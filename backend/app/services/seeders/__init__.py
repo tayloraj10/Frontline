@@ -1,7 +1,7 @@
 from .campaigns import CampaignSeeder
-from .census_tracts import CensusTractSeeder
+from .zip_codes import ZipCodeSeeder
 
 REGISTRY: dict[str, type] = {
     "campaigns": CampaignSeeder,
-    "census_tracts": CensusTractSeeder,
+    "zip_codes": ZipCodeSeeder,
 }

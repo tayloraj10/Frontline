@@ -23,15 +23,15 @@ class CampaignSeeder(Seeder):
                      geo_unit, status, geo_scope, scoring_rules, win_condition)
                 VALUES (
                     :id, 'trash-war', 'Trash War',
-                    'Claim territory by cleaning up trash. The group with the most bags cleaned in a census tract controls it.',
-                    'territory', 'cleanup', 'census_tract', 'active',
+                    'Claim territory by cleaning up trash. The group with the most bags cleaned in a ZIP code controls it.',
+                    'territory', 'cleanup', 'zip', 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
-                ON CONFLICT (slug) DO NOTHING
+                ON CONFLICT (slug) DO UPDATE SET geo_unit = 'zip'
             """),
             {
                 "id": str(TRASH_WAR_ID),
-                "geo_scope": json.dumps({"state_fips": state_fips, "county_fips": county_fips}),
+                "geo_scope": json.dumps({"scope": "nationwide"}),
                 "scoring_rules": json.dumps({"unit": "bags", "per_contribution": 1}),
                 "win_condition": json.dumps({"type": "open_ended"}),
             },

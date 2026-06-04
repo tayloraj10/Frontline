@@ -22,3 +22,6 @@ build/
 *.log
 .vercel
 
+# Large geo data files — generated locally, not committed
+backend/data/
+
