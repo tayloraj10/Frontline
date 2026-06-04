@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { createClient } from "@/lib/supabase/client";
@@ -61,6 +61,7 @@ function applyClaimsAsFeatureState(
 export default function CampaignMap({ campaign, claims, activeEvents }: Props) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const [tilesLoading, setTilesLoading] = useState(true);
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
@@ -136,6 +137,9 @@ export default function CampaignMap({ campaign, claims, activeEvents }: Props) {
 
     const ro = new ResizeObserver(() => map.current?.resize());
     ro.observe(mapContainer.current);
+
+    map.current.on("dataloading", () => setTilesLoading(true));
+    map.current.on("idle", () => setTilesLoading(false));
 
     map.current.on("load", () => {
       if (!map.current) return;
@@ -281,6 +285,13 @@ export default function CampaignMap({ campaign, claims, activeEvents }: Props) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {tilesLoading && (
+        <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+          <div className="w-3 h-3 rounded-full border-2 border-zinc-600 border-t-zinc-300 animate-spin" />
+          <span className="text-zinc-400 text-xs">Loading map…</span>
         </div>
       )}
 
