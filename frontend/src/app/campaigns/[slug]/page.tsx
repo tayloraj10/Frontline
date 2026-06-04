@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CampaignMapWrapper from "@/components/map/CampaignMapWrapper";
+import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -25,49 +27,78 @@ export default async function CampaignPage({ params }: Props) {
   const campaign = data as Campaign | null;
   if (!campaign) notFound();
 
-  const [{ data: geoUnitsData }, { data: claimsData }, { data: eventsData }] = await Promise.all([
-    supabase
-      .from("geo_units")
-      .select("id, campaign_id, unit_id, unit_type, geojson, display_name")
-      .eq("campaign_id", campaign.id),
-    supabase
-      .from("territory_claims")
-      .select("*")
-      .eq("campaign_id", campaign.id),
-    supabase
-      .from("campaign_events")
-      .select("*")
-      .eq("campaign_id", campaign.id)
-      .eq("status", "active"),
-  ]);
+  const [{ data: geoUnitsData }, { data: claimsData }, { data: eventsData }] =
+    await Promise.all([
+      supabase
+        .from("geo_units")
+        .select("id, campaign_id, unit_id, unit_type, geojson, display_name")
+        .eq("campaign_id", campaign.id),
+      supabase
+        .from("territory_claims")
+        .select("*")
+        .eq("campaign_id", campaign.id),
+      supabase
+        .from("campaign_events")
+        .select("*")
+        .eq("campaign_id", campaign.id)
+        .eq("status", "active"),
+    ]);
 
   const geoUnits = (geoUnitsData ?? []) as GeoUnit[];
   const claims = (claimsData ?? []) as TerritoryClaim[];
   const events = (eventsData ?? []) as CampaignEvent[];
 
+  const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type] ?? {
+    icon: "🏁",
+    color: "text-zinc-400",
+    bg: "bg-zinc-800/20",
+    border: "border-zinc-700/50",
+    bar: "bg-zinc-600",
+  };
+
   return (
     <div className="flex flex-col flex-1">
-      <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">{campaign.title}</h1>
-          {campaign.description && (
-            <p className="text-zinc-400 text-sm">{campaign.description}</p>
-          )}
+      <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            href="/campaigns"
+            className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors shrink-0"
+          >
+            ← Campaigns
+          </Link>
+          <span className="text-zinc-700 shrink-0">|</span>
+          <div className="min-w-0">
+            <h1 className="text-base font-bold text-zinc-100 truncate leading-tight">
+              {campaign.title}
+            </h1>
+            {campaign.description && (
+              <p className="text-zinc-500 text-xs truncate">{campaign.description}</p>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex items-center gap-2 shrink-0">
           {events.length > 0 && (
-            <span className="px-3 py-1 bg-red-900/50 border border-red-700 text-red-300 text-xs font-medium rounded-full animate-pulse">
-              {events.length} Active Event{events.length > 1 ? "s" : ""}
+            <span className="px-3 py-1 bg-red-900/40 border border-red-700/60 text-red-300 text-xs font-semibold rounded-full animate-pulse">
+              ⚡ {events.length} Event{events.length > 1 ? "s" : ""}
             </span>
           )}
-          <span className="px-3 py-1 bg-emerald-900/50 border border-emerald-700 text-emerald-300 text-xs font-medium rounded-full capitalize">
-            {campaign.campaign_type}
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border ${cfg.bg} ${cfg.border} ${cfg.color}`}
+          >
+            {cfg.icon}
+            <span className="capitalize">{campaign.campaign_type}</span>
           </span>
         </div>
       </div>
 
       <div className="flex flex-col flex-1 min-h-0">
-        <CampaignMapWrapper campaign={campaign} geoUnits={geoUnits} claims={claims} activeEvents={events} />
+        <CampaignMapWrapper
+          campaign={campaign}
+          geoUnits={geoUnits}
+          claims={claims}
+          activeEvents={events}
+        />
       </div>
     </div>
   );
