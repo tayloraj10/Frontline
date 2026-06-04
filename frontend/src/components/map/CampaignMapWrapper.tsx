@@ -4,13 +4,11 @@ import dynamic from "next/dynamic";
 import type { Database } from "@/types/database";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
-type GeoUnit = Omit<Database["public"]["Tables"]["geo_units"]["Row"], "geometry">;
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 interface Props {
   campaign: Campaign;
-  geoUnits: GeoUnit[];
   claims: TerritoryClaim[];
   activeEvents: CampaignEvent[];
 }

@@ -6,33 +6,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 
-function bboxCenter(geojson: unknown): [number, number] | null {
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-  function walk(coords: unknown): void {
-    if (!Array.isArray(coords)) return;
-    if (typeof coords[0] === "number") {
-      minLng = Math.min(minLng, coords[0] as number);
-      maxLng = Math.max(maxLng, coords[0] as number);
-      minLat = Math.min(minLat, coords[1] as number);
-      maxLat = Math.max(maxLat, coords[1] as number);
-    } else coords.forEach(walk);
-  }
-  try {
-    const geo = geojson as { coordinates?: unknown };
-    if (geo?.coordinates) walk(geo.coordinates);
-  } catch { return null; }
-  if (!isFinite(minLng)) return null;
-  return [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
-}
-
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
-type GeoUnit = Omit<Database["public"]["Tables"]["geo_units"]["Row"], "geometry">;
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 interface Props {
   campaign: Campaign;
-  geoUnits: GeoUnit[];
   claims: TerritoryClaim[];
   activeEvents: CampaignEvent[];
 }
@@ -61,127 +40,85 @@ const MAP_STYLE = {
   ],
 };
 
-function tractColor(claim: TerritoryClaim | undefined): string {
-  if (!claim) return "#1f2937"; // dark gray — neutral/unclaimed
-  if (claim.claimed_by_group) return "#10b981"; // emerald — group claimed
-  if (claim.claimed_by_user) return "#3b82f6"; // blue — individual claimed
-  return "#1f2937";
-}
-
-function fitBoundsToFeatures(
+function applyClaimsAsFeatureState(
   map: maplibregl.Map,
-  features: { geometry: GeoJSON.Geometry }[]
+  claims: TerritoryClaim[],
 ): void {
-  if (!features.length) return;
-
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-
-  function walk(coords: unknown): void {
-    if (!Array.isArray(coords)) return;
-    if (typeof coords[0] === "number") {
-      minLng = Math.min(minLng, coords[0] as number);
-      maxLng = Math.max(maxLng, coords[0] as number);
-      minLat = Math.min(minLat, coords[1] as number);
-      maxLat = Math.max(maxLat, coords[1] as number);
-    } else {
-      coords.forEach(walk);
-    }
+  for (const claim of claims) {
+    if (!claim.geo_unit_id) continue;
+    const color = claim.claimed_by_group
+      ? "#10b981"
+      : claim.claimed_by_user
+        ? "#3b82f6"
+        : "#1f2937";
+    map.setFeatureState(
+      { source: "territory", sourceLayer: "territories", id: claim.geo_unit_id },
+      { color, total_value: claim.total_value ?? 0 },
+    );
   }
-
-  for (const f of features) {
-    if ("coordinates" in f.geometry) walk(f.geometry.coordinates);
-  }
-
-  if (!isFinite(minLng)) return;
-  map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 40, duration: 300 });
 }
 
-export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }: Props) {
+export default function CampaignMap({ campaign, claims, activeEvents }: Props) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const geoUnitsRef = useRef(geoUnits);
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
-  const hasFit = useRef(false);
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
 
-  useEffect(() => { geoUnitsRef.current = geoUnits; }, [geoUnits]);
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
 
-  const updateEventMarkers = useCallback(
-    (events: CampaignEvent[], units: GeoUnit[]) => {
-      if (!map.current) return;
+  const updateEventMarkers = useCallback((events: CampaignEvent[]) => {
+    if (!map.current) return;
+    eventMarkersRef.current.forEach((m) => m.remove());
+    eventMarkersRef.current = [];
 
-      eventMarkersRef.current.forEach((m) => m.remove());
-      eventMarkersRef.current = [];
+    for (const event of events) {
+      if (!event.geo_unit_id) continue;
 
-      const unitById = new Map(units.map((u) => [u.id, u]));
+      // Fetch centroid of the geo_unit from the map's rendered features
+      const features = map.current.querySourceFeatures("territory", {
+        sourceLayer: "territories",
+        filter: ["==", ["id"], event.geo_unit_id],
+      });
+      if (!features.length) continue;
 
-      for (const event of events) {
-        if (!event.geo_unit_id) continue;
-        const unit = unitById.get(event.geo_unit_id);
-        if (!unit?.geojson) continue;
-        const center = bboxCenter(unit.geojson);
-        if (!center) continue;
+      const geom = features[0].geometry;
+      if (geom.type !== "Polygon" && geom.type !== "MultiPolygon") continue;
 
-        const el = document.createElement("div");
-        el.style.cssText =
-          "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.9);border:2px solid #ef4444;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.5);cursor:pointer;animation:pulse 2s cubic-bezier(0.4,0,0.6,1) infinite";
-        el.textContent = "⚡";
-        el.title = event.title;
+      // Compute rough center from first ring
+      const coords =
+        geom.type === "Polygon"
+          ? geom.coordinates[0]
+          : geom.coordinates[0][0];
+      const lng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+      const lat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
 
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat(center)
-          .setPopup(
-            new maplibregl.Popup({ offset: 20 }).setHTML(
-              `<div style="font-weight:600;font-size:12px;color:#fca5a5">${event.title}</div>
-               ${event.description ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${event.description}</div>` : ""}`,
-            ),
-          )
-          .addTo(map.current!);
+      const el = document.createElement("div");
+      el.style.cssText =
+        "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.9);border:2px solid #ef4444;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.5);cursor:pointer;animation:pulse 2s cubic-bezier(0.4,0,0.6,1) infinite";
+      el.textContent = "⚡";
+      el.title = event.title;
 
-        eventMarkersRef.current.push(marker);
-      }
-    },
-    [],
-  );
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([lng, lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 20 }).setHTML(
+            `<div style="font-weight:600;font-size:12px;color:#fca5a5">${event.title}</div>
+             ${event.description ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${event.description}</div>` : ""}`,
+          ),
+        )
+        .addTo(map.current!);
 
-  const updateLayer = useCallback(
-    (allUnits: GeoUnit[], claimsData: TerritoryClaim[]) => {
-      if (!map.current) return;
-
-      const claimsByUnit = new Map(claimsData.map((c) => [c.geo_unit_id, c]));
-
-      const features = allUnits
-        .filter((u) => u.geojson)
-        .map((u) => ({
-          type: "Feature" as const,
-          properties: {
-            geo_unit_id: u.id,
-            color: tractColor(claimsByUnit.get(u.id)),
-            total_value: claimsByUnit.get(u.id)?.total_value ?? 0,
-            display_name: u.display_name ?? u.unit_id,
-          },
-          geometry: u.geojson as unknown as GeoJSON.Geometry,
-        }));
-
-      const source = map.current.getSource("territory") as maplibregl.GeoJSONSource | undefined;
-      if (source) {
-        source.setData({ type: "FeatureCollection", features });
-      }
-
-      if (!hasFit.current && features.length > 0) {
-        fitBoundsToFeatures(map.current, features);
-        hasFit.current = true;
-      }
-    },
-    []
-  );
+      eventMarkersRef.current.push(marker);
+    }
+  }, []);
 
   // Map initialization
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
+
+    const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
 
     map.current = new maplibregl.Map({
       container: mapContainer.current,
@@ -192,7 +129,10 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
-    map.current.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    map.current.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-right",
+    );
 
     const ro = new ResizeObserver(() => map.current?.resize());
     ro.observe(mapContainer.current);
@@ -201,16 +141,24 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
       if (!map.current) return;
 
       map.current.addSource("territory", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
+        type: "vector",
+        tiles: [tileUrl],
+        minzoom: 0,
+        maxzoom: 14,
+        promoteId: "geo_unit_id",
       });
 
       map.current.addLayer({
         id: "territory-fill",
         type: "fill",
         source: "territory",
+        "source-layer": "territories",
         paint: {
-          "fill-color": ["get", "color"],
+          "fill-color": [
+            "coalesce",
+            ["feature-state", "color"],
+            "#1f2937",
+          ],
           "fill-opacity": 0.5,
         },
       });
@@ -219,24 +167,33 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
         id: "territory-border",
         type: "line",
         source: "territory",
+        "source-layer": "territories",
         paint: {
-          "line-color": ["get", "color"],
+          "line-color": [
+            "coalesce",
+            ["feature-state", "color"],
+            "#374151",
+          ],
           "line-width": 1.5,
           "line-opacity": 0.8,
         },
       });
 
-      const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+      const popup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+      });
 
       map.current.on("mouseenter", "territory-fill", (e) => {
         if (!map.current || !e.features?.[0]) return;
         map.current.getCanvas().style.cursor = "pointer";
         const props = e.features[0].properties;
+        const state = e.features[0].state as { total_value?: number };
         popup
           .setLngLat(e.lngLat)
           .setHTML(
             `<div style="font-weight:600;font-size:12px">${props.display_name}</div>
-             <div style="color:#a1a1aa;font-size:11px">${props.total_value} pts</div>`
+             <div style="color:#a1a1aa;font-size:11px">${state.total_value ?? 0} pts</div>`,
           )
           .addTo(map.current);
       });
@@ -247,8 +204,9 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
         popup.remove();
       });
 
-      updateLayer(geoUnitsRef.current, claimsRef.current);
-      updateEventMarkers(activeEventsRef.current, geoUnitsRef.current);
+      // Apply initial claims
+      applyClaimsAsFeatureState(map.current, claimsRef.current);
+      updateEventMarkers(activeEventsRef.current);
     });
 
     return () => {
@@ -259,21 +217,14 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync when props change (e.g. parent re-renders)
+  // Sync claims via feature-state when prop changes
   useEffect(() => {
     if (map.current?.isStyleLoaded()) {
-      updateLayer(geoUnits, claims);
+      applyClaimsAsFeatureState(map.current, claims);
     }
-  }, [geoUnits, claims, updateLayer]);
+  }, [claims]);
 
-  // Boss event markers — sync when props change
-  useEffect(() => {
-    if (map.current?.isStyleLoaded()) {
-      updateEventMarkers(activeEvents, geoUnits);
-    }
-  }, [activeEvents, geoUnits, updateEventMarkers]);
-
-  // Supabase Realtime — live territory updates
+  // Supabase Realtime — surgical feature-state updates
   useEffect(() => {
     const supabase = createClient();
 
@@ -287,21 +238,31 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
           table: "territory_claims",
           filter: `campaign_id=eq.${campaign.id}`,
         },
-        async () => {
-          const { data } = await supabase
-            .from("territory_claims")
-            .select("*")
-            .eq("campaign_id", campaign.id);
-
-          if (data) updateLayer(geoUnitsRef.current, data as TerritoryClaim[]);
-        }
+        (payload) => {
+          if (!map.current) return;
+          const claim = payload.new as TerritoryClaim;
+          if (!claim?.geo_unit_id) return;
+          const color = claim.claimed_by_group
+            ? "#10b981"
+            : claim.claimed_by_user
+              ? "#3b82f6"
+              : "#1f2937";
+          map.current.setFeatureState(
+            {
+              source: "territory",
+              sourceLayer: "territories",
+              id: claim.geo_unit_id,
+            },
+            { color, total_value: claim.total_value ?? 0 },
+          );
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [campaign.id, updateLayer]);
+  }, [campaign.id]);
 
   return (
     <div className="relative flex flex-col flex-1 min-h-[500px]">

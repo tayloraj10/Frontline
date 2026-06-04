@@ -7,7 +7,6 @@ import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
-type GeoUnit = Omit<Database["public"]["Tables"]["geo_units"]["Row"], "geometry">;
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
@@ -27,12 +26,8 @@ export default async function CampaignPage({ params }: Props) {
   const campaign = data as Campaign | null;
   if (!campaign) notFound();
 
-  const [{ data: geoUnitsData }, { data: claimsData }, { data: eventsData }] =
+  const [{ data: claimsData }, { data: eventsData }] =
     await Promise.all([
-      supabase
-        .from("geo_units")
-        .select("id, campaign_id, unit_id, unit_type, geojson, display_name")
-        .eq("campaign_id", campaign.id),
       supabase
         .from("territory_claims")
         .select("*")
@@ -44,7 +39,6 @@ export default async function CampaignPage({ params }: Props) {
         .eq("status", "active"),
     ]);
 
-  const geoUnits = (geoUnitsData ?? []) as GeoUnit[];
   const claims = (claimsData ?? []) as TerritoryClaim[];
   const events = (eventsData ?? []) as CampaignEvent[];
 
@@ -95,7 +89,6 @@ export default async function CampaignPage({ params }: Props) {
       <div className="flex flex-col flex-1 min-h-0 relative">
         <CampaignMapWrapper
           campaign={campaign}
-          geoUnits={geoUnits}
           claims={claims}
           activeEvents={events}
         />

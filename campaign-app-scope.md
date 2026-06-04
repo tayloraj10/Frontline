@@ -18,7 +18,7 @@
 ```
 Next.js → Supabase PostgREST      (all standard CRUD)
 Next.js → Supabase Edge Functions  (presigned URLs, lightweight logic)
-Next.js → FastAPI                  (geo-processing, territory calculation, event engine, decay jobs)
+Next.js → FastAPI                  (geo-processing, territory calculation, event engine, decay jobs, MVT tiles)
 Next.js → Supabase Realtime        (websocket subscriptions)
 ```
 
@@ -37,8 +37,28 @@ PostGIS is required for all geographic operations. Supabase ships with it enable
 - Proximity validation: confirming a submission is within X meters of a claimed tract
 - Viewport queries: fetching only contributions/territory within the current map bounds
 - Distance calculations between points
+- **MVT tile generation** via `ST_AsMVT()` + `ST_TileEnvelope()` for serving geography at scale
 
 On the FastAPI side, use **GeoAlchemy2** for PostGIS-aware SQLAlchemy queries and **Shapely** for any in-memory geometry processing. Census tract boundaries sourced from Census Bureau TIGER/Line files (free).
+
+### Map Rendering Architecture
+
+Geography (zip codes, census tracts, states) and user-submitted data are served separately:
+
+**Geometry layer — Vector tiles (MVT)**
+- FastAPI endpoint: `GET /api/tiles/{campaign_id}/{z}/{x}/{y}.mvt`
+- PostGIS generates tiles on demand via `ST_AsMVT()`. Only features intersecting the current viewport tile are returned — no bulk transfer.
+- Response is binary protobuf with `Content-Type: application/x-protobuf`
+- Tiles are static (geometry never changes) and can be cached aggressively at the CDN layer
+- Each feature carries `geo_unit_id` as its MVT feature ID for client-side state lookup
+
+**Dynamic data layer — Regular fetch + MapLibre feature-state**
+- `territory_claims` fetched on page load (only claimed rows — a small subset of total geo units)
+- MapLibre's `setFeatureState(featureId, { color, totalValue })` applies claim colors to tile features without re-fetching geometry
+- Supabase Realtime pushes individual claim updates → `setFeatureState` called surgically on just the changed feature
+- Net result: Total War-style territory coloring that updates live, with zero tile re-requests on claim changes
+
+This separation scales to campaigns with 32k+ geographic units (e.g., all US zip codes) without bandwidth or memory issues on the client.
 
 ### Cost Estimate at Launch
 - Supabase Pro: $25/mo
@@ -363,7 +383,7 @@ LIMIT 1;
 ### Realtime Subscriptions (Supabase)
 Tables that drive live map updates:
 - `contributions` — new contribution appears on map instantly
-- `territory_claims` — territory color/owner updates live
+- `territory_claims` — Realtime change → `map.setFeatureState()` on the affected geo_unit (no tile re-fetch)
 - `campaign_events` — boss event spawns trigger map animation
 - `leaderboard_entries` — live leaderboard updates
 
@@ -402,13 +422,13 @@ Tables that drive live map updates:
 **Goal:** MapLibre rendering with campaign territory data
 
 - [x] Integrate MapLibre GL JS into Next.js
-- [ ] Load and render US census tract GeoJSON for a test region
 - [x] Implement basic territory color layer (neutral → claimed)
 - [x] Wire Supabase Realtime subscription to territory_claims table
 - [x] Territory updates reflect on map without page refresh
 - [x] Basic Total War-style map styling (muted terrain, stylized borders)
-
-**Remaining:** Load real census tract GeoJSON into `geo_units` table and wire it to the map source — campaign detail page and CampaignMap component are built and waiting for data.
+- [ ] MVT tile endpoint (`GET /api/tiles/{campaign_id}/{z}/{x}/{y}.mvt`) serving geometry from PostGIS
+- [ ] CampaignMap uses vector tile source + feature-state for claim coloring (replaces bulk GeoJSON fetch)
+- [ ] Realtime claim updates routed through `setFeatureState` instead of layer rebuild
 
 **Deliverable:** A live map that updates in real time when territory_claims change
 
