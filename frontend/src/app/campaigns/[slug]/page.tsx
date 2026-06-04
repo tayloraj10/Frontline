@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import CampaignMap from "@/components/map/CampaignMap";
+import CampaignMapWrapper from "@/components/map/CampaignMapWrapper";
 import type { Database } from "@/types/database";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
-type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"] & {
-  geo_units: { geojson: unknown; unit_id: string; display_name: string | null } | null;
-};
+type GeoUnit = Omit<Database["public"]["Tables"]["geo_units"]["Row"], "geometry">;
+type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 interface Props {
@@ -26,17 +25,23 @@ export default async function CampaignPage({ params }: Props) {
   const campaign = data as Campaign | null;
   if (!campaign) notFound();
 
-  const { data: claimsData } = await supabase
-    .from("territory_claims")
-    .select("*, geo_units(geojson, unit_id, display_name)")
-    .eq("campaign_id", campaign.id);
+  const [{ data: geoUnitsData }, { data: claimsData }, { data: eventsData }] = await Promise.all([
+    supabase
+      .from("geo_units")
+      .select("id, campaign_id, unit_id, unit_type, geojson, display_name")
+      .eq("campaign_id", campaign.id),
+    supabase
+      .from("territory_claims")
+      .select("*")
+      .eq("campaign_id", campaign.id),
+    supabase
+      .from("campaign_events")
+      .select("*")
+      .eq("campaign_id", campaign.id)
+      .eq("status", "active"),
+  ]);
 
-  const { data: eventsData } = await supabase
-    .from("campaign_events")
-    .select("*")
-    .eq("campaign_id", campaign.id)
-    .eq("status", "active");
-
+  const geoUnits = (geoUnitsData ?? []) as GeoUnit[];
   const claims = (claimsData ?? []) as TerritoryClaim[];
   const events = (eventsData ?? []) as CampaignEvent[];
 
@@ -61,8 +66,8 @@ export default async function CampaignPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="flex-1">
-        <CampaignMap campaign={campaign} claims={claims} activeEvents={events} />
+      <div className="flex flex-col flex-1 min-h-0">
+        <CampaignMapWrapper campaign={campaign} geoUnits={geoUnits} claims={claims} activeEvents={events} />
       </div>
     </div>
   );
