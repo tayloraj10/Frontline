@@ -95,6 +95,21 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["contributions"]["Insert"]>;
       };
+      geo_units: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          unit_id: string;
+          unit_type: string;
+          geometry: unknown;
+          geojson: Json | null;
+          display_name: string | null;
+        };
+        Insert: Omit<Database["public"]["Tables"]["geo_units"]["Row"], "id"> & {
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["geo_units"]["Insert"]>;
+      };
       territory_claims: {
         Row: {
           id: string;
