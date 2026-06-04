@@ -400,7 +400,7 @@ Tables that drive live map updates:
 - [x] Add spatial indexes to geo_units, contributions, problem_reports
 - [x] Configure Supabase Auth (email + OAuth — Google at minimum)
 - [x] Initialize FastAPI project with health check endpoint (local; Railway deploy deferred)
-- [ ] Configure Cloudflare R2 bucket + presigned URL upload flow
+- [x] Configure Cloudflare R2 bucket + presigned URL upload flow
 - [x] Set up environment variable management (local `.env` / `.env.local`, VS Code launch.json)
 - [x] Basic user profile creation on first login (DB trigger on auth.users INSERT)
 
@@ -426,9 +426,9 @@ Tables that drive live map updates:
 - [x] Wire Supabase Realtime subscription to territory_claims table
 - [x] Territory updates reflect on map without page refresh
 - [x] Basic Total War-style map styling (muted terrain, stylized borders)
-- [ ] MVT tile endpoint (`GET /api/tiles/{campaign_id}/{z}/{x}/{y}.mvt`) serving geometry from PostGIS
-- [ ] CampaignMap uses vector tile source + feature-state for claim coloring (replaces bulk GeoJSON fetch)
-- [ ] Realtime claim updates routed through `setFeatureState` instead of layer rebuild
+- [x] MVT tile endpoint (`GET /api/tiles/{campaign_id}/{z}/{x}/{y}.mvt`) serving geometry from PostGIS
+- [x] CampaignMap uses vector tile source + feature-state for claim coloring (replaces bulk GeoJSON fetch)
+- [x] Realtime claim updates routed through `setFeatureState` instead of layer rebuild
 
 **Deliverable:** A live map that updates in real time when territory_claims change
 
