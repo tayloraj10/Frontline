@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CampaignMapWrapper from "@/components/map/CampaignMapWrapper";
+import ContributionPanel from "@/components/contributions/ContributionPanel";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 
@@ -18,11 +19,10 @@ export default async function CampaignPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("campaigns")
-    .select("*")
-    .eq("slug", slug)
-    .single();
+  const [{ data: { user } }, { data }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("campaigns").select("*").eq("slug", slug).single(),
+  ]);
 
   const campaign = data as Campaign | null;
   if (!campaign) notFound();
@@ -92,13 +92,20 @@ export default async function CampaignPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex flex-col flex-1 min-h-0 relative">
         <CampaignMapWrapper
           campaign={campaign}
           geoUnits={geoUnits}
           claims={claims}
           activeEvents={events}
         />
+        {user && (
+          <ContributionPanel
+            campaignId={campaign.id}
+            campaignContributionType={campaign.contribution_type}
+            userId={user.id}
+          />
+        )}
       </div>
     </div>
   );

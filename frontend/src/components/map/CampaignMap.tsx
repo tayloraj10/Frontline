@@ -6,6 +6,25 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 
+function bboxCenter(geojson: unknown): [number, number] | null {
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  function walk(coords: unknown): void {
+    if (!Array.isArray(coords)) return;
+    if (typeof coords[0] === "number") {
+      minLng = Math.min(minLng, coords[0] as number);
+      maxLng = Math.max(maxLng, coords[0] as number);
+      minLat = Math.min(minLat, coords[1] as number);
+      maxLat = Math.max(maxLat, coords[1] as number);
+    } else coords.forEach(walk);
+  }
+  try {
+    const geo = geojson as { coordinates?: unknown };
+    if (geo?.coordinates) walk(geo.coordinates);
+  } catch { return null; }
+  if (!isFinite(minLng)) return null;
+  return [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
+}
+
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type GeoUnit = Omit<Database["public"]["Tables"]["geo_units"]["Row"], "geometry">;
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -82,10 +101,51 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
   const map = useRef<maplibregl.Map | null>(null);
   const geoUnitsRef = useRef(geoUnits);
   const claimsRef = useRef(claims);
+  const activeEventsRef = useRef(activeEvents);
   const hasFit = useRef(false);
+  const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   useEffect(() => { geoUnitsRef.current = geoUnits; }, [geoUnits]);
   useEffect(() => { claimsRef.current = claims; }, [claims]);
+  useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
+
+  const updateEventMarkers = useCallback(
+    (events: CampaignEvent[], units: GeoUnit[]) => {
+      if (!map.current) return;
+
+      eventMarkersRef.current.forEach((m) => m.remove());
+      eventMarkersRef.current = [];
+
+      const unitById = new Map(units.map((u) => [u.id, u]));
+
+      for (const event of events) {
+        if (!event.geo_unit_id) continue;
+        const unit = unitById.get(event.geo_unit_id);
+        if (!unit?.geojson) continue;
+        const center = bboxCenter(unit.geojson);
+        if (!center) continue;
+
+        const el = document.createElement("div");
+        el.style.cssText =
+          "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.9);border:2px solid #ef4444;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.5);cursor:pointer;animation:pulse 2s cubic-bezier(0.4,0,0.6,1) infinite";
+        el.textContent = "⚡";
+        el.title = event.title;
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat(center)
+          .setPopup(
+            new maplibregl.Popup({ offset: 20 }).setHTML(
+              `<div style="font-weight:600;font-size:12px;color:#fca5a5">${event.title}</div>
+               ${event.description ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${event.description}</div>` : ""}`,
+            ),
+          )
+          .addTo(map.current!);
+
+        eventMarkersRef.current.push(marker);
+      }
+    },
+    [],
+  );
 
   const updateLayer = useCallback(
     (allUnits: GeoUnit[], claimsData: TerritoryClaim[]) => {
@@ -188,10 +248,12 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
       });
 
       updateLayer(geoUnitsRef.current, claimsRef.current);
+      updateEventMarkers(activeEventsRef.current, geoUnitsRef.current);
     });
 
     return () => {
       ro.disconnect();
+      eventMarkersRef.current.forEach((m) => m.remove());
       map.current?.remove();
       map.current = null;
     };
@@ -203,6 +265,13 @@ export default function CampaignMap({ campaign, geoUnits, claims, activeEvents }
       updateLayer(geoUnits, claims);
     }
   }, [geoUnits, claims, updateLayer]);
+
+  // Boss event markers — sync when props change
+  useEffect(() => {
+    if (map.current?.isStyleLoaded()) {
+      updateEventMarkers(activeEvents, geoUnits);
+    }
+  }, [activeEvents, geoUnits, updateEventMarkers]);
 
   // Supabase Realtime — live territory updates
   useEffect(() => {

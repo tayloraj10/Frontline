@@ -22,6 +22,100 @@ class ContributionRequest(BaseModel):
     notes: str | None = None
 
 
+@router.post("/submit")
+async def submit_contribution(payload: ContributionRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Full contribution submission: inserts the contribution row, assigns it to a geo_unit
+    via point-in-polygon, and upserts territory_claims. Called directly from the frontend.
+    """
+    # Find geo_unit via point-in-polygon
+    geo_result = await db.execute(
+        text("""
+            SELECT id FROM geo_units
+            WHERE ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
+            AND campaign_id = :campaign_id
+            LIMIT 1
+        """),
+        {"lon": payload.longitude, "lat": payload.latitude, "campaign_id": str(payload.campaign_id)},
+    )
+    geo_unit_row = geo_result.fetchone()
+    geo_unit_id = str(geo_unit_row[0]) if geo_unit_row else None
+
+    # Proximity check (point within 5km of tract centroid)
+    location_verified = False
+    if geo_unit_id:
+        prox = await db.execute(
+            text("""
+                SELECT ST_DWithin(
+                    geography(ST_Centroid(geometry)),
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                    5000
+                ) FROM geo_units WHERE id = :geo_unit_id
+            """),
+            {"lon": payload.longitude, "lat": payload.latitude, "geo_unit_id": geo_unit_id},
+        )
+        location_verified = bool(prox.scalar())
+
+    # Insert contribution row
+    await db.execute(
+        text("""
+            INSERT INTO contributions
+                (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
+                 value, photo_url, location, location_verified, notes)
+            VALUES
+                (:campaign_id, :user_id, :group_id, :geo_unit_id, :contribution_type,
+                 :value, :photo_url,
+                 ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                 :location_verified, :notes)
+        """),
+        {
+            "campaign_id": str(payload.campaign_id),
+            "user_id": str(payload.user_id),
+            "group_id": str(payload.group_id) if payload.group_id else None,
+            "geo_unit_id": geo_unit_id,
+            "contribution_type": payload.contribution_type,
+            "value": payload.value or 1,
+            "photo_url": payload.photo_url,
+            "lon": payload.longitude,
+            "lat": payload.latitude,
+            "location_verified": location_verified,
+            "notes": payload.notes,
+        },
+    )
+
+    # Upsert territory claim
+    if geo_unit_id:
+        await db.execute(
+            text("""
+                INSERT INTO territory_claims
+                    (campaign_id, geo_unit_id, claimed_by_user, claimed_by_group, total_value, last_contribution_at)
+                VALUES
+                    (:campaign_id, :geo_unit_id, :user_id, :group_id, :value, NOW())
+                ON CONFLICT (campaign_id, geo_unit_id) DO UPDATE SET
+                    total_value = territory_claims.total_value + EXCLUDED.total_value,
+                    claimed_by_user = EXCLUDED.claimed_by_user,
+                    claimed_by_group = EXCLUDED.claimed_by_group,
+                    last_contribution_at = NOW(),
+                    decay_starts_at = NULL,
+                    updated_at = NOW()
+            """),
+            {
+                "campaign_id": str(payload.campaign_id),
+                "geo_unit_id": geo_unit_id,
+                "user_id": str(payload.user_id),
+                "group_id": str(payload.group_id) if payload.group_id else None,
+                "value": payload.value or 1,
+            },
+        )
+
+    await db.commit()
+    return {
+        "geo_unit_id": geo_unit_id,
+        "location_verified": location_verified,
+        "claimed_territory": geo_unit_id is not None,
+    }
+
+
 @router.post("/process")
 async def process_contribution(payload: ContributionRequest, db: AsyncSession = Depends(get_db)):
     """
