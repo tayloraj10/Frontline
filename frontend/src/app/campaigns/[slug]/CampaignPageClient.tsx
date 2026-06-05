@@ -37,6 +37,7 @@ export default function CampaignPageClient({ campaign, claims, activeEvents, cla
   const [placedPinCoords, setPlacedPinCoords] = useState<Coords | null>(null);
   const [newContribution, setNewContribution] = useState<NewContribution | null>(null);
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
+  const [activeMapStyle, setActiveMapStyle] = useState("outdoor");
 
   const handleContributionSubmitted = (lat: number, lng: number, value: number) => {
     setNewContribution({ lat, lng, value, key: Date.now() });
@@ -73,6 +74,7 @@ export default function CampaignPageClient({ campaign, claims, activeEvents, cla
         onPinCancelled={handlePinCancelled}
         newContribution={newContribution}
         userLocation={userLocation}
+        activeStyle={activeMapStyle}
       />
       {userId && (
         <ContributionPanel
@@ -85,6 +87,8 @@ export default function CampaignPageClient({ campaign, claims, activeEvents, cla
           placedPinCoords={placedPinCoords}
           onContributionSubmitted={handleContributionSubmitted}
           onLocationCaptured={setUserLocation}
+          activeMapStyle={activeMapStyle}
+          onStyleChange={setActiveMapStyle}
         />
       )}
     </>

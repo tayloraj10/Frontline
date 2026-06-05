@@ -13,6 +13,12 @@ interface Coords {
   longitude: number;
 }
 
+const MAP_STYLES = [
+  { id: "outdoor", label: "Terrain" },
+  { id: "streets", label: "Streets" },
+  { id: "hybrid",  label: "Satellite" },
+] as const;
+
 interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
@@ -23,6 +29,8 @@ interface ContributionPanelProps {
   placedPinCoords: Coords | null;
   onContributionSubmitted?: (lat: number, lng: number, value: number) => void;
   onLocationCaptured?: (coords: Coords) => void;
+  activeMapStyle?: string;
+  onStyleChange?: (id: string) => void;
 }
 
 // ─── GPS hook ────────────────────────────────────────────────────────────────
@@ -168,6 +176,7 @@ function ContributeModal({
   onEnterPinPicker,
   onClose,
   onContributionSubmitted,
+  activeMapStyle,
 }: {
   campaignId: string;
   userId: string;
@@ -177,6 +186,7 @@ function ContributeModal({
   onEnterPinPicker: () => void;
   onClose: () => void;
   onContributionSubmitted?: (lat: number, lng: number, value: number) => void;
+  activeMapStyle?: string;
 }) {
   const [bagCount, setBagCount] = useState(1);
   const [notes, setNotes] = useState("");
@@ -271,7 +281,7 @@ function ContributeModal({
         </div>
 
         {submitCoords && (
-          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} />
+          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
         )}
 
         {userGroups.length > 0 && (
@@ -370,6 +380,7 @@ function ReportModal({
   overrideCoords,
   onEnterPinPicker,
   onClose,
+  activeMapStyle,
 }: {
   campaignId: string;
   userId: string;
@@ -377,6 +388,7 @@ function ReportModal({
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
   onClose: () => void;
+  activeMapStyle?: string;
 }) {
   const [photo, setPhoto] = useState<File | null>(null);
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
@@ -463,7 +475,7 @@ function ReportModal({
         </div>
 
         {submitCoords && (
-          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} />
+          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
         )}
 
         <div>
@@ -564,6 +576,8 @@ export default function ContributionPanel({
   placedPinCoords,
   onContributionSubmitted,
   onLocationCaptured,
+  activeMapStyle,
+  onStyleChange,
 }: ContributionPanelProps) {
   const gps = useGPS();
   const [mode, setMode] = useState<"contribute" | "report" | null>(null);
@@ -621,7 +635,7 @@ export default function ContributionPanel({
   return (
     <>
       {!pinPickerActive && (
-        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
+        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 items-start">
           <button
             onClick={openContribute}
             className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
@@ -636,6 +650,23 @@ export default function ContributionPanel({
               ⚠️ Report Trash
             </button>
           )}
+          {onStyleChange && (
+            <div className="self-start flex gap-0.5 p-1 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg">
+              {MAP_STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => onStyleChange(s.id)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    activeMapStyle === s.id
+                      ? "bg-zinc-600 text-zinc-100"
+                      : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -649,6 +680,7 @@ export default function ContributionPanel({
           onEnterPinPicker={handleEnterPinPickerForCleanup}
           onClose={() => setMode(null)}
           onContributionSubmitted={onContributionSubmitted}
+          activeMapStyle={activeMapStyle}
         />
       )}
       {mode === "report" && !pinPickerActive && (
@@ -659,6 +691,7 @@ export default function ContributionPanel({
           overrideCoords={reportOverrideCoords}
           onEnterPinPicker={handleEnterPinPickerForReport}
           onClose={() => { setMode(null); setReportOverrideCoords(null); }}
+          activeMapStyle={activeMapStyle}
         />
       )}
     </>

@@ -39,41 +39,30 @@ interface Props {
   onPinCancelled?: () => void;
   newContribution?: { lat: number; lng: number; value: number; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
+  activeStyle?: StyleId;
 }
 
-const MAP_STYLE = {
-  version: 8 as const,
-  sources: {
-    esri: {
-      type: "raster" as const,
-      tiles: [
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-      ],
-      tileSize: 256,
-      attribution: "© Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China, OpenStreetMap contributors",
-    },
-  },
-  layers: [
-    {
-      id: "esri-tiles",
-      type: "raster" as const,
-      source: "esri",
-      paint: {
-        "raster-opacity": 1.0,
-      },
-    },
-  ],
-};
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
+
+const MAP_STYLES = [
+  { id: "outdoor", label: "Terrain"   },
+  { id: "streets", label: "Streets"   },
+  { id: "hybrid",  label: "Satellite" },
+] as const;
+
+type StyleId = typeof MAP_STYLES[number]["id"];
+
+function styleUrl(id: StyleId) {
+  return `https://api.maptiler.com/maps/${id}/style.json?key=${MAPTILER_KEY}`;
+}
 
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
 function claimHeatColor(isGroup: boolean, totalValue: number): string {
   const t = Math.min(Math.max(totalValue, 0) / 50, 1);
   if (isGroup) {
-    // emerald: medium green → bright emerald
     return `rgb(${Math.round(lerp(6, 16, t))},${Math.round(lerp(120, 185, t))},${Math.round(lerp(80, 129, t))})`;
   }
-  // blue: medium blue → bright blue
   return `rgb(${Math.round(lerp(30, 59, t))},${Math.round(lerp(80, 130, t))},${Math.round(lerp(180, 246, t))})`;
 }
 
@@ -167,7 +156,7 @@ function TerritoryPanel({
   const accentHex = isClaimed ? (isGroup ? "#10b981" : "#3b82f6") : "#3f3f46";
 
   return (
-    <div className="absolute top-20 right-2 z-20 w-60 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-[200px] right-2 z-20 w-60 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
       {/* Colored left accent strip */}
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentHex }} />
 
@@ -245,6 +234,7 @@ export default function CampaignMap({
   onPinCancelled,
   newContribution,
   userLocation,
+  activeStyle = "outdoor",
 }: Props) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -264,6 +254,7 @@ export default function CampaignMap({
   const pinPickerActiveRef = useRef(pinPickerActive);
   const pinPickerConstrainedRef = useRef(pinPickerConstrained);
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapReadyRef = useRef(false);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
@@ -318,6 +309,128 @@ export default function CampaignMap({
     }
   }, []);
 
+  // Adds territory + contribution sources/layers. Called on initial load and after every style swap
+  // (setStyle wipes all custom sources/layers; event listeners persist and reattach automatically).
+  const setupCustomLayers = useCallback(async () => {
+    const m = map.current;
+    if (!m) return;
+    const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
+
+    m.addSource("territory", {
+      type: "vector",
+      tiles: [tileUrl],
+      minzoom: 0,
+      maxzoom: 14,
+      promoteId: "geo_unit_id",
+    });
+
+    m.addLayer({
+      id: "territory-fill",
+      type: "fill",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "fill-color": ["coalesce", ["feature-state", "color"], "#a1a1aa"],
+        "fill-opacity": ["coalesce", ["feature-state", "opacity"], 0.05],
+      },
+    });
+
+    m.addLayer({
+      id: "territory-border",
+      type: "line",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "line-color": [
+          "case",
+          ["boolean", ["feature-state", "hover"], false],
+          "#ea580c",
+          ["coalesce", ["feature-state", "border_color"], "#a1a1aa"],
+        ],
+        "line-width": [
+          "case",
+          ["boolean", ["feature-state", "hover"], false],
+          ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
+          ["coalesce", ["feature-state", "border_width"], 2.0],
+        ],
+        "line-opacity": ["coalesce", ["feature-state", "border_opacity"], 0.85],
+      },
+    });
+
+    m.addLayer({
+      id: "territory-hover",
+      type: "fill",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "fill-color": "#fde047",
+        "fill-opacity": [
+          "case",
+          ["boolean", ["feature-state", "hover"], false],
+          0.52,
+          0,
+        ],
+      },
+    });
+
+    const addDotLayer = () => m.addLayer({
+      id: "contribution-dots",
+      type: "circle",
+      source: "contribution-pts",
+      paint: {
+        "circle-radius": 6,
+        "circle-color": "#22c55e",
+        "circle-opacity": 0.9,
+        "circle-stroke-width": 1.5,
+        "circle-stroke-color": "#fff",
+        "circle-stroke-opacity": 0.7,
+      },
+    });
+
+    if (contributionFeaturesRef.current.length > 0) {
+      m.addSource("contribution-pts", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: contributionFeaturesRef.current },
+      });
+      addDotLayer();
+    } else {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/locations`,
+        );
+        if (res.ok) {
+          const locations = (await res.json()) as ContributionPoint[];
+          const features = locations.map((loc) => ({
+            type: "Feature" as const,
+            geometry: { type: "Point" as const, coordinates: [loc.longitude, loc.latitude] },
+            properties: {
+              value: loc.value ?? 1,
+              submitted_at: loc.submitted_at ?? "",
+            },
+          }));
+          contributionFeaturesRef.current = features;
+          m.addSource("contribution-pts", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features },
+          });
+          addDotLayer();
+        }
+      } catch {
+        // contribution dots are non-critical
+      }
+    }
+
+    applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
+    updateEventMarkers(activeEventsRef.current);
+  }, [campaign.id, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Style switcher — setStyle wipes sources/layers; re-add them on style.load
+  useEffect(() => {
+    if (!map.current || !mapReadyRef.current) return;
+    map.current.once("style.load", () => { setupCustomLayers(); });
+    map.current.setStyle(styleUrl(activeStyle));
+  }, [activeStyle, setupCustomLayers]);
+
   // Map initialization
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -332,10 +445,11 @@ export default function CampaignMap({
     hoverDivRef.current = hoverDiv;
 
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
+    void tileUrl; // consumed inside setupCustomLayers
 
     map.current = new maplibregl.Map({
       container: mapContainer.current,
-      style: MAP_STYLE,
+      style: styleUrl("outdoor"),
       center: [-98.5795, 39.8283],
       zoom: 4,
       attributionControl: false,
@@ -364,124 +478,31 @@ export default function CampaignMap({
 
     map.current.on("load", async () => {
       if (!map.current) return;
+      mapReadyRef.current = true;
+      await setupCustomLayers();
 
-      map.current.addSource("territory", {
-        type: "vector",
-        tiles: [tileUrl],
-        minzoom: 0,
-        maxzoom: 14,
-        promoteId: "geo_unit_id",
+      // Event listeners are registered once here and persist through style swaps.
+      map.current.on("mouseenter", "contribution-dots", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
-
-      map.current.addLayer({
-        id: "territory-fill",
-        type: "fill",
-        source: "territory",
-        "source-layer": "territories",
-        paint: {
-          "fill-color": ["coalesce", ["feature-state", "color"], "#a1a1aa"],
-          "fill-opacity": ["coalesce", ["feature-state", "opacity"], 0.05],
-        },
+      map.current.on("mousemove", "contribution-dots", (e) => {
+        if (pinPickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as { value?: number; submitted_at?: string };
+        const date = props.submitted_at
+          ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
+        hoverDiv.style.display = "block";
+        hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
+        hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
+        hoverDiv.innerHTML =
+          `<span style="font-size:13px">🗑️</span>` +
+          `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${props.value ?? 1} bag${(props.value ?? 1) !== 1 ? "s" : ""}</span>` +
+          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
       });
-
-      map.current.addLayer({
-        id: "territory-border",
-        type: "line",
-        source: "territory",
-        "source-layer": "territories",
-        paint: {
-          "line-color": [
-            "case",
-            ["boolean", ["feature-state", "hover"], false],
-            "#ea580c",
-            ["coalesce", ["feature-state", "border_color"], "#a1a1aa"],
-          ],
-          "line-width": [
-            "case",
-            ["boolean", ["feature-state", "hover"], false],
-            ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
-            ["coalesce", ["feature-state", "border_width"], 2.0],
-          ],
-          "line-opacity": ["coalesce", ["feature-state", "border_opacity"], 0.85],
-        },
+      map.current.on("mouseleave", "contribution-dots", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "";
+        hoverDiv.style.display = "none";
       });
-
-      map.current.addLayer({
-        id: "territory-hover",
-        type: "fill",
-        source: "territory",
-        "source-layer": "territories",
-        paint: {
-          "fill-color": "#fde047",
-          "fill-opacity": [
-            "case",
-            ["boolean", ["feature-state", "hover"], false],
-            0.52,
-            0,
-          ],
-        },
-      });
-
-      // Contribution point dots
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/locations`,
-        );
-        if (res.ok) {
-          const locations = (await res.json()) as ContributionPoint[];
-          const features = locations.map((loc) => ({
-            type: "Feature" as const,
-            geometry: { type: "Point" as const, coordinates: [loc.longitude, loc.latitude] },
-            properties: {
-              value: loc.value ?? 1,
-              submitted_at: loc.submitted_at ?? "",
-            },
-          }));
-          contributionFeaturesRef.current = features;
-          map.current.addSource("contribution-pts", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features },
-          });
-
-          map.current.addLayer({
-            id: "contribution-dots",
-            type: "circle",
-            source: "contribution-pts",
-            paint: {
-              "circle-radius": 6,
-              "circle-color": "#22c55e",
-              "circle-opacity": 0.9,
-              "circle-stroke-width": 1.5,
-              "circle-stroke-color": "#fff",
-              "circle-stroke-opacity": 0.7,
-            },
-          });
-
-          map.current.on("mouseenter", "contribution-dots", () => {
-            if (map.current) map.current.getCanvas().style.cursor = "pointer";
-          });
-          map.current.on("mousemove", "contribution-dots", (e) => {
-            if (pinPickerActiveRef.current || !e.features?.[0]) return;
-            const props = e.features[0].properties as { value?: number; submitted_at?: string };
-            const date = props.submitted_at
-              ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-              : "";
-            hoverDiv.style.display = "block";
-            hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
-            hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
-            hoverDiv.innerHTML =
-              `<span style="font-size:13px">🗑️</span>` +
-              `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${props.value ?? 1} bag${(props.value ?? 1) !== 1 ? "s" : ""}</span>` +
-              (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
-          });
-          map.current.on("mouseleave", "contribution-dots", () => {
-            if (map.current) map.current.getCanvas().style.cursor = "";
-            hoverDiv.style.display = "none";
-          });
-        }
-      } catch {
-        // contribution dots are non-critical
-      }
 
       let lastHoveredId: string | number | null = null;
 
@@ -545,9 +566,6 @@ export default function CampaignMap({
         const displayName = props.display_name ?? geoUnitId;
         setSelectedZip({ geoUnitId, displayName });
       });
-
-      applyClaimsAsFeatureState(map.current, claimsRef.current, claimLabelsRef.current);
-      updateEventMarkers(activeEventsRef.current);
     });
 
     return () => {
@@ -791,24 +809,27 @@ export default function CampaignMap({
       )}
 
       {!pinPickerActive && (
-        <div className="absolute bottom-8 right-4 z-10 flex flex-col gap-1.5 text-xs">
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-            <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
-            <span className="text-zinc-300">Cleanup logged</span>
+        <>
+          {/* Legend */}
+          <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
+              <span className="text-zinc-300">Cleanup logged</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
+              <span className="text-zinc-300">Group territory</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
+              <span className="text-zinc-300">Individual territory</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
+              <span className="text-zinc-300">Unclaimed</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-            <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
-            <span className="text-zinc-300">Group territory</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-            <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
-            <span className="text-zinc-300">Individual territory</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-            <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
-            <span className="text-zinc-300">Unclaimed</span>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

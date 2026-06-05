@@ -20,6 +20,7 @@ interface Props {
   onPinCancelled?: () => void;
   newContribution?: { lat: number; lng: number; value: number; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
+  activeStyle?: string;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {
@@ -27,6 +28,11 @@ const CampaignMap = dynamic(() => import("./CampaignMap"), {
   loading: () => <div className="absolute inset-0 bg-zinc-900 animate-pulse" />,
 });
 
-export default function CampaignMapWrapper(props: Props) {
-  return <CampaignMap {...props} />;
+export default function CampaignMapWrapper({ activeStyle, ...rest }: Props) {
+  return (
+    <CampaignMap
+      {...rest}
+      activeStyle={activeStyle as "outdoor" | "streets" | "hybrid" | undefined}
+    />
+  );
 }
