@@ -20,6 +20,7 @@ interface Props {
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
   userId: string | null;
+  userGroups: { id: string; name: string }[];
 }
 
 interface NewContribution {
@@ -29,7 +30,7 @@ interface NewContribution {
   key: number;
 }
 
-export default function CampaignPageClient({ campaign, claims, activeEvents, claimLabels, userId }: Props) {
+export default function CampaignPageClient({ campaign, claims, activeEvents, claimLabels, userId, userGroups }: Props) {
   const [pinPickerActive, setPinPickerActive] = useState(false);
   const [pinPickerInitialCoords, setPinPickerInitialCoords] = useState<Coords | null>(null);
   const [pinPickerConstrained, setPinPickerConstrained] = useState(true);
@@ -78,6 +79,7 @@ export default function CampaignPageClient({ campaign, claims, activeEvents, cla
           campaignId={campaign.id}
           campaignContributionType={campaign.contribution_type}
           userId={userId}
+          userGroups={userGroups}
           onEnterPinPicker={handleEnterPinPicker}
           pinPickerActive={pinPickerActive}
           placedPinCoords={placedPinCoords}

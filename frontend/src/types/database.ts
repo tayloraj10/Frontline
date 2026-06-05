@@ -48,6 +48,28 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["groups"]["Insert"]>;
       };
+      group_members: {
+        Row: {
+          id: string;
+          group_id: string;
+          user_id: string;
+          role: MemberRole;
+          joined_at: string;
+        };
+        Insert: {
+          id?: string;
+          group_id: string;
+          user_id: string;
+          role?: MemberRole;
+          joined_at?: string;
+        };
+        Update: Partial<{
+          group_id: string;
+          user_id: string;
+          role: MemberRole;
+          joined_at: string;
+        }>;
+      };
       campaigns: {
         Row: {
           id: string;

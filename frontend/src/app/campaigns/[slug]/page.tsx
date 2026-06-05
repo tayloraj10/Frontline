@@ -44,7 +44,7 @@ export default async function CampaignPage({ params }: Props) {
   const campaign = data as Campaign | null;
   if (!campaign) notFound();
 
-  const [{ data: claimsData }, { data: eventsData }, { count: contribCount }] =
+  const [{ data: claimsData }, { data: eventsData }, { count: contribCount }, { data: membershipData }] =
     await Promise.all([
       supabase
         .from("territory_claims")
@@ -59,11 +59,20 @@ export default async function CampaignPage({ params }: Props) {
         .from("contributions")
         .select("*", { count: "exact", head: true })
         .eq("campaign_id", campaign.id),
+      user
+        ? supabase.from("group_members").select("group_id").eq("user_id", user.id)
+        : Promise.resolve({ data: [] as { group_id: string }[] }),
     ]);
 
   const claims = (claimsData ?? []) as TerritoryClaim[];
   const events = (eventsData ?? []) as CampaignEvent[];
   const tractsCount = claims.length;
+
+  const userGroupIds = (membershipData ?? []).map((m) => m.group_id);
+  const { data: userGroupsData } = userGroupIds.length > 0
+    ? await supabase.from("groups").select("id, name").in("id", userGroupIds)
+    : { data: [] as { id: string; name: string }[] };
+  const userGroups = (userGroupsData ?? []) as { id: string; name: string }[];
   const totalBags = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const contributionCount = contribCount ?? 0;
 
@@ -154,6 +163,7 @@ export default async function CampaignPage({ params }: Props) {
           activeEvents={events}
           claimLabels={claimLabels}
           userId={user?.id ?? null}
+          userGroups={userGroups}
         />
       </div>
     </div>

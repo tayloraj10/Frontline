@@ -455,9 +455,9 @@ Tables that drive live map updates:
 ### Phase 4: Groups & Social Layer (Week 3–4)
 **Goal:** Groups can participate and there's a social feed
 
-- [ ] Group creation and profile pages
-- [ ] Group membership (join, admin roles)
-- [ ] Contributions attributed to group when user is a member
+- [x] Group creation and profile pages
+- [x] Group membership (join, admin roles)
+- [x] Contributions attributed to group when user is a member
 - [ ] Group leaderboard per campaign
 - [ ] Individual leaderboard per campaign
 - [ ] Activity feed (recent contributions, events, claims — paginated)

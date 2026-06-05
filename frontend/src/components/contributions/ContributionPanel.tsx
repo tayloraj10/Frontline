@@ -17,6 +17,7 @@ interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
   userId: string;
+  userGroups?: { id: string; name: string }[];
   onEnterPinPicker: (coords: Coords, constrained?: boolean) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
@@ -161,6 +162,7 @@ function GpsIndicator({
 function ContributeModal({
   campaignId,
   userId,
+  userGroups,
   gps,
   overrideCoords,
   onEnterPinPicker,
@@ -169,6 +171,7 @@ function ContributeModal({
 }: {
   campaignId: string;
   userId: string;
+  userGroups: { id: string; name: string }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -178,6 +181,7 @@ function ContributeModal({
   const [bagCount, setBagCount] = useState(1);
   const [notes, setNotes] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -200,6 +204,7 @@ function ContributeModal({
           body: JSON.stringify({
             campaign_id: campaignId,
             user_id: userId,
+            group_id: selectedGroupId,
             contribution_type: "cleanup",
             value: bagCount,
             photo_url: photoUrl,
@@ -267,6 +272,39 @@ function ContributeModal({
 
         {submitCoords && (
           <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} />
+        )}
+
+        {userGroups.length > 0 && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedGroupId(null)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  selectedGroupId === null
+                    ? "bg-zinc-700 border-zinc-500 text-zinc-100"
+                    : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                }`}
+              >
+                Individual
+              </button>
+              {userGroups.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => setSelectedGroupId(g.id)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    selectedGroupId === g.id
+                      ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                      : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                  }`}
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         <div>
@@ -520,6 +558,7 @@ export default function ContributionPanel({
   campaignId,
   campaignContributionType,
   userId,
+  userGroups = [],
   onEnterPinPicker,
   pinPickerActive,
   placedPinCoords,
@@ -604,6 +643,7 @@ export default function ContributionPanel({
         <ContributeModal
           campaignId={campaignId}
           userId={userId}
+          userGroups={userGroups}
           gps={gps}
           overrideCoords={placedPinCoords}
           onEnterPinPicker={handleEnterPinPickerForCleanup}
