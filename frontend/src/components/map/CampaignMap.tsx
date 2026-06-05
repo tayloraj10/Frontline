@@ -45,9 +45,9 @@ interface Props {
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
 const MAP_STYLES = [
-  { id: "outdoor", label: "Terrain"   },
-  { id: "streets", label: "Streets"   },
-  { id: "hybrid",  label: "Satellite" },
+  { id: "outdoor", label: "Terrain" },
+  { id: "streets", label: "Streets" },
+  { id: "hybrid", label: "Satellite" },
 ] as const;
 
 type StyleId = typeof MAP_STYLES[number]["id"];
@@ -67,8 +67,8 @@ function claimHeatColor(isGroup: boolean, totalValue: number): string {
 }
 
 function claimHeatOpacity(owned: boolean, totalValue: number): number {
-  if (!owned) return 0.05;
-  return lerp(0.28, 0.42, Math.min(totalValue / 50, 1));
+  if (!owned) return 0.22;
+  return lerp(0.32, 0.50, Math.min(totalValue / 50, 1));
 }
 
 function claimBorderWidth(owned: boolean, totalValue: number): number {
@@ -331,7 +331,7 @@ export default function CampaignMap({
       "source-layer": "territories",
       paint: {
         "fill-color": ["coalesce", ["feature-state", "color"], "#a1a1aa"],
-        "fill-opacity": ["coalesce", ["feature-state", "opacity"], 0.05],
+        "fill-opacity": ["coalesce", ["feature-state", "opacity"], 0.22],
       },
     });
 
@@ -538,8 +538,8 @@ export default function CampaignMap({
           const bags = state.total_value ?? 0;
           const claimerHtml = state.claimed_label
             ? `<div style="color:${state.claim_is_group ? "#34d399" : "#60a5fa"};font-size:11px;margin-top:4px">` +
-              `${state.claim_is_group ? "👥" : "👤"} ${state.claimed_label}</div>` +
-              `<div style="color:#a1a1aa;font-size:11px;margin-top:1px">${bags} bag${bags !== 1 ? "s" : ""}</div>`
+            `${state.claim_is_group ? "👥" : "👤"} ${state.claimed_label}</div>` +
+            `<div style="color:#a1a1aa;font-size:11px;margin-top:1px">${bags} bag${bags !== 1 ? "s" : ""}</div>`
             : `<div style="color:#52525b;font-size:11px;margin-top:4px">Unclaimed</div>`;
           hoverDiv.innerHTML =
             `<div style="font-weight:700;font-size:13px;color:#f4f4f5">ZIP ${zip}</div>` + claimerHtml;
@@ -759,11 +759,10 @@ export default function CampaignMap({
 
       {pinPickerActive && (
         <>
-          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap transition-colors duration-200 ${
-            outOfZoneWarning
+          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap transition-colors duration-200 ${outOfZoneWarning
               ? "bg-red-950/95 border-red-700 text-red-300"
               : "bg-zinc-900/95 border-zinc-700 text-zinc-200"
-          }`}>
+            }`}>
             {outOfZoneWarning
               ? "Pin must stay within your ZIP code"
               : "Drag the pin to your exact cleanup location"}

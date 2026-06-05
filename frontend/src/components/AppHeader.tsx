@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import UserNav from "./UserNav";
+import NotificationBellWrapper from "./NotificationBellWrapper";
 
 export default async function AppHeader() {
   const supabase = await createClient();
@@ -36,7 +37,10 @@ export default async function AppHeader() {
             </Link>
           </nav>
         </div>
-        <UserNav user={user} />
+        <div className="flex items-center gap-2">
+          {user && <NotificationBellWrapper />}
+          <UserNav user={user} />
+        </div>
       </div>
     </header>
   );

@@ -30,11 +30,16 @@ export default function UserNav({ user }: { user: User | null }) {
     user.user_metadata?.username || user.email?.split("@")[0] || "User";
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm text-zinc-400 hidden sm:block">{displayName}</span>
+    <div className="flex items-center gap-1">
+      <Link
+        href="/profile"
+        className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors hidden sm:block"
+      >
+        {displayName}
+      </Link>
       <button
         onClick={handleSignOut}
-        className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors"
+        className="px-3 py-1.5 text-sm text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors"
       >
         Sign out
       </button>
