@@ -7,6 +7,7 @@
 | Frontend | Next.js + TypeScript | Web-first, React Native for mobile post-MVP |
 | Styling / Animation | Framer Motion + GSAP | UI transitions + heavy map/campaign animations |
 | Map Engine | MapLibre GL JS | Open source, highly customizable, SVG/canvas overlay support |
+| Basemap | CartoDB Voyager (current) → **MapTiler Streets** (planned) | CartoDB is free/no-key. Switch to MapTiler Streets (free API key at maptiler.com) for Google Maps-quality styling — just a tile URL + key swap in `MAP_STYLE`. |
 | Backend API | FastAPI (Python) | Hosted on Railway or Cloud Run (see note below) |
 | Database | Supabase (PostgreSQL + PostGIS) | Includes Auth, Realtime, Row Level Security. PostGIS enabled by default. |
 | Geo Libraries | GeoAlchemy2 + Shapely (Python) | Spatial queries and geometry processing in FastAPI |
@@ -489,6 +490,7 @@ Tables that drive live map updates:
 - [ ] Map animations: territory pulse on claim, boss spawn particle effect, photo pin drop
 - [ ] Onboarding flow for new users
 - [ ] Campaign discovery / home page
+- [ ] Switch basemap to MapTiler Streets (get free API key at maptiler.com, swap tile URL in `MAP_STYLE` in `CampaignMap.tsx`)
 - [ ] Mobile responsive UI audit
 - [ ] Performance audit: map tile caching, image optimization, query indexing
 - [ ] Error handling, loading states, empty states throughout

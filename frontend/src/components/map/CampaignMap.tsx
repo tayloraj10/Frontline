@@ -44,26 +44,57 @@ interface Props {
 const MAP_STYLE = {
   version: 8 as const,
   sources: {
-    osm: {
+    esri: {
       type: "raster" as const,
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+      ],
       tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
+      attribution: "© Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China, OpenStreetMap contributors",
     },
   },
   layers: [
     {
-      id: "osm-tiles",
+      id: "esri-tiles",
       type: "raster" as const,
-      source: "osm",
+      source: "esri",
       paint: {
-        "raster-opacity": 0.7,
-        "raster-saturation": -0.5,
-        "raster-brightness-max": 0.8,
+        "raster-opacity": 1.0,
       },
     },
   ],
 };
+
+function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+
+function claimHeatColor(isGroup: boolean, totalValue: number): string {
+  const t = Math.min(Math.max(totalValue, 0) / 50, 1);
+  if (isGroup) {
+    // emerald: medium green → bright emerald
+    return `rgb(${Math.round(lerp(6, 16, t))},${Math.round(lerp(120, 185, t))},${Math.round(lerp(80, 129, t))})`;
+  }
+  // blue: medium blue → bright blue
+  return `rgb(${Math.round(lerp(30, 59, t))},${Math.round(lerp(80, 130, t))},${Math.round(lerp(180, 246, t))})`;
+}
+
+function claimHeatOpacity(owned: boolean, totalValue: number): number {
+  if (!owned) return 0.05;
+  return lerp(0.28, 0.42, Math.min(totalValue / 50, 1));
+}
+
+function claimBorderWidth(owned: boolean, totalValue: number): number {
+  if (!owned) return 1.3;
+  return lerp(2.5, 4.5, Math.min(totalValue / 50, 1));
+}
+
+function claimBorderOpacity(owned: boolean, _totalValue: number): number {
+  return owned ? 1.0 : 0.7;
+}
+
+function claimBorderColor(owned: boolean, isGroup: boolean, totalValue: number): string {
+  if (!owned) return "#a1a1aa";
+  return claimHeatColor(isGroup, totalValue);
+}
 
 function applyClaimsAsFeatureState(
   map: maplibregl.Map,
@@ -72,17 +103,22 @@ function applyClaimsAsFeatureState(
 ): void {
   for (const claim of claims) {
     if (!claim.geo_unit_id) continue;
-    const color = claim.claimed_by_group
-      ? "#10b981"
-      : claim.claimed_by_user
-        ? "#3b82f6"
-        : "#1f2937";
+    const owned = !!(claim.claimed_by_group || claim.claimed_by_user);
+    const isGroup = !!claim.claimed_by_group;
+    const totalValue = claim.total_value ?? 0;
+    const color = owned ? claimHeatColor(isGroup, totalValue) : "#a1a1aa";
+    const opacity = claimHeatOpacity(owned, totalValue);
+    const borderWidth = claimBorderWidth(owned, totalValue);
     const label = claimLabels[claim.geo_unit_id] ?? null;
     map.setFeatureState(
       { source: "territory", sourceLayer: "territories", id: claim.geo_unit_id },
       {
         color,
-        total_value: claim.total_value ?? 0,
+        border_color: claimBorderColor(owned, isGroup, totalValue),
+        opacity,
+        border_width: borderWidth,
+        border_opacity: claimBorderOpacity(owned, totalValue),
+        total_value: totalValue,
         claimed_label: label?.name ?? null,
         claim_is_group: label?.isGroup ?? false,
       },
@@ -126,18 +162,25 @@ function TerritoryPanel({
 
   const bags = claim?.total_value ?? 0;
   const isGroup = claimLabel?.isGroup ?? false;
+  const isClaimed = !!(claim?.claimed_by_group || claim?.claimed_by_user);
+
+  const accentHex = isClaimed ? (isGroup ? "#10b981" : "#3b82f6") : "#3f3f46";
 
   return (
-    <div className="absolute top-20 right-2 z-20 w-56 bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-zinc-800">
+    <div className="absolute top-20 right-2 z-20 w-60 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+      {/* Colored left accent strip */}
+      <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentHex }} />
+
+      {/* Header */}
+      <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-zinc-500 text-xs uppercase tracking-wider mb-0.5">ZIP Code</p>
-            <p className="text-zinc-100 font-bold text-lg leading-none">{displayName}</p>
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Territory</p>
+            <p className="text-xl font-black leading-none tracking-tight text-zinc-100">ZIP {displayName}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-600 hover:text-zinc-300 text-xl leading-none mt-0.5 transition-colors"
+            className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 transition-colors hover:text-zinc-300"
           >
             ×
           </button>
@@ -147,33 +190,34 @@ function TerritoryPanel({
           {claimLabel ? (
             <div className="flex items-center gap-1.5">
               <span className="text-sm">{isGroup ? "👥" : "👤"}</span>
-              <span className={`text-sm font-semibold ${isGroup ? "text-emerald-400" : "text-blue-400"}`}>
+              <span className={`truncate text-sm font-semibold ${isGroup ? "text-emerald-400" : "text-blue-400"}`}>
                 {claimLabel.name}
               </span>
             </div>
           ) : (
-            <span className="text-zinc-600 text-sm">Unclaimed</span>
+            <span className="text-sm text-zinc-600">Unclaimed</span>
           )}
-          {bags > 0 && (
-            <p className="text-zinc-500 text-xs mt-1">{bags} bag{bags !== 1 ? "s" : ""} collected</p>
+          {isClaimed && (
+            <p className="mt-1 text-xs text-zinc-500">{bags} bag{bags !== 1 ? "s" : ""} collected</p>
           )}
         </div>
       </div>
 
-      <div className="px-4 py-3">
-        <p className="text-zinc-500 text-xs uppercase tracking-wider mb-2">Recent Cleanups</p>
+      {/* Recent cleanups */}
+      <div className="pb-3 pl-4 pr-3 pt-3">
+        <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Cleanups</p>
         {loading ? (
-          <p className="text-zinc-700 text-xs">Loading…</p>
+          <p className="text-xs text-zinc-700">Loading…</p>
         ) : contribs.length === 0 ? (
-          <p className="text-zinc-700 text-xs">No cleanups logged yet</p>
+          <p className="text-xs text-zinc-700">No cleanups logged yet</p>
         ) : (
           <div className="space-y-1.5">
             {contribs.map((c, i) => (
               <div key={i} className="flex items-center justify-between">
-                <span className="text-zinc-300 text-xs">
+                <span className="text-xs text-zinc-300">
                   🗑️ {c.value ?? 1} bag{(c.value ?? 1) !== 1 ? "s" : ""}
                 </span>
-                <span className="text-zinc-600 text-xs">
+                <span className="text-xs text-zinc-600">
                   {c.submitted_at
                     ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                     : ""}
@@ -256,8 +300,8 @@ export default function CampaignMap({
 
       const el = document.createElement("div");
       el.style.cssText = isBoss
-        ? "display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:rgba(120,20,20,0.95);border:2px solid #ef4444;font-size:24px;box-shadow:0 0 16px rgba(239,68,68,0.5);cursor:pointer;transform-origin:center"
-        : "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.9);border:2px solid #ef4444;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.5);cursor:pointer;transform-origin:center";
+        ? "display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;background:radial-gradient(circle,rgba(153,27,27,0.97) 0%,rgba(127,29,29,0.97) 100%);border:2px solid #ef4444;font-size:26px;box-shadow:0 0 0 4px rgba(239,68,68,0.18),0 0 22px rgba(239,68,68,0.45),0 4px 14px rgba(0,0,0,0.85);cursor:pointer;transform-origin:center"
+        : "display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(120,27,27,0.92);border:1.5px solid #f87171;font-size:17px;box-shadow:0 0 10px rgba(239,68,68,0.3),0 2px 8px rgba(0,0,0,0.65);cursor:pointer;transform-origin:center";
       el.textContent = isBoss ? "🗑️" : "⚡";
       el.title = event.title;
 
@@ -335,8 +379,8 @@ export default function CampaignMap({
         source: "territory",
         "source-layer": "territories",
         paint: {
-          "fill-color": ["coalesce", ["feature-state", "color"], "#1f2937"],
-          "fill-opacity": 0.5,
+          "fill-color": ["coalesce", ["feature-state", "color"], "#a1a1aa"],
+          "fill-opacity": ["coalesce", ["feature-state", "opacity"], 0.05],
         },
       });
 
@@ -346,9 +390,35 @@ export default function CampaignMap({
         source: "territory",
         "source-layer": "territories",
         paint: {
-          "line-color": ["coalesce", ["feature-state", "color"], "#374151"],
-          "line-width": 1.5,
-          "line-opacity": 0.8,
+          "line-color": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            "#ea580c",
+            ["coalesce", ["feature-state", "border_color"], "#a1a1aa"],
+          ],
+          "line-width": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
+            ["coalesce", ["feature-state", "border_width"], 2.0],
+          ],
+          "line-opacity": ["coalesce", ["feature-state", "border_opacity"], 0.85],
+        },
+      });
+
+      map.current.addLayer({
+        id: "territory-hover",
+        type: "fill",
+        source: "territory",
+        "source-layer": "territories",
+        paint: {
+          "fill-color": "#fde047",
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.52,
+            0,
+          ],
         },
       });
 
@@ -424,6 +494,18 @@ export default function CampaignMap({
 
         const featId = e.features[0].id ?? null;
         if (featId !== lastHoveredId) {
+          if (lastHoveredId !== null) {
+            map.current.setFeatureState(
+              { source: "territory", sourceLayer: "territories", id: lastHoveredId },
+              { hover: false },
+            );
+          }
+          if (featId !== null) {
+            map.current.setFeatureState(
+              { source: "territory", sourceLayer: "territories", id: featId },
+              { hover: true },
+            );
+          }
           lastHoveredId = featId;
           const props = e.features[0].properties as { display_name?: string };
           const state = e.features[0].state as {
@@ -445,6 +527,12 @@ export default function CampaignMap({
 
       map.current.on("mouseleave", "territory-fill", () => {
         if (!map.current) return;
+        if (lastHoveredId !== null) {
+          map.current.setFeatureState(
+            { source: "territory", sourceLayer: "territories", id: lastHoveredId },
+            { hover: false },
+          );
+        }
         map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
         lastHoveredId = null;
@@ -607,17 +695,20 @@ export default function CampaignMap({
           if (!map.current) return;
           const claim = payload.new as TerritoryClaim;
           if (!claim?.geo_unit_id) return;
-          const color = claim.claimed_by_group
-            ? "#10b981"
-            : claim.claimed_by_user
-              ? "#3b82f6"
-              : "#1f2937";
+          const owned = !!(claim.claimed_by_group || claim.claimed_by_user);
+          const isGroup = !!claim.claimed_by_group;
+          const totalValue = claim.total_value ?? 0;
+          const color = owned ? claimHeatColor(isGroup, totalValue) : "#a1a1aa";
           const label = claimLabelsRef.current[claim.geo_unit_id] ?? null;
           map.current.setFeatureState(
             { source: "territory", sourceLayer: "territories", id: claim.geo_unit_id },
             {
               color,
-              total_value: claim.total_value ?? 0,
+              border_color: claimBorderColor(owned, isGroup, totalValue),
+              opacity: claimHeatOpacity(owned, totalValue),
+              border_width: claimBorderWidth(owned, totalValue),
+              border_opacity: claimBorderOpacity(owned, totalValue),
+              total_value: totalValue,
               claimed_label: label?.name ?? null,
               claim_is_group: label?.isGroup ?? false,
             },
@@ -714,7 +805,7 @@ export default function CampaignMap({
             <span className="text-zinc-300">Individual territory</span>
           </div>
           <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-            <span className="w-3 h-3 rounded-sm bg-zinc-700/70" />
+            <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
             <span className="text-zinc-300">Unclaimed</span>
           </div>
         </div>

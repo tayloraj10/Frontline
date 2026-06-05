@@ -48,43 +48,42 @@ export default async function CampaignsPage() {
               <Link
                 key={campaign.id}
                 href={`/campaigns/${campaign.slug}`}
-                className="group relative block p-6 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-2xl transition-all duration-200 overflow-hidden"
+                className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40"
               >
-                {/* Colored top accent bar */}
-                <div
-                  className={`absolute top-0 left-0 right-0 h-0.5 ${cfg.bar} opacity-40 group-hover:opacity-80 transition-opacity`}
-                />
+                {/* Left accent border */}
+                <div className={`absolute inset-y-0 left-0 w-[3px] rounded-l-2xl ${cfg.bar} opacity-50 transition-opacity duration-300 group-hover:opacity-100`} />
 
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    {/* Badges row */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${cfg.bg} ${cfg.border} ${cfg.color}`}
-                      >
+<div className="relative flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    {/* Badges + live indicator row */}
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${cfg.bg} ${cfg.border} ${cfg.color}`}>
                         <span>{cfg.icon}</span>
                         <span className="capitalize">{campaign.campaign_type}</span>
                       </span>
                       {campaign.contribution_type && (
-                        <span className="px-2.5 py-1 bg-zinc-800 border border-zinc-700 text-zinc-400 text-xs rounded-full">
-                          {CONTRIBUTION_LABELS[campaign.contribution_type] ??
-                            campaign.contribution_type}
+                        <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-400">
+                          {CONTRIBUTION_LABELS[campaign.contribution_type] ?? campaign.contribution_type}
                         </span>
                       )}
+                      <span className="ml-auto flex items-center gap-1 text-[10px] font-bold tracking-widest text-emerald-400">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                        LIVE
+                      </span>
                     </div>
 
-                    <h2 className="font-bold text-lg text-zinc-100 group-hover:text-white leading-snug">
+                    <h2 className="text-lg font-bold leading-snug text-zinc-100 group-hover:text-white">
                       {campaign.title}
                     </h2>
                     {campaign.description && (
-                      <p className="text-zinc-500 text-sm mt-1.5 line-clamp-2 leading-relaxed">
+                      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-zinc-500">
                         {campaign.description}
                       </p>
                     )}
                   </div>
 
                   {/* Arrow */}
-                  <span className="text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all text-xl mt-0.5 flex-shrink-0">
+                  <span className="mt-0.5 flex-shrink-0 text-xl text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300">
                     →
                   </span>
                 </div>
