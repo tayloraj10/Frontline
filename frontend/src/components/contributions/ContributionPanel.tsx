@@ -18,20 +18,30 @@ interface ContributionPanelProps {
 function useGPS() {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [errorCode, setErrorCode] = useState<number | null>(null);
 
   const capture = () => {
+    if (!navigator.geolocation) {
+      setErrorCode(0);
+      setStatus("error");
+      return;
+    }
     setStatus("loading");
+    setErrorCode(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
         setStatus("success");
       },
-      () => setStatus("error"),
+      (err) => {
+        setErrorCode(err.code);
+        setStatus("error");
+      },
       { enableHighAccuracy: true, timeout: 10000 },
     );
   };
 
-  return { coords, status, capture };
+  return { coords, status, errorCode, capture };
 }
 
 // ─── Presign + upload to R2 ──────────────────────────────────────────────────
@@ -59,13 +69,22 @@ async function uploadToR2(file: File): Promise<string> {
 
 // ─── GPS status indicator ─────────────────────────────────────────────────────
 
+const GPS_ERROR_MSG: Record<number, string> = {
+  0: "Location requires HTTPS — use localhost or deploy with SSL",
+  1: "Location blocked — allow it in your browser/OS settings",
+  2: "Location signal unavailable",
+  3: "Location timed out",
+};
+
 function GpsIndicator({
   status,
   coords,
+  errorCode,
   onRetry,
 }: {
   status: "idle" | "loading" | "success" | "error";
   coords: Coords | null;
+  errorCode: number | null;
   onRetry: () => void;
 }) {
   if (status === "loading") {
@@ -87,12 +106,15 @@ function GpsIndicator({
     );
   }
   if (status === "error") {
+    const msg = (errorCode !== null && GPS_ERROR_MSG[errorCode]) || "Location unavailable";
     return (
-      <div className="flex items-center gap-2 text-sm">
-        <span className="w-2 h-2 rounded-full bg-red-500" />
-        <span className="text-red-400">Location unavailable</span>
-        <button onClick={onRetry} className="text-zinc-400 underline hover:text-zinc-200 text-xs">
-          Retry
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+          <span className="text-red-400">{msg}</span>
+        </div>
+        <button onClick={onRetry} className="self-start text-zinc-400 underline hover:text-zinc-200 text-xs ml-4">
+          Try again
         </button>
       </div>
     );
@@ -111,7 +133,7 @@ function ContributeModal({
   userId: string;
   onClose: () => void;
 }) {
-  const { coords, status: gpsStatus, capture } = useGPS();
+  const { coords, status: gpsStatus, errorCode: gpsErrorCode, capture } = useGPS();
   const [bagCount, setBagCount] = useState(1);
   const [notes, setNotes] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
@@ -179,7 +201,7 @@ function ContributeModal({
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs text-zinc-500 mb-1.5">Your location</p>
-          <GpsIndicator status={gpsStatus} coords={coords} onRetry={capture} />
+          <GpsIndicator status={gpsStatus} coords={coords} errorCode={gpsErrorCode} onRetry={capture} />
         </div>
 
         <div>
@@ -247,7 +269,7 @@ function ReportModal({
   userId: string;
   onClose: () => void;
 }) {
-  const { coords, status: gpsStatus, capture } = useGPS();
+  const { coords, status: gpsStatus, errorCode: gpsErrorCode, capture } = useGPS();
   const [photo, setPhoto] = useState<File | null>(null);
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
   const [submitting, setSubmitting] = useState(false);
@@ -308,7 +330,7 @@ function ReportModal({
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs text-zinc-500 mb-1.5">Your location</p>
-          <GpsIndicator status={gpsStatus} coords={coords} onRetry={capture} />
+          <GpsIndicator status={gpsStatus} coords={coords} errorCode={gpsErrorCode} onRetry={capture} />
         </div>
 
         <div>

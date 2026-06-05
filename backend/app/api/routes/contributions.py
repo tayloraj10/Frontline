@@ -116,6 +116,39 @@ async def submit_contribution(payload: ContributionRequest, db: AsyncSession = D
     }
 
 
+@router.get("/{campaign_id}/locations")
+async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        text("""
+            SELECT
+                id::text,
+                user_id::text,
+                value,
+                submitted_at,
+                ST_Y(location::geometry) AS latitude,
+                ST_X(location::geometry) AS longitude
+            FROM contributions
+            WHERE campaign_id = :campaign_id
+              AND location IS NOT NULL
+            ORDER BY submitted_at DESC
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    rows = result.fetchall()
+    return [
+        {
+            "id": row.id,
+            "user_id": row.user_id,
+            "value": row.value,
+            "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
+            "latitude": float(row.latitude),
+            "longitude": float(row.longitude),
+        }
+        for row in rows
+        if row.latitude is not None and row.longitude is not None
+    ]
+
+
 @router.post("/process")
 async def process_contribution(payload: ContributionRequest, db: AsyncSession = Depends(get_db)):
     """

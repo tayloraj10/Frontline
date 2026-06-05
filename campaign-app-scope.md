@@ -437,15 +437,15 @@ Tables that drive live map updates:
 ### Phase 3: First Campaign — Trash War (Week 2–3)
 **Goal:** Full contribution flow for one campaign end to end
 
-- [ ] Campaign detail page with map + stats
-- [ ] Contribution submission form (photo upload to R2, GPS capture, bag count)
-- [ ] Proximity validation via PostGIS `ST_DWithin` (check GPS within reasonable distance of claimed tract)
-- [ ] Point-in-polygon tract assignment via PostGIS `ST_Contains` (auto-assign submission to correct census tract)
-- [ ] FastAPI endpoint to process contribution, update territory_claims
-- [ ] Problem reporting flow (photo + GPS → problem_reports table)
-- [ ] Boss event trigger: X reports in a tract → spawn campaign_event
-- [ ] Boss event visible on map (trash pile animation with GSAP)
-- [ ] Territory decay cron job (FastAPI background task)
+- [x] Campaign detail page with map + stats
+- [x] Contribution submission form (photo upload to R2, GPS capture, bag count)
+- [x] Proximity validation via PostGIS `ST_DWithin` (check GPS within reasonable distance of claimed tract)
+- [x] Point-in-polygon tract assignment via PostGIS `ST_Contains` (auto-assign submission to correct census tract)
+- [x] FastAPI endpoint to process contribution, update territory_claims
+- [x] Problem reporting flow (photo + GPS → problem_reports table)
+- [x] Boss event trigger: X reports in a tract → spawn campaign_event
+- [x] Boss event visible on map (trash pile animation with GSAP)
+- [x] Territory decay cron job (FastAPI background task)
 
 **Deliverable:** End-to-end Trash War campaign playable by real users
 
