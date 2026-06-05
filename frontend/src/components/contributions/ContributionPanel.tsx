@@ -17,9 +17,11 @@ interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
   userId: string;
-  onEnterPinPicker: (coords: Coords) => void;
+  onEnterPinPicker: (coords: Coords, constrained?: boolean) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
+  onContributionSubmitted?: (lat: number, lng: number, value: number) => void;
+  onLocationCaptured?: (coords: Coords) => void;
 }
 
 // ─── GPS hook ────────────────────────────────────────────────────────────────
@@ -163,6 +165,7 @@ function ContributeModal({
   overrideCoords,
   onEnterPinPicker,
   onClose,
+  onContributionSubmitted,
 }: {
   campaignId: string;
   userId: string;
@@ -170,6 +173,7 @@ function ContributeModal({
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
   onClose: () => void;
+  onContributionSubmitted?: (lat: number, lng: number, value: number) => void;
 }) {
   const [bagCount, setBagCount] = useState(1);
   const [notes, setNotes] = useState("");
@@ -207,6 +211,7 @@ function ContributeModal({
       );
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as { claimed_territory: boolean };
+      onContributionSubmitted?.(submitCoords.latitude, submitCoords.longitude, bagCount);
       setResult(data.claimed_territory ? "success" : "outside");
     } catch {
       setError("Submission failed. Please try again.");
@@ -323,23 +328,30 @@ function ContributeModal({
 function ReportModal({
   campaignId,
   userId,
+  gps,
+  overrideCoords,
+  onEnterPinPicker,
   onClose,
 }: {
   campaignId: string;
   userId: string;
+  gps: ReturnType<typeof useGPS>;
+  overrideCoords: Coords | null;
+  onEnterPinPicker: () => void;
   onClose: () => void;
 }) {
-  const { coords, status: gpsStatus, errorCode: gpsErrorCode, capture } = useGPS();
   const [photo, setPhoto] = useState<File | null>(null);
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const submitCoords = overrideCoords ?? gps.coords;
 
   const handleSubmit = async () => {
-    if (!coords || !photo) return;
+    if (!submitCoords || !photo) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -354,8 +366,8 @@ function ReportModal({
             campaign_id: campaignId,
             reported_by: userId,
             photo_url: photoUrl,
-            latitude: coords.latitude,
-            longitude: coords.longitude,
+            latitude: submitCoords.latitude,
+            longitude: submitCoords.longitude,
             severity,
           }),
         },
@@ -389,9 +401,32 @@ function ReportModal({
     <ModalShell title="Report Trash" onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div>
-          <p className="text-xs text-zinc-500 mb-1.5">Your location</p>
-          <GpsIndicator status={gpsStatus} coords={coords} errorCode={gpsErrorCode} onRetry={capture} />
+          <p className="text-xs text-zinc-500 mb-1.5">Trash location</p>
+          <GpsIndicator
+            status={gps.status}
+            coords={gps.coords}
+            errorCode={gps.errorCode}
+            onRetry={gps.capture}
+          />
+          {overrideCoords && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+            </div>
+          )}
+          {gps.status === "success" && gps.coords && (
+            <button
+              onClick={onEnterPinPicker}
+              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+            >
+              {overrideCoords ? "Reposition pin on map" : "Place pin on map"}
+            </button>
+          )}
         </div>
+
+        {submitCoords && (
+          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} />
+        )}
 
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">Photo (required)</label>
@@ -437,7 +472,7 @@ function ReportModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!coords || !photo || submitting}
+            disabled={!submitCoords || !photo || submitting}
             className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {submitting ? "Submitting…" : "Report"}
@@ -488,28 +523,58 @@ export default function ContributionPanel({
   onEnterPinPicker,
   pinPickerActive,
   placedPinCoords,
+  onContributionSubmitted,
+  onLocationCaptured,
 }: ContributionPanelProps) {
   const gps = useGPS();
   const [mode, setMode] = useState<"contribute" | "report" | null>(null);
+  const [reportOverrideCoords, setReportOverrideCoords] = useState<Coords | null>(null);
   const prevPinPickerActiveRef = useRef(false);
+  const prePinPickerModeRef = useRef<"contribute" | "report" | null>(null);
 
-  // When pin picker closes (confirmed or cancelled), reopen the contribute modal
+  // Start GPS immediately so the map pin and modal coords are ready before user taps a button
+  useEffect(() => {
+    gps.capture();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notify parent when GPS is captured so map can drop a location pin
+  useEffect(() => {
+    if (gps.status === "success" && gps.coords) {
+      onLocationCaptured?.(gps.coords);
+    }
+  }, [gps.status, gps.coords, onLocationCaptured]);
+
+  // When pin picker closes, reopen the modal that triggered it and route coords
   useEffect(() => {
     if (prevPinPickerActiveRef.current && !pinPickerActive) {
-      setMode("contribute");
+      const prevMode = prePinPickerModeRef.current ?? "contribute";
+      setMode(prevMode);
+      if (prevMode === "report") {
+        setReportOverrideCoords(placedPinCoords);
+      }
+      prePinPickerModeRef.current = null;
     }
     prevPinPickerActiveRef.current = pinPickerActive;
-  }, [pinPickerActive]);
+  }, [pinPickerActive, placedPinCoords]);
 
   const openContribute = () => {
     setMode("contribute");
     if (gps.status === "idle") gps.capture();
   };
 
-  const handleEnterPinPicker = () => {
+  const handleEnterPinPickerForCleanup = () => {
     if (!gps.coords) return;
+    prePinPickerModeRef.current = "contribute";
     setMode(null);
-    onEnterPinPicker(gps.coords);
+    onEnterPinPicker(gps.coords, true);
+  };
+
+  const handleEnterPinPickerForReport = () => {
+    const coords = reportOverrideCoords ?? gps.coords;
+    if (!coords) return;
+    prePinPickerModeRef.current = "report";
+    setMode(null);
+    onEnterPinPicker(coords, false); // unconstrained — trash can be anywhere
   };
 
   const showReport = campaignContributionType === "cleanup";
@@ -526,7 +591,7 @@ export default function ContributionPanel({
           </button>
           {showReport && (
             <button
-              onClick={() => setMode("report")}
+              onClick={() => { setMode("report"); if (gps.status === "idle") gps.capture(); }}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
             >
               ⚠️ Report Trash
@@ -541,15 +606,19 @@ export default function ContributionPanel({
           userId={userId}
           gps={gps}
           overrideCoords={placedPinCoords}
-          onEnterPinPicker={handleEnterPinPicker}
+          onEnterPinPicker={handleEnterPinPickerForCleanup}
           onClose={() => setMode(null)}
+          onContributionSubmitted={onContributionSubmitted}
         />
       )}
-      {mode === "report" && (
+      {mode === "report" && !pinPickerActive && (
         <ReportModal
           campaignId={campaignId}
           userId={userId}
-          onClose={() => setMode(null)}
+          gps={gps}
+          overrideCoords={reportOverrideCoords}
+          onEnterPinPicker={handleEnterPinPickerForReport}
+          onClose={() => { setMode(null); setReportOverrideCoords(null); }}
         />
       )}
     </>

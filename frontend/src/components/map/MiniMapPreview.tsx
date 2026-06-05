@@ -38,7 +38,7 @@ export default function MiniMapPreview({ lat, lng }: { lat: number; lng: number 
       container: containerRef.current,
       style: MINI_STYLE,
       center: [lng, lat],
-      zoom: 14,
+      zoom: 17,
       interactive: false,
       attributionControl: false,
     });

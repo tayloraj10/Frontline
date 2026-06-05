@@ -15,8 +15,11 @@ interface Props {
   claimLabels: Record<string, ClaimLabel>;
   pinPickerActive?: boolean;
   pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
+  pinPickerConstrained?: boolean;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
+  newContribution?: { lat: number; lng: number; value: number; key: number } | null;
+  userLocation?: { latitude: number; longitude: number } | null;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {

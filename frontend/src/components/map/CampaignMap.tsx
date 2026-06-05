@@ -7,6 +7,7 @@ import gsap from "gsap";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import type { ClaimLabel } from "./CampaignMapWrapper";
+import type { Feature, Point } from "geojson";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -33,8 +34,11 @@ interface Props {
   claimLabels: Record<string, ClaimLabel>;
   pinPickerActive?: boolean;
   pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
+  pinPickerConstrained?: boolean;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
+  newContribution?: { lat: number; lng: number; value: number; key: number } | null;
+  userLocation?: { latitude: number; longitude: number } | null;
 }
 
 const MAP_STYLE = {
@@ -192,8 +196,11 @@ export default function CampaignMap({
   claimLabels,
   pinPickerActive = false,
   pinPickerInitialCoords,
+  pinPickerConstrained = true,
   onPinPlaced,
   onPinCancelled,
+  newContribution,
+  userLocation,
 }: Props) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -204,17 +211,21 @@ export default function CampaignMap({
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
   const claimLabelsRef = useRef(claimLabels);
+  const contributionFeaturesRef = useRef<Feature<Point>[]>([]);
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const eventTweensRef = useRef<gsap.core.Tween[]>([]);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
   const pinPickerActiveRef = useRef(pinPickerActive);
+  const pinPickerConstrainedRef = useRef(pinPickerConstrained);
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
   useEffect(() => { claimLabelsRef.current = claimLabels; }, [claimLabels]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
+  useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
 
   const updateEventMarkers = useCallback((events: CampaignEvent[]) => {
     if (!map.current) return;
@@ -348,19 +359,18 @@ export default function CampaignMap({
         );
         if (res.ok) {
           const locations = (await res.json()) as ContributionPoint[];
+          const features = locations.map((loc) => ({
+            type: "Feature" as const,
+            geometry: { type: "Point" as const, coordinates: [loc.longitude, loc.latitude] },
+            properties: {
+              value: loc.value ?? 1,
+              submitted_at: loc.submitted_at ?? "",
+            },
+          }));
+          contributionFeaturesRef.current = features;
           map.current.addSource("contribution-pts", {
             type: "geojson",
-            data: {
-              type: "FeatureCollection",
-              features: locations.map((loc) => ({
-                type: "Feature" as const,
-                geometry: { type: "Point" as const, coordinates: [loc.longitude, loc.latitude] },
-                properties: {
-                  value: loc.value ?? 1,
-                  submitted_at: loc.submitted_at ?? "",
-                },
-              })),
-            },
+            data: { type: "FeatureCollection", features },
           });
 
           map.current.addLayer({
@@ -457,6 +467,8 @@ export default function CampaignMap({
         document.body.removeChild(hoverDivRef.current);
         hoverDivRef.current = null;
       }
+      userLocationMarkerRef.current?.remove();
+      userLocationMarkerRef.current = null;
       eventTweensRef.current.forEach((t) => t.kill());
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
@@ -507,7 +519,7 @@ export default function CampaignMap({
 
     marker.on("dragend", () => {
       const pos = marker.getLngLat();
-      if (userGeoUnitId === undefined || userGeoUnitId === null) {
+      if (!pinPickerConstrainedRef.current || userGeoUnitId === undefined || userGeoUnitId === null) {
         lastValidLng = pos.lng;
         lastValidLat = pos.lat;
         return;
@@ -539,6 +551,43 @@ export default function CampaignMap({
       if (outOfZoneTimerRef.current) clearTimeout(outOfZoneTimerRef.current);
     };
   }, [pinPickerActive, pinPickerInitialCoords, campaign.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // User location marker — auto-dropped when GPS is captured in the contribution panel
+  useEffect(() => {
+    userLocationMarkerRef.current?.remove();
+    userLocationMarkerRef.current = null;
+
+    if (!userLocation || !map.current || pinPickerActive) return;
+
+    const outer = document.createElement("div");
+    outer.style.cssText = "width:22px;height:22px;display:flex;align-items:center;justify-content:center;pointer-events:none";
+    const ring = document.createElement("div");
+    ring.style.cssText = "position:absolute;width:22px;height:22px;border-radius:50%;background:rgba(59,130,246,0.25)";
+    const dot = document.createElement("div");
+    dot.style.cssText = "width:12px;height:12px;border-radius:50%;background:#3b82f6;border:2px solid white;position:relative";
+    outer.appendChild(ring);
+    outer.appendChild(dot);
+
+    gsap.to(ring, { scale: 1.6, opacity: 0, duration: 1.6, repeat: -1, ease: "power2.out" });
+
+    userLocationMarkerRef.current = new maplibregl.Marker({ element: outer, anchor: "center" })
+      .setLngLat([userLocation.longitude, userLocation.latitude])
+      .addTo(map.current);
+  }, [userLocation, pinPickerActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Append freshly-submitted contribution to the live GeoJSON source
+  useEffect(() => {
+    if (!newContribution || !map.current?.isStyleLoaded()) return;
+    const source = map.current.getSource("contribution-pts") as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+    const feature: Feature<Point> = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [newContribution.lng, newContribution.lat] },
+      properties: { value: newContribution.value, submitted_at: new Date().toISOString() },
+    };
+    contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
+    source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
+  }, [newContribution]);
 
   // Supabase Realtime
   useEffect(() => {
