@@ -31,6 +31,10 @@ interface Props {
   claims: TerritoryClaim[];
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
+  pinPickerActive?: boolean;
+  pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
+  onPinPlaced?: (lat: number, lng: number) => void;
+  onPinCancelled?: () => void;
 }
 
 const MAP_STYLE = {
@@ -181,11 +185,21 @@ function TerritoryPanel({
 
 // ─── Main map component ───────────────────────────────────────────────────────
 
-export default function CampaignMap({ campaign, claims, activeEvents, claimLabels }: Props) {
+export default function CampaignMap({
+  campaign,
+  claims,
+  activeEvents,
+  claimLabels,
+  pinPickerActive = false,
+  pinPickerInitialCoords,
+  onPinPlaced,
+  onPinCancelled,
+}: Props) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [selectedZip, setSelectedZip] = useState<SelectedZip | null>(null);
+  const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
 
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
@@ -193,10 +207,14 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const eventTweensRef = useRef<gsap.core.Tween[]>([]);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
+  const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const pinPickerActiveRef = useRef(pinPickerActive);
+  const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
   useEffect(() => { claimLabelsRef.current = claimLabels; }, [claimLabels]);
+  useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
 
   const updateEventMarkers = useCallback((events: CampaignEvent[]) => {
     if (!map.current) return;
@@ -249,7 +267,6 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    // Custom hover tooltip div — bypasses MapLibre's CSS entirely
     const hoverDiv = document.createElement("div");
     hoverDiv.style.cssText =
       "position:fixed;display:none;pointer-events:none;z-index:9999;" +
@@ -293,7 +310,6 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
     map.current.on("load", async () => {
       if (!map.current) return;
 
-      // Territory vector tiles
       map.current.addSource("territory", {
         type: "vector",
         tiles: [tileUrl],
@@ -361,12 +377,11 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
             },
           });
 
-          // Hover on contribution dots
           map.current.on("mouseenter", "contribution-dots", () => {
             if (map.current) map.current.getCanvas().style.cursor = "pointer";
           });
           map.current.on("mousemove", "contribution-dots", (e) => {
-            if (!e.features?.[0]) return;
+            if (pinPickerActiveRef.current || !e.features?.[0]) return;
             const props = e.features[0].properties as { value?: number; submitted_at?: string };
             const date = props.submitted_at
               ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -388,11 +403,10 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
         // contribution dots are non-critical
       }
 
-      // Territory hover tooltip
       let lastHoveredId: string | number | null = null;
 
       map.current.on("mousemove", "territory-fill", (e) => {
-        if (!map.current || !e.features?.[0]) return;
+        if (!map.current || !e.features?.[0] || pinPickerActiveRef.current) return;
         map.current.getCanvas().style.cursor = "pointer";
         hoverDiv.style.display = "block";
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
@@ -426,16 +440,14 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
         lastHoveredId = null;
       });
 
-      // Territory click → open panel
       map.current.on("click", "territory-fill", (e) => {
-        if (!e.features?.[0]) return;
+        if (!e.features?.[0] || pinPickerActiveRef.current) return;
         const props = e.features[0].properties as { display_name?: string; geo_unit_id?: string };
         const geoUnitId = String(e.features[0].id ?? props.geo_unit_id ?? "");
         const displayName = props.display_name ?? geoUnitId;
         setSelectedZip({ geoUnitId, displayName });
       });
 
-      // Apply initial state
       applyClaimsAsFeatureState(map.current, claimsRef.current, claimLabelsRef.current);
       updateEventMarkers(activeEventsRef.current);
     });
@@ -460,7 +472,75 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
     }
   }, [claims]);
 
-  // Supabase Realtime — surgical feature-state updates
+  // Pin picker: add/remove draggable marker with ZIP boundary constraint
+  useEffect(() => {
+    pinPickerMarkerRef.current?.remove();
+    pinPickerMarkerRef.current = null;
+    if (hoverDivRef.current) hoverDivRef.current.style.display = "none";
+    setOutOfZoneWarning(false);
+
+    if (!pinPickerActive || !pinPickerInitialCoords || !map.current) return;
+
+    map.current.flyTo({
+      center: [pinPickerInitialCoords.longitude, pinPickerInitialCoords.latitude],
+      zoom: 15,
+      duration: 700,
+    });
+
+    const marker = new maplibregl.Marker({ draggable: true, color: "#22c55e" })
+      .setLngLat([pinPickerInitialCoords.longitude, pinPickerInitialCoords.latitude])
+      .addTo(map.current);
+    pinPickerMarkerRef.current = marker;
+
+    let lastValidLng = pinPickerInitialCoords.longitude;
+    let lastValidLat = pinPickerInitialCoords.latitude;
+    // undefined = fetch in progress, null = outside any zone (fail open)
+    let userGeoUnitId: string | null | undefined = undefined;
+    const apiBase = process.env.NEXT_PUBLIC_FASTAPI_URL;
+
+    fetch(
+      `${apiBase}/api/contributions/${campaign.id}/geo-unit-at?lat=${pinPickerInitialCoords.latitude}&lng=${pinPickerInitialCoords.longitude}`,
+    )
+      .then((r) => r.json())
+      .then((d: { geo_unit_id: string | null }) => { userGeoUnitId = d.geo_unit_id; })
+      .catch(() => { userGeoUnitId = null; });
+
+    marker.on("dragend", () => {
+      const pos = marker.getLngLat();
+      if (userGeoUnitId === undefined || userGeoUnitId === null) {
+        lastValidLng = pos.lng;
+        lastValidLat = pos.lat;
+        return;
+      }
+      fetch(
+        `${apiBase}/api/contributions/${campaign.id}/geo-unit-at?lat=${pos.lat}&lng=${pos.lng}`,
+      )
+        .then((r) => r.json())
+        .then((d: { geo_unit_id: string | null }) => {
+          if (d.geo_unit_id !== userGeoUnitId) {
+            marker.setLngLat([lastValidLng, lastValidLat]);
+            setOutOfZoneWarning(true);
+            if (outOfZoneTimerRef.current) clearTimeout(outOfZoneTimerRef.current);
+            outOfZoneTimerRef.current = setTimeout(() => setOutOfZoneWarning(false), 2500);
+          } else {
+            lastValidLng = pos.lng;
+            lastValidLat = pos.lat;
+          }
+        })
+        .catch(() => {
+          lastValidLng = pos.lng;
+          lastValidLat = pos.lat;
+        });
+    });
+
+    return () => {
+      marker.remove();
+      pinPickerMarkerRef.current = null;
+      if (outOfZoneTimerRef.current) clearTimeout(outOfZoneTimerRef.current);
+    };
+  }, [pinPickerActive, pinPickerInitialCoords, campaign.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Supabase Realtime
   useEffect(() => {
     const supabase = createClient();
 
@@ -500,11 +580,16 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
     return () => { supabase.removeChannel(channel); };
   }, [campaign.id]);
 
+  const handleConfirmPin = () => {
+    const pos = pinPickerMarkerRef.current?.getLngLat();
+    if (pos) onPinPlaced?.(pos.lat, pos.lng);
+  };
+
   return (
     <div className="relative flex flex-col flex-1 min-h-[500px]">
       <div ref={mapContainer} className="flex-1 w-full" />
 
-      {selectedZip && (
+      {selectedZip && !pinPickerActive && (
         <TerritoryPanel
           geoUnitId={selectedZip.geoUnitId}
           displayName={selectedZip.displayName}
@@ -514,7 +599,35 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
         />
       )}
 
-      {activeEvents.length > 0 && (
+      {pinPickerActive && (
+        <>
+          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap transition-colors duration-200 ${
+            outOfZoneWarning
+              ? "bg-red-950/95 border-red-700 text-red-300"
+              : "bg-zinc-900/95 border-zinc-700 text-zinc-200"
+          }`}>
+            {outOfZoneWarning
+              ? "Pin must stay within your ZIP code"
+              : "Drag the pin to your exact cleanup location"}
+          </div>
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+            <button
+              onClick={handleConfirmPin}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-lg transition-colors"
+            >
+              Confirm location
+            </button>
+            <button
+              onClick={onPinCancelled}
+              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+
+      {activeEvents.length > 0 && !pinPickerActive && (
         <div className="absolute top-4 left-4 z-10 space-y-2 max-w-xs">
           {activeEvents.map((event) => (
             <div
@@ -537,24 +650,26 @@ export default function CampaignMap({ campaign, claims, activeEvents, claimLabel
         </div>
       )}
 
-      <div className="absolute bottom-8 right-4 z-10 flex flex-col gap-1.5 text-xs">
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-          <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
-          <span className="text-zinc-300">Cleanup logged</span>
+      {!pinPickerActive && (
+        <div className="absolute bottom-8 right-4 z-10 flex flex-col gap-1.5 text-xs">
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+            <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
+            <span className="text-zinc-300">Cleanup logged</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+            <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
+            <span className="text-zinc-300">Group territory</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+            <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
+            <span className="text-zinc-300">Individual territory</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+            <span className="w-3 h-3 rounded-sm bg-zinc-700/70" />
+            <span className="text-zinc-300">Unclaimed</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-          <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
-          <span className="text-zinc-300">Group territory</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-          <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
-          <span className="text-zinc-300">Individual territory</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-          <span className="w-3 h-3 rounded-sm bg-zinc-700/70" />
-          <span className="text-zinc-300">Unclaimed</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

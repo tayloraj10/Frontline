@@ -149,6 +149,29 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
     ]
 
 
+@router.get("/{campaign_id}/geo-unit-at")
+async def get_geo_unit_at_point(
+    campaign_id: UUID,
+    lat: float,
+    lng: float,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text("""
+            SELECT id::text, display_name
+            FROM geo_units
+            WHERE campaign_id = :campaign_id
+              AND ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326))
+            LIMIT 1
+        """),
+        {"campaign_id": str(campaign_id), "lat": lat, "lng": lng},
+    )
+    row = result.fetchone()
+    if not row:
+        return {"geo_unit_id": None, "display_name": None}
+    return {"geo_unit_id": row.id, "display_name": row.display_name}
+
+
 @router.post("/process")
 async def process_contribution(payload: ContributionRequest, db: AsyncSession = Depends(get_db)):
     """

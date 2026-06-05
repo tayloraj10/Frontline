@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import CampaignMapWrapper from "@/components/map/CampaignMapWrapper";
-import ContributionPanel from "@/components/contributions/ContributionPanel";
+import CampaignPageClient from "./CampaignPageClient";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 
@@ -149,19 +148,13 @@ export default async function CampaignPage({ params }: Props) {
       </div>
 
       <div className="flex flex-col flex-1 min-h-0 relative">
-        <CampaignMapWrapper
+        <CampaignPageClient
           campaign={campaign}
           claims={claims}
           activeEvents={events}
           claimLabels={claimLabels}
+          userId={user?.id ?? null}
         />
-        {user && (
-          <ContributionPanel
-            campaignId={campaign.id}
-            campaignContributionType={campaign.contribution_type}
-            userId={user.id}
-          />
-        )}
       </div>
     </div>
   );

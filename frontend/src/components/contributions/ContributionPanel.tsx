@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
+
+const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
+  ssr: false,
+  loading: () => <div className="w-full h-[100px] rounded-lg bg-zinc-800 animate-pulse" />,
+});
 
 interface Coords {
   latitude: number;
@@ -11,6 +17,9 @@ interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
   userId: string;
+  onEnterPinPicker: (coords: Coords) => void;
+  pinPickerActive: boolean;
+  placedPinCoords: Coords | null;
 }
 
 // ─── GPS hook ────────────────────────────────────────────────────────────────
@@ -28,20 +37,43 @@ function useGPS() {
     }
     setStatus("loading");
     setErrorCode(null);
+
+    // First attempt: high accuracy, 12s timeout
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
         setStatus("success");
       },
       (err) => {
+        if (err.code === 3) {
+          // Timeout — retry once with network-based location (faster)
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+              setStatus("success");
+            },
+            (err2) => {
+              setErrorCode(err2.code);
+              setStatus("error");
+            },
+            { enableHighAccuracy: false, timeout: 8000 },
+          );
+          return;
+        }
         setErrorCode(err.code);
         setStatus("error");
       },
-      { enableHighAccuracy: true, timeout: 10000 },
+      { enableHighAccuracy: true, timeout: 12000 },
     );
   };
 
-  return { coords, status, errorCode, capture };
+  const reset = () => {
+    setCoords(null);
+    setStatus("idle");
+    setErrorCode(null);
+  };
+
+  return { coords, status, errorCode, capture, reset };
 }
 
 // ─── Presign + upload to R2 ──────────────────────────────────────────────────
@@ -127,13 +159,18 @@ function GpsIndicator({
 function ContributeModal({
   campaignId,
   userId,
+  gps,
+  overrideCoords,
+  onEnterPinPicker,
   onClose,
 }: {
   campaignId: string;
   userId: string;
+  gps: ReturnType<typeof useGPS>;
+  overrideCoords: Coords | null;
+  onEnterPinPicker: () => void;
   onClose: () => void;
 }) {
-  const { coords, status: gpsStatus, errorCode: gpsErrorCode, capture } = useGPS();
   const [bagCount, setBagCount] = useState(1);
   const [notes, setNotes] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
@@ -141,10 +178,10 @@ function ContributeModal({
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const submitCoords = overrideCoords ?? gps.coords;
 
   const handleSubmit = async () => {
-    if (!coords) return;
+    if (!submitCoords) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -162,8 +199,8 @@ function ContributeModal({
             contribution_type: "cleanup",
             value: bagCount,
             photo_url: photoUrl,
-            latitude: coords.latitude,
-            longitude: coords.longitude,
+            latitude: submitCoords.latitude,
+            longitude: submitCoords.longitude,
             notes: notes || null,
           }),
         },
@@ -201,8 +238,31 @@ function ContributeModal({
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs text-zinc-500 mb-1.5">Your location</p>
-          <GpsIndicator status={gpsStatus} coords={coords} errorCode={gpsErrorCode} onRetry={capture} />
+          <GpsIndicator
+            status={gps.status}
+            coords={gps.coords}
+            errorCode={gps.errorCode}
+            onRetry={gps.capture}
+          />
+          {overrideCoords && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Adjusted: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+            </div>
+          )}
+          {gps.status === "success" && gps.coords && (
+            <button
+              onClick={onEnterPinPicker}
+              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+            >
+              {overrideCoords ? "Reposition on map" : "Place pin on map"}
+            </button>
+          )}
         </div>
+
+        {submitCoords && (
+          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} />
+        )}
 
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
@@ -247,7 +307,7 @@ function ContributeModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!coords || submitting}
+            disabled={!submitCoords || submitting}
             className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {submitting ? "Submitting…" : "Submit"}
@@ -419,40 +479,69 @@ function ModalShell({
   );
 }
 
-// ─── Main panel (floating action buttons) ────────────────────────────────────
+// ─── Main panel ───────────────────────────────────────────────────────────────
 
 export default function ContributionPanel({
   campaignId,
   campaignContributionType,
   userId,
+  onEnterPinPicker,
+  pinPickerActive,
+  placedPinCoords,
 }: ContributionPanelProps) {
+  const gps = useGPS();
   const [mode, setMode] = useState<"contribute" | "report" | null>(null);
+  const prevPinPickerActiveRef = useRef(false);
+
+  // When pin picker closes (confirmed or cancelled), reopen the contribute modal
+  useEffect(() => {
+    if (prevPinPickerActiveRef.current && !pinPickerActive) {
+      setMode("contribute");
+    }
+    prevPinPickerActiveRef.current = pinPickerActive;
+  }, [pinPickerActive]);
+
+  const openContribute = () => {
+    setMode("contribute");
+    if (gps.status === "idle") gps.capture();
+  };
+
+  const handleEnterPinPicker = () => {
+    if (!gps.coords) return;
+    setMode(null);
+    onEnterPinPicker(gps.coords);
+  };
 
   const showReport = campaignContributionType === "cleanup";
 
   return (
     <>
-      <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
-        <button
-          onClick={() => setMode("contribute")}
-          className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
-        >
-          🗑️ Log Cleanup
-        </button>
-        {showReport && (
+      {!pinPickerActive && (
+        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
           <button
-            onClick={() => setMode("report")}
+            onClick={openContribute}
             className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
           >
-            ⚠️ Report Trash
+            🗑️ Log Cleanup
           </button>
-        )}
-      </div>
+          {showReport && (
+            <button
+              onClick={() => setMode("report")}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+            >
+              ⚠️ Report Trash
+            </button>
+          )}
+        </div>
+      )}
 
-      {mode === "contribute" && (
+      {mode === "contribute" && !pinPickerActive && (
         <ContributeModal
           campaignId={campaignId}
           userId={userId}
+          gps={gps}
+          overrideCoords={placedPinCoords}
+          onEnterPinPicker={handleEnterPinPicker}
           onClose={() => setMode(null)}
         />
       )}

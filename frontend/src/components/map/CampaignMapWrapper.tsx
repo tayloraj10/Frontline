@@ -13,6 +13,10 @@ interface Props {
   claims: TerritoryClaim[];
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
+  pinPickerActive?: boolean;
+  pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
+  onPinPlaced?: (lat: number, lng: number) => void;
+  onPinCancelled?: () => void;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {
