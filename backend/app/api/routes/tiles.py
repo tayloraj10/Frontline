@@ -9,7 +9,9 @@ from app.db.database import get_db
 router = APIRouter(prefix="/tiles", tags=["tiles"])
 
 # In-process tile cache: keyed by (campaign_id, z, x, y) → raw bytes
+# Capped at 2 000 entries (~200 MB worst-case at 100 KB/tile) to prevent OOM.
 _tile_cache: dict[tuple, bytes] = {}
+_TILE_CACHE_MAX = 2000
 
 _SIMPLIFY_TOLERANCE = {
     range(0, 6): 0.05,
@@ -81,6 +83,11 @@ async def get_tile(
 
     tile_data = result.scalar()
     tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        # Evict oldest quarter when full
+        evict = list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]
+        for k in evict:
+            _tile_cache.pop(k, None)
     _tile_cache[cache_key] = tile_bytes
 
     return Response(

@@ -163,6 +163,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
             WHERE campaign_id = :campaign_id
               AND location IS NOT NULL
             ORDER BY submitted_at DESC
+            LIMIT 1000
         """),
         {"campaign_id": str(campaign_id)},
     )
