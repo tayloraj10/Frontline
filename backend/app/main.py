@@ -1,8 +1,17 @@
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import admin, contributions, decay, events, health, leaderboard, problem_reports, tiles, upload
 from app.core.config import settings
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=0.1 if settings.is_production else 1.0,
+        enable_tracing=True,
+    )
 
 app = FastAPI(title="Frontline API", version="0.1.0")
 

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     r2_public_url: str = ""
 
     environment: str = "development"
+    sentry_dsn: str = ""
 
     @property
     def is_production(self) -> bool:
