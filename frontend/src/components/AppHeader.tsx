@@ -9,6 +9,16 @@ export default async function AppHeader() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let isAdmin = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+    isAdmin = profile?.is_admin ?? false;
+  }
+
   return (
     <header className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
@@ -35,6 +45,14 @@ export default async function AppHeader() {
             >
               Groups
             </Link>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="px-3 py-1.5 text-sm text-amber-500 hover:text-amber-400 hover:bg-zinc-800/60 rounded-lg transition-colors"
+              >
+                Admin
+              </Link>
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-2">

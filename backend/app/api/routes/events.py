@@ -144,18 +144,21 @@ async def _check_report_count_trigger(campaign_id: UUID, trigger, db: AsyncSessi
         if existing.fetchone():
             continue
 
+        duration_hours = int(config.get("duration_hours", 72))
         await db.execute(
             text("""
                 INSERT INTO campaign_events (campaign_id, trigger_id, geo_unit_id, event_type, title, description, effect_config, ends_at)
-                VALUES (:campaign_id, :trigger_id, :geo_unit_id, :event_type, :title, :description, :effect_config, NOW() + INTERVAL '72 hours')
+                VALUES (:campaign_id, :trigger_id, :geo_unit_id, :event_type, :title, :description, :effect_config,
+                        NOW() + (:duration_hours * INTERVAL '1 hour'))
             """),
             {
                 "campaign_id": str(campaign_id),
                 "trigger_id": str(trigger.id),
                 "geo_unit_id": str(row.geo_unit_id),
                 "event_type": trigger.event_type,
-                "title": "Trash Boss Event — Surge Needed!",
-                "description": f"Reports have reached critical mass. Clean it up in 72 hours for bonus XP!",
+                "title": config.get("title", "Boss Event — Surge Needed!"),
+                "description": config.get("description", "Reports have reached critical mass. Respond now!"),
                 "effect_config": trigger.effect_config,
+                "duration_hours": duration_hours,
             },
         )

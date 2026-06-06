@@ -471,12 +471,12 @@ Tables that drive live map updates:
 ### Phase 5: Campaign 2 + Engine Generalization (Week 4–5)
 **Goal:** Launch second campaign, prove engine is reusable
 
-- [ ] Touch Grass campaign (photo collage map type)
-- [ ] Refactor campaign engine to support photo collage map type
-- [ ] Photo pin drop on map, thumbnail expansion, mosaic fill visualization
-- [ ] Campaign-agnostic contribution form (driven by `contribution_type` config)
-- [ ] Event trigger system generalized (condition evaluation runs as FastAPI background task)
-- [ ] Admin panel (internal only): create campaigns, configure triggers, monitor events
+- [x] Touch Grass campaign (photo collage map type)
+- [x] Refactor campaign engine to support photo collage map type
+- [x] Photo pin drop on map, thumbnail expansion, mosaic fill visualization
+- [x] Campaign-agnostic contribution form (driven by `contribution_type` config)
+- [x] Event trigger system generalized (condition evaluation runs as FastAPI background task)
+- [x] Admin panel (internal only): create campaigns, configure triggers, monitor events
 
 **Deliverable:** Second campaign live, engine is data-driven not hardcoded
 
