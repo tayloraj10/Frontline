@@ -2,21 +2,22 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS } from "@/config/campaigns";
 import type { Database } from "@/types/database";
+import OnboardingModalClient from "@/components/OnboardingModalClient";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 
 export default async function CampaignsPage() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("campaigns")
-    .select("*")
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
+  const [{ data }, { data: { user } }] = await Promise.all([
+    supabase.from("campaigns").select("*").eq("status", "active").order("created_at", { ascending: false }),
+    supabase.auth.getUser(),
+  ]);
 
   const campaigns = (data ?? []) as Campaign[];
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10 w-full">
+      {user && <OnboardingModalClient campaigns={campaigns} />}
       <div className="mb-10">
         <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
           Active Campaigns
