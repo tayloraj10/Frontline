@@ -76,7 +76,7 @@ export default async function CampaignPage({ params }: Props) {
   const totalBags = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const contributionCount = contribCount ?? 0;
 
-  const unit = campaign.campaign_type === "territory" ? "bags" : "pts";
+  const unit = campaign.campaign_type === "territory" ? "bags" : campaign.campaign_type === "choropleth" ? "registrations" : "pts";
 
   // Leaderboard raw data
   type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
@@ -167,7 +167,7 @@ export default async function CampaignPage({ params }: Props) {
 
   return (
     <div className="flex flex-col flex-1">
-      <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-4">
+      <div className="px-4 sm:px-6 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/campaigns"
@@ -203,8 +203,12 @@ export default async function CampaignPage({ params }: Props) {
 
       <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center gap-6 overflow-x-auto scrollbar-none">
         {campaign.campaign_type === "collage" ? (
+          <CampaignStat label="Photos submitted" value={contributionCount.toLocaleString()} />
+        ) : campaign.campaign_type === "choropleth" ? (
           <>
-            <CampaignStat label="Photos submitted" value={contributionCount.toLocaleString()} />
+            <CampaignStat label="Total registrations" value={totalBags.toLocaleString()} />
+            <CampaignStat label="States active" value={tractsCount} />
+            <CampaignStat label="Contributions" value={contributionCount.toLocaleString()} />
           </>
         ) : (
           <>

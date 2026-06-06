@@ -60,6 +60,75 @@ function styleUrl(id: StyleId) {
 
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
+// ─── Choropleth (state partisan-lean) helpers ────────────────────────────────
+
+// D = positive, R = negative, 0 = swing. Based on 2024 presidential results.
+const US_STATE_LEAN: Record<string, number> = {
+  Alabama: -1.0, Alaska: -0.4, Arizona: -0.1, Arkansas: -0.9,
+  California: 0.9, Colorado: 0.5, Connecticut: 0.6, Delaware: 0.6,
+  Florida: -0.5, Georgia: -0.1, Hawaii: 0.9, Idaho: -0.9,
+  Illinois: 0.6, Indiana: -0.7, Iowa: -0.6, Kansas: -0.8,
+  Kentucky: -0.9, Louisiana: -0.8, Maine: 0.3, Maryland: 0.8,
+  Massachusetts: 0.8, Michigan: 0.1, Minnesota: 0.3, Mississippi: -0.8,
+  Missouri: -0.8, Montana: -0.6, Nebraska: -0.6, Nevada: 0.0,
+  "New Hampshire": 0.1, "New Jersey": 0.5, "New Mexico": 0.4, "New York": 0.7,
+  "North Carolina": -0.1, "North Dakota": -0.9, Ohio: -0.6, Oklahoma: -0.9,
+  Oregon: 0.6, Pennsylvania: 0.0, "Rhode Island": 0.7, "South Carolina": -0.6,
+  "South Dakota": -0.9, Tennessee: -0.9, Texas: -0.5, Utah: -0.5,
+  Vermont: 0.9, Virginia: 0.4, Washington: 0.7, "West Virginia": -0.9,
+  Wisconsin: 0.0, Wyoming: -1.0, "District of Columbia": 0.95,
+};
+
+const CHOROPLETH_THRESHOLD = 500;
+
+function choroplethFillColor(lean: number, totalRegistrations: number): string {
+  const progress = Math.min(Math.max(totalRegistrations, 0) / CHOROPLETH_THRESHOLD, 1);
+  const isR = lean < 0;
+  const s = Math.abs(lean);
+  const rS = isR ? Math.round(lerp(180, 220, s)) : 100;
+  const gS = isR ? 38 : Math.round(lerp(100, 38, s));
+  const bS = isR ? 38 : Math.round(lerp(180, 235, s));
+  return `rgb(${Math.round(lerp(rS, 113, progress))},${Math.round(lerp(gS, 113, progress))},${Math.round(lerp(bS, 122, progress))})`;
+}
+
+function choroplethBorderColor(lean: number, totalRegistrations: number): string {
+  const progress = Math.min(Math.max(totalRegistrations, 0) / CHOROPLETH_THRESHOLD, 1);
+  const isR = lean < 0;
+  const s = Math.abs(lean);
+  const rS = isR ? Math.round(lerp(160, 200, s)) : 80;
+  const gS = isR ? 60 : Math.round(lerp(80, 50, s));
+  const bS = isR ? 60 : Math.round(lerp(160, 210, s));
+  return `rgb(${Math.round(lerp(rS, 82, progress))},${Math.round(lerp(gS, 82, progress))},${Math.round(lerp(bS, 91, progress))})`;
+}
+
+function getChoroplethLeanLookup(m: maplibregl.Map): Record<string, number> {
+  const features = m.querySourceFeatures("territory", { sourceLayer: "territories" });
+  const lookup: Record<string, number> = {};
+  for (const f of features) {
+    if (!f.id) continue;
+    const dn = (f.properties as { display_name?: string }).display_name ?? "";
+    lookup[String(f.id)] = US_STATE_LEAN[dn] ?? 0;
+  }
+  return lookup;
+}
+
+function initializeChoroplethColors(m: maplibregl.Map): void {
+  const features = m.querySourceFeatures("territory", { sourceLayer: "territories" });
+  for (const f of features) {
+    if (!f.id) continue;
+    const dn = (f.properties as { display_name?: string }).display_name ?? "";
+    const lean = US_STATE_LEAN[dn] ?? 0;
+    const color = choroplethFillColor(lean, 0);
+    const borderColor = choroplethBorderColor(lean, 0);
+    m.setFeatureState(
+      { source: "territory", sourceLayer: "territories", id: f.id },
+      { color, border_color: borderColor, opacity: 0.55, border_width: 1.5, border_opacity: 0.85 },
+    );
+  }
+}
+
+// ─── Territory heat helpers ───────────────────────────────────────────────────
+
 function claimHeatColor(isGroup: boolean, totalValue: number): string {
   const t = Math.min(Math.max(totalValue, 0) / 50, 1);
   if (isGroup) {
@@ -91,7 +160,29 @@ function applyClaimsAsFeatureState(
   map: maplibregl.Map,
   claims: TerritoryClaim[],
   claimLabels: Record<string, ClaimLabel> = {},
+  isChoropleth = false,
 ): void {
+  if (isChoropleth) {
+    const leanLookup = getChoroplethLeanLookup(map);
+    for (const claim of claims) {
+      if (!claim.geo_unit_id) continue;
+      const lean = leanLookup[claim.geo_unit_id] ?? 0;
+      const totalValue = claim.total_value ?? 0;
+      map.setFeatureState(
+        { source: "territory", sourceLayer: "territories", id: claim.geo_unit_id },
+        {
+          color: choroplethFillColor(lean, totalValue),
+          border_color: choroplethBorderColor(lean, totalValue),
+          opacity: 0.55,
+          border_width: 1.5,
+          border_opacity: 0.9,
+          total_value: totalValue,
+        },
+      );
+    }
+    return;
+  }
+
   for (const claim of claims) {
     if (!claim.geo_unit_id) continue;
     const owned = !!(claim.claimed_by_group || claim.claimed_by_user);
@@ -189,7 +280,7 @@ function TerritoryPanel({
   const accentHex = isClaimed ? (isGroup ? "#10b981" : "#3b82f6") : "#3f3f46";
 
   return (
-    <div className="absolute top-[200px] right-2 z-20 w-60 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-60 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
       {/* Colored left accent strip */}
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentHex }} />
 
@@ -253,6 +344,74 @@ function TerritoryPanel({
   );
 }
 
+// ─── State detail panel (choropleth campaigns) ────────────────────────────────
+
+function StatePanel({
+  geoUnitId,
+  displayName,
+  totalRegistrations,
+  onClose,
+}: {
+  geoUnitId: string;
+  displayName: string;
+  totalRegistrations: number;
+  onClose: () => void;
+}) {
+  const lean = US_STATE_LEAN[displayName] ?? 0;
+  const progress = Math.min(totalRegistrations / CHOROPLETH_THRESHOLD, 1);
+  const isR = lean < 0;
+  const accentColor = isR ? "#ef4444" : "#3b82f6";
+  const party = Math.abs(lean) < 0.15 ? "Swing" : isR ? "Republican" : "Democrat";
+
+  return (
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+      <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentColor }} />
+      <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">State</p>
+            <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
+            <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
+          </div>
+          <button onClick={onClose} className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+        </div>
+      </div>
+      <div className="px-4 pt-3 pb-4">
+        <div className="flex items-baseline justify-between mb-1.5">
+          <span className="text-xs text-zinc-500">Registrations</span>
+          <span className="text-sm font-bold text-zinc-200 tabular-nums">
+            {totalRegistrations.toLocaleString()} / {CHOROPLETH_THRESHOLD.toLocaleString()}
+          </span>
+        </div>
+        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${progress * 100}%`, background: accentColor }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-zinc-600">
+          {progress >= 1 ? "Fully neutralized ✓" : `${Math.round((1 - progress) * CHOROPLETH_THRESHOLD - totalRegistrations + 1)} more to neutralize`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function pulseClaim(m: maplibregl.Map, geoUnitId: string): void {
+  const obj = { v: 0.45 };
+  gsap.to(obj, {
+    v: 0,
+    duration: 0.9,
+    ease: "power2.out",
+    onUpdate: () => {
+      m.setFeatureState(
+        { source: "territory", sourceLayer: "territories", id: geoUnitId },
+        { pulse_extra: obj.v },
+      );
+    },
+  });
+}
+
 // ─── Main map component ───────────────────────────────────────────────────────
 
 export default function CampaignMap({
@@ -271,6 +430,7 @@ export default function CampaignMap({
   activeStyle = "outdoor",
 }: Props) {
   const isCollage = campaignType === "collage";
+  const isChoropleth = campaignType === "choropleth";
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -340,10 +500,11 @@ export default function CampaignMap({
 
       eventMarkersRef.current.push(marker);
 
-      const tween = isBoss
-        ? gsap.to(el, { scale: 1.25, duration: 0.85, repeat: -1, yoyo: true, ease: "power1.inOut" })
-        : gsap.to(el, { scale: 1.1, duration: 1.2, repeat: -1, yoyo: true, ease: "sine.inOut" });
-      eventTweensRef.current.push(tween);
+      const entranceTween = gsap.from(el, { scale: 0, duration: 0.55, ease: "back.out(1.7)" });
+      const pulseTween = isBoss
+        ? gsap.to(el, { scale: 1.25, duration: 0.85, repeat: -1, yoyo: true, ease: "power1.inOut", delay: 0.55 })
+        : gsap.to(el, { scale: 1.1, duration: 1.2, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.55 });
+      eventTweensRef.current.push(entranceTween, pulseTween);
     }
   }, []);
 
@@ -391,7 +552,14 @@ export default function CampaignMap({
       "source-layer": "territories",
       paint: {
         "fill-color": ["coalesce", ["feature-state", "color"], "#a1a1aa"],
-        "fill-opacity": ["coalesce", ["feature-state", "opacity"], 0.22],
+        "fill-opacity": [
+          "min",
+          ["+",
+            ["coalesce", ["feature-state", "opacity"], 0.22],
+            ["coalesce", ["feature-state", "pulse_extra"], 0],
+          ],
+          0.95,
+        ],
       },
     });
 
@@ -480,9 +648,25 @@ export default function CampaignMap({
       }
     }
 
-    applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
+    if (isChoropleth) {
+      // Initialize partisan lean colors; re-apply after source tiles load
+      const applyInitial = () => {
+        if (!m.isSourceLoaded("territory")) return;
+        initializeChoroplethColors(m);
+        applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current, true);
+        m.off("sourcedata", applyInitial as unknown as Parameters<typeof m.on>[1]);
+      };
+      if (m.isSourceLoaded("territory")) {
+        initializeChoroplethColors(m);
+        applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current, true);
+      } else {
+        m.on("sourcedata", applyInitial);
+      }
+    } else {
+      applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
+    }
     updateEventMarkers(activeEventsRef.current);
-  }, [campaign.id, isCollage, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isCollage, isChoropleth, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -589,20 +773,32 @@ export default function CampaignMap({
           }
           lastHoveredId = featId;
           const props = e.features[0].properties as { display_name?: string };
-          const state = e.features[0].state as {
+          const featureState = e.features[0].state as {
             total_value?: number;
             claimed_label?: string | null;
             claim_is_group?: boolean;
           };
-          const zip = props.display_name ?? "—";
-          const bags = state.total_value ?? 0;
-          const claimerHtml = state.claimed_label
-            ? `<div style="color:${state.claim_is_group ? "#34d399" : "#60a5fa"};font-size:11px;margin-top:4px">` +
-            `${state.claim_is_group ? "👥" : "👤"} ${state.claimed_label}</div>` +
-            `<div style="color:#a1a1aa;font-size:11px;margin-top:1px">${bags} bag${bags !== 1 ? "s" : ""}</div>`
-            : `<div style="color:#52525b;font-size:11px;margin-top:4px">Unclaimed</div>`;
-          hoverDiv.innerHTML =
-            `<div style="font-weight:700;font-size:13px;color:#f4f4f5">ZIP ${zip}</div>` + claimerHtml;
+          const displayName = props.display_name ?? "—";
+          const totalVal = featureState.total_value ?? 0;
+          if (isChoropleth) {
+            const lean = US_STATE_LEAN[displayName] ?? 0;
+            const isR = lean < 0;
+            const party = Math.abs(lean) < 0.15 ? "Swing" : isR ? "Republican" : "Democrat";
+            const pct = Math.min(Math.round((totalVal / CHOROPLETH_THRESHOLD) * 100), 100);
+            hoverDiv.innerHTML =
+              `<div style="font-weight:700;font-size:13px;color:#f4f4f5">${displayName}</div>` +
+              `<div style="color:${isR ? "#f87171" : "#60a5fa"};font-size:11px;margin-top:4px">${party}</div>` +
+              `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${totalVal.toLocaleString()} registrations · ${pct}% neutralized</div>`;
+          } else {
+            const bags = totalVal;
+            const claimerHtml = featureState.claimed_label
+              ? `<div style="color:${featureState.claim_is_group ? "#34d399" : "#60a5fa"};font-size:11px;margin-top:4px">` +
+              `${featureState.claim_is_group ? "👥" : "👤"} ${featureState.claimed_label}</div>` +
+              `<div style="color:#a1a1aa;font-size:11px;margin-top:1px">${bags} bag${bags !== 1 ? "s" : ""}</div>`
+              : `<div style="color:#52525b;font-size:11px;margin-top:4px">Unclaimed</div>`;
+            hoverDiv.innerHTML =
+              `<div style="font-weight:700;font-size:13px;color:#f4f4f5">ZIP ${displayName}</div>` + claimerHtml;
+          }
         }
       });
 
@@ -648,7 +844,7 @@ export default function CampaignMap({
   // Sync claims via feature-state when prop changes
   useEffect(() => {
     if (map.current?.isStyleLoaded()) {
-      applyClaimsAsFeatureState(map.current, claims, claimLabelsRef.current);
+      applyClaimsAsFeatureState(map.current, claims, claimLabelsRef.current, isChoropleth);
     }
   }, [claims]);
 
@@ -759,6 +955,7 @@ export default function CampaignMap({
         setSelectedPhoto,
       );
       photoMarkersRef.current.push(marker);
+      gsap.from(marker.getElement(), { y: -40, opacity: 0, duration: 0.5, ease: "bounce.out" });
       return;
     }
 
@@ -791,24 +988,41 @@ export default function CampaignMap({
           if (!map.current) return;
           const claim = payload.new as TerritoryClaim;
           if (!claim?.geo_unit_id) return;
-          const owned = !!(claim.claimed_by_group || claim.claimed_by_user);
-          const isGroup = !!claim.claimed_by_group;
           const totalValue = claim.total_value ?? 0;
-          const color = owned ? claimHeatColor(isGroup, totalValue) : "#a1a1aa";
-          const label = claimLabelsRef.current[claim.geo_unit_id] ?? null;
-          map.current.setFeatureState(
-            { source: "territory", sourceLayer: "territories", id: claim.geo_unit_id },
-            {
-              color,
-              border_color: claimBorderColor(owned, isGroup, totalValue),
-              opacity: claimHeatOpacity(owned, totalValue),
-              border_width: claimBorderWidth(owned, totalValue),
-              border_opacity: claimBorderOpacity(owned, totalValue),
-              total_value: totalValue,
-              claimed_label: label?.name ?? null,
-              claim_is_group: label?.isGroup ?? false,
-            },
-          );
+          if (isChoropleth) {
+            const leanLookup = getChoroplethLeanLookup(map.current);
+            const lean = leanLookup[claim.geo_unit_id] ?? 0;
+            map.current.setFeatureState(
+              { source: "territory", sourceLayer: "territories", id: claim.geo_unit_id },
+              {
+                color: choroplethFillColor(lean, totalValue),
+                border_color: choroplethBorderColor(lean, totalValue),
+                opacity: 0.55,
+                border_width: 1.5,
+                border_opacity: 0.9,
+                total_value: totalValue,
+              },
+            );
+          } else {
+            const owned = !!(claim.claimed_by_group || claim.claimed_by_user);
+            const isGroup = !!claim.claimed_by_group;
+            const color = owned ? claimHeatColor(isGroup, totalValue) : "#a1a1aa";
+            const label = claimLabelsRef.current[claim.geo_unit_id] ?? null;
+            map.current.setFeatureState(
+              { source: "territory", sourceLayer: "territories", id: claim.geo_unit_id },
+              {
+                color,
+                border_color: claimBorderColor(owned, isGroup, totalValue),
+                opacity: claimHeatOpacity(owned, totalValue),
+                border_width: claimBorderWidth(owned, totalValue),
+                border_opacity: claimBorderOpacity(owned, totalValue),
+                total_value: totalValue,
+                claimed_label: label?.name ?? null,
+                claim_is_group: label?.isGroup ?? false,
+              },
+            );
+          }
+          pulseClaim(map.current, claim.geo_unit_id);
         },
       )
       .subscribe();
@@ -826,13 +1040,22 @@ export default function CampaignMap({
       <div ref={mapContainer} className="flex-1 w-full" />
 
       {selectedZip && !pinPickerActive && (
-        <TerritoryPanel
-          geoUnitId={selectedZip.geoUnitId}
-          displayName={selectedZip.displayName}
-          claim={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
-          claimLabel={claimLabelsRef.current[selectedZip.geoUnitId] ?? null}
-          onClose={() => setSelectedZip(null)}
-        />
+        isChoropleth ? (
+          <StatePanel
+            geoUnitId={selectedZip.geoUnitId}
+            displayName={selectedZip.displayName}
+            totalRegistrations={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId)?.total_value ?? 0}
+            onClose={() => setSelectedZip(null)}
+          />
+        ) : (
+          <TerritoryPanel
+            geoUnitId={selectedZip.geoUnitId}
+            displayName={selectedZip.displayName}
+            claim={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
+            claimLabel={claimLabelsRef.current[selectedZip.geoUnitId] ?? null}
+            onClose={() => setSelectedZip(null)}
+          />
+        )
       )}
 
       {pinPickerActive && (
@@ -886,27 +1109,43 @@ export default function CampaignMap({
       )}
 
       {!pinPickerActive && !isCollage && (
-        <>
-          {/* Legend — territory campaigns only */}
-          <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1.5 text-xs">
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-              <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
-              <span className="text-zinc-300">Cleanup logged</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-              <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
-              <span className="text-zinc-300">Group territory</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-              <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
-              <span className="text-zinc-300">Individual territory</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-              <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
-              <span className="text-zinc-300">Unclaimed</span>
-            </div>
-          </div>
-        </>
+        <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1.5 text-xs">
+          {isChoropleth ? (
+            <>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
+                <span className="text-zinc-300">Democrat lean</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-sm bg-red-600/80" />
+                <span className="text-zinc-300">Republican lean</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-sm bg-zinc-500/80" />
+                <span className="text-zinc-300">Neutralized</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
+                <span className="text-zinc-300">Cleanup logged</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
+                <span className="text-zinc-300">Group territory</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
+                <span className="text-zinc-300">Individual territory</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
+                <span className="text-zinc-300">Unclaimed</span>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {selectedPhoto && (
