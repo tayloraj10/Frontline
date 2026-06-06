@@ -32,7 +32,7 @@ export default async function AppHeader() {
               FRONTLINE
             </span>
           </Link>
-          <nav className="flex items-center gap-1">
+          <nav className="hidden sm:flex items-center gap-1">
             <Link
               href="/campaigns"
               className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"

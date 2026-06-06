@@ -257,7 +257,7 @@ export default function CampaignPageClient({
 
       {/* Side panel */}
       {openPanel && !pinPickerActive && (
-        <div className="absolute inset-y-0 right-0 w-72 bg-zinc-950/95 backdrop-blur-sm border-l border-zinc-800 flex flex-col z-10 overflow-hidden">
+        <div className="absolute bottom-0 left-0 right-0 h-[55vh] sm:h-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-t sm:border-t-0 sm:border-l border-zinc-800 flex flex-col z-10 overflow-hidden">
           {/* Header: tab buttons + close */}
           <div className="flex items-center border-b border-zinc-800 shrink-0 px-2 pt-2 pb-0 gap-1">
             <button
@@ -301,7 +301,7 @@ export default function CampaignPageClient({
 
       {/* Floating toggle buttons — only visible when panel is closed */}
       {!openPanel && !pinPickerActive && (
-        <div className="absolute top-3 z-20 flex gap-1.5" style={{ right: "3.25rem" }}>
+        <div className="absolute top-14 sm:top-3 left-4 sm:left-auto sm:right-[3.25rem] z-20 flex gap-1.5">
           <button
             onClick={() => setOpenPanel("leaderboard")}
             className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
