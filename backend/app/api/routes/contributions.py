@@ -43,7 +43,7 @@ async def submit_contribution(
             text("""
                 SELECT id FROM geo_units
                 WHERE ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
-                AND campaign_id = :campaign_id
+                AND unit_type = (SELECT geo_unit FROM campaigns WHERE id = :campaign_id)
                 LIMIT 1
             """),
             {"lon": payload.longitude, "lat": payload.latitude, "campaign_id": str(payload.campaign_id)},
@@ -194,7 +194,7 @@ async def get_geo_unit_at_point(
         text("""
             SELECT id::text, display_name
             FROM geo_units
-            WHERE campaign_id = :campaign_id
+            WHERE unit_type = (SELECT geo_unit FROM campaigns WHERE id = :campaign_id)
               AND ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326))
             LIMIT 1
         """),
@@ -218,7 +218,7 @@ async def process_contribution(payload: ContributionRequest, db: AsyncSession = 
         text("""
             SELECT id FROM geo_units
             WHERE ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
-            AND campaign_id = :campaign_id
+            AND unit_type = (SELECT geo_unit FROM campaigns WHERE id = :campaign_id)
             LIMIT 1
         """),
         {"lon": payload.longitude, "lat": payload.latitude, "campaign_id": str(payload.campaign_id)},

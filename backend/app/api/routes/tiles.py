@@ -70,7 +70,7 @@ async def get_tile(
                 FROM geo_units g
                 CROSS JOIN bounds
                 WHERE
-                    g.campaign_id = :campaign_id
+                    g.unit_type = (SELECT geo_unit FROM campaigns WHERE id = :campaign_id)
                     AND g.geometry && bounds.geom_4326
                     AND ST_Intersects(g.geometry, bounds.geom_4326)
             )

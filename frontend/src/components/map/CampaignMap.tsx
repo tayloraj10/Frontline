@@ -453,6 +453,7 @@ export default function CampaignMap({
   const pinPickerConstrainedRef = useRef(pinPickerConstrained);
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapReadyRef = useRef(false);
+  const choroplethListenerRef = useRef(false);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
@@ -649,18 +650,26 @@ export default function CampaignMap({
     }
 
     if (isChoropleth) {
-      // Initialize partisan lean colors; re-apply after source tiles load
-      const applyInitial = () => {
-        if (!m.isSourceLoaded("territory")) return;
+      const applyColors = () => {
         initializeChoroplethColors(m);
         applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current, true);
-        m.off("sourcedata", applyInitial as unknown as Parameters<typeof m.on>[1]);
       };
-      if (m.isSourceLoaded("territory")) {
-        initializeChoroplethColors(m);
-        applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current, true);
-      } else {
-        m.on("sourcedata", applyInitial);
+      // Poll on each idle until querySourceFeatures returns features (tiles are in the
+      // render buffer). Both "idle before tiles start" and "isSourceLoaded fires early
+      // on metadata" cause the one-shot approaches to consume their listener with an
+      // empty feature set. Polling self-removes on first success.
+      const tryApplyColors = () => {
+        const features = m.querySourceFeatures("territory", { sourceLayer: "territories" });
+        if (features.length > 0) {
+          m.off("idle", tryApplyColors as unknown as Parameters<typeof m.on>[1]);
+          applyColors();
+        }
+      };
+      m.on("idle", tryApplyColors as unknown as Parameters<typeof m.on>[1]);
+      // Re-apply when user pans/zooms new tiles into view; registered once, survives style swaps
+      if (!choroplethListenerRef.current) {
+        choroplethListenerRef.current = true;
+        m.on("moveend", () => m.once("idle", applyColors));
       }
     } else {
       applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
