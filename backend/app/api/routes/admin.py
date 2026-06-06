@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.services import geo
 from app.services.seeders import REGISTRY
+from app.services.seeders.zip_codes import ZipCodeSeeder
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -57,3 +58,15 @@ async def run_all_seeds(db: AsyncSession = Depends(get_db)):
         except Exception as exc:
             raise HTTPException(500, f"Seeder '{name}' failed: {exc}")
     return results
+
+
+@router.post("/load-geo-units")
+async def load_geo_units(campaign_slug: str = "trash-war", db: AsyncSession = Depends(get_db)):
+    """Load ZIP code boundaries into geo_units for a campaign. Run POST /admin/simplify-zipcodes first."""
+    try:
+        result = await ZipCodeSeeder().run(db, {"campaign_slug": campaign_slug})
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}

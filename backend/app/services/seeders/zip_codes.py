@@ -47,12 +47,6 @@ class ZipCodeSeeder(Seeder):
         with open(SIMPLIFIED_ZIP_FILE, encoding="utf-8") as f:
             features = json.load(f).get("features", [])
 
-        # Clear existing geo_units for this campaign before reloading
-        await db.execute(
-            text("DELETE FROM geo_units WHERE campaign_id = :cid"),
-            {"cid": campaign_id},
-        )
-
         result = SeedResult()
 
         for i in range(0, len(features), _BATCH_SIZE):
