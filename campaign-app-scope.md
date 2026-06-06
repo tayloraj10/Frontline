@@ -485,16 +485,16 @@ Tables that drive live map updates:
 ### Phase 6: Polish & MVP Launch Prep
 **Goal:** App is presentable to real users
 
-- [ ] Road to Independence campaign (state choropleth, registration self-report)
-- [ ] Choropleth map type support — state color fade visualization, state-level progress bars
-- [ ] Map animations: territory pulse on claim, boss spawn particle effect, photo pin drop
-- [ ] Onboarding flow for new users
-- [ ] Campaign discovery / home page
-- [ ] Switch basemap to MapTiler Streets (get free API key at maptiler.com, swap tile URL in `MAP_STYLE` in `CampaignMap.tsx`)
-- [ ] Mobile responsive UI audit
-- [ ] Performance audit: map tile caching, image optimization, query indexing
-- [ ] Error handling, loading states, empty states throughout
-- [ ] Set up monitoring (Sentry for errors, basic analytics)
+- [x] Road to Independence campaign (state choropleth, registration self-report)
+- [x] Choropleth map type support — state color fade visualization, state-level progress bars
+- [x] Map animations: territory pulse on claim, boss spawn particle effect, photo pin drop
+- [x] Onboarding flow for new users
+- [x] Campaign discovery / home page
+- [x] Switch basemap to MapTiler Streets (get free API key at maptiler.com, swap tile URL in `MAP_STYLE` in `CampaignMap.tsx`)
+- [x] Mobile responsive UI audit
+- [x] Performance audit: map tile caching, image optimization, query indexing
+- [x] Error handling, loading states, empty states throughout
+- [x] Set up monitoring (Sentry for errors, basic analytics)
 
 **Deliverable:** Public MVP launch with 3 campaigns
 
