@@ -153,19 +153,24 @@ Each campaign is its own mini-game running on a shared geographic foundation. Th
 ---
 
 ### Campaign 2: Road to Independence 🗳️
-**Concept:** US state map showing party affiliation by last election. As users mark they've changed voter registration to Independent, states fade toward a neutral color.
+**Concept:** Civic action campaign for America's 250th anniversary. Users log real-world civic actions to grow the independence movement and break free from the two-party system.
 
-**Map Style:** US political choropleth — deep red/blue fading toward gray/purple as registrations come in
+**Map Style:** US political choropleth — states colored by civic engagement density
 
-**Contribution:** Self-report voter registration change (honor system), optionally upload registration confirmation
+**Contribution (7 accepted actions):**
+1. Re-register as Independent (primary focus — move away from Democrat/Republican)
+2. Attend a town hall or city council meeting
+3. Contact your representative (call, letter, email)
+4. Volunteer for a local civic organization
+5. Visit a historical landmark
+6. Attend a protest or rally
+7. Read a founding document in full
 
-**Scoring:** Each registration change contributes to state-level progress. States have thresholds based on population.
-
-**Visualization:** State color gradually desaturates. Progress bar per state. National aggregate showing total registrations.
+**Scoring:** Each logged action contributes to state-level progress. `contribution_type = civic_action`, action subtype stored in scoring_rules.action_types.
 
 **Dynamic Events:**
 - Election season surge events
-- State "flips" to swing status when threshold reached — triggers celebration animation
+- State "flips" when threshold reached — triggers celebration animation
 - Leaderboard of most active states
 
 ---
@@ -188,14 +193,35 @@ Each campaign is its own mini-game running on a shared geographic foundation. Th
 
 ---
 
-### Campaign 4: Dark Sky 🌌 *(concept)*
-**Concept:** Users submit night sky photos from their location. Map overlays real light pollution data. As communities advocate for ordinances the light pollution overlay fades.
+### Campaign 4: BRAINROT 🧠
+**Full name:** Building Resistance Against Influencers, Narcissism, Ragebait, Overconsumption, and Time-wasting
 
-**Map Style:** Night mode map with light pollution heat overlay that fades with advocacy actions
+**Concept:** Log every account you unfollow — rage-bait political commentators, content farms, clout chasers, cringe humor accounts. The leaderboard tracks which accounts are being dethroned the most globally.
 
-**Contribution:** Photo submission + advocacy action log (attending meeting, contacting representative)
+**Map Style:** Global heatmap — density of people doing the digital detox, by location
 
-**Visualization:** Glowing light pollution overlay dims region by region as actions accumulate. Photo submissions create star-pin clusters on the map.
+**Contribution:** Required — account handle you unfollowed (stored in `notes`). Optional — photo. Location captured for heatmap.
+
+**Scoring:** Each unfollow = 1 point. Secondary "Dethrone Leaderboard" aggregates `notes` values to rank accounts by total unfollows received.
+
+**Visualization:** Heat clusters show where the detox movement is spreading. Dethrone leaderboard shows most-unfollowed accounts.
+
+---
+
+### Campaign 5: Ground Truth 🌍 *(post-launch)*
+**Concept:** Crowdsourced global news — people submit events, incidents, and stories from their location with a photo and short description. A living map of what's actually happening on the ground, unfiltered by media gatekeepers.
+
+**Map Style:** Global point map — event pins clustered by proximity, expanding into cards on click. Density heatmap toggle to see activity hotspots.
+
+**Contribution:** Photo + title + short description + GPS location. Optional: category tag (protest, natural event, infrastructure, community, etc.)
+
+**Scoring:** Open-ended — each submission adds a pin. No territory. Leaderboard by most submissions (per user/group) and most-viewed reports.
+
+**Visualization:** Live wire of pins appearing globally. Cluster bubbles show density. Clicking a cluster expands to individual event cards with photo, timestamp, and description.
+
+**Moderation:** Community flagging + threshold-based auto-hide. Verified contributors (groups) get a badge. Phase 1 is honor system — heavier moderation post-launch.
+
+**Post-launch priority:** UI and moderation complexity are high. Ship after the core 4 campaigns are stable.
 
 ---
 
@@ -245,7 +271,7 @@ CREATE TABLE campaigns (
   title TEXT NOT NULL,
   description TEXT,
   campaign_type TEXT NOT NULL, -- 'territory' | 'collage' | 'choropleth' | 'heatmap'
-  contribution_type TEXT NOT NULL, -- 'cleanup' | 'photo' | 'registration' | 'advocacy'
+  contribution_type TEXT NOT NULL, -- 'cleanup' | 'photo' | 'registration' | 'advocacy' | 'civic_action' | 'unfollow'
   geo_scope JSONB, -- bounding box or region list
   geo_unit TEXT, -- 'census_tract' | 'zip' | 'state' | 'point'
   win_condition JSONB, -- { type: 'threshold', value: 10000, unit: 'lbs' }
@@ -500,9 +526,26 @@ Tables that drive live map updates:
 
 ---
 
+### Phase 7: Launch Campaigns 4 & 5
+**Goal:** Ship BRAINROT and Road to Independence v2, lay groundwork for Ground Truth
+
+- [x] Road to Independence v2 — expand contribution form to 7 civic action types (action selector UI, store subtype in `notes`)
+- [x] Road to Independence v2 — update description and scope doc to reflect 250th anniversary framing
+- [x] BRAINROT campaign — heatmap map type rendering (MapLibre heatmap layer from point contributions)
+- [x] BRAINROT contribution form — required account handle input, optional photo, location capture
+- [x] BRAINROT dethrone leaderboard — aggregate `notes` field to rank most-unfollowed accounts
+- [x] DB migration 011 — expand `contribution_type` CHECK constraint to include `civic_action` and `unfollow`
+- [x] Demo data for BRAINROT (Digital Detox Collective group + 24 global unfollow contributions)
+- [ ] Ground Truth campaign — design and spec (post-launch; ship UI after core 4 are stable)
+
+**Deliverable:** 4 campaigns live at launch
+
+---
+
 ### Post-MVP: Mobile & Monetization
 - React Native app sharing API and auth layer
 - Collective Action Fund (legal review required — pooled donation vehicle with voting)
 - Campaign creation tools for verified groups
 - Weather API integration for dynamic environmental events
 - Advanced moderation layer for user-generated content
+- Ground Truth (Campaign 5) — crowdsourced global news map

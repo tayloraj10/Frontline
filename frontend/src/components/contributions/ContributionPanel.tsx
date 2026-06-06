@@ -24,6 +24,8 @@ const PANEL_BUTTON: Record<string, { icon: string; label: string }> = {
   photo:        { icon: "📷", label: "Submit Photo" },
   registration: { icon: "🗳️", label: "Register" },
   advocacy:     { icon: "✊", label: "Take Action" },
+  civic_action: { icon: "🗽", label: "Log Civic Action" },
+  unfollow:     { icon: "🧠", label: "Log Unfollow" },
 };
 
 const MODAL_CONFIG: Record<string, {
@@ -51,7 +53,27 @@ const MODAL_CONFIG: Record<string, {
     successClaimed: "Action logged!",
     successUnclaimed: "Action logged!",
   },
+  civic_action: {
+    title: "Log Civic Action",
+    successClaimed: "Action logged! State progress updated.",
+    successUnclaimed: "Action logged!",
+  },
+  unfollow: {
+    title: "Log Unfollow",
+    successClaimed: "Unfollow logged! You're on the map.",
+    successUnclaimed: "Unfollow logged!",
+  },
 };
+
+const CIVIC_ACTIONS: { key: string; icon: string; label: string }[] = [
+  { key: "register_independent",    icon: "🗳️", label: "Register as Independent" },
+  { key: "town_hall",               icon: "🏛️", label: "Attend a Town Hall" },
+  { key: "contact_representative",  icon: "📬", label: "Contact Your Rep" },
+  { key: "volunteer",               icon: "🤝", label: "Volunteer for Civic Org" },
+  { key: "visit_landmark",          icon: "🗽", label: "Visit a Landmark" },
+  { key: "attend_protest",          icon: "✊", label: "Attend a Protest" },
+  { key: "read_founding_document",  icon: "📜", label: "Read a Founding Document" },
+];
 
 interface ContributionPanelProps {
   campaignId: string;
@@ -224,13 +246,16 @@ function ContributeModal({
 }) {
   const isCleanup = campaignContributionType === "cleanup";
   const isPhoto = campaignContributionType === "photo";
-  const needsLocation = isCleanup || isPhoto;
-  const showPhoto = isCleanup || isPhoto;
+  const isCivicAction = campaignContributionType === "civic_action";
+  const isUnfollow = campaignContributionType === "unfollow";
+  const needsLocation = isCleanup || isPhoto || isUnfollow;
+  const showPhoto = isCleanup || isPhoto || isCivicAction || isUnfollow;
 
   const config = MODAL_CONFIG[campaignContributionType] ?? MODAL_CONFIG.cleanup;
 
   const [bagCount, setBagCount] = useState(1);
   const [notes, setNotes] = useState("");
+  const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -243,6 +268,8 @@ function ContributeModal({
     if (submitting) return false;
     if (needsLocation && !submitCoords) return false;
     if (isPhoto && !photo) return false;
+    if (isCivicAction && !selectedAction) return false;
+    if (isUnfollow && !notes.trim()) return false;
     return true;
   })();
 
@@ -256,6 +283,7 @@ function ContributeModal({
       if (photo) photoUrl = await uploadToR2(photo);
 
       const value = isCleanup ? bagCount : 1;
+      const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
 
       const body: Record<string, unknown> = {
         campaign_id: campaignId,
@@ -264,7 +292,7 @@ function ContributeModal({
         contribution_type: campaignContributionType,
         value,
         photo_url: photoUrl,
-        notes: notes || null,
+        notes: computedNotes,
       };
 
       if (submitCoords) {
@@ -302,7 +330,9 @@ function ContributeModal({
       <ModalShell onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">
-            {result === "success" ? (isPhoto ? "🌿" : "🎉") : "✅"}
+            {result === "success"
+              ? isPhoto ? "🌿" : isCivicAction ? "🗽" : isUnfollow ? "🧠" : "🎉"
+              : "✅"}
           </span>
           <p className="text-zinc-100 font-semibold text-center">
             {result === "success" ? config.successClaimed : config.successUnclaimed}
@@ -315,23 +345,30 @@ function ContributeModal({
     );
   }
 
-  const notesLabel = isPhoto ? "Caption" : "Notes";
-  const notesPlaceholder = isCleanup
-    ? "e.g. Found a mattress near the park entrance"
-    : isPhoto
-      ? "Add a caption…"
-      : campaignContributionType === "registration"
-        ? "e.g. Registered at county clerk office"
-        : "e.g. Attended city council meeting";
-
   return (
     <ModalShell title={config.title} onClose={onClose}>
       <div className="flex flex-col gap-4">
 
+        {/* Account handle — unfollow only (required) */}
+        {isUnfollow && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Account you unfollowed (required)</label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="@handle or account name"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+            />
+          </div>
+        )}
+
         {/* Location section */}
         {needsLocation && (
           <div>
-            <p className="text-xs text-zinc-500 mb-1.5">Your location</p>
+            <p className="text-xs text-zinc-500 mb-1.5">
+              {isUnfollow ? "Your location (where you are)" : "Your location"}
+            </p>
             <GpsIndicator
               status={gps.status}
               coords={gps.coords}
@@ -407,6 +444,30 @@ function ContributeModal({
           </div>
         )}
 
+        {/* Civic action selector */}
+        {isCivicAction && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-2">Select your action (required)</label>
+            <div className="grid grid-cols-2 gap-2">
+              {CIVIC_ACTIONS.map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  onClick={() => setSelectedAction(a.key)}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${
+                    selectedAction === a.key
+                      ? "bg-blue-900/60 border-blue-500 text-blue-200"
+                      : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  <span className="text-base shrink-0">{a.icon}</span>
+                  <span className="leading-tight">{a.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Photo */}
         {showPhoto && (
           <div>
@@ -422,17 +483,29 @@ function ContributeModal({
           </div>
         )}
 
-        {/* Notes / Caption */}
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">{notesLabel} (optional)</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            placeholder={notesPlaceholder}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
-          />
-        </div>
+        {/* Notes / Caption — not shown for civic_action or unfollow (notes field used internally) */}
+        {!isCivicAction && !isUnfollow && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">
+              {isPhoto ? "Caption" : "Notes"} (optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder={
+                isCleanup
+                  ? "e.g. Found a mattress near the park entrance"
+                  : isPhoto
+                    ? "Add a caption…"
+                    : campaignContributionType === "registration"
+                      ? "e.g. Registered at county clerk office"
+                      : "e.g. Attended city council meeting"
+              }
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+            />
+          </div>
+        )}
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
 

@@ -13,6 +13,11 @@ interface LeaderboardEntry {
   tracts_claimed: number;
 }
 
+interface DethroneEntry {
+  account: string;
+  count: number;
+}
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
@@ -86,26 +91,67 @@ function LeaderboardTable({
   );
 }
 
+function DethroneTable({ entries }: { entries: DethroneEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="px-5 py-10 text-center text-zinc-600 text-sm">
+        No unfollows logged yet. Be the first to dethrone someone.
+      </div>
+    );
+  }
+  return (
+    <ul className="divide-y divide-zinc-800/50">
+      {entries.map((entry, i) => (
+        <li key={entry.account} className="px-5 py-3 flex items-center gap-3">
+          <RankBadge rank={i + 1} />
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-orange-900/40 border border-orange-700/60 flex items-center justify-center text-xs shrink-0">
+              🧠
+            </div>
+            <span className="text-sm text-zinc-200 truncate font-medium">{entry.account}</span>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="text-xs font-semibold text-orange-400 tabular-nums">{entry.count}</div>
+            <div className="text-xs text-zinc-600">unfollows</div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default async function LeaderboardPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
   const { data: campaignData } = await supabase
     .from("campaigns")
-    .select("id, title, description, campaign_type")
+    .select("id, title, description, campaign_type, contribution_type")
     .eq("slug", slug)
     .single();
 
   if (!campaignData) notFound();
 
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
-  const res = await fetch(`${fastapiUrl}/api/campaigns/${campaignData.id}/leaderboard`, {
-    next: { revalidate: 30 },
-  });
+  const isHeatmap = campaignData.campaign_type === "heatmap";
+
+  const [res, dethroneRes] = await Promise.all([
+    fetch(`${fastapiUrl}/api/campaigns/${campaignData.id}/leaderboard`, {
+      next: { revalidate: 30 },
+    }),
+    isHeatmap
+      ? fetch(`${fastapiUrl}/api/campaigns/${campaignData.id}/dethrone-leaderboard`, {
+          next: { revalidate: 30 },
+        })
+      : Promise.resolve(null),
+  ]);
 
   const leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] } = res.ok
     ? await res.json()
     : { users: [], groups: [] };
+
+  const dethroneEntries: DethroneEntry[] =
+    dethroneRes?.ok ? await dethroneRes.json() : [];
 
   const userIds = leaderboard.users.map((u) => u.entity_id);
   const groupIds = leaderboard.groups.map((g) => g.entity_id);
@@ -124,7 +170,11 @@ export default async function LeaderboardPage({ params }: Props) {
   );
   const groupsById = new Map((groupsData ?? []).map((g) => [g.id, g.name]));
 
-  const unit = campaignData.campaign_type === "territory" ? "bags" : "pts";
+  const unit =
+    campaignData.campaign_type === "territory" ? "bags"
+    : campaignData.contribution_type === "unfollow" ? "unfollows"
+    : campaignData.contribution_type === "civic_action" ? "actions"
+    : "pts";
 
   return (
     <div className="flex flex-col flex-1">
@@ -144,6 +194,18 @@ export default async function LeaderboardPage({ params }: Props) {
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+
+          {isHeatmap && (
+            <div className="border border-orange-800/50 rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-orange-800/50 bg-orange-950/30 flex items-center gap-2">
+                <span className="text-lg">🧠</span>
+                <span className="text-sm font-semibold text-orange-300">Dethrone Leaderboard</span>
+                <span className="ml-auto text-xs text-zinc-600">most unfollowed accounts</span>
+              </div>
+              <DethroneTable entries={dethroneEntries} />
+            </div>
+          )}
+
           <div className="border border-zinc-800 rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
               <span className="text-sm font-semibold text-zinc-300">Individuals</span>

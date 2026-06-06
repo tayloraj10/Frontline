@@ -349,16 +349,16 @@ function TerritoryPanel({
 function StatePanel({
   geoUnitId,
   displayName,
-  totalRegistrations,
+  totalActions,
   onClose,
 }: {
   geoUnitId: string;
   displayName: string;
-  totalRegistrations: number;
+  totalActions: number;
   onClose: () => void;
 }) {
   const lean = US_STATE_LEAN[displayName] ?? 0;
-  const progress = Math.min(totalRegistrations / CHOROPLETH_THRESHOLD, 1);
+  const progress = Math.min(totalActions / CHOROPLETH_THRESHOLD, 1);
   const isR = lean < 0;
   const accentColor = isR ? "#ef4444" : "#3b82f6";
   const party = Math.abs(lean) < 0.15 ? "Swing" : isR ? "Republican" : "Democrat";
@@ -378,9 +378,9 @@ function StatePanel({
       </div>
       <div className="px-4 pt-3 pb-4">
         <div className="flex items-baseline justify-between mb-1.5">
-          <span className="text-xs text-zinc-500">Registrations</span>
+          <span className="text-xs text-zinc-500">Actions</span>
           <span className="text-sm font-bold text-zinc-200 tabular-nums">
-            {totalRegistrations.toLocaleString()} / {CHOROPLETH_THRESHOLD.toLocaleString()}
+            {totalActions.toLocaleString()} / {CHOROPLETH_THRESHOLD.toLocaleString()}
           </span>
         </div>
         <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
@@ -390,7 +390,7 @@ function StatePanel({
           />
         </div>
         <p className="mt-2 text-xs text-zinc-600">
-          {progress >= 1 ? "Fully neutralized ✓" : `${Math.round((1 - progress) * CHOROPLETH_THRESHOLD - totalRegistrations + 1)} more to neutralize`}
+          {progress >= 1 ? "Fully neutralized ✓" : `${Math.round((1 - progress) * CHOROPLETH_THRESHOLD - totalActions + 1)} more to neutralize`}
         </p>
       </div>
     </div>
@@ -412,6 +412,52 @@ function pulseClaim(m: maplibregl.Map, geoUnitId: string): void {
   });
 }
 
+// ─── Fit-to-extent control ────────────────────────────────────────────────────
+
+class FitExtentControl implements maplibregl.IControl {
+  private _map: maplibregl.Map | null = null;
+  private _container: HTMLDivElement | null = null;
+  private readonly _getBounds: () => maplibregl.LngLatBoundsLike | null;
+
+  constructor(getBounds: () => maplibregl.LngLatBoundsLike | null) {
+    this._getBounds = getBounds;
+  }
+
+  onAdd(map: maplibregl.Map): HTMLElement {
+    this._map = map;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = "Zoom to data extent";
+    btn.style.cssText =
+      "width:29px;height:29px;display:flex;align-items:center;justify-content:center;" +
+      "background:none;border:none;cursor:pointer;padding:0;color:#333";
+    btn.innerHTML =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">` +
+      `<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>` +
+      `</svg>`;
+    btn.onclick = () => {
+      const bounds = this._getBounds();
+      if (bounds && this._map) {
+        this._map.fitBounds(bounds as maplibregl.LngLatBoundsLike, {
+          padding: 60,
+          maxZoom: 12,
+          duration: 800,
+        });
+      }
+    };
+    const container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    container.appendChild(btn);
+    this._container = container;
+    return container;
+  }
+
+  onRemove(): void {
+    this._container?.parentNode?.removeChild(this._container);
+    this._map = null;
+  }
+}
+
 // ─── Main map component ───────────────────────────────────────────────────────
 
 export default function CampaignMap({
@@ -431,6 +477,7 @@ export default function CampaignMap({
 }: Props) {
   const isCollage = campaignType === "collage";
   const isChoropleth = campaignType === "choropleth";
+  const isHeatmap = campaignType === "heatmap";
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -454,6 +501,7 @@ export default function CampaignMap({
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapReadyRef = useRef(false);
   const choroplethListenerRef = useRef(false);
+  const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
@@ -529,12 +577,72 @@ export default function CampaignMap({
             const marker = addPhotoMarker(m, loc, setSelectedPhoto);
             photoMarkersRef.current.push(marker);
           }
+          if (locations.length > 0) {
+            const b = new maplibregl.LngLatBounds();
+            for (const loc of locations) b.extend([loc.longitude, loc.latitude]);
+            dataBoundsRef.current = b;
+          }
         }
       } catch {
         // photo markers are non-critical
       }
       return;
     }
+
+    if (isHeatmap) {
+      // Heatmap campaigns: no territory tiles — render MapLibre heatmap from contribution points
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/locations`,
+        );
+        if (res.ok) {
+          const locations = (await res.json()) as ContributionPoint[];
+          const features = locations.map((loc) => ({
+            type: "Feature" as const,
+            geometry: { type: "Point" as const, coordinates: [loc.longitude, loc.latitude] },
+            properties: { value: loc.value ?? 1 },
+          }));
+          contributionFeaturesRef.current = features;
+          if (features.length > 0) {
+            const b = new maplibregl.LngLatBounds();
+            for (const f of features) b.extend(f.geometry.coordinates as [number, number]);
+            dataBoundsRef.current = b;
+          }
+          m.addSource("contribution-pts", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features },
+          });
+          m.addLayer({
+            id: "heatmap-layer",
+            type: "heatmap",
+            source: "contribution-pts",
+            paint: {
+              "heatmap-weight": 1,
+              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 9, 4],
+              "heatmap-color": [
+                "interpolate", ["linear"], ["heatmap-density"],
+                0,    "rgba(0,0,0,0)",
+                0.08, "rgba(0,80,255,0.9)",
+                0.25, "rgba(0,200,180,1)",
+                0.42, "rgba(0,210,60,1)",
+                0.58, "rgba(200,220,0,1)",
+                0.72, "rgba(255,140,0,1)",
+                0.88, "rgba(230,30,0,1)",
+                1,    "rgba(160,0,0,1)",
+              ],
+              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 20, 5, 30, 9, 45],
+              "heatmap-opacity": 0.9,
+            },
+          } as Parameters<typeof m.addLayer>[0]);
+        }
+      } catch {
+        // heatmap layer is non-critical
+      }
+      return;
+    }
+
+    // Territory/choropleth campaigns are US-scoped
+    dataBoundsRef.current = [[-125, 24], [-66, 49]];
 
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
 
@@ -675,7 +783,7 @@ export default function CampaignMap({
       applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
     }
     updateEventMarkers(activeEventsRef.current);
-  }, [campaign.id, isCollage, isChoropleth, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -703,8 +811,8 @@ export default function CampaignMap({
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: styleUrl("outdoor"),
-      center: [-98.5795, 39.8283],
-      zoom: 4,
+      center: isHeatmap ? [0, 20] : [-98.5795, 39.8283],
+      zoom: isHeatmap ? 2 : 4,
       attributionControl: false,
     });
 
@@ -718,6 +826,10 @@ export default function CampaignMap({
         "top-right",
       );
     }
+    map.current.addControl(
+      new FitExtentControl(() => dataBoundsRef.current),
+      "top-right",
+    );
     map.current.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
@@ -797,7 +909,7 @@ export default function CampaignMap({
             hoverDiv.innerHTML =
               `<div style="font-weight:700;font-size:13px;color:#f4f4f5">${displayName}</div>` +
               `<div style="color:${isR ? "#f87171" : "#60a5fa"};font-size:11px;margin-top:4px">${party}</div>` +
-              `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${totalVal.toLocaleString()} registrations · ${pct}% neutralized</div>`;
+              `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${totalVal.toLocaleString()} actions · ${pct}% neutralized</div>`;
           } else {
             const bags = totalVal;
             const claimerHtml = featureState.claimed_label
@@ -1053,7 +1165,7 @@ export default function CampaignMap({
           <StatePanel
             geoUnitId={selectedZip.geoUnitId}
             displayName={selectedZip.displayName}
-            totalRegistrations={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId)?.total_value ?? 0}
+            totalActions={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId)?.total_value ?? 0}
             onClose={() => setSelectedZip(null)}
           />
         ) : (
@@ -1132,6 +1244,16 @@ export default function CampaignMap({
               <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-zinc-500/80" />
                 <span className="text-zinc-300">Neutralized</span>
+              </div>
+            </>
+          ) : isHeatmap ? (
+            <>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-2 rounded-sm" style={{ background: "linear-gradient(to right, rgba(255,200,0,0.5), rgba(255,80,0,0.8), rgba(150,0,30,1))" }} />
+                <span className="text-zinc-300">Unfollow density</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="text-zinc-500">Low → High</span>
               </div>
             </>
           ) : (

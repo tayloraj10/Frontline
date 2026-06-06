@@ -13,4 +13,6 @@ export const CONTRIBUTION_LABELS: Record<string, string> = {
   photo:        "Photo",
   registration: "Register",
   advocacy:     "Advocate",
+  civic_action: "Act",
+  unfollow:     "Unfollow",
 };

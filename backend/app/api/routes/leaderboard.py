@@ -95,3 +95,26 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
             for r in group_rows
         ],
     }
+
+
+@router.get("/{campaign_id}/dethrone-leaderboard")
+async def get_dethrone_leaderboard(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    rows = (
+        await db.execute(
+            text("""
+                SELECT
+                    notes                   AS account,
+                    COUNT(*)::int           AS unfollow_count
+                FROM contributions
+                WHERE campaign_id = :cid
+                  AND notes IS NOT NULL
+                  AND notes != ''
+                GROUP BY notes
+                ORDER BY unfollow_count DESC
+                LIMIT 20
+            """),
+            {"cid": str(campaign_id)},
+        )
+    ).fetchall()
+
+    return [{"account": r.account, "count": r.unfollow_count} for r in rows]

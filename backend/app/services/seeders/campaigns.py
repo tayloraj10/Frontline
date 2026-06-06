@@ -9,6 +9,7 @@ from .base import Seeder, SeedResult
 TRASH_WAR_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 TOUCH_GRASS_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 ROAD_TO_INDEPENDENCE_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
+BRAINROT_ID = uuid.UUID("00000000-0000-0000-0000-000000000004")
 
 
 class CampaignSeeder(Seeder):
@@ -38,6 +39,7 @@ class CampaignSeeder(Seeder):
                 "win_condition": json.dumps({"type": "open_ended"}),
             },
         )
+
         await db.execute(
             text("""
                 INSERT INTO campaigns
@@ -58,6 +60,7 @@ class CampaignSeeder(Seeder):
                 "win_condition": json.dumps({"type": "open_ended"}),
             },
         )
+
         await db.execute(
             text("""
                 INSERT INTO campaigns
@@ -65,21 +68,60 @@ class CampaignSeeder(Seeder):
                      geo_unit, status, geo_scope, scoring_rules, win_condition)
                 VALUES (
                     :id, 'road-to-independence', 'Road to Independence',
-                    'Every voter registration change toward Independent shifts the map from red and blue toward gray. Help neutralize America''s political map.',
-                    'choropleth', 'registration', 'state', 'active',
+                    'Break free from the two-party system. Log civic actions — re-register as Independent, attend town halls, contact your representatives, volunteer, visit landmarks, protest, and read the founding documents. Help grow America''s independence movement.',
+                    'choropleth', 'civic_action', 'state', 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
-                ON CONFLICT (slug) DO NOTHING
+                ON CONFLICT (slug) DO UPDATE SET
+                    contribution_type = EXCLUDED.contribution_type,
+                    description = EXCLUDED.description,
+                    scoring_rules = EXCLUDED.scoring_rules
             """),
             {
                 "id": str(ROAD_TO_INDEPENDENCE_ID),
                 "geo_scope": json.dumps({"scope": "nationwide"}),
-                "scoring_rules": json.dumps({"unit": "registrations", "per_contribution": 1}),
-                "win_condition": json.dumps({"type": "threshold", "value": 500, "unit": "registrations_per_state"}),
+                "scoring_rules": json.dumps({
+                    "unit": "actions",
+                    "per_contribution": 1,
+                    "action_types": [
+                        "register_independent",
+                        "town_hall",
+                        "contact_representative",
+                        "volunteer",
+                        "visit_landmark",
+                        "attend_protest",
+                        "read_founding_document",
+                    ],
+                }),
+                "win_condition": json.dumps({"type": "open_ended"}),
             },
         )
+
+        await db.execute(
+            text("""
+                INSERT INTO campaigns
+                    (id, slug, title, description, campaign_type, contribution_type,
+                     geo_unit, status, geo_scope, scoring_rules, win_condition)
+                VALUES (
+                    :id, 'brainrot', 'BRAINROT',
+                    'Building Resistance Against Influencers, Narcissism, Ragebait, Overconsumption, and Time-wasting. Log every account you unfollow and help dethrone the biggest offenders.',
+                    'heatmap', 'unfollow', 'point', 'active',
+                    CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
+                )
+                ON CONFLICT (slug) DO UPDATE SET
+                    description = EXCLUDED.description,
+                    scoring_rules = EXCLUDED.scoring_rules
+            """),
+            {
+                "id": str(BRAINROT_ID),
+                "geo_scope": json.dumps({"scope": "global"}),
+                "scoring_rules": json.dumps({"unit": "unfollows", "per_contribution": 1}),
+                "win_condition": json.dumps({"type": "open_ended"}),
+            },
+        )
+
         await db.commit()
 
         result = SeedResult()
-        result.inserted = 3
+        result.inserted = 4
         return result

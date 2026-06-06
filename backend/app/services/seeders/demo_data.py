@@ -20,6 +20,7 @@ DEMO_NS = uuid.UUID("12345678-1234-5678-1234-567812345678")
 TRASH_WAR_ID = "00000000-0000-0000-0000-000000000001"
 TOUCH_GRASS_ID = "00000000-0000-0000-0000-000000000002"
 ROAD_ID = "00000000-0000-0000-0000-000000000003"
+BRAINROT_ID = "00000000-0000-0000-0000-000000000004"
 
 
 def _uid(key: str) -> str:
@@ -56,6 +57,8 @@ _GROUPS = [
      "description": "Outdoor adventurers logging nature photos from coast to coast.", "creator": "sarah"},
     {"key": "ivu", "name": "Independent Voters United","slug": "independent-voters-united",
      "description": "Registering as Independent to break the partisan gridlock.", "creator": "sam"},
+    {"key": "ddc", "name": "Digital Detox Collective", "slug": "digital-detox-collective",
+     "description": "Culling our feeds one unfollow at a time.", "creator": "priya"},
 ]
 
 # (user_key, group_key, role)
@@ -68,6 +71,9 @@ _MEMBERSHIPS = [
     ("sam",     "ivu", "admin"), ("tyler",   "ivu", "member"),
     ("priya",   "ivu", "member"), ("alex",   "ivu", "member"),
     ("destiny", "ivu", "member"),
+    ("priya",   "ddc", "admin"), ("sam",     "ddc", "member"),
+    ("maya",    "ddc", "member"), ("olivia",  "ddc", "member"),
+    ("alex",    "ddc", "member"),
 ]
 
 # (user_key, group_key_or_None, zip_code, lat, lng, bags, days_back, hour)
@@ -202,6 +208,42 @@ _ROAD = [
     ("tyler",  "ivu", "05",  34.7465,  -92.2896, 3, 8.0, 10),
     ("destiny","ivu", "28",  32.2988,  -90.1848, 3, 9.0, 14),
     ("alex",   "ivu", "01",  32.3617,  -86.2792, 3, 10.0, 9),
+]
+
+
+# (user_key, group_key_or_None, lat, lng, account_handle, days_back, hour)
+_BRAINROT = [
+    # @DailyRage — most unfollowed (5 times)
+    ("sam",     "ddc",  40.7128,  -74.0060, "@DailyRage",      1.0, 10),
+    ("tyler",    None,  41.8781,  -87.6298, "@DailyRage",      2.0, 14),
+    ("destiny",  None,  38.8951,  -77.0369, "@DailyRage",      3.0, 10),
+    ("priya",   "ddc",  39.7392, -104.9903, "@DailyRage",      5.0, 15),
+    ("sam",      None,  35.6762,  139.6503, "@DailyRage",     12.0, 10),
+    # @AngryPundit — 4 times
+    ("sam",     "ddc",  42.3601,  -71.0589, "@AngryPundit",    2.0, 10),
+    ("jordan",   None,  48.8566,    2.3522, "@AngryPundit",    8.0,  9),
+    ("alex",     None,  35.2271,  -80.8431, "@AngryPundit",    4.0,  9),
+    ("maya",     None,  44.9537,  -93.0900, "@AngryPundit",    5.0,  8),
+    # @ViralSlop — 4 times
+    ("priya",   "ddc",  37.7749, -122.4194, "@ViralSlop",      1.5,  9),
+    ("sarah",    None,  45.5051, -122.6750, "@ViralSlop",      3.0,  9),
+    ("olivia",  "ddc",  51.5074,   -0.1278, "@ViralSlop",      7.0, 14),
+    ("marcus",   None, -23.5505,  -46.6333, "@ViralSlop",     14.0, 10),
+    # @OutrageEngine — 3 times
+    ("jordan",   None,  39.9526,  -75.1652, "@OutrageEngine",  2.5, 11),
+    ("maya",    "ddc",  44.9537,  -93.0900, "@OutrageEngine",  5.0,  8),
+    ("tyler",    None,  43.6532,  -79.3832, "@OutrageEngine",  9.0, 11),
+    # @CloutChaser99 — 3 times
+    ("alex",     None,  34.0522, -118.2437, "@CloutChaser99",  1.0, 11),
+    ("tyler",    None,  30.2672,  -97.7431, "@CloutChaser99",  3.0, 12),
+    ("sarah",    None,  52.5200,   13.4050, "@CloutChaser99", 10.0, 11),
+    # @RageHour — 3 times
+    ("marcus",   None,  29.7604,  -95.3698, "@RageHour",       3.0,  9),
+    ("alex",     None,  32.7767,  -96.7970, "@RageHour",       6.0, 11),
+    ("priya",    None, -33.8688,  151.2093, "@RageHour",      15.0,  9),
+    # @ContentFarm42 — 2 times
+    ("olivia",  "ddc",  25.7617,  -80.1918, "@ContentFarm42",  4.0,  8),
+    ("destiny",  None,  19.4326,  -99.1332, "@ContentFarm42", 11.0,  8),
 ]
 
 
@@ -353,7 +395,7 @@ class DemoDataSeeder(Seeder):
                              contribution_type, value, location, location_verified, submitted_at)
                         VALUES
                             (:id, :cid, :uid, :gid, :geo_id,
-                             'registration', :value,
+                             'civic_action', :value,
                              ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
                              :verified, :ts)
                         ON CONFLICT (id) DO NOTHING
@@ -412,6 +454,31 @@ class DemoDataSeeder(Seeder):
                 )
             except Exception as exc:
                 result.errors.append(f"road claim {geo_id}: {exc}")
+
+        # 9b. BRAINROT contributions (heatmap — account handle stored in notes)
+        for i, (ukey, gkey, lat, lng, handle, d_back, hour) in enumerate(_BRAINROT):
+            uid = user_ids.get(ukey)
+            gid = group_ids.get(gkey) if gkey else None
+            if not uid:
+                continue
+            try:
+                await db.execute(
+                    text("""
+                        INSERT INTO contributions
+                            (id, campaign_id, user_id, group_id, contribution_type, value,
+                             location, location_verified, notes, submitted_at)
+                        VALUES
+                            (:id, :cid, :uid, :gid, 'unfollow', 1,
+                             ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                             TRUE, :notes, :ts)
+                        ON CONFLICT (id) DO NOTHING
+                    """),
+                    {"id": _uid(f"brainrot_{i}"), "cid": BRAINROT_ID, "uid": uid, "gid": gid,
+                     "lng": lng, "lat": lat, "notes": handle, "ts": _ts(d_back, hour)},
+                )
+                result.inserted += 1
+            except Exception as exc:
+                result.errors.append(f"brainrot contrib {i}: {exc}")
 
         # 10. Campaign events
         chicago_geo = zip_geos.get("60601")
