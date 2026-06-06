@@ -13,12 +13,13 @@ interface Props {
   claims: TerritoryClaim[];
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
+  campaignType?: string;
   pinPickerActive?: boolean;
   pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
   pinPickerConstrained?: boolean;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
-  newContribution?: { lat: number; lng: number; value: number; key: number } | null;
+  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: string;
 }

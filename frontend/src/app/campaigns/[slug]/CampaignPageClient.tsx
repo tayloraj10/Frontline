@@ -50,6 +50,7 @@ interface NewContribution {
   lat: number;
   lng: number;
   value: number;
+  photoUrl?: string;
   key: number;
 }
 
@@ -210,8 +211,9 @@ export default function CampaignPageClient({
   const [activeMapStyle, setActiveMapStyle] = useState("outdoor");
   const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | null>(null);
 
-  const handleContributionSubmitted = (lat: number, lng: number, value: number) => {
-    setNewContribution({ lat, lng, value, key: Date.now() });
+  const handleContributionSubmitted = (lat: number | null, lng: number | null, value: number, photoUrl?: string) => {
+    if (lat === null || lng === null) return; // no-location contributions don't update the map
+    setNewContribution({ lat, lng, value, photoUrl, key: Date.now() });
   };
 
   const handleEnterPinPicker = (coords: Coords, constrained = true) => {
@@ -242,6 +244,7 @@ export default function CampaignPageClient({
         claims={claims}
         activeEvents={activeEvents}
         claimLabels={claimLabels}
+        campaignType={campaign.campaign_type ?? undefined}
         pinPickerActive={pinPickerActive}
         pinPickerInitialCoords={pinPickerInitialCoords}
         pinPickerConstrained={pinPickerConstrained}

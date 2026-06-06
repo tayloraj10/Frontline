@@ -19,6 +19,40 @@ const MAP_STYLES = [
   { id: "hybrid",  label: "Satellite" },
 ] as const;
 
+const PANEL_BUTTON: Record<string, { icon: string; label: string }> = {
+  cleanup:      { icon: "🗑️", label: "Log Cleanup" },
+  photo:        { icon: "📷", label: "Submit Photo" },
+  registration: { icon: "🗳️", label: "Register" },
+  advocacy:     { icon: "✊", label: "Take Action" },
+};
+
+const MODAL_CONFIG: Record<string, {
+  title: string;
+  successClaimed: string;
+  successUnclaimed: string;
+}> = {
+  cleanup: {
+    title: "Log Cleanup",
+    successClaimed: "Cleanup logged! Territory updated.",
+    successUnclaimed: "Cleanup logged! Location was outside the campaign area.",
+  },
+  photo: {
+    title: "Submit Photo",
+    successClaimed: "Photo on the map!",
+    successUnclaimed: "Photo submitted!",
+  },
+  registration: {
+    title: "Register",
+    successClaimed: "Registration logged!",
+    successUnclaimed: "Registration logged!",
+  },
+  advocacy: {
+    title: "Take Action",
+    successClaimed: "Action logged!",
+    successUnclaimed: "Action logged!",
+  },
+};
+
 interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
@@ -27,7 +61,7 @@ interface ContributionPanelProps {
   onEnterPinPicker: (coords: Coords, constrained?: boolean) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
-  onContributionSubmitted?: (lat: number, lng: number, value: number) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
   onLocationCaptured?: (coords: Coords) => void;
   activeMapStyle?: string;
   onStyleChange?: (id: string) => void;
@@ -49,7 +83,6 @@ function useGPS() {
     setStatus("loading");
     setErrorCode(null);
 
-    // First attempt: high accuracy, 12s timeout
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
@@ -57,7 +90,6 @@ function useGPS() {
       },
       (err) => {
         if (err.code === 3) {
-          // Timeout — retry once with network-based location (faster)
           navigator.geolocation.getCurrentPosition(
             (pos) => {
               setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
@@ -169,6 +201,7 @@ function GpsIndicator({
 
 function ContributeModal({
   campaignId,
+  campaignContributionType,
   userId,
   userGroups,
   gps,
@@ -179,15 +212,23 @@ function ContributeModal({
   activeMapStyle,
 }: {
   campaignId: string;
+  campaignContributionType: string;
   userId: string;
   userGroups: { id: string; name: string }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
   onClose: () => void;
-  onContributionSubmitted?: (lat: number, lng: number, value: number) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
   activeMapStyle?: string;
 }) {
+  const isCleanup = campaignContributionType === "cleanup";
+  const isPhoto = campaignContributionType === "photo";
+  const needsLocation = isCleanup || isPhoto;
+  const showPhoto = isCleanup || isPhoto;
+
+  const config = MODAL_CONFIG[campaignContributionType] ?? MODAL_CONFIG.cleanup;
+
   const [bagCount, setBagCount] = useState(1);
   const [notes, setNotes] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
@@ -198,35 +239,56 @@ function ContributeModal({
 
   const submitCoords = overrideCoords ?? gps.coords;
 
+  const canSubmit = (() => {
+    if (submitting) return false;
+    if (needsLocation && !submitCoords) return false;
+    if (isPhoto && !photo) return false;
+    return true;
+  })();
+
   const handleSubmit = async () => {
-    if (!submitCoords) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
+
     try {
       let photoUrl: string | null = null;
       if (photo) photoUrl = await uploadToR2(photo);
+
+      const value = isCleanup ? bagCount : 1;
+
+      const body: Record<string, unknown> = {
+        campaign_id: campaignId,
+        user_id: userId,
+        group_id: selectedGroupId,
+        contribution_type: campaignContributionType,
+        value,
+        photo_url: photoUrl,
+        notes: notes || null,
+      };
+
+      if (submitCoords) {
+        body.latitude = submitCoords.latitude;
+        body.longitude = submitCoords.longitude;
+      }
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/submit`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            campaign_id: campaignId,
-            user_id: userId,
-            group_id: selectedGroupId,
-            contribution_type: "cleanup",
-            value: bagCount,
-            photo_url: photoUrl,
-            latitude: submitCoords.latitude,
-            longitude: submitCoords.longitude,
-            notes: notes || null,
-          }),
+          body: JSON.stringify(body),
         },
       );
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as { claimed_territory: boolean };
-      onContributionSubmitted?.(submitCoords.latitude, submitCoords.longitude, bagCount);
+
+      onContributionSubmitted?.(
+        submitCoords?.latitude ?? null,
+        submitCoords?.longitude ?? null,
+        value,
+        photoUrl ?? undefined,
+      );
       setResult(data.claimed_territory ? "success" : "outside");
     } catch {
       setError("Submission failed. Please try again.");
@@ -239,11 +301,11 @@ function ContributeModal({
     return (
       <ModalShell onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
-          <span className="text-4xl">{result === "success" ? "🎉" : "✅"}</span>
+          <span className="text-4xl">
+            {result === "success" ? (isPhoto ? "🌿" : "🎉") : "✅"}
+          </span>
           <p className="text-zinc-100 font-semibold text-center">
-            {result === "success"
-              ? "Cleanup logged! Territory updated."
-              : "Cleanup logged! Location was outside the campaign area."}
+            {result === "success" ? config.successClaimed : config.successUnclaimed}
           </p>
           <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">
             Close
@@ -253,37 +315,51 @@ function ContributeModal({
     );
   }
 
-  return (
-    <ModalShell title="Log Cleanup" onClose={onClose}>
-      <div className="flex flex-col gap-4">
-        <div>
-          <p className="text-xs text-zinc-500 mb-1.5">Your location</p>
-          <GpsIndicator
-            status={gps.status}
-            coords={gps.coords}
-            errorCode={gps.errorCode}
-            onRetry={gps.capture}
-          />
-          {overrideCoords && (
-            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              Adjusted: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
-            </div>
-          )}
-          {gps.status === "success" && gps.coords && (
-            <button
-              onClick={onEnterPinPicker}
-              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
-            >
-              {overrideCoords ? "Reposition on map" : "Place pin on map"}
-            </button>
-          )}
-        </div>
+  const notesLabel = isPhoto ? "Caption" : "Notes";
+  const notesPlaceholder = isCleanup
+    ? "e.g. Found a mattress near the park entrance"
+    : isPhoto
+      ? "Add a caption…"
+      : campaignContributionType === "registration"
+        ? "e.g. Registered at county clerk office"
+        : "e.g. Attended city council meeting";
 
-        {submitCoords && (
+  return (
+    <ModalShell title={config.title} onClose={onClose}>
+      <div className="flex flex-col gap-4">
+
+        {/* Location section */}
+        {needsLocation && (
+          <div>
+            <p className="text-xs text-zinc-500 mb-1.5">Your location</p>
+            <GpsIndicator
+              status={gps.status}
+              coords={gps.coords}
+              errorCode={gps.errorCode}
+              onRetry={gps.capture}
+            />
+            {overrideCoords && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                Adjusted: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+              </div>
+            )}
+            {gps.status === "success" && gps.coords && (
+              <button
+                onClick={onEnterPinPicker}
+                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+              >
+                {overrideCoords ? "Reposition on map" : "Place pin on map"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {needsLocation && submitCoords && (
           <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
         )}
 
+        {/* Group selection */}
         {userGroups.length > 0 && (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
@@ -317,34 +393,43 @@ function ContributeModal({
           </div>
         )}
 
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
-          <input
-            type="number"
-            min={1}
-            value={bagCount}
-            onChange={(e) => setBagCount(Math.max(1, Number(e.target.value)))}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
-          />
-        </div>
+        {/* Bags count (cleanup only) */}
+        {isCleanup && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
+            <input
+              type="number"
+              min={1}
+              value={bagCount}
+              onChange={(e) => setBagCount(Math.max(1, Number(e.target.value)))}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+            />
+          </div>
+        )}
 
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Photo (optional)</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
-          />
-        </div>
+        {/* Photo */}
+        {showPhoto && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">
+              Photo {isPhoto ? "(required)" : "(optional)"}
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+              className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+            />
+          </div>
+        )}
 
+        {/* Notes / Caption */}
         <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Notes (optional)</label>
+          <label className="block text-xs text-zinc-500 mb-1.5">{notesLabel} (optional)</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            placeholder="e.g. Found a mattress near the park entrance"
+            placeholder={notesPlaceholder}
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
           />
         </div>
@@ -360,7 +445,7 @@ function ContributeModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!submitCoords || submitting}
+            disabled={!canSubmit}
             className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {submitting ? "Submitting…" : "Submit"}
@@ -585,19 +670,16 @@ export default function ContributionPanel({
   const prevPinPickerActiveRef = useRef(false);
   const prePinPickerModeRef = useRef<"contribute" | "report" | null>(null);
 
-  // Start GPS immediately so the map pin and modal coords are ready before user taps a button
   useEffect(() => {
     gps.capture();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Notify parent when GPS is captured so map can drop a location pin
   useEffect(() => {
     if (gps.status === "success" && gps.coords) {
       onLocationCaptured?.(gps.coords);
     }
   }, [gps.status, gps.coords, onLocationCaptured]);
 
-  // When pin picker closes, reopen the modal that triggered it and route coords
   useEffect(() => {
     if (prevPinPickerActiveRef.current && !pinPickerActive) {
       const prevMode = prePinPickerModeRef.current ?? "contribute";
@@ -615,7 +697,7 @@ export default function ContributionPanel({
     if (gps.status === "idle") gps.capture();
   };
 
-  const handleEnterPinPickerForCleanup = () => {
+  const handleEnterPinPickerForContribute = () => {
     if (!gps.coords) return;
     prePinPickerModeRef.current = "contribute";
     setMode(null);
@@ -627,10 +709,11 @@ export default function ContributionPanel({
     if (!coords) return;
     prePinPickerModeRef.current = "report";
     setMode(null);
-    onEnterPinPicker(coords, false); // unconstrained — trash can be anywhere
+    onEnterPinPicker(coords, false);
   };
 
   const showReport = campaignContributionType === "cleanup";
+  const btn = PANEL_BUTTON[campaignContributionType] ?? PANEL_BUTTON.cleanup;
 
   return (
     <>
@@ -640,7 +723,7 @@ export default function ContributionPanel({
             onClick={openContribute}
             className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
           >
-            🗑️ Log Cleanup
+            {btn.icon} {btn.label}
           </button>
           {showReport && (
             <button
@@ -673,11 +756,12 @@ export default function ContributionPanel({
       {mode === "contribute" && !pinPickerActive && (
         <ContributeModal
           campaignId={campaignId}
+          campaignContributionType={campaignContributionType}
           userId={userId}
           userGroups={userGroups}
           gps={gps}
           overrideCoords={placedPinCoords}
-          onEnterPinPicker={handleEnterPinPickerForCleanup}
+          onEnterPinPicker={handleEnterPinPickerForContribute}
           onClose={() => setMode(null)}
           onContributionSubmitted={onContributionSubmitted}
           activeMapStyle={activeMapStyle}

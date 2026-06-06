@@ -202,9 +202,17 @@ export default async function CampaignPage({ params }: Props) {
       </div>
 
       <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center gap-6 overflow-x-auto scrollbar-none">
-        <CampaignStat label="Tracts claimed" value={tractsCount} />
-        <CampaignStat label="Bags collected" value={totalBags.toLocaleString()} />
-        <CampaignStat label="Contributions" value={contributionCount.toLocaleString()} />
+        {campaign.campaign_type === "collage" ? (
+          <>
+            <CampaignStat label="Photos submitted" value={contributionCount.toLocaleString()} />
+          </>
+        ) : (
+          <>
+            <CampaignStat label="Tracts claimed" value={tractsCount} />
+            <CampaignStat label="Bags collected" value={totalBags.toLocaleString()} />
+            <CampaignStat label="Contributions" value={contributionCount.toLocaleString()} />
+          </>
+        )}
         {events.length > 0 && (
           <CampaignStat label="Boss events" value={events.length} highlight />
         )}

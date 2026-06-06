@@ -33,8 +33,76 @@ async def _evaluate_triggers(campaign_id: UUID, db: AsyncSession):
     for trigger in triggers.fetchall():
         if trigger.condition_type == "report_count":
             await _check_report_count_trigger(campaign_id, trigger, db)
+        elif trigger.condition_type == "threshold_reached":
+            await _check_threshold_trigger(campaign_id, trigger, db)
 
     await db.commit()
+
+
+async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession):
+    """Fire an event when total campaign-wide or geo-unit contributions cross a threshold."""
+    config = trigger.condition_config
+    threshold = config.get("threshold", 1000)
+    metric = config.get("metric", "total_value")  # 'total_value' | 'contribution_count'
+    geo_unit_id = config.get("geo_unit_id")
+
+    col = "total_value" if metric == "total_value" else "contribution_count"
+    query_params: dict = {"campaign_id": str(campaign_id), "threshold": threshold}
+
+    if geo_unit_id:
+        query_params["geo_unit_id"] = geo_unit_id
+        result = await db.execute(
+            text(f"SELECT {col} FROM leaderboard_entries WHERE campaign_id = :campaign_id AND entity_type = 'campaign' LIMIT 1"),
+            query_params,
+        )
+        # Fallback: aggregate from territory_claims for the specific geo unit
+        result = await db.execute(
+            text(f"SELECT total_value FROM territory_claims WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id"),
+            query_params,
+        )
+        row = result.fetchone()
+        current_value = float(row[0]) if row else 0
+    else:
+        result = await db.execute(
+            text(f"SELECT COALESCE(SUM({col}), 0) FROM territory_claims WHERE campaign_id = :campaign_id"),
+            query_params,
+        )
+        current_value = float(result.scalar() or 0)
+
+    if current_value < threshold:
+        return
+
+    existing = await db.execute(
+        text("""
+            SELECT id FROM campaign_events
+            WHERE campaign_id = :campaign_id
+              AND trigger_id = :trigger_id
+              AND status = 'active'
+            LIMIT 1
+        """),
+        {"campaign_id": str(campaign_id), "trigger_id": str(trigger.id)},
+    )
+    if existing.fetchone():
+        return
+
+    await db.execute(
+        text("""
+            INSERT INTO campaign_events
+                (campaign_id, trigger_id, geo_unit_id, event_type, title, description, effect_config, ends_at)
+            VALUES
+                (:campaign_id, :trigger_id, :geo_unit_id, :event_type,
+                 :title, :description, :effect_config, NOW() + INTERVAL '7 days')
+        """),
+        {
+            "campaign_id": str(campaign_id),
+            "trigger_id": str(trigger.id),
+            "geo_unit_id": geo_unit_id,
+            "event_type": trigger.event_type,
+            "title": config.get("title", f"Milestone reached — {int(current_value):,} {metric.replace('_', ' ')}!"),
+            "description": config.get("description", "A campaign milestone has been hit. Keep the momentum going!"),
+            "effect_config": trigger.effect_config,
+        },
+    )
 
 
 async def _check_report_count_trigger(campaign_id: UUID, trigger, db: AsyncSession):

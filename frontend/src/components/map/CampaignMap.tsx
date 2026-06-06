@@ -17,6 +17,7 @@ interface ContributionPoint {
   id: string;
   user_id: string | null;
   value: number | null;
+  photo_url: string | null;
   submitted_at: string | null;
   latitude: number;
   longitude: number;
@@ -32,12 +33,13 @@ interface Props {
   claims: TerritoryClaim[];
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
+  campaignType?: string;
   pinPickerActive?: boolean;
   pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
   pinPickerConstrained?: boolean;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
-  newContribution?: { lat: number; lng: number; value: number; key: number } | null;
+  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
 }
@@ -113,6 +115,37 @@ function applyClaimsAsFeatureState(
       },
     );
   }
+}
+
+// ─── Photo marker helper (module-level to avoid stale closure) ───────────────
+
+function addPhotoMarker(
+  m: maplibregl.Map,
+  loc: { latitude: number; longitude: number; photo_url: string | null; submitted_at?: string | null },
+  onSelect: (url: string) => void,
+): maplibregl.Marker {
+  const el = document.createElement("div");
+  el.style.cssText =
+    "width:48px;height:48px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.7);" +
+    "box-shadow:0 2px 10px rgba(0,0,0,0.6);cursor:pointer;flex-shrink:0;background:#27272a";
+
+  if (loc.photo_url) {
+    const img = document.createElement("img");
+    img.src = loc.photo_url;
+    img.style.cssText = "width:100%;height:100%;object-fit:cover";
+    el.appendChild(img);
+    el.onclick = () => onSelect(loc.photo_url!);
+  } else {
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.style.justifyContent = "center";
+    el.style.fontSize = "20px";
+    el.textContent = "📷";
+  }
+
+  return new maplibregl.Marker({ element: el, anchor: "center" })
+    .setLngLat([loc.longitude, loc.latitude])
+    .addTo(m);
 }
 
 // ─── Territory detail panel ───────────────────────────────────────────────────
@@ -227,6 +260,7 @@ export default function CampaignMap({
   claims,
   activeEvents,
   claimLabels,
+  campaignType,
   pinPickerActive = false,
   pinPickerInitialCoords,
   pinPickerConstrained = true,
@@ -236,11 +270,15 @@ export default function CampaignMap({
   userLocation,
   activeStyle = "outdoor",
 }: Props) {
+  const isCollage = campaignType === "collage";
+
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [selectedZip, setSelectedZip] = useState<SelectedZip | null>(null);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
@@ -314,6 +352,28 @@ export default function CampaignMap({
   const setupCustomLayers = useCallback(async () => {
     const m = map.current;
     if (!m) return;
+
+    if (isCollage) {
+      // Collage campaigns: no territory tiles — render photo markers instead
+      photoMarkersRef.current.forEach((mk) => mk.remove());
+      photoMarkersRef.current = [];
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/locations`,
+        );
+        if (res.ok) {
+          const locations = (await res.json()) as ContributionPoint[];
+          for (const loc of locations) {
+            const marker = addPhotoMarker(m, loc, setSelectedPhoto);
+            photoMarkersRef.current.push(marker);
+          }
+        }
+      } catch {
+        // photo markers are non-critical
+      }
+      return;
+    }
+
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
 
     m.addSource("territory", {
@@ -422,7 +482,7 @@ export default function CampaignMap({
 
     applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
     updateEventMarkers(activeEventsRef.current);
-  }, [campaign.id, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isCollage, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -578,6 +638,8 @@ export default function CampaignMap({
       eventTweensRef.current.forEach((t) => t.kill());
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
+      photoMarkersRef.current.forEach((m) => m.remove());
+      photoMarkersRef.current = [];
       map.current?.remove();
       map.current = null;
     };
@@ -681,9 +743,25 @@ export default function CampaignMap({
       .addTo(map.current);
   }, [userLocation, pinPickerActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Append freshly-submitted contribution to the live GeoJSON source
+  // Append freshly-submitted contribution to the live map
   useEffect(() => {
     if (!newContribution || !map.current?.isStyleLoaded()) return;
+
+    if (isCollage) {
+      const marker = addPhotoMarker(
+        map.current,
+        {
+          latitude: newContribution.lat,
+          longitude: newContribution.lng,
+          photo_url: newContribution.photoUrl ?? null,
+          submitted_at: new Date().toISOString(),
+        },
+        setSelectedPhoto,
+      );
+      photoMarkersRef.current.push(marker);
+      return;
+    }
+
     const source = map.current.getSource("contribution-pts") as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
     const feature: Feature<Point> = {
@@ -693,7 +771,7 @@ export default function CampaignMap({
     };
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
     source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
-  }, [newContribution]);
+  }, [newContribution, isCollage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Supabase Realtime
   useEffect(() => {
@@ -807,9 +885,9 @@ export default function CampaignMap({
         </div>
       )}
 
-      {!pinPickerActive && (
+      {!pinPickerActive && !isCollage && (
         <>
-          {/* Legend */}
+          {/* Legend — territory campaigns only */}
           <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1.5 text-xs">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
               <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
@@ -829,6 +907,28 @@ export default function CampaignMap({
             </div>
           </div>
         </>
+      )}
+
+      {selectedPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setSelectedPhoto(null)}
+        >
+          <div className="relative max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={selectedPhoto}
+              alt="Contribution photo"
+              className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
+            />
+            <button
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
