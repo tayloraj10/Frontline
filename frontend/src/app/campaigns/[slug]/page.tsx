@@ -76,7 +76,7 @@ export default async function CampaignPage({ params }: Props) {
   const totalBags = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const contributionCount = contribCount ?? 0;
 
-  const unit = campaign.campaign_type === "territory" ? "bags" : campaign.campaign_type === "choropleth" ? "registrations" : "pts";
+  const unit = campaign.campaign_type === "territory" ? "bags" : campaign.campaign_type === "choropleth" ? "registrations" : "photos";
 
   // Leaderboard raw data
   type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };

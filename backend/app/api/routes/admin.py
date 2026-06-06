@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.services import geo
 from app.services.seeders import REGISTRY, StatesSeeder
+from app.services.seeders.demo_data import DemoDataSeeder
 from app.services.seeders.zip_codes import ZipCodeSeeder
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -69,6 +70,16 @@ async def load_geo_units_zips(db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, str(exc))
     except Exception as exc:
         raise HTTPException(500, str(exc))
+    return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
+
+
+@router.post("/seed/demo-data")
+async def seed_demo_data(db: AsyncSession = Depends(get_db)):
+    """Seed 10 demo users, 5 groups, and realistic activity for all 3 campaigns. Idempotent."""
+    try:
+        result = await DemoDataSeeder().run(db, {})
+    except Exception as exc:
+        raise HTTPException(500, f"Demo seeder failed: {exc}")
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
 
 

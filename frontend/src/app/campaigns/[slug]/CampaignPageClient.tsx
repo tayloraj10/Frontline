@@ -78,11 +78,18 @@ function LeaderboardPanel({
   users,
   groups,
   unit,
+  campaignType,
 }: {
   users: LeaderboardEntry[];
   groups: LeaderboardEntry[];
   unit: string;
+  campaignType: string;
 }) {
+  const claimedLabel =
+    campaignType === "territory" ? "tracts" :
+    campaignType === "choropleth" ? "states" :
+    null;
+
   return (
     <div className="py-2 space-y-3">
       <section>
@@ -97,14 +104,16 @@ function LeaderboardPanel({
               <li key={entry.entity_id} className="px-4 py-2.5 flex items-center gap-2.5">
                 <RankBadge rank={i + 1} />
                 <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0">
-                  {entry.name[0].toUpperCase()}
+                  {(entry.name || "?")[0].toUpperCase()}
                 </div>
                 <span className="flex-1 text-xs text-zinc-200 truncate">{entry.name}</span>
                 <div className="text-right shrink-0">
                   <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                     {Math.round(entry.total_value).toLocaleString()} {unit}
                   </div>
-                  <div className="text-xs text-zinc-600">{entry.tracts_claimed} tracts</div>
+                  {claimedLabel && (
+                    <div className="text-xs text-zinc-600">{entry.tracts_claimed} {claimedLabel}</div>
+                  )}
                 </div>
               </li>
             ))}
@@ -124,14 +133,16 @@ function LeaderboardPanel({
               <li key={entry.entity_id} className="px-4 py-2.5 flex items-center gap-2.5">
                 <RankBadge rank={i + 1} />
                 <div className="w-6 h-6 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">
-                  {entry.name[0].toUpperCase()}
+                  {(entry.name || "?")[0].toUpperCase()}
                 </div>
                 <span className="flex-1 text-xs text-zinc-200 truncate">{entry.name}</span>
                 <div className="text-right shrink-0">
                   <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                     {Math.round(entry.total_value).toLocaleString()} {unit}
                   </div>
-                  <div className="text-xs text-zinc-600">{entry.tracts_claimed} tracts</div>
+                  {claimedLabel && (
+                    <div className="text-xs text-zinc-600">{entry.tracts_claimed} {claimedLabel}</div>
+                  )}
                 </div>
               </li>
             ))}
@@ -140,6 +151,12 @@ function LeaderboardPanel({
       </section>
     </div>
   );
+}
+
+function displayUnit(value: number, unit: string): string {
+  const n = Math.round(value);
+  if (n === 1) return `1 ${unit.replace(/s$/, "")}`;
+  return `${n.toLocaleString()} ${unit.endsWith("s") ? unit : unit + "s"}`;
 }
 
 function ActivityPanel({ items, unit }: { items: ActivityItem[]; unit: string }) {
@@ -151,7 +168,7 @@ function ActivityPanel({ items, unit }: { items: ActivityItem[]; unit: string })
       {items.map((item) => (
         <li key={item.id} className="px-4 py-3 flex items-start gap-2.5">
           <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0 mt-0.5">
-            {item.actorName[0].toUpperCase()}
+            {(item.actorName || "?")[0].toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1 flex-wrap">
@@ -177,7 +194,7 @@ function ActivityPanel({ items, unit }: { items: ActivityItem[]; unit: string })
                 </>
               )}
               <span className="text-xs text-zinc-500">
-                {item.value ?? 1} {unit}
+                {displayUnit(item.value ?? 1, unit)}
               </span>
             </div>
             {item.notes && (
@@ -290,7 +307,7 @@ export default function CampaignPageClient({
           </div>
           <div className="flex-1 overflow-y-auto">
             {openPanel === "leaderboard" && (
-              <LeaderboardPanel users={leaderboard.users} groups={leaderboard.groups} unit={unit} />
+              <LeaderboardPanel users={leaderboard.users} groups={leaderboard.groups} unit={unit} campaignType={campaign.campaign_type ?? ""} />
             )}
             {openPanel === "activity" && (
               <ActivityPanel items={activity} unit={unit} />
@@ -317,7 +334,7 @@ export default function CampaignPageClient({
         </div>
       )}
 
-      {userId && (
+      {userId ? (
         <ContributionPanel
           campaignId={campaign.id}
           campaignContributionType={campaign.contribution_type}
@@ -331,6 +348,22 @@ export default function CampaignPageClient({
           activeMapStyle={activeMapStyle}
           onStyleChange={setActiveMapStyle}
         />
+      ) : (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-4 py-2.5 bg-zinc-950/90 backdrop-blur-sm border border-zinc-800 rounded-xl shadow-xl">
+          <span className="text-xs text-zinc-400">Sign in to participate</span>
+          <Link
+            href="/login"
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            Sign In
+          </Link>
+          <Link
+            href="/signup"
+            className="px-3 py-1.5 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-zinc-100 text-xs font-semibold rounded-lg transition-colors"
+          >
+            Sign Up
+          </Link>
+        </div>
       )}
     </>
   );

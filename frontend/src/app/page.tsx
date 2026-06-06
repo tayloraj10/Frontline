@@ -67,12 +67,19 @@ export default async function HomePage() {
 
       {/* Feature pills */}
       <div className="relative flex flex-wrap justify-center gap-2 max-w-md">
-        {["Territory control", "Live map", "Boss events", "Group competition", "Real impact"].map((f) => (
+        {[
+          { icon: "🗺", label: "Territory control" },
+          { icon: "📍", label: "Live map" },
+          { icon: "⚡", label: "Boss events" },
+          { icon: "👥", label: "Group competition" },
+          { icon: "🌱", label: "Real impact" },
+        ].map(({ icon, label }) => (
           <span
-            key={f}
-            className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-xs text-zinc-500"
+            key={label}
+            className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-xs text-zinc-500"
           >
-            {f}
+            <span>{icon}</span>
+            {label}
           </span>
         ))}
       </div>

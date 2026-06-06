@@ -73,7 +73,7 @@ export default async function GroupsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 text-sm font-bold text-zinc-300 shrink-0">
-                        {group.name[0].toUpperCase()}
+                        {(group.name || "?")[0].toUpperCase()}
                       </div>
                       {group.verified && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">

@@ -615,12 +615,49 @@ export default function AdminPanel({ initialCampaigns, initialEvents, initialTri
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [events, setEvents] = useState(initialEvents);
   const [triggers, setTriggers] = useState(initialTriggers);
+  const [seedingDemo, setSeedingDemo] = useState(false);
+  const [seedDemoResult, setSeedDemoResult] = useState<string | null>(null);
+
+  const handleSeedDemo = async () => {
+    setSeedingDemo(true);
+    setSeedDemoResult(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/admin/seed/demo-data`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed");
+      const errs = data.errors?.length ? ` · ${data.errors.length} error(s)` : "";
+      setSeedDemoResult(`✓ ${data.inserted} inserted, ${data.skipped} skipped${errs}`);
+    } catch (err) {
+      setSeedDemoResult(`✗ ${err instanceof Error ? err.message : "Error"}`);
+    } finally {
+      setSeedingDemo(false);
+    }
+  };
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10 w-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
-        <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
+          <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            onClick={handleSeedDemo}
+            disabled={seedingDemo}
+            className="px-4 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-xl transition-colors disabled:opacity-50"
+          >
+            {seedingDemo ? "Seeding…" : "Seed Demo Data"}
+          </button>
+          {seedDemoResult && (
+            <span className={`text-xs ${seedDemoResult.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>
+              {seedDemoResult}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
