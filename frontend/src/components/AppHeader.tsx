@@ -38,7 +38,7 @@ export default async function AppHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          {user && <NotificationBellWrapper />}
+          {user && <NotificationBellWrapper userId={user.id} />}
           <UserNav user={user} />
         </div>
       </div>

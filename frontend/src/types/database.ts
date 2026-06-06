@@ -194,6 +194,38 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["campaign_events"]["Insert"]>;
       };
+      user_notifications: {
+        Row: {
+          id: string;
+          user_id: string;
+          type: string;
+          title: string;
+          body: string | null;
+          campaign_id: string | null;
+          campaign_slug: string | null;
+          read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          type?: string;
+          title: string;
+          body?: string | null;
+          campaign_id?: string | null;
+          campaign_slug?: string | null;
+          read?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<{
+          type: string;
+          title: string;
+          body: string | null;
+          campaign_id: string | null;
+          campaign_slug: string | null;
+          read: boolean;
+        }>;
+      };
       problem_reports: {
         Row: {
           id: string;

@@ -458,11 +458,11 @@ Tables that drive live map updates:
 - [x] Group creation and profile pages
 - [x] Group membership (join, admin roles)
 - [x] Contributions attributed to group when user is a member
-- [ ] Group leaderboard per campaign
-- [ ] Individual leaderboard per campaign
-- [ ] Activity feed (recent contributions, events, claims — paginated)
-- [ ] User profile page with contribution history and impact stats
-- [ ] Basic push/in-app notifications for boss events and milestones
+- [x] Group leaderboard per campaign
+- [x] Individual leaderboard per campaign
+- [x] Activity feed (recent contributions, events, claims — paginated)
+- [x] User profile page with contribution history and impact stats
+- [x] Basic push/in-app notifications for boss events and milestones
 
 **Deliverable:** Groups can compete, users have profiles, feed is live
 
