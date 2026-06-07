@@ -75,7 +75,7 @@ async def load_geo_units_zips(db: AsyncSession = Depends(get_db)):
 
 @router.post("/seed/demo-data")
 async def seed_demo_data(db: AsyncSession = Depends(get_db)):
-    """Seed 10 demo users, 5 groups, and realistic activity for all 3 campaigns. Idempotent."""
+    """Seed 10 demo users, 6 groups, and realistic activity for all 4 campaigns. Idempotent."""
     try:
         result = await DemoDataSeeder().run(db, {})
     except Exception as exc:

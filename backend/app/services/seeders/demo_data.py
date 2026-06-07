@@ -161,53 +161,84 @@ _GRASS = [
     ("destiny", None,  32.7341, -117.1441, 250,  6.0,  9, "Balboa Park sunset"),
 ]
 
-# (user_key, group_key, state_fips, lat, lng, registrations, days_back, hour)
+# (user_key, group_key, state_fips, lat, lng, action_type, days_back, hour)
+# action_type stored in notes; value always 1 (matches frontend behavior)
 _ROAD = [
-    ("sam",    "ivu", "06",  38.5816, -121.4944, 5, 1.0, 10),
-    ("priya",  "ivu", "06",  37.7749, -122.4194, 3, 2.0, 14),
-    ("tyler",  "ivu", "06",  34.0522, -118.2437, 4, 3.0,  9),
-    ("alex",   "ivu", "48",  30.2672,  -97.7431, 6, 1.0, 11),
-    ("destiny","ivu", "48",  29.7604,  -95.3698, 4, 2.0, 14),
-    ("sam",    "ivu", "48",  32.7767,  -96.7970, 3, 4.0,  9),
-    ("priya",  "ivu", "12",  25.7617,  -80.1918, 5, 1.5, 10),
-    ("tyler",  "ivu", "12",  28.5421,  -81.3790, 4, 3.0, 11),
-    ("alex",   "ivu", "36",  40.7128,  -74.0060, 6, 1.0,  9),
-    ("sam",    "ivu", "36",  42.6526,  -73.7562, 3, 2.0, 14),
-    ("priya",  "ivu", "42",  39.9526,  -75.1652, 4, 2.5, 10),
-    ("sam",    "ivu", "42",  40.4406,  -79.9959, 3, 4.0,  9),
-    ("tyler",  "ivu", "39",  39.9612,  -82.9988, 5, 2.0, 11),
-    ("alex",   "ivu", "39",  41.4995,  -81.6954, 3, 4.0, 14),
-    ("sam",    "ivu", "17",  41.8781,  -87.6298, 4, 3.0,  9),
-    ("priya",  "ivu", "17",  39.7817,  -89.6501, 3, 5.0, 11),
-    ("destiny","ivu", "13",  33.7490,  -84.3880, 5, 2.0, 10),
-    ("alex",   "ivu", "13",  31.5785,  -84.1557, 3, 3.0, 14),
-    ("tyler",  "ivu", "37",  35.7796,  -78.6382, 4, 2.0,  9),
-    ("sam",    "ivu", "37",  35.2271,  -80.8431, 3, 4.0, 11),
-    ("priya",  "ivu", "26",  42.3314,  -83.0458, 4, 3.0, 10),
-    ("alex",   "ivu", "26",  42.7335,  -84.5555, 3, 5.0, 14),
-    ("sam",    "ivu", "34",  40.2171,  -74.7429, 4, 1.5,  9),
-    ("tyler",  "ivu", "51",  37.5407,  -77.4360, 4, 2.0, 10),
-    ("destiny","ivu", "51",  38.8976,  -77.0366, 3, 3.0, 14),
-    ("alex",   "ivu", "53",  47.0379, -122.9007, 5, 1.0,  9),
-    ("sam",    "ivu", "53",  47.6062, -122.3321, 3, 2.0, 11),
-    ("priya",  "ivu", "04",  33.4484, -112.0740, 5, 2.0, 10),
-    ("tyler",  "ivu", "08",  39.7392, -104.9903, 5, 1.0,  9),
-    ("alex",   "ivu", "08",  40.0150, -105.2705, 3, 3.0, 11),
-    ("sam",    "ivu", "27",  44.9537,  -93.0900, 4, 3.0, 10),
-    ("destiny","ivu", "47",  36.1627,  -86.7816, 4, 4.0, 14),
-    ("priya",  "ivu", "29",  38.5767,  -92.1735, 3, 5.0,  9),
-    ("tyler",  "ivu", "55",  43.0731,  -89.4012, 4, 4.0, 10),
-    ("alex",   "ivu", "41",  45.5051, -122.6750, 4, 2.0,  9),
-    ("sam",    "ivu", "32",  39.1638, -119.7674, 3, 3.0, 11),
-    ("priya",  "ivu", "49",  40.7608, -111.8910, 4, 2.0, 10),
-    ("tyler",  "ivu", "18",  39.7684,  -86.1581, 3, 5.0, 14),
-    ("destiny","ivu", "20",  39.0473,  -95.6752, 3, 6.0,  9),
-    ("alex",   "ivu", "35",  35.6870, -105.9378, 4, 5.0, 10),
-    ("sam",    "ivu", "19",  41.5868,  -93.6250, 3, 7.0, 11),
-    ("priya",  "ivu", "40",  35.4676,  -97.5164, 3, 6.0,  9),
-    ("tyler",  "ivu", "05",  34.7465,  -92.2896, 3, 8.0, 10),
-    ("destiny","ivu", "28",  32.2988,  -90.1848, 3, 9.0, 14),
-    ("alex",   "ivu", "01",  32.3617,  -86.2792, 3, 10.0, 9),
+    # California (06)
+    ("sam",    "ivu", "06",  38.5816, -121.4944, "register_independent",   1.0, 10),
+    ("priya",  "ivu", "06",  37.7749, -122.4194, "town_hall",              2.0, 14),
+    ("tyler",  "ivu", "06",  34.0522, -118.2437, "register_independent",   3.0,  9),
+    # Texas (48)
+    ("alex",   "ivu", "48",  30.2672,  -97.7431, "contact_representative", 1.0, 11),
+    ("destiny","ivu", "48",  29.7604,  -95.3698, "register_independent",   2.0, 14),
+    ("sam",    "ivu", "48",  32.7767,  -96.7970, "attend_protest",         4.0,  9),
+    # Florida (12)
+    ("priya",  "ivu", "12",  25.7617,  -80.1918, "register_independent",   1.5, 10),
+    ("tyler",  "ivu", "12",  28.5421,  -81.3790, "volunteer",              3.0, 11),
+    # New York (36)
+    ("alex",   "ivu", "36",  40.7128,  -74.0060, "town_hall",              1.0,  9),
+    ("sam",    "ivu", "36",  42.6526,  -73.7562, "read_founding_document", 2.0, 14),
+    # Pennsylvania (42)
+    ("priya",  "ivu", "42",  39.9526,  -75.1652, "contact_representative", 2.5, 10),
+    ("sam",    "ivu", "42",  40.4406,  -79.9959, "register_independent",   4.0,  9),
+    # Ohio (39)
+    ("tyler",  "ivu", "39",  39.9612,  -82.9988, "town_hall",              2.0, 11),
+    ("alex",   "ivu", "39",  41.4995,  -81.6954, "volunteer",              4.0, 14),
+    # Illinois (17)
+    ("sam",    "ivu", "17",  41.8781,  -87.6298, "register_independent",   3.0,  9),
+    ("priya",  "ivu", "17",  39.7817,  -89.6501, "read_founding_document", 5.0, 11),
+    # Georgia (13)
+    ("destiny","ivu", "13",  33.7490,  -84.3880, "attend_protest",         2.0, 10),
+    ("alex",   "ivu", "13",  31.5785,  -84.1557, "contact_representative", 3.0, 14),
+    # North Carolina (37)
+    ("tyler",  "ivu", "37",  35.7796,  -78.6382, "register_independent",   2.0,  9),
+    ("sam",    "ivu", "37",  35.2271,  -80.8431, "volunteer",              4.0, 11),
+    # Michigan (26)
+    ("priya",  "ivu", "26",  42.3314,  -83.0458, "town_hall",              3.0, 10),
+    ("alex",   "ivu", "26",  42.7335,  -84.5555, "read_founding_document", 5.0, 14),
+    # New Jersey (34)
+    ("sam",    "ivu", "34",  40.2171,  -74.7429, "register_independent",   1.5,  9),
+    # Virginia (51)
+    ("tyler",  "ivu", "51",  37.5407,  -77.4360, "contact_representative", 2.0, 10),
+    ("destiny","ivu", "51",  38.8976,  -77.0366, "visit_landmark",         3.0, 14),
+    # Washington (53)
+    ("alex",   "ivu", "53",  47.0379, -122.9007, "register_independent",   1.0,  9),
+    ("sam",    "ivu", "53",  47.6062, -122.3321, "town_hall",              2.0, 11),
+    # Arizona (04)
+    ("priya",  "ivu", "04",  33.4484, -112.0740, "register_independent",   2.0, 10),
+    # Colorado (08)
+    ("tyler",  "ivu", "08",  39.7392, -104.9903, "attend_protest",         1.0,  9),
+    ("alex",   "ivu", "08",  40.0150, -105.2705, "volunteer",              3.0, 11),
+    # Minnesota (27)
+    ("sam",    "ivu", "27",  44.9537,  -93.0900, "read_founding_document", 3.0, 10),
+    # Tennessee (47)
+    ("destiny","ivu", "47",  36.1627,  -86.7816, "contact_representative", 4.0, 14),
+    # Missouri (29)
+    ("priya",  "ivu", "29",  38.5767,  -92.1735, "register_independent",   5.0,  9),
+    # Wisconsin (55)
+    ("tyler",  "ivu", "55",  43.0731,  -89.4012, "town_hall",              4.0, 10),
+    # Oregon (41)
+    ("alex",   "ivu", "41",  45.5051, -122.6750, "register_independent",   2.0,  9),
+    # Nevada (32)
+    ("sam",    "ivu", "32",  39.1638, -119.7674, "attend_protest",         3.0, 11),
+    # Utah (49)
+    ("priya",  "ivu", "49",  40.7608, -111.8910, "visit_landmark",         2.0, 10),
+    # Indiana (18)
+    ("tyler",  "ivu", "18",  39.7684,  -86.1581, "contact_representative", 5.0, 14),
+    # Kansas (20)
+    ("destiny","ivu", "20",  39.0473,  -95.6752, "register_independent",   6.0,  9),
+    # New Mexico (35)
+    ("alex",   "ivu", "35",  35.6870, -105.9378, "read_founding_document", 5.0, 10),
+    # Iowa (19)
+    ("sam",    "ivu", "19",  41.5868,  -93.6250, "volunteer",              7.0, 11),
+    # Oklahoma (40)
+    ("priya",  "ivu", "40",  35.4676,  -97.5164, "register_independent",   6.0,  9),
+    # Arkansas (05)
+    ("tyler",  "ivu", "05",  34.7465,  -92.2896, "town_hall",              8.0, 10),
+    # Mississippi (28)
+    ("destiny","ivu", "28",  32.2988,  -90.1848, "contact_representative", 9.0, 14),
+    # Alabama (01)
+    ("alex",   "ivu", "01",  32.3617,  -86.2792, "attend_protest",        10.0,  9),
 ]
 
 
@@ -380,7 +411,7 @@ class DemoDataSeeder(Seeder):
 
         # 8. Road to Independence contributions
         road_claims: dict[str, dict] = {}
-        for i, (ukey, gkey, fips, lat, lng, regs, d_back, hour) in enumerate(_ROAD):
+        for i, (ukey, gkey, fips, lat, lng, action_type, d_back, hour) in enumerate(_ROAD):
             uid = user_ids.get(ukey)
             gid = group_ids.get(gkey) if gkey else None
             if not uid:
@@ -392,17 +423,18 @@ class DemoDataSeeder(Seeder):
                     text("""
                         INSERT INTO contributions
                             (id, campaign_id, user_id, group_id, geo_unit_id,
-                             contribution_type, value, location, location_verified, submitted_at)
+                             contribution_type, value, location, location_verified,
+                             notes, submitted_at)
                         VALUES
                             (:id, :cid, :uid, :gid, :geo_id,
-                             'civic_action', :value,
+                             'civic_action', 1,
                              ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
-                             :verified, :ts)
+                             :verified, :notes, :ts)
                         ON CONFLICT (id) DO NOTHING
                     """),
                     {"id": _uid(f"road_{i}"), "cid": ROAD_ID, "uid": uid, "gid": gid,
-                     "geo_id": geo_id, "value": regs, "lng": lng, "lat": lat,
-                     "verified": geo_id is not None, "ts": ts},
+                     "geo_id": geo_id, "lng": lng, "lat": lat,
+                     "verified": geo_id is not None, "notes": action_type, "ts": ts},
                 )
                 result.inserted += 1
             except Exception as exc:
@@ -410,7 +442,7 @@ class DemoDataSeeder(Seeder):
                 continue
 
             if geo_id:
-                self._track_claim(road_claims, geo_id, regs, uid, gid, d_back, ts)
+                self._track_claim(road_claims, geo_id, 1, uid, gid, d_back, ts)
 
         # 9. Territory claims
         for geo_id, claim in trash_claims.items():

@@ -30,7 +30,7 @@ class CampaignSeeder(Seeder):
                     'territory', 'cleanup', 'zip', 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
-                ON CONFLICT (slug) DO UPDATE SET geo_unit = 'zip'
+                ON CONFLICT (slug) DO UPDATE SET geo_unit = 'zip', geo_scope = EXCLUDED.geo_scope
             """),
             {
                 "id": str(TRASH_WAR_ID),
@@ -68,7 +68,7 @@ class CampaignSeeder(Seeder):
                      geo_unit, status, geo_scope, scoring_rules, win_condition)
                 VALUES (
                     :id, 'road-to-independence', 'Road to Independence',
-                    'Break free from the two-party system. Log civic actions — re-register as Independent, attend town halls, contact your representatives, volunteer, visit landmarks, protest, and read the founding documents. Help grow America''s independence movement.',
+                    'Break free from the two-party system. Log civic actions and help grow America''s independence movement.',
                     'choropleth', 'civic_action', 'state', 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )

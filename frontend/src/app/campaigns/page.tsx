@@ -63,8 +63,13 @@ export default async function CampaignsPage() {
                         <span className="capitalize">{campaign.campaign_type}</span>
                       </span>
                       {campaign.contribution_type && (
-                        <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-400">
+                        <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${cfg.border} ${cfg.color}`}>
                           {CONTRIBUTION_LABELS[campaign.contribution_type] ?? campaign.contribution_type}
+                        </span>
+                      )}
+                      {(campaign.geo_scope as { scope?: string } | null)?.scope === "nationwide" && (
+                        <span className="rounded-full border border-red-700/50 bg-red-900/20 px-2.5 py-1 text-xs font-semibold text-red-400">
+                          US only
                         </span>
                       )}
                       <span className="ml-auto flex items-center gap-1 text-[10px] font-bold tracking-widest text-emerald-400">
@@ -77,8 +82,17 @@ export default async function CampaignsPage() {
                       {campaign.title}
                     </h2>
                     {campaign.description && (
-                      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-zinc-500">
-                        {campaign.description}
+                      <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">
+                        {campaign.slug === "brainrot" ? (
+                          <>
+                            <strong className="font-semibold text-zinc-300">
+                              {campaign.description.split(". ")[0]}.
+                            </strong>{" "}
+                            {campaign.description.split(". ").slice(1).join(". ")}
+                          </>
+                        ) : (
+                          campaign.description
+                        )}
                       </p>
                     )}
                   </div>

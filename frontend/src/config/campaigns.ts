@@ -10,9 +10,9 @@ export const CAMPAIGN_TYPE_CONFIG: Record<
 
 export const CONTRIBUTION_LABELS: Record<string, string> = {
   cleanup:      "Cleanup",
-  photo:        "Photo",
+  photo:        "Photos",
   registration: "Register",
   advocacy:     "Advocate",
-  civic_action: "Act",
+  civic_action: "Civic Action",
   unfollow:     "Unfollow",
 };
