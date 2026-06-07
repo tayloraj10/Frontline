@@ -39,12 +39,14 @@ export default async function AppHeader() {
             >
               Campaigns
             </Link>
-            <Link
-              href="/groups"
-              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
-            >
-              Groups
-            </Link>
+            {user && (
+              <Link
+                href="/groups"
+                className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+              >
+                Groups
+              </Link>
+            )}
             {isAdmin && (
               <Link
                 href="/admin"

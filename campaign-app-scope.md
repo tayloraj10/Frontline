@@ -130,6 +130,71 @@ Each campaign is its own mini-game running on a shared geographic foundation. Th
 - **Seasonal resets** — competitive maps reset quarterly with weighted scoring to help smaller groups compete
 - **Weather integration** — NOAA / Open-Meteo APIs (free) can trigger real-world weather events on the map (post-MVP)
 
+### Event System — Implementation Status
+
+#### How the trigger pipeline works
+1. A contribution is submitted → FastAPI `POST /api/contributions/process` runs point-in-polygon, upserts `territory_claims`, then enqueues `_evaluate_triggers` as a background task.
+2. `_evaluate_triggers` loads all `is_active = TRUE` triggers for the campaign and evaluates their conditions.
+3. If a condition is met and no duplicate active event exists, a row is inserted into `campaign_events`. `campaign_events` is on Supabase Realtime, so the frontend receives the event live.
+
+#### Condition types
+| Condition | Status | Notes |
+|---|---|---|
+| `threshold_reached` | ✅ Implemented | Fires when campaign-wide or geo-unit total crosses a numeric threshold |
+| `report_count` | ✅ Implemented | Fires when open problem reports in a geo unit reach a count threshold |
+| `time_elapsed` | ❌ Not implemented | In the admin dropdown and DB schema but no evaluation handler exists — triggers using it will silently never fire |
+| `decay_elapsed` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator |
+| `external_api` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator |
+
+#### Event types
+| Event type | Status | Notes |
+|---|---|---|
+| `boss_spawn` | ✅ Trigger fires | Event record created, displayed on map with icon. `score_multiplier` in `effect_config` is stored but **not applied** by the scoring engine — contributions during a boss event do not actually earn bonus points yet |
+| `notification` | ⚠️ Stub | Event record created but no message is dispatched — users are not notified |
+| `cascade_unlock` | ⚠️ Stub | Event record created but no unlock handler reads the `unlocks` key |
+| `seasonal_reset` | ⚠️ Stub | Event record created but no reset logic runs |
+| `decay_start` | ⚠️ Stub | Event record created but no decay logic is triggered by it |
+
+#### What works today if you create a trigger
+Creating a `threshold_reached` or `report_count` trigger through the admin panel will work end-to-end: the condition evaluates after every contribution, the event fires once when met, deduplicates against active events, and the `campaign_events` row is stored and surfaced in the admin events tab. The **effect** of the event (score bonus, notification, unlock, reset, decay) is not implemented for any type yet — that is the next layer to build.
+
+---
+
+### Campaign Status — Implementation Gap
+
+The `campaigns` table has a `status` field constrained to `draft | active | paused | completed`. The admin panel lets you set and change status. However, **status is only enforced on the frontend** — the backend has no guards anywhere.
+
+| Status | Frontend behavior | Backend behavior |
+|---|---|---|
+| `draft` | Hidden from `/campaigns` listing and homepage count | No enforcement — contributions and trigger evaluation still run |
+| `active` | Visible publicly; all features work normally | Same — this is the only status with observable effect |
+| `paused` | Hidden from public listing (same as draft) | No enforcement — contributions still accepted |
+| `completed` | Hidden from public listing | No enforcement — contributions still accepted, triggers still fire |
+
+#### What still needs to be built
+- **Backend guard on contributions:** Reject `POST /api/contributions/process` with a 422 if the campaign is not `active`
+- **Backend guard on trigger evaluation:** Skip `_evaluate_triggers` for non-active campaigns
+- **Frontend enforcement for `paused`/`completed`:** Campaign detail page (`/campaigns/[slug]`) should show a status banner and disable the contribution form when status is not `active`
+- **`completed` transition logic:** Optional — auto-set status to `completed` when `ends_at` is passed or a win condition is met
+
+---
+
+### Campaign Create Form — Known Gaps
+
+#### Contribution types
+The four options (`cleanup`, `photo`, `registration`, `advocacy`) were defined to match the first four campaigns exactly. They are confusing out of that context — a new campaign creator has no way to know which one applies to their use case or what the label actually controls. What needs to be done:
+- Decide whether `contribution_type` stays a fixed enum or becomes a free-text/configurable field
+- If keeping the enum: rename the options to be more generic and self-describing (e.g. `physical_action`, `media_submission`, `civic_action`, `awareness_action`)
+- Add a description below the select (same pattern as event type info panel) explaining what each type controls at runtime
+
+#### Geo unit — census_tract
+`census_tract` appears in the dropdown and in the DB `CHECK` constraint but **no census tract data is loaded anywhere** — there is no `/admin/load-geo-units/census-tracts` route and no seeder for it. Selecting census_tract when creating a campaign will produce a campaign with no geo units, meaning contributions will fail point-in-polygon matching and be rejected.
+
+What needs to be done:
+- Remove `census_tract` from the create form dropdown until a loader is built, **or** build the loader
+- If building the loader: Census Bureau TIGER/Web API has tract GeoJSON by state FIPS — same pattern as the ZIP loader
+- `point` is also in the dropdown; verify whether point-based campaigns work end-to-end before exposing it
+
 ---
 
 ### Campaign 1: Trash War 🗑️
@@ -425,7 +490,8 @@ Tables that drive live map updates:
 - [x] Set up Supabase project, run schema migrations (core tables)
 - [x] Enable PostGIS extension in Supabase (`CREATE EXTENSION postgis;`)
 - [x] Add spatial indexes to geo_units, contributions, problem_reports
-- [x] Configure Supabase Auth (email + OAuth — Google at minimum)
+- [x] Configure Supabase Auth (email/password)
+- [ ] OAuth providers — Google sign-in (and any other Supabase-supported providers worth adding: GitHub, Apple, Discord, Twitter/X). Requires enabling each provider in Supabase dashboard, adding client ID/secret env vars, and wiring the sign-in button(s) into the login/signup UI.
 - [x] Initialize FastAPI project with health check endpoint (local; Railway deploy deferred)
 - [x] Configure Cloudflare R2 bucket + presigned URL upload flow
 - [x] Set up environment variable management (local `.env` / `.env.local`, VS Code launch.json)
@@ -539,6 +605,54 @@ Tables that drive live map updates:
 - [ ] Ground Truth campaign — design and spec (post-launch; ship UI after core 4 are stable)
 
 **Deliverable:** 4 campaigns live at launch
+
+---
+
+### Pre-Launch Polish: Auth & User Accounts
+**Goal:** Production-ready auth flow and user account management before going public
+
+**Auth hardening:**
+- [ ] Password reset flow (Supabase magic link → reset page with new password form)
+- [ ] Email confirmation on signup (currently skipped in dev)
+- [ ] "Forgot password" link on login page
+- [ ] Account deletion — self-serve from settings (delete profile row + Supabase auth user, cascade via RLS/triggers)
+- [ ] Session expiry handling — graceful re-auth prompt instead of silent failure
+
+**Legal:**
+- [ ] Terms of Service page (`/terms`) — basic ToS covering UGC, conduct, data usage
+- [ ] Privacy Policy page (`/privacy`)
+- [ ] Link both in signup flow (checkbox or footer) so users acknowledge before creating an account
+
+**User profile:**
+- [ ] Profile image upload — presigned R2 upload, store URL in `profiles.avatar_url`, display everywhere avatars appear
+- [ ] Profile page (`/users/[username]`) — contribution history, joined groups, campaign activity stats, bio
+- [ ] Profile edit page — display name, bio, username change (with availability check), avatar upload
+- [ ] Account settings — email change, password change, danger zone (delete account)
+
+---
+
+---
+
+### Groups Page Cleanup
+
+#### Create Group — access control
+`/groups/new` is restricted to site admins. The listing page hides the button for non-admins and the page server component redirects non-admins to `/groups`. The RLS `groups_insert` policy still only checks `auth.uid() = created_by` — add `is_site_admin()` to that policy to enforce the restriction at the DB layer as well.
+
+#### Group profile page (`/groups/[slug]`) — known gaps
+The `isAdmin` flag is computed on the page but only used to show an "Admin" badge and suppress the join button. There is no edit path for group leaders. What needs to be built:
+
+- **Edit group info** — name, description, website. Gate behind `isAdmin` check (already computed on the page). Recommend a dedicated `/groups/[slug]/edit` route rather than inline editing — keeps the read path simple. The RLS `groups_update` policy already allows group admins to update their own group row, so no DB changes needed.
+- **Profile picture upload** — `logo_url` column exists in the `groups` table but is never written or displayed; the UI falls back to a letter avatar. Wire up a presigned R2 upload (same pattern as contribution photo upload) and render the image in the avatar slot on both the group profile page and the groups listing cards.
+- **Standardized group schema** — a shared schema for group info fields is in progress and will eventually replace or extend the current `groups` table columns. Design the edit form to be forward-compatible: keep field names generic and avoid hardcoding assumptions about which fields exist.
+- **Member management** — group admins should be able to promote members to admin or remove them. The RLS `group_members_delete` policy already allows admins to delete any member row in their group; promoting requires an update policy (not yet defined).
+- **Edit button placement** — on `/groups/[slug]`, show an "Edit Group" link/button next to the group header, visible only when `isAdmin` is true. Route to `/groups/[slug]/edit`.
+
+#### What works today
+- Group creation (site admins only — button hidden for non-admins, server-side redirect enforced)
+- Groups nav link hidden in `AppHeader` for logged-out users
+- Group profile display: name, description, website, verified badge, member list with roles
+- Join / leave membership (`GroupMembershipButton`)
+- Admin role badge display
 
 ---
 

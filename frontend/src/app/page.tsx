@@ -22,7 +22,7 @@ export default async function HomePage() {
 
   return (
     <main className="relative flex flex-col items-center justify-center flex-1 px-6 py-24 text-center gap-10 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_40%,rgba(16,185,129,0.08),transparent)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_58%_at_50%_40%,rgba(16,185,129,0.18),transparent)] pointer-events-none" />
 
       <div className="relative space-y-5">
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-900/30 border border-emerald-700/40 rounded-full text-emerald-400 text-xs font-semibold tracking-wide mb-1">
@@ -35,7 +35,7 @@ export default async function HomePage() {
         <p className="text-zinc-400 text-lg max-w-sm mx-auto leading-relaxed">
           Collective action on the map.{" "}
           <span className="text-zinc-200">
-            Join campaigns, claim territory, change the world.
+            Join campaigns, take action, change the world.
           </span>
         </p>
       </div>
@@ -69,8 +69,8 @@ export default async function HomePage() {
       <div className="relative flex flex-wrap justify-center gap-2 max-w-md">
         {[
           { icon: "🗺", label: "Territory control" },
-          { icon: "📍", label: "Live map" },
-          { icon: "⚡", label: "Boss events" },
+          { icon: "📍", label: "Live maps" },
+          { icon: "⚡", label: "Map events" },
           { icon: "👥", label: "Group competition" },
           { icon: "🌱", label: "Real impact" },
         ].map(({ icon, label }) => (

@@ -29,7 +29,7 @@ export default async function AdminPage() {
     supabase
       .from("campaign_events")
       .select("id, event_type, title, description, status, started_at, ends_at, campaign_id, campaigns(title, slug)")
-      .eq("status", "active")
+      .in("status", ["active", "paused"])
       .order("started_at", { ascending: false }),
     supabase
       .from("event_triggers")

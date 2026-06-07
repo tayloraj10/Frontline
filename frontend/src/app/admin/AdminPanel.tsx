@@ -99,6 +99,14 @@ const EFFECT_TEMPLATES: Record<string, object> = {
   decay_start: { decay_rate: 0.1 },
 };
 
+const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = {
+  boss_spawn:     { desc: "Spawns a boss battle in a geo unit when problem reports hit a threshold. Contributions in the affected area earn a score multiplier during the event. Trigger logic is live; score multiplier effect is stored but not yet applied by the scoring engine.", implemented: true },
+  cascade_unlock: { desc: "Intended to unlock new zones or content when a contribution milestone is reached. The event record is created but no unlock handler exists yet.", implemented: false },
+  notification:   { desc: "Meant to broadcast a message to campaign participants when a trigger fires. The event record is created but no message is dispatched anywhere yet.", implemented: false },
+  seasonal_reset: { desc: "Signals a campaign-wide or weighted score reset. The event record is created but no reset logic is implemented yet.", implemented: false },
+  decay_start:    { desc: "Marks the start of a score decay period. The event record is created but no decay logic is implemented yet.", implemented: false },
+};
+
 const inputCls = "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 // ─── Campaigns Tab ────────────────────────────────────────────────────────────
@@ -118,8 +126,6 @@ function CampaignsTab({ campaigns, setCampaigns }: {
   const [status, setStatus] = useState("draft");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [geoUnitsLoading, setGeoUnitsLoading] = useState<Record<string, boolean>>({});
-  const [geoUnitsResult, setGeoUnitsResult] = useState<Record<string, string>>({});
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
@@ -171,24 +177,6 @@ function CampaignsTab({ campaigns, setCampaigns }: {
     const supabase = createClient();
     await supabase.from("campaigns").update({ status: newStatus }).eq("id", campaignId);
     setCampaigns(campaigns.map(c => c.id === campaignId ? { ...c, status: newStatus } : c));
-  };
-
-  const handleLoadGeoUnits = async (campaignSlug: string) => {
-    setGeoUnitsLoading(prev => ({ ...prev, [campaignSlug]: true }));
-    setGeoUnitsResult(prev => ({ ...prev, [campaignSlug]: "" }));
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/admin/load-geo-units?campaign_slug=${campaignSlug}`,
-        { method: "POST" },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed");
-      setGeoUnitsResult(prev => ({ ...prev, [campaignSlug]: `✓ ${data.inserted} inserted, ${data.skipped} skipped` }));
-    } catch (err) {
-      setGeoUnitsResult(prev => ({ ...prev, [campaignSlug]: `✗ ${err instanceof Error ? err.message : "Error"}` }));
-    } finally {
-      setGeoUnitsLoading(prev => ({ ...prev, [campaignSlug]: false }));
-    }
   };
 
   return (
@@ -273,13 +261,12 @@ function CampaignsTab({ campaigns, setCampaigns }: {
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Campaign</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Type</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Status</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/60">
             {campaigns.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-zinc-600 text-sm">No campaigns.</td>
+                <td colSpan={3} className="px-4 py-8 text-center text-zinc-600 text-sm">No campaigns.</td>
               </tr>
             )}
             {campaigns.map(c => (
@@ -302,24 +289,6 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                     <option value="paused">paused</option>
                     <option value="completed">completed</option>
                   </select>
-                </td>
-                <td className="px-4 py-3">
-                  {c.geo_unit === "zip" && (
-                    <div className="flex flex-col gap-1 items-start">
-                      <button
-                        onClick={() => handleLoadGeoUnits(c.slug)}
-                        disabled={!!geoUnitsLoading[c.slug]}
-                        className="text-xs text-zinc-500 hover:text-zinc-300 underline disabled:opacity-40 transition-colors"
-                      >
-                        {geoUnitsLoading[c.slug] ? "Loading…" : "Load Geo Units"}
-                      </button>
-                      {geoUnitsResult[c.slug] && (
-                        <span className={`text-xs ${geoUnitsResult[c.slug].startsWith("✓") ? "text-emerald-500" : "text-red-400"}`}>
-                          {geoUnitsResult[c.slug]}
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </td>
               </tr>
             ))}
@@ -462,6 +431,15 @@ function TriggersTab({ campaigns, triggers, setTriggers }: {
                 <option value="seasonal_reset">seasonal_reset</option>
                 <option value="decay_start">decay_start</option>
               </select>
+              {EVENT_TYPE_INFO[eventType] && (
+                <div className="mt-1.5 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs space-y-1">
+                  <p className="text-zinc-400 leading-relaxed">{EVENT_TYPE_INFO[eventType].desc}</p>
+                  {EVENT_TYPE_INFO[eventType].implemented
+                    ? <span className="text-emerald-400">✓ Trigger logic implemented</span>
+                    : <span className="text-amber-400">⚠ Stub — effect not yet implemented</span>
+                  }
+                </div>
+              )}
             </div>
             <div className="col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Condition config (JSON)</label>
@@ -542,22 +520,27 @@ function EventsTab({ events, setEvents }: {
   events: ActiveEvent[];
   setEvents: (e: ActiveEvent[]) => void;
 }) {
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const handleResolve = async (eventId: string) => {
-    setResolvingId(eventId);
+  const updateStatus = async (eventId: string, status: "active" | "paused" | "cancelled") => {
+    setPendingId(eventId);
     const supabase = createClient();
     await supabase
       .from("campaign_events")
-      .update({ status: "resolved", resolved_at: new Date().toISOString() })
+      .update({ status, ...(status === "cancelled" ? { resolved_at: new Date().toISOString() } : {}) })
       .eq("id", eventId);
-    setEvents(events.filter(e => e.id !== eventId));
-    setResolvingId(null);
+    setEvents(events.map(e => e.id === eventId ? { ...e, status } : e));
+    setPendingId(null);
   };
+
+  const activeCount = events.filter(e => e.status === "active").length;
+  const pausedCount = events.filter(e => e.status === "paused").length;
 
   return (
     <div className="space-y-4">
-      <span className="text-sm text-zinc-500">{events.length} active event{events.length !== 1 ? "s" : ""}</span>
+      <span className="text-sm text-zinc-500">
+        {activeCount} active{pausedCount > 0 ? `, ${pausedCount} paused` : ""}
+      </span>
 
       {events.length === 0 ? (
         <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
@@ -566,11 +549,16 @@ function EventsTab({ events, setEvents }: {
       ) : (
         <div className="space-y-2">
           {events.map(e => (
-            <div key={e.id} className="border border-zinc-800 rounded-xl px-5 py-4 flex items-start justify-between gap-4">
+            <div key={e.id} className={`border rounded-xl px-5 py-4 flex items-start justify-between gap-4 ${e.status === "paused" ? "border-yellow-900/60 bg-yellow-950/10" : "border-zinc-800"}`}>
               <div className="flex items-start gap-3 min-w-0">
                 <span className="text-xl shrink-0 mt-0.5">{EVENT_ICON[e.event_type] ?? "⚡"}</span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-zinc-200">{e.title}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-zinc-200">{e.title}</p>
+                    {e.status === "paused" && (
+                      <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-900/50 text-yellow-400 border border-yellow-800">paused</span>
+                    )}
+                  </div>
                   {e.description && (
                     <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{e.description}</p>
                   )}
@@ -589,13 +577,33 @@ function EventsTab({ events, setEvents }: {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => handleResolve(e.id)}
-                disabled={resolvingId === e.id}
-                className="shrink-0 px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors disabled:opacity-40"
-              >
-                {resolvingId === e.id ? "Resolving…" : "Resolve"}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {e.status === "active" && (
+                  <button
+                    onClick={() => updateStatus(e.id, "paused")}
+                    disabled={pendingId === e.id}
+                    className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-yellow-400 hover:border-yellow-900 rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    Pause
+                  </button>
+                )}
+                {e.status === "paused" && (
+                  <button
+                    onClick={() => updateStatus(e.id, "active")}
+                    disabled={pendingId === e.id}
+                    className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-emerald-400 hover:border-emerald-900 rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    Resume
+                  </button>
+                )}
+                <button
+                  onClick={() => updateStatus(e.id, "cancelled")}
+                  disabled={pendingId === e.id}
+                  className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -644,20 +652,22 @@ export default function AdminPanel({ initialCampaigns, initialEvents, initialTri
           <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
           <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <button
-            onClick={handleSeedDemo}
-            disabled={seedingDemo}
-            className="px-4 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-xl transition-colors disabled:opacity-50"
-          >
-            {seedingDemo ? "Seeding…" : "Seed Demo Data"}
-          </button>
-          {seedDemoResult && (
-            <span className={`text-xs ${seedDemoResult.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>
-              {seedDemoResult}
-            </span>
-          )}
-        </div>
+        {process.env.NODE_ENV === "development" && (
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              onClick={handleSeedDemo}
+              disabled={seedingDemo}
+              className="px-4 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {seedingDemo ? "Seeding…" : "Seed Demo Data"}
+            </button>
+            {seedDemoResult && (
+              <span className={`text-xs ${seedDemoResult.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>
+                {seedDemoResult}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
@@ -672,9 +682,9 @@ export default function AdminPanel({ initialCampaigns, initialEvents, initialTri
             }`}
           >
             {t}
-            {t === "events" && events.length > 0 && (
+            {t === "events" && events.filter(e => e.status === "active").length > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-red-900/60 text-red-400 text-xs tabular-nums">
-                {events.length}
+                {events.filter(e => e.status === "active").length}
               </span>
             )}
           </button>
