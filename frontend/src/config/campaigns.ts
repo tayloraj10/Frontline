@@ -1,3 +1,10 @@
+export const CAMPAIGN_SLUG_ORDER = [
+  "trash-war",
+  "touch-grass",
+  "road-to-independence",
+  "brainrot",
+];
+
 export const CAMPAIGN_TYPE_CONFIG: Record<
   string,
   { icon: string; color: string; bg: string; border: string; bar: string }
