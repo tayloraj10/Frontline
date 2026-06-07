@@ -273,7 +273,122 @@ What needs to be done:
 
 ---
 
-### Campaign 5: Ground Truth 🌍 *(post-launch)*
+### Campaign 5: Solarpunk 🌱
+
+**Concept:** A cooperative, globally scoped campaign to document, grow, and celebrate the real-world solarpunk movement. Players log real-world actions, submit photos of existing solarpunk infrastructure and culture in the wild, and collectively "bloom" a world map from industrial gray to lush illustrated green. No territory competition — the whole map wins together.
+
+**Map Style:** Global H3 hex grid (resolution 5, ~250 km² per hex). Each hex is rendered with a solar panel aesthetic — dark surface, subtle internal grid lines, metallic border — before blooming. As the collective Bloom Score grows, hexes visually transform through staged illustrations:
+
+> **Stage 0** — Dark solar panel grid (default / unseeded)
+> **Stage 1** — Cracked asphalt with weeds pushing through
+> **Stage 2** — Garden beds, rain barrels, rooftop solar
+> **Stage 3** — Full canopy, murals, community structures
+> **Stage 4** — Thriving solarpunk district (max bloom — warm yellows and greens, illustrated style)
+
+Pre-seeded hexes start at Stage 1–2 based on real-world data for cities and countries already aligned with solarpunk values.
+
+**Three Contribution Pillars:**
+
+1. **Action Log** (self-reported, like Road to Independence) — categorized actions with point values, each contributing to the Bloom Score of the player's current H3 hex
+2. **Solarpunk in the Wild** (geotagged photo submission, like Touch Grass) — photos of real-world solarpunk sightings: community gardens, solar arrays, living walls, mutual aid fridges, repair cafes, urban farms. Each validated photo adds to the hex's Bloom Score and feeds a per-hex photo collage panel
+3. **Collective Milestones** — when a hex reaches a Bloom Stage threshold, every contributor to that hex receives a celebratory unlock (illustrated badge, "Blueprint" card previewing the next stage). No individual winner — earned together
+
+**Action Categories & Point Values:**
+
+*Green Infrastructure & Biodiversity*
+- Planted a tree or native plant (+3)
+- Started or joined a community garden (+3)
+- Installed a green roof or living wall (+3)
+- Created a rain garden or bioswale (+2)
+- Set up a compost system (+2)
+- Participated in a rewilding effort (+2)
+- Installed a bird/bat/bee habitat (+1)
+- Restored a natural area — beach, trail, wetland cleanup (+2)
+
+*Energy & Green Technology*
+- Installed solar panels — home or shared (+4)
+- Joined a community energy co-op (+3)
+- Switched to a renewable electricity provider (+2)
+- Repaired something instead of replacing it (+1)
+- Attended a repair cafe (+1)
+- Reduced home energy consumption — insulation, smart thermostat (+2)
+- Switched to an e-bike or cargo bike (+2)
+
+*Food Systems*
+- Joined a CSA or food co-op (+2)
+- Grew your own food (+2)
+- Preserved, fermented, or reduced food waste (+1)
+- Participated in urban foraging (+2)
+- Contributed to a seed library (+2)
+- Sourced a meal entirely locally (+1)
+
+*Mutual Aid & Social Change*
+- Contributed to a mutual aid network (+2)
+- Organized or attended a skill share (+2)
+- Started or used a tool/resource library (+2)
+- Supported a worker-owned cooperative (+2)
+- Participated in local governance or a community meeting (+1)
+- Helped a neighbor with something tangible (+1)
+
+*Built Environment & Mobility*
+- Advocated for bike infrastructure or public transit (+2)
+- Chose public transit or bike over car (+1)
+- Participated in a walkability or placemaking project (+2)
+- Contributed to co-housing or intentional community (+2)
+
+*Art, Culture & Education*
+- Created or commissioned solarpunk art or a mural (+2)
+- Ran or attended a solarpunk education event (+2)
+- Published or distributed a zine or guide (+1)
+- Upcycled clothing or materials into something new (+1)
+
+*Water*
+- Installed a rain barrel or greywater system (+3)
+- Participated in watershed or wetland restoration (+2)
+- Reduced household water consumption significantly (+1)
+
+**Scoring:**
+- Each logged action contributes to the `bloom_score` of the player's H3 hex (determined by GPS location at submission)
+- Photo submissions add a fixed +2 to the hex's bloom_score after basic review
+- Hex stage thresholds (example): 0 → 50 → 200 → 600 → 1500 total bloom points
+- No competitive leaderboard — a global "World Bloom Score" tracks collective progress. Regional leaderboards show most-bloomed cities/countries for discovery, not competition
+
+**Pre-Seeding — Existing Solarpunk World:**
+Research-backed baseline scores seeded into specific hexes at campaign launch, reflecting real-world leadership in renewable energy, green infrastructure, and community cooperation. Pre-seeded hexes are visually distinct at launch — showing a world already partially bloomed — with an info panel explaining why that area is highlighted.
+
+*Candidates to research and validate scores for:*
+- Iceland (near-100% renewable energy)
+- Denmark / Copenhagen (cycling infrastructure, wind energy, district heating)
+- Costa Rica (biodiversity, renewable electricity)
+- Netherlands (cycling, green urban design, circular economy)
+- Bhutan (carbon negative, Gross National Happiness policy)
+- Germany (Energiewende, community solar — Freiburg especially)
+- Uruguay (high renewable electricity share)
+- Singapore (vertical gardens, integrated urban greenery)
+- Medellín, Colombia (urban transformation, green corridors)
+- Curitiba, Brazil (bus rapid transit, urban parks)
+- Amsterdam (cycling modal share, circular economy programs)
+- Vienna (social housing density, public transit quality)
+
+Each pre-seeded hex stores a `seed_source` note (e.g., "IEA 2024: 99% renewable electricity share") for transparency.
+
+**Visualization:**
+- World map with full H3 resolution-5 hex grid overlay
+- Hex illustration shifts through bloom stages as collective score grows (GSAP transitions)
+- Per-hex photo collage panel: thumbnail grid of "Solarpunk in the Wild" submissions for that area
+- Animated global Bloom Score counter
+- "Bloom wave" ripple animation when a hex advances to a new stage
+- Pre-seeded hexes show a distinct "existing leader" glow before user actions begin
+
+**Dynamic Events:**
+- **Solarpunk Spotlight** — weekly featured hex: most-active hex gets a highlighted border, surfaced in the activity feed globally
+- **Bloom Burst** — when a hex advances a full stage, neighboring hexes get a temporary score multiplier (spreading the wave)
+- **Infrastructure Milestone** — global event tied to real-world news (e.g., a country crosses 50% renewable) — celebratory announcement + bonus points for that country's hexes
+- **Seasonal campaigns** — spring planting drive, repair cafe month, water conservation sprint
+
+---
+
+### Campaign 6: Ground Truth 🌍 *(post-launch)*
 **Concept:** Crowdsourced global news — people submit events, incidents, and stories from their location with a photo and short description. A living map of what's actually happening on the ground, unfiltered by media gatekeepers.
 
 **Map Style:** Global point map — event pins clustered by proximity, expanding into cards on click. Density heatmap toggle to see activity hotspots.
@@ -602,9 +717,47 @@ Tables that drive live map updates:
 - [x] BRAINROT dethrone leaderboard — aggregate `notes` field to rank most-unfollowed accounts
 - [x] DB migration 011 — expand `contribution_type` CHECK constraint to include `civic_action` and `unfollow`
 - [x] Demo data for BRAINROT (Digital Detox Collective group + 24 global unfollow contributions)
-- [ ] Ground Truth campaign — design and spec (post-launch; ship UI after core 4 are stable)
+- [ ] Ground Truth campaign — design and spec (post-launch; ship UI after core 5 are stable)
 
-**Deliverable:** 4 campaigns live at launch
+**Deliverable:** 4 campaigns complete — Solarpunk (Campaign 5) built in Phase 8
+
+---
+
+### Phase 8: Campaign 5 — Solarpunk
+**Goal:** Launch Solarpunk as the fifth campaign, introducing the hex bloom map type, cooperative scoring, and pre-seeded real-world data
+
+**New technical dependencies:**
+- `h3-js` (frontend) — H3 hex index lookup by lat/lng, hex boundary GeoJSON generation
+- `h3` Python package (backend) — hex assignment during contribution processing
+- New `campaign_type`: `hex_bloom`
+- New `geo_unit` type: `h3_hex` (unit_id = H3 index string at resolution 5)
+- New `contribution_type` values: `solarpunk_action` (action log) and `solarpunk_photo` (in-the-wild photo)
+
+**Data model additions:**
+- `bloom_score` column on `territory_claims` (or a dedicated `hex_bloom_scores` table) storing cumulative bloom points per H3 hex
+- `bloom_stage` derived column (0–4) computed from thresholds
+- `seed_source` text field on `geo_units` for pre-seeded hex provenance notes
+- DB migration to expand `contribution_type` CHECK constraint and add `h3_hex` to `geo_unit` CHECK
+
+**Development checklist:**
+- [ ] Research and finalize pre-seed hex list with sources (renewable energy data, green index data)
+- [ ] Build H3 hex loader — `/admin/seed` variant that generates all resolution-5 hex `geo_units` rows globally (or just populated hexes near pre-seed targets)
+- [ ] Backend: H3 hex assignment on contribution submit — replace PostGIS point-in-polygon with `h3_lat_lng_to_cell` (faster, no polygon needed)
+- [ ] Backend: Bloom score upsert logic — accumulate points by category weight into `territory_claims.bloom_score`
+- [ ] Backend: Pre-seed endpoint — load baseline bloom scores for research-validated hexes with `seed_source` metadata
+- [ ] Frontend: H3 hex grid MapLibre layer — render hex boundaries as a GeoJSON fill layer generated client-side via `h3-js` for the visible viewport
+- [ ] Frontend: Hex bloom stage coloring — map `bloom_score` to stage 0–4 palette, illustrated texture per stage
+- [ ] Frontend: Solar panel aesthetic for Stage 0 hexes — dark fill, subtle internal grid line overlay
+- [ ] Frontend: GSAP bloom wave animation — ripple effect when a hex advances a stage
+- [ ] Frontend: Per-hex photo collage panel — thumbnail grid of `solarpunk_photo` contributions for the selected hex
+- [ ] Frontend: Global Bloom Score counter — animated aggregate shown on campaign hero
+- [ ] Frontend: Solarpunk action log form — category selector + action picker (driven by `scoring_rules` config), GPS capture, optional photo
+- [ ] Frontend: Solarpunk in the Wild form — photo upload, GPS capture, optional description
+- [ ] Frontend: Pre-seeded hex info panel — on hex click, show `seed_source` explanation for why this area is highlighted
+- [ ] Seeder: Demo data — sample contributions across 8–10 cities, photo submissions, pre-seeded hexes at Stage 1–2
+- [ ] Milestone unlock system — when hex crosses a stage threshold, create a `campaign_events` record and award a badge to all contributors
+
+**Deliverable:** 5 campaigns live at launch — cooperative hex bloom map, full action log, photo collage per hex, pre-seeded world data visible on load
 
 ---
 
