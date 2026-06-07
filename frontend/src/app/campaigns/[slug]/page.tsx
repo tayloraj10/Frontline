@@ -76,7 +76,7 @@ export default async function CampaignPage({ params }: Props) {
   const totalBags = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const contributionCount = contribCount ?? 0;
 
-  const unit = campaign.campaign_type === "territory" ? "bags" : campaign.campaign_type === "choropleth" ? "registrations" : "photos";
+  const unit = campaign.campaign_type === "territory" ? "bags" : campaign.campaign_type === "choropleth" ? "registrations" : campaign.campaign_type === "heatmap" ? "unfollows" : "photos";
 
   // Leaderboard raw data
   type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
@@ -210,6 +210,8 @@ export default async function CampaignPage({ params }: Props) {
             <CampaignStat label="States active" value={tractsCount} />
             <CampaignStat label="Contributions" value={contributionCount.toLocaleString()} />
           </>
+        ) : campaign.campaign_type === "heatmap" ? (
+          <CampaignStat label="Unfollows logged" value={contributionCount.toLocaleString()} />
         ) : (
           <>
             <CampaignStat label="Tracts claimed" value={tractsCount} />
@@ -221,6 +223,26 @@ export default async function CampaignPage({ params }: Props) {
           <CampaignStat label="Boss events" value={events.length} highlight />
         )}
       </div>
+
+      {campaign.campaign_type === "heatmap" && (
+        <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/60 flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider shrink-0">What counts:</span>
+          {[
+            "Rage-bait accounts",
+            "Outrage addiction",
+            "Drama channels",
+            "Overconsumption hauls",
+            "Clout chasers",
+            "Narcissist influencers",
+            "Content farms",
+            "Doomscroll traps",
+          ].map((tag) => (
+            <span key={tag} className="px-2 py-0.5 rounded-full bg-orange-900/20 border border-orange-700/30 text-orange-400/80 text-[10px] font-medium">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col flex-1 min-h-0 relative">
         <CampaignPageClient

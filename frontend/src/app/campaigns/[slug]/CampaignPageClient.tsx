@@ -106,7 +106,7 @@ function LeaderboardPanel({
                 <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0">
                   {(entry.name || "?")[0].toUpperCase()}
                 </div>
-                <span className="flex-1 text-xs text-zinc-200 truncate">{entry.name}</span>
+                <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
                 <div className="text-right shrink-0">
                   <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                     {Math.round(entry.total_value).toLocaleString()} {unit}
@@ -135,7 +135,7 @@ function LeaderboardPanel({
                 <div className="w-6 h-6 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">
                   {(entry.name || "?")[0].toUpperCase()}
                 </div>
-                <span className="flex-1 text-xs text-zinc-200 truncate">{entry.name}</span>
+                <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
                 <div className="text-right shrink-0">
                   <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                     {Math.round(entry.total_value).toLocaleString()} {unit}

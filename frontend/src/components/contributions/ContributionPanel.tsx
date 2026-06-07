@@ -249,7 +249,7 @@ function ContributeModal({
   const isCivicAction = campaignContributionType === "civic_action";
   const isUnfollow = campaignContributionType === "unfollow";
   const needsLocation = isCleanup || isPhoto || isUnfollow;
-  const showPhoto = isCleanup || isPhoto || isCivicAction || isUnfollow;
+  const showPhoto = isCleanup || isPhoto || isCivicAction;
 
   const config = MODAL_CONFIG[campaignContributionType] ?? MODAL_CONFIG.cleanup;
 
@@ -266,7 +266,7 @@ function ContributeModal({
 
   const canSubmit = (() => {
     if (submitting) return false;
-    if (needsLocation && !submitCoords) return false;
+    if ((isCleanup || isPhoto) && !submitCoords) return false;
     if (isPhoto && !photo) return false;
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
@@ -367,7 +367,7 @@ function ContributeModal({
         {needsLocation && (
           <div>
             <p className="text-xs text-zinc-500 mb-1.5">
-              {isUnfollow ? "Your location (where you are)" : "Your location"}
+              {isUnfollow ? "Your location (optional — helps build the global heatmap)" : "Your location"}
             </p>
             <GpsIndicator
               status={gps.status}
