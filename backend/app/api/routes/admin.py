@@ -8,6 +8,8 @@ from app.db.database import get_db
 from app.services import geo
 from app.services.seeders import REGISTRY, StatesSeeder
 from app.services.seeders.demo_data import DemoDataSeeder
+from app.services.seeders.global_hexes import GlobalHexSeeder
+from app.services.seeders.solarpunk_preseed import SolarpunkPreseedSeeder
 from app.services.seeders.zip_codes import ZipCodeSeeder
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -45,12 +47,13 @@ async def simplify_zipcodes(tolerance: float = 0.001, precision: int = 4):
 
 
 @router.post("/seed")
-async def run_all_seeds(db: AsyncSession = Depends(get_db)):
-    """Run all registered seeders with their default params."""
+async def run_all_seeds(wipe: bool = False, db: AsyncSession = Depends(get_db)):
+    """Run all registered seeders with their default params. Pass wipe=true to wipe each seeder's data before re-seeding."""
     results = {}
     for name, seeder_cls in REGISTRY.items():
         try:
-            result = await seeder_cls().run(db, seeder_cls.default_params)
+            params = {**seeder_cls.default_params, "wipe": wipe}
+            result = await seeder_cls().run(db, params)
             results[name] = {
                 "inserted": result.inserted,
                 "skipped": result.skipped,
@@ -74,10 +77,10 @@ async def load_geo_units_zips(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/seed/demo-data")
-async def seed_demo_data(db: AsyncSession = Depends(get_db)):
-    """Seed 10 demo users, 6 groups, and realistic activity for all 4 campaigns. Idempotent."""
+async def seed_demo_data(wipe: bool = False, db: AsyncSession = Depends(get_db)):
+    """Seed 10 demo users, 6 groups, and realistic activity for all 4 campaigns. Pass wipe=true to delete and re-create all demo data."""
     try:
-        result = await DemoDataSeeder().run(db, {})
+        result = await DemoDataSeeder().run(db, {"wipe": wipe})
     except Exception as exc:
         raise HTTPException(500, f"Demo seeder failed: {exc}")
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
@@ -90,4 +93,24 @@ async def load_geo_units_states(db: AsyncSession = Depends(get_db)):
         result = await StatesSeeder().run(db, {})
     except Exception as exc:
         raise HTTPException(500, str(exc))
+    return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
+
+
+@router.post("/seed/global-hexes")
+async def seed_global_hexes(wipe: bool = False, db: AsyncSession = Depends(get_db)):
+    """Seed geo_units for all ~41K H3 resolution-3 hexes globally. Pass wipe=true to drop and re-create all h3_hex rows (safe — never touches zip_code or state rows)."""
+    try:
+        result = await GlobalHexSeeder().run(db, {"wipe": wipe})
+    except Exception as exc:
+        raise HTTPException(500, f"Global hex seeder failed: {exc}")
+    return {"inserted": result.inserted, "errors": result.errors[:20]}
+
+
+@router.post("/seed/solarpunk-preseed")
+async def seed_solarpunk_preseed(wipe: bool = False, db: AsyncSession = Depends(get_db)):
+    """Pre-seed known solarpunk-aligned cities and regions with baseline bloom scores. Pass wipe=true to reset preseed territory_claims before re-seeding."""
+    try:
+        result = await SolarpunkPreseedSeeder().run(db, {"wipe": wipe})
+    except Exception as exc:
+        raise HTTPException(500, f"Solarpunk preseed failed: {exc}")
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}

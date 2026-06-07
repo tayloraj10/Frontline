@@ -20,12 +20,14 @@ const MAP_STYLES = [
 ] as const;
 
 const PANEL_BUTTON: Record<string, { icon: string; label: string }> = {
-  cleanup:      { icon: "🗑️", label: "Log Cleanup" },
-  photo:        { icon: "📷", label: "Submit Photo" },
-  registration: { icon: "🗳️", label: "Register" },
-  advocacy:     { icon: "✊", label: "Take Action" },
-  civic_action: { icon: "🗽", label: "Log Civic Action" },
-  unfollow:     { icon: "🧠", label: "Log Unfollow" },
+  cleanup:         { icon: "🗑️", label: "Log Cleanup" },
+  photo:           { icon: "📷", label: "Submit Photo" },
+  registration:    { icon: "🗳️", label: "Register" },
+  advocacy:        { icon: "✊", label: "Take Action" },
+  civic_action:    { icon: "🗽", label: "Log Civic Action" },
+  unfollow:        { icon: "🧠", label: "Log Unfollow" },
+  solarpunk_action:{ icon: "🌿", label: "Log Action" },
+  solarpunk_photo: { icon: "📸", label: "Spot It" },
 };
 
 const MODAL_CONFIG: Record<string, {
@@ -63,6 +65,16 @@ const MODAL_CONFIG: Record<string, {
     successClaimed: "Unfollow logged! You're on the map.",
     successUnclaimed: "Unfollow logged!",
   },
+  solarpunk_action: {
+    title: "Log Solarpunk Action",
+    successClaimed: "Action logged! Your hex is blooming 🌱",
+    successUnclaimed: "Action logged! 🌱",
+  },
+  solarpunk_photo: {
+    title: "Spot It",
+    successClaimed: "Photo added to the bloom map! 🌿",
+    successUnclaimed: "Photo logged! 🌿",
+  },
 };
 
 const CIVIC_ACTIONS: { key: string; icon: string; label: string }[] = [
@@ -73,6 +85,83 @@ const CIVIC_ACTIONS: { key: string; icon: string; label: string }[] = [
   { key: "visit_landmark",          icon: "🗽", label: "Visit a Landmark" },
   { key: "attend_protest",          icon: "✊", label: "Attend a Protest" },
   { key: "read_founding_document",  icon: "📜", label: "Read a Founding Document" },
+];
+
+const SOLARPUNK_ACTIONS: {
+  category: string;
+  icon: string;
+  actions: { key: string; label: string; points: number }[];
+}[] = [
+  {
+    category: "Energy", icon: "⚡",
+    actions: [
+      { key: "solar_panels",  label: "Installed solar panels",            points: 50 },
+      { key: "green_energy",  label: "Switched to green energy tariff",   points: 20 },
+      { key: "energy_audit",  label: "Completed home energy audit",       points: 15 },
+      { key: "led_lighting",  label: "Replaced all lighting with LEDs",   points: 8  },
+      { key: "solar_charger", label: "Using a solar charger",             points: 5  },
+    ],
+  },
+  {
+    category: "Food", icon: "🌱",
+    actions: [
+      { key: "grow_food",         label: "Grew food (any amount)",        points: 15 },
+      { key: "community_garden",  label: "Joined a community garden",     points: 20 },
+      { key: "composted",         label: "Started composting",            points: 10 },
+      { key: "saved_seeds",       label: "Saved seeds for next season",   points: 12 },
+      { key: "foraged",           label: "Foraged / wildcrafted food",    points: 8  },
+    ],
+  },
+  {
+    category: "Transport", icon: "🚲",
+    actions: [
+      { key: "bike_commute",   label: "Biked instead of drove (week)", points: 10 },
+      { key: "transit_month",  label: "Used transit for a month",      points: 20 },
+      { key: "car_free_week",  label: "Car-free week",                 points: 25 },
+      { key: "ev_switch",      label: "Switched to electric vehicle",  points: 40 },
+      { key: "flight_avoided", label: "Avoided or offset a flight",    points: 30 },
+    ],
+  },
+  {
+    category: "Community", icon: "🤝",
+    actions: [
+      { key: "repair_cafe",  label: "Attended a repair café",       points: 15 },
+      { key: "skill_share",  label: "Hosted a skill share",         points: 20 },
+      { key: "tool_library", label: "Used or joined a tool library", points: 10 },
+      { key: "mutual_aid",   label: "Participated in mutual aid",   points: 15 },
+      { key: "cooperative",  label: "Joined a cooperative",         points: 25 },
+    ],
+  },
+  {
+    category: "Nature", icon: "🌳",
+    actions: [
+      { key: "plant_tree",        label: "Planted a tree",                points: 20 },
+      { key: "rewilding",         label: "Rewilded part of your yard",    points: 25 },
+      { key: "local_cleanup",     label: "Organized a local cleanup",     points: 15 },
+      { key: "water_catchment",   label: "Installed rainwater catchment", points: 30 },
+      { key: "pollinator_garden", label: "Created pollinator garden",     points: 18 },
+    ],
+  },
+  {
+    category: "Consumption", icon: "♻️",
+    actions: [
+      { key: "repair_item",      label: "Repaired instead of replacing",   points: 10 },
+      { key: "secondhand",       label: "Bought something secondhand",     points: 8  },
+      { key: "zero_waste_month", label: "Zero-waste shopping month",       points: 20 },
+      { key: "clothing_swap",    label: "Organized a clothing swap",       points: 15 },
+      { key: "refused_plastic",  label: "Refused single-use plastics (month)", points: 12 },
+    ],
+  },
+  {
+    category: "Advocacy", icon: "✊",
+    actions: [
+      { key: "contact_official", label: "Contacted an elected official",     points: 15 },
+      { key: "attend_council",   label: "Attended a city council meeting",   points: 20 },
+      { key: "wrote_article",    label: "Wrote about solarpunk values",      points: 15 },
+      { key: "organized_event",  label: "Organized a community event",       points: 25 },
+      { key: "taught_class",     label: "Taught a sustainability workshop",  points: 20 },
+    ],
+  },
 ];
 
 interface ContributionPanelProps {
@@ -691,6 +780,387 @@ function ReportModal({
   );
 }
 
+// ─── Solarpunk action modal ───────────────────────────────────────────────────
+
+function SolarpunkActionModal({
+  campaignId,
+  userId,
+  userGroups,
+  gps,
+  overrideCoords,
+  onEnterPinPicker,
+  onClose,
+  onContributionSubmitted,
+  activeMapStyle,
+}: {
+  campaignId: string;
+  userId: string;
+  userGroups: { id: string; name: string }[];
+  gps: ReturnType<typeof useGPS>;
+  overrideCoords: Coords | null;
+  onEnterPinPicker: () => void;
+  onClose: () => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
+  activeMapStyle?: string;
+}) {
+  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState<number | null>(null);
+  const [selectedAction, setSelectedAction] = useState<{ key: string; label: string; points: number } | null>(null);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<"success" | "outside" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submitCoords = overrideCoords ?? gps.coords;
+  const canSubmit = !submitting && !!selectedAction && !!submitCoords;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !selectedAction) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      let photoUrl: string | null = null;
+      if (photo) photoUrl = await uploadToR2(photo);
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/submit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaign_id: campaignId,
+            user_id: userId,
+            group_id: selectedGroupId,
+            contribution_type: "solarpunk_action",
+            value: selectedAction.points,
+            photo_url: photoUrl,
+            notes: selectedAction.key,
+            latitude: submitCoords!.latitude,
+            longitude: submitCoords!.longitude,
+          }),
+        },
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as { claimed_territory: boolean };
+      onContributionSubmitted?.(submitCoords!.latitude, submitCoords!.longitude, selectedAction.points, photoUrl ?? undefined);
+      setResult(data.claimed_territory ? "success" : "outside");
+    } catch {
+      setError("Submission failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (result) {
+    return (
+      <ModalShell onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-4">
+          <span className="text-4xl">🌱</span>
+          <p className="text-zinc-100 font-semibold text-center">
+            {result === "success"
+              ? `+${selectedAction?.points ?? 0} bloom points! Your hex is growing.`
+              : "Action logged! 🌱"}
+          </p>
+          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">Close</button>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  const activeCat = selectedCategoryIdx !== null ? SOLARPUNK_ACTIONS[selectedCategoryIdx] : null;
+
+  return (
+    <ModalShell title="Log Solarpunk Action" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+
+        {/* Location */}
+        <div>
+          <p className="text-xs text-zinc-500 mb-1.5">Your location (required)</p>
+          <GpsIndicator status={gps.status} coords={gps.coords} errorCode={gps.errorCode} onRetry={gps.capture} />
+          {overrideCoords && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+            </div>
+          )}
+          {gps.status === "success" && gps.coords && (
+            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline">
+              {overrideCoords ? "Reposition on map" : "Place pin on map"}
+            </button>
+          )}
+        </div>
+
+        {submitCoords && (
+          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+        )}
+
+        {/* Category picker */}
+        <div>
+          <label className="block text-xs text-zinc-500 mb-2">Category</label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {SOLARPUNK_ACTIONS.map((cat, i) => (
+              <button
+                key={cat.category}
+                type="button"
+                onClick={() => { setSelectedCategoryIdx(i); setSelectedAction(null); }}
+                className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg border text-xs font-medium transition-colors ${
+                  selectedCategoryIdx === i
+                    ? "bg-lime-900/60 border-lime-600 text-lime-300"
+                    : "bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                <span className="text-base">{cat.icon}</span>
+                <span className="leading-tight text-center">{cat.category}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Action picker */}
+        {activeCat && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-2">Action</label>
+            <div className="flex flex-col gap-1.5">
+              {activeCat.actions.map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  onClick={() => setSelectedAction(a)}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${
+                    selectedAction?.key === a.key
+                      ? "bg-lime-900/60 border-lime-600 text-lime-200"
+                      : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                  }`}
+                >
+                  <span>{a.label}</span>
+                  <span className={`ml-2 shrink-0 font-bold ${selectedAction?.key === a.key ? "text-lime-400" : "text-zinc-600"}`}>
+                    +{a.points}pts
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Group */}
+        {userGroups.length > 0 && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedGroupId(null)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
+              >Individual</button>
+              {userGroups.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => setSelectedGroupId(g.id)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Optional photo */}
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Photo (optional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+          />
+        </div>
+
+        {error && <p className="text-red-400 text-xs">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+          >
+            {submitting ? "Submitting…" : selectedAction ? `Submit (+${selectedAction.points} pts)` : "Submit"}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Solarpunk photo modal ────────────────────────────────────────────────────
+
+function SolarpunkPhotoModal({
+  campaignId,
+  userId,
+  userGroups,
+  gps,
+  overrideCoords,
+  onEnterPinPicker,
+  onClose,
+  onContributionSubmitted,
+  activeMapStyle,
+}: {
+  campaignId: string;
+  userId: string;
+  userGroups: { id: string; name: string }[];
+  gps: ReturnType<typeof useGPS>;
+  overrideCoords: Coords | null;
+  onEnterPinPicker: () => void;
+  onClose: () => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
+  activeMapStyle?: string;
+}) {
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [notes, setNotes] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<"success" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submitCoords = overrideCoords ?? gps.coords;
+  const canSubmit = !submitting && !!photo && !!submitCoords;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !photo) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const photoUrl = await uploadToR2(photo);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/submit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaign_id: campaignId,
+            user_id: userId,
+            group_id: selectedGroupId,
+            contribution_type: "solarpunk_photo",
+            value: 2,
+            photo_url: photoUrl,
+            notes: notes.trim() || null,
+            latitude: submitCoords!.latitude,
+            longitude: submitCoords!.longitude,
+          }),
+        },
+      );
+      if (!res.ok) throw new Error(await res.text());
+      onContributionSubmitted?.(submitCoords!.latitude, submitCoords!.longitude, 2, photoUrl);
+      setResult("success");
+    } catch {
+      setError("Submission failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (result) {
+    return (
+      <ModalShell onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-4">
+          <span className="text-4xl">🌿</span>
+          <p className="text-zinc-100 font-semibold text-center">Photo added to the bloom map!</p>
+          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">Close</button>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  return (
+    <ModalShell title="Spot It — Photograph the Future" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+
+        {/* Location */}
+        <div>
+          <p className="text-xs text-zinc-500 mb-1.5">Your location (required)</p>
+          <GpsIndicator status={gps.status} coords={gps.coords} errorCode={gps.errorCode} onRetry={gps.capture} />
+          {overrideCoords && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+            </div>
+          )}
+          {gps.status === "success" && gps.coords && (
+            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline">
+              {overrideCoords ? "Reposition on map" : "Place pin on map"}
+            </button>
+          )}
+        </div>
+
+        {submitCoords && (
+          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+        )}
+
+        {/* Photo */}
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Photo (required) — something solarpunk you spotted</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+          />
+        </div>
+
+        {/* Caption */}
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Caption (optional)</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="Describe what makes this solarpunk…"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+          />
+        </div>
+
+        {/* Group */}
+        {userGroups.length > 0 && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => setSelectedGroupId(null)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
+                Individual
+              </button>
+              {userGroups.map((g) => (
+                <button key={g.id} type="button" onClick={() => setSelectedGroupId(g.id)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {error && <p className="text-red-400 text-xs">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+          >
+            {submitting ? "Uploading…" : "Submit (+2 pts)"}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 // ─── Modal shell ──────────────────────────────────────────────────────────────
 
 function ModalShell({
@@ -737,11 +1207,13 @@ export default function ContributionPanel({
   activeMapStyle,
   onStyleChange,
 }: ContributionPanelProps) {
+  const isSolarpunk = campaignContributionType === "solarpunk_action";
+
   const gps = useGPS();
-  const [mode, setMode] = useState<"contribute" | "report" | null>(null);
+  const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | null>(null);
   const [reportOverrideCoords, setReportOverrideCoords] = useState<Coords | null>(null);
   const prevPinPickerActiveRef = useRef(false);
-  const prePinPickerModeRef = useRef<"contribute" | "report" | null>(null);
+  const prePinPickerModeRef = useRef<"contribute" | "report" | "solarpunk_photo" | null>(null);
 
   useEffect(() => {
     gps.capture();
@@ -763,7 +1235,7 @@ export default function ContributionPanel({
       prePinPickerModeRef.current = null;
     }
     prevPinPickerActiveRef.current = pinPickerActive;
-  }, [pinPickerActive, placedPinCoords]);
+  }, [pinPickerActive, placedPinCoords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openContribute = () => {
     setMode("contribute");
@@ -774,7 +1246,15 @@ export default function ContributionPanel({
     if (!gps.coords) return;
     prePinPickerModeRef.current = "contribute";
     setMode(null);
-    onEnterPinPicker(gps.coords, true);
+    onEnterPinPicker(gps.coords, !isSolarpunk);
+  };
+
+  const handleEnterPinPickerForSolarpunkPhoto = () => {
+    const coords = placedPinCoords ?? gps.coords;
+    if (!coords) return;
+    prePinPickerModeRef.current = "solarpunk_photo";
+    setMode(null);
+    onEnterPinPicker(coords, false);
   };
 
   const handleEnterPinPickerForReport = () => {
@@ -798,6 +1278,14 @@ export default function ContributionPanel({
           >
             {btn.icon} {btn.label}
           </button>
+          {isSolarpunk && (
+            <button
+              onClick={() => { setMode("solarpunk_photo"); if (gps.status === "idle") gps.capture(); }}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-lime-800/60 rounded-lg text-lime-300 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+            >
+              📸 Spot It
+            </button>
+          )}
           {showReport && (
             <button
               onClick={() => { setMode("report"); if (gps.status === "idle") gps.capture(); }}
@@ -827,14 +1315,41 @@ export default function ContributionPanel({
       )}
 
       {mode === "contribute" && !pinPickerActive && (
-        <ContributeModal
+        isSolarpunk ? (
+          <SolarpunkActionModal
+            campaignId={campaignId}
+            userId={userId}
+            userGroups={userGroups}
+            gps={gps}
+            overrideCoords={placedPinCoords}
+            onEnterPinPicker={handleEnterPinPickerForContribute}
+            onClose={() => setMode(null)}
+            onContributionSubmitted={onContributionSubmitted}
+            activeMapStyle={activeMapStyle}
+          />
+        ) : (
+          <ContributeModal
+            campaignId={campaignId}
+            campaignContributionType={campaignContributionType}
+            userId={userId}
+            userGroups={userGroups}
+            gps={gps}
+            overrideCoords={placedPinCoords}
+            onEnterPinPicker={handleEnterPinPickerForContribute}
+            onClose={() => setMode(null)}
+            onContributionSubmitted={onContributionSubmitted}
+            activeMapStyle={activeMapStyle}
+          />
+        )
+      )}
+      {mode === "solarpunk_photo" && !pinPickerActive && (
+        <SolarpunkPhotoModal
           campaignId={campaignId}
-          campaignContributionType={campaignContributionType}
           userId={userId}
           userGroups={userGroups}
           gps={gps}
           overrideCoords={placedPinCoords}
-          onEnterPinPicker={handleEnterPinPickerForContribute}
+          onEnterPinPicker={handleEnterPinPickerForSolarpunkPhoto}
           onClose={() => setMode(null)}
           onContributionSubmitted={onContributionSubmitted}
           activeMapStyle={activeMapStyle}

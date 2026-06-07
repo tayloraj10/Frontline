@@ -76,7 +76,12 @@ export default async function CampaignPage({ params }: Props) {
   const totalBags = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const contributionCount = contribCount ?? 0;
 
-  const unit = campaign.campaign_type === "territory" ? "bags" : campaign.campaign_type === "choropleth" ? "registrations" : campaign.campaign_type === "heatmap" ? "unfollows" : "photos";
+  const unit =
+    campaign.campaign_type === "territory" ? "bags" :
+    campaign.campaign_type === "choropleth" ? "registrations" :
+    campaign.campaign_type === "heatmap" ? "unfollows" :
+    campaign.campaign_type === "hex_bloom" ? "bloom points" :
+    "photos";
 
   // Leaderboard raw data
   type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
@@ -212,6 +217,12 @@ export default async function CampaignPage({ params }: Props) {
           </>
         ) : campaign.campaign_type === "heatmap" ? (
           <CampaignStat label="Unfollows logged" value={contributionCount.toLocaleString()} />
+        ) : campaign.campaign_type === "hex_bloom" ? (
+          <>
+            <CampaignStat label="World Bloom Score" value={totalBags.toLocaleString()} />
+            <CampaignStat label="Hexes bloomed" value={tractsCount} />
+            <CampaignStat label="Actions logged" value={contributionCount.toLocaleString()} />
+          </>
         ) : (
           <>
             <CampaignStat label="Tracts claimed" value={tractsCount} />

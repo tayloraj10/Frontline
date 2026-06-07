@@ -3,6 +3,7 @@ export const CAMPAIGN_SLUG_ORDER = [
   "touch-grass",
   "road-to-independence",
   "brainrot",
+  "solarpunk",
 ];
 
 export const CAMPAIGN_TYPE_CONFIG: Record<
@@ -13,6 +14,7 @@ export const CAMPAIGN_TYPE_CONFIG: Record<
   collage:    { icon: "◈", color: "text-purple-400",  bg: "bg-purple-900/20",  border: "border-purple-700/50",  bar: "bg-purple-500" },
   choropleth: { icon: "▦", color: "text-blue-400",    bg: "bg-blue-900/20",    border: "border-blue-700/50",    bar: "bg-blue-500" },
   heatmap:    { icon: "◉", color: "text-orange-400",  bg: "bg-orange-900/20",  border: "border-orange-700/50",  bar: "bg-orange-500" },
+  hex_bloom:  { icon: "⬡", color: "text-lime-400",   bg: "bg-lime-900/20",   border: "border-lime-700/50",   bar: "bg-lime-500" },
 };
 
 export const CONTRIBUTION_LABELS: Record<string, string> = {
@@ -21,5 +23,7 @@ export const CONTRIBUTION_LABELS: Record<string, string> = {
   registration: "Register",
   advocacy:     "Advocate",
   civic_action: "Civic Action",
-  unfollow:     "Unfollow",
+  unfollow:         "Unfollow",
+  solarpunk_action: "Log Action",
+  solarpunk_photo:  "Spot It",
 };

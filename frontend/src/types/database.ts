@@ -1,9 +1,9 @@
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
-export type CampaignType = "territory" | "collage" | "choropleth" | "heatmap";
-export type ContributionType = "cleanup" | "photo" | "registration" | "advocacy";
+export type CampaignType = "territory" | "collage" | "choropleth" | "heatmap" | "hex_bloom";
+export type ContributionType = "cleanup" | "photo" | "registration" | "advocacy" | "civic_action" | "unfollow" | "solarpunk_action" | "solarpunk_photo";
 export type CampaignStatus = "draft" | "active" | "completed" | "paused";
-export type GeoUnit = "census_tract" | "zip" | "state" | "point";
+export type GeoUnit = "census_tract" | "zip" | "state" | "point" | "h3_hex";
 export type EntityType = "user" | "group";
 export type MemberRole = "admin" | "member";
 export type EventStatus = "active" | "resolved" | "expired";
@@ -123,9 +123,10 @@ export interface Database {
           campaign_id: string;
           unit_id: string;
           unit_type: string;
-          geometry: unknown;
+          geometry: unknown | null;
           geojson: Json | null;
           display_name: string | null;
+          seed_source: string | null;
         };
         Insert: Omit<Database["public"]["Tables"]["geo_units"]["Row"], "id"> & {
           id?: string;

@@ -27,6 +27,63 @@ def _tolerance(z: int) -> float:
     return 0.0
 
 
+@router.get("/h3-bloom/{campaign_id}/{z}/{x}/{y}.mvt")
+async def get_h3_bloom_tile(
+    campaign_id: UUID,
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text("""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y)                      AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326)  AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    gu.id::text                                AS geo_unit_id,
+                    gu.unit_id                                 AS h3_index,
+                    COALESCE(tc.total_value, 0)::float         AS bloom_score,
+                    CASE
+                        WHEN COALESCE(tc.total_value, 0) >= 1500 THEN 5
+                        WHEN COALESCE(tc.total_value, 0) >= 600  THEN 4
+                        WHEN COALESCE(tc.total_value, 0) >= 200  THEN 3
+                        WHEN COALESCE(tc.total_value, 0) >= 50   THEN 2
+                        ELSE 1
+                    END                                        AS bloom_stage,
+                    gu.seed_source,
+                    ST_AsMVTGeom(
+                        ST_Transform(gu.geometry, 3857),
+                        bounds.geom_3857,
+                        4096, 8, true
+                    )                                          AS geom
+                FROM geo_units gu
+                CROSS JOIN bounds
+                LEFT JOIN territory_claims tc
+                    ON tc.geo_unit_id = gu.id
+                    AND tc.campaign_id = :campaign_id
+                WHERE gu.unit_type = 'h3_hex'
+                  AND gu.geometry && bounds.geom_4326
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'hexes', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y, "campaign_id": str(campaign_id)},
+    )
+
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    return Response(
+        content=tile_bytes,
+        media_type="application/x-protobuf",
+        headers={"Cache-Control": "public, max-age=30", "Access-Control-Allow-Origin": "*"},
+    )
+
+
 @router.get("/{campaign_id}/{z}/{x}/{y}.mvt")
 async def get_tile(
     campaign_id: UUID,

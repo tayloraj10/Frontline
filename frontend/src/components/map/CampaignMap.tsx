@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import gsap from "gsap";
+import { cellToBoundary } from "h3-js";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import type { ClaimLabel } from "./CampaignMapWrapper";
@@ -26,6 +27,42 @@ interface ContributionPoint {
 interface SelectedZip {
   geoUnitId: string;
   displayName: string;
+}
+
+interface HexBloomEntry {
+  geo_unit_id: string;
+  h3_index: string;
+  bloom_score: number;
+  bloom_stage: number;
+  seed_source: string | null;
+}
+
+const BLOOM_STAGE_LABELS = [
+  "",             // index 0 unused
+  "Dormant",      // stage 1 — 0–49 pts
+  "Germinating",  // stage 2 — 50–199 pts
+  "Growing",      // stage 3 — 200–599 pts
+  "Thriving",     // stage 4 — 600–1499 pts
+  "Flourishing",  // stage 5 — 1500+ pts
+];
+const BLOOM_STAGE_COLORS = ["#1a2035", "#1a2035", "#1f3a18", "#2d5c24", "#3d7a2e", "#5ca84a"];
+const BLOOM_THRESHOLDS = [null, 0, 50, 200, 600, 1500];
+
+function hexEntryToFeature(entry: HexBloomEntry): GeoJSON.Feature<GeoJSON.Polygon> {
+  const boundary = cellToBoundary(entry.h3_index);
+  const coords = boundary.map(([lat, lng]) => [lng, lat] as [number, number]);
+  coords.push(coords[0]);
+  return {
+    type: "Feature",
+    id: entry.geo_unit_id,
+    geometry: { type: "Polygon", coordinates: [coords] },
+    properties: {
+      h3_index: entry.h3_index,
+      bloom_score: entry.bloom_score,
+      bloom_stage: entry.bloom_stage,
+      seed_source: entry.seed_source,
+    },
+  };
 }
 
 interface Props {
@@ -412,6 +449,53 @@ function pulseClaim(m: maplibregl.Map, geoUnitId: string): void {
   });
 }
 
+// ─── Hex bloom detail panel ───────────────────────────────────────────────────
+
+function HexPanel({ entry, onClose }: { entry: HexBloomEntry; onClose: () => void }) {
+  const nextThreshold = BLOOM_THRESHOLDS[entry.bloom_stage + 1] ?? null;
+  const stageColor = BLOOM_STAGE_COLORS[entry.bloom_stage];
+  const stageLabel = BLOOM_STAGE_LABELS[entry.bloom_stage];
+
+  return (
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+      <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: stageColor }} />
+      <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
+            <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
+          </div>
+          <button onClick={onClose} className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+        </div>
+      </div>
+      <div className="px-4 pt-3 pb-4">
+        <div className="flex items-baseline justify-between mb-1.5">
+          <span className="text-xs text-zinc-500">Bloom Score</span>
+          <span className="text-sm font-bold text-zinc-200 tabular-nums">
+            {Math.round(entry.bloom_score).toLocaleString()}
+            {nextThreshold !== null ? ` / ${nextThreshold.toLocaleString()}` : " ✓ Max"}
+          </span>
+        </div>
+        {nextThreshold !== null && (
+          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min((entry.bloom_score / nextThreshold) * 100, 100)}%`,
+                background: stageColor,
+              }}
+            />
+          </div>
+        )}
+        {entry.seed_source && (
+          <p className="mt-3 text-xs text-zinc-500">🌍 {entry.seed_source}</p>
+        )}
+        <p className="mt-3 text-[10px] text-zinc-700 font-mono break-all">{entry.h3_index}</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Fit-to-extent control ────────────────────────────────────────────────────
 
 class FitExtentControl implements maplibregl.IControl {
@@ -478,11 +562,13 @@ export default function CampaignMap({
   const isCollage = campaignType === "collage";
   const isChoropleth = campaignType === "choropleth";
   const isHeatmap = campaignType === "heatmap";
+  const isHexBloom = campaignType === "hex_bloom";
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [selectedZip, setSelectedZip] = useState<SelectedZip | null>(null);
+  const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
@@ -502,6 +588,7 @@ export default function CampaignMap({
   const mapReadyRef = useRef(false);
   const choroplethListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
+  const hexDataRef = useRef<HexBloomEntry[]>([]);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
@@ -556,6 +643,18 @@ export default function CampaignMap({
       eventTweensRef.current.push(entranceTween, pulseTween);
     }
   }, []);
+
+  const refreshHexBloom = useCallback(() => {
+    const m = map.current;
+    if (!m) return;
+    const src = m.getSource("hex-bloom");
+    if (src) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (src as any).setTiles([
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/h3-bloom/${campaign.id}/{z}/{x}/{y}.mvt?v=${Date.now()}`,
+      ]);
+    }
+  }, [campaign.id]);
 
   // Adds territory + contribution sources/layers. Called on initial load and after every style swap
   // (setStyle wipes all custom sources/layers; event listeners persist and reattach automatically).
@@ -638,6 +737,70 @@ export default function CampaignMap({
       } catch {
         // heatmap layer is non-critical
       }
+      return;
+    }
+
+    if (isHexBloom) {
+      dataBoundsRef.current = [[-180, -85], [180, 85]];
+      m.addSource("hex-bloom", {
+        type: "vector",
+        tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/h3-bloom/${campaign.id}/{z}/{x}/{y}.mvt`],
+        minzoom: 0,
+        maxzoom: 10,
+      });
+
+      m.addLayer({
+        id: "hex-bloom-fill",
+        type: "fill",
+        source: "hex-bloom",
+        "source-layer": "hexes",
+        paint: {
+          "fill-color": [
+            "case",
+            ["==", ["get", "bloom_stage"], 5], "#5ca84a",
+            ["==", ["get", "bloom_stage"], 4], "#3d7a2e",
+            ["==", ["get", "bloom_stage"], 3], "#2d5c24",
+            ["==", ["get", "bloom_stage"], 2], "#1f3a18",
+            "#000000",
+          ],
+          "fill-opacity": [
+            "case",
+            ["==", ["get", "bloom_stage"], 5], 0.5,
+            ["==", ["get", "bloom_stage"], 4], 0.35,
+            ["==", ["get", "bloom_stage"], 3], 0.25,
+            ["==", ["get", "bloom_stage"], 2], 0.15,
+            0,
+          ],
+        },
+      } as Parameters<typeof m.addLayer>[0]);
+
+      m.addLayer({
+        id: "hex-bloom-border",
+        type: "line",
+        source: "hex-bloom",
+        "source-layer": "hexes",
+        paint: {
+          "line-color": [
+            "case",
+            ["==", ["get", "bloom_stage"], 5], "#5ca84a",
+            ["==", ["get", "bloom_stage"], 4], "#3d7a2e",
+            ["==", ["get", "bloom_stage"], 3], "#2d5c24",
+            ["==", ["get", "bloom_stage"], 2], "#1f3a18",
+            "#1e2d3a",
+          ],
+          "line-width": [
+            "case",
+            [">=", ["get", "bloom_stage"], 2], 1.5,
+            0.5,
+          ],
+          "line-opacity": [
+            "case",
+            [">=", ["get", "bloom_stage"], 2], 0.9,
+            0.3,
+          ],
+        },
+      } as Parameters<typeof m.addLayer>[0]);
+
       return;
     }
 
@@ -783,7 +946,7 @@ export default function CampaignMap({
       applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
     }
     updateEventMarkers(activeEventsRef.current);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -811,8 +974,8 @@ export default function CampaignMap({
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: styleUrl("outdoor"),
-      center: isHeatmap ? [0, 20] : [-98.5795, 39.8283],
-      zoom: isHeatmap ? 2 : 4,
+      center: (isHeatmap || isHexBloom) ? [0, 20] : [-98.5795, 39.8283],
+      zoom: (isHeatmap || isHexBloom) ? 2 : 4,
       attributionControl: false,
     });
 
@@ -942,6 +1105,45 @@ export default function CampaignMap({
         const geoUnitId = String(e.features[0].id ?? props.geo_unit_id ?? "");
         const displayName = props.display_name ?? geoUnitId;
         setSelectedZip({ geoUnitId, displayName });
+      });
+
+      // Hex bloom hover + click
+      map.current.on("mouseenter", "hex-bloom-fill", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "pointer";
+      });
+      map.current.on("mousemove", "hex-bloom-fill", (e) => {
+        if (!e.features?.[0] || pinPickerActiveRef.current) return;
+        const props = e.features[0].properties as {
+          bloom_stage?: number; bloom_score?: number; seed_source?: string | null;
+        };
+        const stage = props.bloom_stage ?? 1;
+        const score = Math.round(props.bloom_score ?? 0);
+        const color = BLOOM_STAGE_COLORS[stage];
+        const label = BLOOM_STAGE_LABELS[stage];
+        hoverDiv.style.display = "block";
+        hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
+        hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
+        hoverDiv.innerHTML =
+          `<div style="font-weight:700;font-size:12px;color:${color}">Stage ${stage} — ${label}</div>` +
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:3px">${score.toLocaleString()} bloom pts</div>` +
+          (props.seed_source ? `<div style="color:#52525b;font-size:10px;margin-top:2px">🌍 pre-seeded</div>` : "");
+      });
+      map.current.on("mouseleave", "hex-bloom-fill", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "";
+        hoverDiv.style.display = "none";
+      });
+      map.current.on("click", "hex-bloom-fill", (e) => {
+        if (!e.features?.[0] || pinPickerActiveRef.current) return;
+        const props = e.features[0].properties as {
+          geo_unit_id: string; h3_index: string; bloom_score: number; bloom_stage: number; seed_source: string | null;
+        };
+        setSelectedHex({
+          geo_unit_id: props.geo_unit_id ?? String(e.features[0].id ?? ""),
+          h3_index: props.h3_index,
+          bloom_score: props.bloom_score,
+          bloom_stage: props.bloom_stage,
+          seed_source: props.seed_source,
+        });
       });
     });
 
@@ -1080,6 +1282,11 @@ export default function CampaignMap({
       return;
     }
 
+    if (isHexBloom) {
+      refreshHexBloom();
+      return;
+    }
+
     const source = map.current.getSource("contribution-pts") as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
     const feature: Feature<Point> = {
@@ -1089,7 +1296,7 @@ export default function CampaignMap({
     };
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
     source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
-  }, [newContribution, isCollage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [newContribution, isCollage, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Supabase Realtime
   useEffect(() => {
@@ -1110,6 +1317,10 @@ export default function CampaignMap({
           const claim = payload.new as TerritoryClaim;
           if (!claim?.geo_unit_id) return;
           const totalValue = claim.total_value ?? 0;
+          if (isHexBloom) {
+            refreshHexBloom();
+            return;
+          }
           if (isChoropleth) {
             const leanLookup = getChoroplethLeanLookup(map.current);
             const lean = leanLookup[claim.geo_unit_id] ?? 0;
@@ -1149,7 +1360,7 @@ export default function CampaignMap({
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [campaign.id]);
+  }, [campaign.id, isChoropleth, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleConfirmPin = () => {
     const pos = pinPickerMarkerRef.current?.getLngLat();
@@ -1177,6 +1388,10 @@ export default function CampaignMap({
             onClose={() => setSelectedZip(null)}
           />
         )
+      )}
+
+      {selectedHex && !pinPickerActive && (
+        <HexPanel entry={selectedHex} onClose={() => setSelectedHex(null)} />
       )}
 
       {pinPickerActive && (
@@ -1255,6 +1470,15 @@ export default function CampaignMap({
               <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="text-zinc-500">Low → High</span>
               </div>
+            </>
+          ) : isHexBloom ? (
+            <>
+              {BLOOM_STAGE_LABELS.slice(1).map((label, i) => (
+                <div key={i + 1} className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                  <span className="w-3 h-3 rounded-sm" style={{ background: BLOOM_STAGE_COLORS[i + 1] }} />
+                  <span className="text-zinc-300">S{i + 1} {label}</span>
+                </div>
+              ))}
             </>
           ) : (
             <>

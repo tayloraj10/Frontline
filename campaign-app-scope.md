@@ -405,6 +405,109 @@ Each pre-seeded hex stores a `seed_source` note (e.g., "IEA 2024: 99% renewable 
 
 ---
 
+### Campaign 7: Life Detox 🧩 *(future — board game campaign type)*
+
+**Concept:** A personal journey campaign where each user moves a piece along a board by completing real-life steps to break unhealthy digital habits. Inspired by the BRAINROT campaign theme but driven by personal linear progression rather than a collective geographic map. The board is the same for everyone; your piece's position is your own.
+
+**Campaign type:** `board_game` *(new type — not yet implemented)*
+
+**Why this needs a new campaign type:** All current campaign types (territory, collage, choropleth, heatmap) are map/geography-centric and visualize collective action across a geographic plane. A board game campaign tracks per-user linear progress along a defined sequence of steps. It needs a board UI instead of a MapLibre map, per-user position state, and step-gated contribution forms.
+
+**Board concept — "30 Steps Off the Grid":**
+Each space on the board is a concrete detox action. Completing the action (via a logged contribution) advances your piece. Other players' pieces are visible on the board — social pressure and celebration are built in.
+
+*Example spaces:*
+1. Unfollow 5 rage-bait or clout-chasing accounts
+2. Turn off all non-essential push notifications
+3. Set a daily screen time limit and stick to it for 3 days
+4. Delete one social app for 7 days
+5. Replace one doom-scroll session with going outside
+6. Read a book (not an article, a book) for 30 minutes
+7. Cook a meal instead of ordering delivery
+8. Have a phone-free dinner
+9. Go 24 hours without opening any social app
+10. Introduce a friend to the detox and get them to join
+11. Spend a full weekend morning outside before touching your phone
+12. Audit your subscriptions and cancel one you don't use
+13. Replace social media time with a new hobby for one week
+14. Document your screen time before/after — share the diff
+15. Complete the board: log your final reflection
+
+**Data model additions needed:**
+- `board_steps` array in campaign `scoring_rules` JSONB — each step has an id, title, description, and completion criteria
+- Per-user position tracking — either a new `user_campaign_progress` table (`user_id`, `campaign_id`, `current_step`, `completed_steps[]`) or derived from ordered contributions
+- Step-gated contribution form — UI shows only the current step's task; submitting a contribution advances position
+
+**Visualization:**
+- Linear or winding board path rendered in the campaign detail view (replaces MapLibre map)
+- Each space shows a name, icon, and completion count across all players
+- Your piece highlighted; other players' pieces visible for social context
+- Celebration animation when advancing spaces (GSAP)
+- Global leaderboard: who is furthest along the board
+
+**Post-launch priority:** Requires new `campaign_type` enum value, new board UI component, and per-user progress tracking. Not geo-dependent — no PostGIS required for this campaign type.
+
+---
+
+### Campaign 8: Full Life 🥗 *(future — health & lifestyle campaign)*
+
+**Concept:** A cooperative health campaign where users log real-world healthy choices across food, movement, sleep, and lifestyle. No competition — the whole community wins together as collective healthy actions accumulate. Designed to be encouraging and habit-building, not a calorie counter or fitness tracker.
+
+**Campaign type:** `choropleth` or `heatmap` *(geographic density of healthy activity, or a new cooperative type)*
+
+**Contribution pillars:**
+
+*Food & Nutrition*
+- Cooked a meal from whole ingredients (+2)
+- Ate a vegetable or fruit as a snack instead of processed food (+1)
+- Meal prepped for the week (+3)
+- Went to a farmers market (+2)
+- Tried a new healthy recipe (+1)
+- Reduced or eliminated a processed food for a week (+2)
+- Ate mindfully — no screens, sat down, full meal (+1)
+
+*Movement & Exercise*
+- Walked or biked instead of driving — any trip (+2)
+- Completed a workout — any kind, any duration (+2)
+- Went for a walk of 20+ minutes (+1)
+- Tried a new physical activity or sport (+2)
+- Stretched or did mobility work (+1)
+- Reached 10,000 steps (+2)
+- Worked out with a friend or group (+2)
+
+*Sleep & Recovery*
+- Got 7–9 hours of sleep (+2)
+- Kept a consistent sleep/wake time for 3 days (+2)
+- No screens 30 minutes before bed (+1)
+- Took a genuine rest day (+1)
+
+*Mental & Lifestyle*
+- Meditated or did breathwork (+2)
+- Spent time in nature for mental health (+1)
+- Journaled (+1)
+- Connected with a friend or family member in person (+2)
+- Did something creative (+1)
+- Reduced or eliminated alcohol for a week (+3)
+- Quit or reduced caffeine dependency (+2)
+
+**Scoring:** Each logged action contributes to a global "Vitality Score" — a single collective number climbing over time. Geographic visualization shows where the health movement is densest. Individual streaks tracked on user profiles.
+
+**Visualization:**
+- Global heatmap or choropleth showing health action density by location
+- Vitality Score counter animated on the campaign hero (similar to Solarpunk's Bloom Score)
+- Personal streak tracker — consecutive days with at least one logged action
+- "Health wave" — when a region crosses a threshold, neighboring regions get a temporary multiplier
+- Weekly featured category (e.g., "This week: Sleep Week — sleep actions worth 2x")
+
+**Dynamic Events:**
+- Weekly category spotlights (double points for a specific pillar)
+- "Community Challenge" — e.g., collectively log 10,000 workouts this month
+- Seasonal pushes — New Year habit streaks, summer fitness challenge, mental health month
+
+**Post-launch priority:** Data model is compatible with existing architecture (point contributions, scoring_rules for action categories). Main work is the contribution form with category/action picker and the streak tracking UI on user profiles.
+
+---
+
 ## 4. Data Models
 
 ### Core Schema
@@ -740,22 +843,23 @@ Tables that drive live map updates:
 - DB migration to expand `contribution_type` CHECK constraint and add `h3_hex` to `geo_unit` CHECK
 
 **Development checklist:**
-- [ ] Research and finalize pre-seed hex list with sources (renewable energy data, green index data)
-- [ ] Build H3 hex loader — `/admin/seed` variant that generates all resolution-5 hex `geo_units` rows globally (or just populated hexes near pre-seed targets)
-- [ ] Backend: H3 hex assignment on contribution submit — replace PostGIS point-in-polygon with `h3_lat_lng_to_cell` (faster, no polygon needed)
-- [ ] Backend: Bloom score upsert logic — accumulate points by category weight into `territory_claims.bloom_score`
-- [ ] Backend: Pre-seed endpoint — load baseline bloom scores for research-validated hexes with `seed_source` metadata
-- [ ] Frontend: H3 hex grid MapLibre layer — render hex boundaries as a GeoJSON fill layer generated client-side via `h3-js` for the visible viewport
-- [ ] Frontend: Hex bloom stage coloring — map `bloom_score` to stage 0–4 palette, illustrated texture per stage
+- [x] Research and finalize pre-seed hex list with sources (renewable energy data, green index data)
+- [x] Build H3 hex loader — `POST /admin/seed/solarpunk-preseed` — `SolarpunkPreseedSeeder` upserts 12 pre-seeded cities into `geo_units` + `territory_claims`
+- [x] Backend: H3 hex assignment on contribution submit — replace PostGIS point-in-polygon with `h3.latlng_to_cell` (faster, no polygon needed); auto-creates `geo_unit` row if needed
+- [x] Backend: Bloom score upsert logic — accumulates points via `territory_claims.total_value` (bloom_score) on each contribution
+- [x] Backend: Pre-seed endpoint — `POST /admin/seed/solarpunk-preseed` loads baseline bloom scores for 12 research-validated hexes with `seed_source` metadata
+- [x] Frontend: H3 hex grid MapLibre layer — GeoJSON fill layer generated client-side via `h3-js cellToBoundary`; refreshed on contribution and Realtime events
+- [x] Frontend: Hex bloom stage coloring — `bloom_score` mapped to stage 0–4 palette (5 green shades) via `bloom_stage` property on each feature
 - [ ] Frontend: Solar panel aesthetic for Stage 0 hexes — dark fill, subtle internal grid line overlay
 - [ ] Frontend: GSAP bloom wave animation — ripple effect when a hex advances a stage
 - [ ] Frontend: Per-hex photo collage panel — thumbnail grid of `solarpunk_photo` contributions for the selected hex
-- [ ] Frontend: Global Bloom Score counter — animated aggregate shown on campaign hero
-- [ ] Frontend: Solarpunk action log form — category selector + action picker (driven by `scoring_rules` config), GPS capture, optional photo
-- [ ] Frontend: Solarpunk in the Wild form — photo upload, GPS capture, optional description
-- [ ] Frontend: Pre-seeded hex info panel — on hex click, show `seed_source` explanation for why this area is highlighted
+- [x] Frontend: Global Bloom Score counter — World Bloom Score shown in the campaign stats bar (sum of all `territory_claims.total_value`)
+- [x] Frontend: Solarpunk action log form — 7-category / 35-action picker with point values, GPS capture, optional photo (`SolarpunkActionModal`)
+- [x] Frontend: Solarpunk in the Wild form — photo upload, GPS capture, optional caption (`SolarpunkPhotoModal`)
+- [x] Frontend: Pre-seeded hex info panel — `HexPanel` shows `seed_source` explanation and bloom progress bar on hex click
 - [ ] Seeder: Demo data — sample contributions across 8–10 cities, photo submissions, pre-seeded hexes at Stage 1–2
 - [ ] Milestone unlock system — when hex crosses a stage threshold, create a `campaign_events` record and award a badge to all contributors
+- [ ] **Future: multi-resolution hex grid** — at high zoom levels (z ≥ 7), switch from res-3 (~120 km diameter) to res-5 (~9 km) hexes so dense cities show neighborhood-level bloom. Requires zoom-triggered tile source swap in MapLibre, a second MVT endpoint for res-5, and an aggregation model that rolls res-5 bloom scores up to their parent res-3 cell for the zoomed-out view.
 
 **Deliverable:** 5 campaigns live at launch — cooperative hex bloom map, full action log, photo collage per hex, pre-seeded world data visible on load
 

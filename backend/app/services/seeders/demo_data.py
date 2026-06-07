@@ -7,6 +7,7 @@ import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import h3
 import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,7 @@ TRASH_WAR_ID = "00000000-0000-0000-0000-000000000001"
 TOUCH_GRASS_ID = "00000000-0000-0000-0000-000000000002"
 ROAD_ID = "00000000-0000-0000-0000-000000000003"
 BRAINROT_ID = "00000000-0000-0000-0000-000000000004"
+SOLARPUNK_ID = "00000000-0000-0000-0000-000000000005"
 
 
 def _uid(key: str) -> str:
@@ -59,6 +61,8 @@ _GROUPS = [
      "description": "Registering as Independent to break the partisan gridlock.", "creator": "sam"},
     {"key": "ddc", "name": "Digital Detox Collective", "slug": "digital-detox-collective",
      "description": "Culling our feeds one unfollow at a time.", "creator": "priya"},
+    {"key": "gfc", "name": "Green Futures Collective", "slug": "green-futures-collective",
+     "description": "Building the solarpunk future through collective action, city by city.", "creator": "sarah"},
 ]
 
 # (user_key, group_key, role)
@@ -74,6 +78,9 @@ _MEMBERSHIPS = [
     ("priya",   "ddc", "admin"), ("sam",     "ddc", "member"),
     ("maya",    "ddc", "member"), ("olivia",  "ddc", "member"),
     ("alex",    "ddc", "member"),
+    ("sarah",   "gfc", "admin"), ("maya",    "gfc", "member"),
+    ("alex",    "gfc", "member"), ("priya",   "gfc", "member"),
+    ("olivia",  "gfc", "member"),
 ]
 
 # (user_key, group_key_or_None, zip_code, lat, lng, bags, days_back, hour)
@@ -277,12 +284,81 @@ _BRAINROT = [
     ("destiny",  None,  19.4326,  -99.1332, "@ContentFarm42", 11.0,  8),
 ]
 
+# (user_key, group_key_or_None, lat, lng, action_key, bloom_pts, days_back, hour)
+_SOLARPUNK = [
+    # Bhutan (27.47, 89.64) — preseed 900pts + 705 demo = 1605 → Stage 4 Flourishing
+    ("sarah",   "gfc", 27.47,  89.64, "solar_panels",    50,  3.0,  9),
+    ("maya",    "gfc", 27.47,  89.64, "solar_panels",    50,  5.0, 10),
+    ("alex",    None,  27.47,  89.64, "solar_panels",    50,  7.0, 11),
+    ("priya",   "gfc", 27.47,  89.64, "solar_panels",    50,  9.0,  9),
+    ("olivia",  "gfc", 27.47,  89.64, "solar_panels",    50, 12.0, 14),
+    ("sam",     None,  27.47,  89.64, "solar_panels",    50, 15.0, 10),
+    ("maya",    "gfc", 27.47,  89.64, "ev_switch",       40,  4.0,  9),
+    ("alex",    None,  27.47,  89.64, "ev_switch",       40,  6.0, 10),
+    ("priya",   "gfc", 27.47,  89.64, "ev_switch",       40,  8.0, 11),
+    ("olivia",  None,  27.47,  89.64, "ev_switch",       40, 10.0,  9),
+    ("sarah",   "gfc", 27.47,  89.64, "water_catchment", 30,  2.0, 10),
+    ("maya",    "gfc", 27.47,  89.64, "water_catchment", 30, 11.0,  9),
+    ("alex",    None,  27.47,  89.64, "water_catchment", 30, 13.0, 14),
+    ("priya",   "gfc", 27.47,  89.64, "water_catchment", 30, 16.0, 10),
+    ("olivia",  None,  27.47,  89.64, "organized_event", 25,  3.0, 11),
+    ("sam",     None,  27.47,  89.64, "organized_event", 25,  7.0,  9),
+    ("marcus",  None,  27.47,  89.64, "rewilding",       25, 18.0, 14),
+    ("tyler",   None,  27.47,  89.64, "rewilding",       25,  5.0, 10),
+    ("jordan",  None,  27.47,  89.64, "cooperative",     25,  4.0, 11),
+    # Iceland (64.13, -21.91) — preseed 800pts + 740 demo = 1540 → Stage 4 Flourishing
+    ("sarah",   "gfc", 64.13, -21.91, "solar_panels",    50,  1.0,  9),
+    ("maya",    "gfc", 64.13, -21.91, "solar_panels",    50,  2.0, 10),
+    ("alex",    None,  64.13, -21.91, "solar_panels",    50,  4.0, 11),
+    ("priya",   "gfc", 64.13, -21.91, "solar_panels",    50,  6.0,  9),
+    ("olivia",  "gfc", 64.13, -21.91, "solar_panels",    50,  8.0, 14),
+    ("sam",     None,  64.13, -21.91, "solar_panels",    50, 10.0, 10),
+    ("marcus",  None,  64.13, -21.91, "solar_panels",    50, 14.0,  9),
+    ("tyler",   None,  64.13, -21.91, "ev_switch",       40,  3.0, 10),
+    ("jordan",  None,  64.13, -21.91, "ev_switch",       40,  5.0, 11),
+    ("alex",    "gfc", 64.13, -21.91, "ev_switch",       40,  7.0,  9),
+    ("sarah",   "gfc", 64.13, -21.91, "flight_avoided",  30,  2.0, 14),
+    ("maya",    None,  64.13, -21.91, "flight_avoided",  30, 11.0,  9),
+    ("priya",   "gfc", 64.13, -21.91, "flight_avoided",  30, 13.0, 14),
+    ("sam",     None,  64.13, -21.91, "car_free_week",   25,  1.0, 11),
+    ("olivia",  "gfc", 64.13, -21.91, "car_free_week",   25, 12.0,  9),
+    ("tyler",   None,  64.13, -21.91, "car_free_week",   25,  4.0, 14),
+    ("marcus",  None,  64.13, -21.91, "organized_event", 25, 18.0, 10),
+    ("jordan",  None,  64.13, -21.91, "cooperative",     25, 15.0, 11),
+    ("destiny", None,  64.13, -21.91, "cooperative",     25, 20.0,  9),
+    ("alex",    None,  64.13, -21.91, "water_catchment", 30, 22.0, 14),
+    # Portland, OR (45.5051, -122.6750) — demo only → 345pts Stage 2 Growing
+    ("sarah",   "gfc", 45.5051, -122.675, "solar_panels",     50,  2.0,  9),
+    ("olivia",  "gfc", 45.5051, -122.675, "solar_panels",     50,  4.0, 10),
+    ("tyler",   None,  45.5051, -122.675, "solar_panels",     50,  6.0, 11),
+    ("sam",     None,  45.5051, -122.675, "solar_panels",     50,  8.0,  9),
+    ("maya",    "gfc", 45.5051, -122.675, "solar_panels",     50, 10.0, 14),
+    ("alex",    None,  45.5051, -122.675, "community_garden", 20,  3.0, 10),
+    ("priya",   "gfc", 45.5051, -122.675, "community_garden", 20,  5.0,  9),
+    ("sarah",   "gfc", 45.5051, -122.675, "plant_tree",       20,  7.0, 14),
+    ("tyler",   None,  45.5051, -122.675, "rewilding",        25,  9.0, 10),
+    ("sam",     None,  45.5051, -122.675, "composted",        10, 12.0,  9),
+    # Berlin, Germany (52.52, 13.405) — demo only → 85pts Stage 1 Germinating
+    ("priya",   None,  52.52,  13.405,  "solar_panels",  50,  5.0, 11),
+    ("maya",    None,  52.52,  13.405,  "car_free_week", 25,  7.0, 10),
+    ("alex",    "gfc", 52.52,  13.405,  "composted",     10,  9.0,  9),
+    # Seoul, South Korea (37.5665, 126.978) — demo only → 60pts Stage 1 Germinating
+    ("marcus",  None,  37.5665, 126.978, "ev_switch",     40,  8.0,  9),
+    ("jordan",  None,  37.5665, 126.978, "transit_month", 20, 12.0, 10),
+    # São Paulo, Brazil (-23.5505, -46.6333) — demo only → 70pts Stage 1 Germinating
+    ("destiny", None, -23.5505, -46.6333, "solar_panels",     50, 15.0, 10),
+    ("marcus",  None, -23.5505, -46.6333, "community_garden", 20, 18.0,  9),
+]
+
 
 class DemoDataSeeder(Seeder):
     default_params: dict = {}
 
     async def run(self, db: AsyncSession, params: dict) -> SeedResult:
         result = SeedResult()
+
+        if params.get("wipe"):
+            await self._wipe(db)
 
         # 1. Auth users (via Supabase admin API)
         user_ids = await self._create_auth_users(result)
@@ -512,7 +588,66 @@ class DemoDataSeeder(Seeder):
             except Exception as exc:
                 result.errors.append(f"brainrot contrib {i}: {exc}")
 
-        # 10. Campaign events
+        # 10. Solarpunk contributions
+        h3_index_set = {h3.latlng_to_cell(lat, lng, 3) for _, _, lat, lng, *_ in _SOLARPUNK}
+        hex_unit_ids = await self._create_hex_units(db, h3_index_set)
+        solarpunk_claims: dict[str, dict] = {}
+        for i, (ukey, gkey, lat, lng, action_key, bloom_pts, d_back, hour) in enumerate(_SOLARPUNK):
+            uid = user_ids.get(ukey)
+            gid = group_ids.get(gkey) if gkey else None
+            if not uid:
+                continue
+            h3_idx = h3.latlng_to_cell(lat, lng, 3)
+            geo_id = hex_unit_ids.get(h3_idx)
+            ts = _ts(d_back, hour)
+            try:
+                await db.execute(
+                    text("""
+                        INSERT INTO contributions
+                            (id, campaign_id, user_id, group_id, geo_unit_id,
+                             contribution_type, value, location, location_verified,
+                             notes, submitted_at)
+                        VALUES
+                            (:id, :cid, :uid, :gid, :geo_id,
+                             'solarpunk_action', :value,
+                             ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                             TRUE, :notes, :ts)
+                        ON CONFLICT (id) DO NOTHING
+                    """),
+                    {"id": _uid(f"solarpunk_{i}"), "cid": SOLARPUNK_ID, "uid": uid, "gid": gid,
+                     "geo_id": geo_id, "value": bloom_pts, "lng": lng, "lat": lat,
+                     "notes": action_key, "ts": ts},
+                )
+                result.inserted += 1
+            except Exception as exc:
+                result.errors.append(f"solarpunk contrib {i}: {exc}")
+                continue
+
+            if geo_id:
+                self._track_claim(solarpunk_claims, geo_id, bloom_pts, uid, gid, d_back, ts)
+
+        for geo_id, claim in solarpunk_claims.items():
+            try:
+                await db.execute(
+                    text("""
+                        INSERT INTO territory_claims
+                            (campaign_id, geo_unit_id, claimed_by_user, claimed_by_group,
+                             total_value, last_contribution_at)
+                        VALUES (:cid, :geo_id, :uid, :gid, :val, :ts)
+                        ON CONFLICT (campaign_id, geo_unit_id) DO UPDATE SET
+                            total_value = territory_claims.total_value + EXCLUDED.total_value,
+                            last_contribution_at = GREATEST(
+                                territory_claims.last_contribution_at,
+                                EXCLUDED.last_contribution_at),
+                            updated_at = NOW()
+                    """),
+                    {"cid": SOLARPUNK_ID, "geo_id": geo_id, "uid": claim["uid"],
+                     "gid": claim["gid"], "val": claim["total"], "ts": claim["ts"]},
+                )
+            except Exception as exc:
+                result.errors.append(f"solarpunk claim {geo_id}: {exc}")
+
+        # 11. Campaign events
         chicago_geo = zip_geos.get("60601")
         houston_geo = zip_geos.get("77002")
         events = [
@@ -580,6 +715,55 @@ class DemoDataSeeder(Seeder):
             if d_back < claims[geo_id]["d_back"]:
                 claims[geo_id].update(uid=uid, gid=gid, d_back=d_back, ts=ts)
 
+    async def _wipe(self, db: AsyncSession) -> None:
+        demo_user_ids = [_uid(f"user_{u['key']}") for u in _USERS]
+        demo_group_ids = [_uid(f"group_{g['key']}") for g in _GROUPS]
+        demo_event_ids = [
+            _uid("event_boss_chicago"),
+            _uid("event_boss_houston"),
+            _uid("event_road_surge"),
+        ]
+
+        await db.execute(
+            text("DELETE FROM campaign_events WHERE id = ANY(:ids)"),
+            {"ids": demo_event_ids},
+        )
+        await db.execute(
+            text("DELETE FROM contributions WHERE user_id = ANY(:ids)"),
+            {"ids": demo_user_ids},
+        )
+        await db.execute(
+            text("DELETE FROM territory_claims WHERE claimed_by_user = ANY(:ids)"),
+            {"ids": demo_user_ids},
+        )
+        await db.execute(
+            text("DELETE FROM group_members WHERE user_id = ANY(:ids)"),
+            {"ids": demo_user_ids},
+        )
+        await db.execute(
+            text("DELETE FROM groups WHERE id = ANY(:ids)"),
+            {"ids": demo_group_ids},
+        )
+        await db.execute(
+            text("DELETE FROM profiles WHERE id = ANY(:ids)"),
+            {"ids": demo_user_ids},
+        )
+        await db.commit()
+
+        async with httpx.AsyncClient() as client:
+            for uid in demo_user_ids:
+                try:
+                    await client.delete(
+                        f"{settings.supabase_url}/auth/v1/admin/users/{uid}",
+                        headers={
+                            "apikey": settings.supabase_service_role_key,
+                            "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                        },
+                        timeout=15,
+                    )
+                except Exception:
+                    pass
+
     async def _create_auth_users(self, result: SeedResult) -> dict[str, str]:
         user_ids: dict[str, str] = {}
         async with httpx.AsyncClient() as client:
@@ -632,3 +816,24 @@ class DemoDataSeeder(Seeder):
             {"unit_type": unit_type, "ids": unique},
         )
         return {row.unit_id: row.id for row in rows.fetchall()}
+
+    async def _create_hex_units(self, db: AsyncSession, h3_indexes: set[str]) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for h3_index in h3_indexes:
+            boundary = h3.cell_to_boundary(h3_index)
+            coords = [(lng, lat) for lat, lng in boundary]
+            coords.append(coords[0])
+            wkt = "POLYGON((" + ", ".join(f"{x} {y}" for x, y in coords) + "))"
+            row = await db.execute(
+                text("""
+                    INSERT INTO geo_units (unit_type, unit_id, geometry, display_name)
+                    VALUES ('h3_hex', :h3_index, ST_Multi(ST_GeomFromText(:wkt, 4326)), :h3_index)
+                    ON CONFLICT (unit_type, unit_id) DO UPDATE SET unit_type = EXCLUDED.unit_type
+                    RETURNING id::text
+                """),
+                {"h3_index": h3_index, "wkt": wkt},
+            )
+            unit_id = row.scalar()
+            if unit_id:
+                result[h3_index] = unit_id
+        return result
