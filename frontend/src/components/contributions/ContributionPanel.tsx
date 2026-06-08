@@ -406,7 +406,7 @@ function ContributeModal({
         value,
         photoUrl ?? undefined,
       );
-      setResult(data.claimed_territory ? "success" : "outside");
+      setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
     } catch {
       setError("Submission failed. Please try again.");
     } finally {

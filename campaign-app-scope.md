@@ -865,6 +865,17 @@ Tables that drive live map updates:
 
 ---
 
+### Pre-Launch Requirement: External Model Imports
+Before going live, the following models must be imported from a separate API currently under development:
+
+- **Groups** — the organization/group schema, membership, and roles. The current `groups` table is a placeholder; the canonical model lives in the external API.
+- **Cleanups** — the full cleanup event model with structured data (location, photos, bag counts, organizer, participants). Trash War contributions currently store a simplified cleanup record; the external API owns the authoritative schema.
+- **Trash Reports** — community-submitted trash reports used to seed Trash War campaign data and generate cleanup events. The external API owns this model.
+
+These imports are a hard dependency before launch — the Trash War campaign in particular relies on cleanups and trash reports from this external API to function as designed.
+
+---
+
 ### Pre-Launch Polish: Auth & User Accounts
 **Goal:** Production-ready auth flow and user account management before going public
 

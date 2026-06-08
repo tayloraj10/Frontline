@@ -30,7 +30,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${cfg.bg} ${cfg.border} ${cfg.color}`}>
               <span>{cfg.icon}</span>
-              <span className="capitalize">{campaign.campaign_type}</span>
+              <span>{cfg.label}</span>
             </span>
             {campaign.contribution_type && (
               <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${cfg.border} ${cfg.color}`}>
@@ -116,9 +116,16 @@ export default async function CampaignsPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
-            {gridCampaigns.map((campaign) => (
-              <CampaignCard key={campaign.id} campaign={campaign} />
-            ))}
+            {gridCampaigns.map((campaign, i) => {
+              const isLastOdd = i === gridCampaigns.length - 1 && gridCampaigns.length % 2 === 1;
+              return isLastOdd ? (
+                <div key={campaign.id} className="sm:col-span-2 sm:max-w-[calc(50%-8px)] sm:mx-auto w-full">
+                  <CampaignCard campaign={campaign} />
+                </div>
+              ) : (
+                <CampaignCard key={campaign.id} campaign={campaign} />
+              );
+            })}
           </div>
           {extraCampaigns.length > 0 && (
             <div className="mt-4 flex justify-center gap-4">

@@ -164,6 +164,7 @@ export default async function CampaignPage({ params }: Props) {
 
   const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type] ?? {
     icon: "🏁",
+    label: campaign.campaign_type,
     color: "text-zinc-400",
     bg: "bg-zinc-800/20",
     border: "border-zinc-700/50",
@@ -201,7 +202,7 @@ export default async function CampaignPage({ params }: Props) {
             className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border ${cfg.bg} ${cfg.border} ${cfg.color}`}
           >
             {cfg.icon}
-            <span className="capitalize">{campaign.campaign_type}</span>
+            <span>{cfg.label ?? campaign.campaign_type}</span>
           </span>
         </div>
       </div>

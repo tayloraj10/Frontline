@@ -741,7 +741,29 @@ export default function CampaignMap({
     }
 
     if (isHexBloom) {
-      dataBoundsRef.current = [[-180, -85], [180, 85]];
+      // Fetch hex data to compute extent for the fit-to-extent button.
+      // Prefer stage 2+ cells; fall back to all cells if none qualify.
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/hex-bloom`,
+        );
+        if (res.ok) {
+          const hexes = (await res.json()) as HexBloomEntry[];
+          const active = hexes.filter((h) => h.bloom_stage >= 2);
+          const source = active.length > 0 ? active : hexes;
+          if (source.length > 0) {
+            const b = new maplibregl.LngLatBounds();
+            for (const hex of source) {
+              for (const [lat, lng] of cellToBoundary(hex.h3_index)) {
+                b.extend([lng, lat]);
+              }
+            }
+            dataBoundsRef.current = b;
+          }
+        }
+      } catch {
+        // non-critical — fit button just won't work
+      }
       m.addSource("hex-bloom", {
         type: "vector",
         tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/h3-bloom/${campaign.id}/{z}/{x}/{y}.mvt`],
@@ -761,7 +783,7 @@ export default function CampaignMap({
             ["==", ["get", "bloom_stage"], 4], "#3d7a2e",
             ["==", ["get", "bloom_stage"], 3], "#2d5c24",
             ["==", ["get", "bloom_stage"], 2], "#1f3a18",
-            "#000000",
+            "#1a2035",
           ],
           "fill-opacity": [
             "case",
@@ -769,7 +791,7 @@ export default function CampaignMap({
             ["==", ["get", "bloom_stage"], 4], 0.35,
             ["==", ["get", "bloom_stage"], 3], 0.25,
             ["==", ["get", "bloom_stage"], 2], 0.15,
-            0,
+            0.08,
           ],
         },
       } as Parameters<typeof m.addLayer>[0]);
