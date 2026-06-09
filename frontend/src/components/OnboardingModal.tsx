@@ -14,7 +14,7 @@ const STORAGE_KEY = "frontline_onboarded";
 
 const STEPS = [
   {
-    icon: "⚑",
+    icon: "🚩",
     title: "Welcome to Frontline",
     body: "Frontline turns real-world action into a strategy game. Join campaigns, log contributions, and watch your impact spread across a live map.",
   },
