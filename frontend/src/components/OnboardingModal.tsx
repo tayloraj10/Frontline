@@ -25,7 +25,7 @@ const STEPS = [
     bullets: [
       { icon: "📍", text: "Log a contribution — cleanup bags, photos, voter registration, and more" },
       { icon: "⚑", text: "Claim territory — your geo-unit gets your color on the map" },
-      { icon: "⚡", text: "Watch dynamic events unfold — boss events, decay, cascading unlocks" },
+      { icon: "⚡", text: "Watch dynamic events unfold — hotspots, decay, cascading unlocks" },
       { icon: "🏆", text: "Compete on leaderboards — individually or as a group" },
     ],
   },

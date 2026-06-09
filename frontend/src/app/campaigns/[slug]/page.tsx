@@ -54,6 +54,8 @@ export default async function CampaignPage({ params }: Props) {
     { data: membershipData },
     lbRes,
     { data: actContribsData },
+    problemReportsRes,
+    eventCentroidsRes,
   ] = await Promise.all([
     supabase.from("territory_claims").select("*").eq("campaign_id", campaign.id),
     supabase.from("campaign_events").select("*").eq("campaign_id", campaign.id).eq("status", "active"),
@@ -68,7 +70,23 @@ export default async function CampaignPage({ params }: Props) {
       .eq("campaign_id", campaign.id)
       .order("submitted_at", { ascending: false })
       .limit(20),
+    campaign.campaign_type === "territory"
+      ? fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`, { next: { revalidate: 60 } }).catch(() => null)
+      : Promise.resolve(null),
+    campaign.campaign_type === "territory"
+      ? fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/centroids`, { next: { revalidate: 60 } }).catch(() => null)
+      : Promise.resolve(null),
   ]);
+
+  type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; latitude: number; longitude: number };
+  type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null };
+  const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
+
+  type EventCentroid = { geo_unit_id: string; lat: number; lng: number };
+  const eventCentroidList: EventCentroid[] = eventCentroidsRes?.ok ? await eventCentroidsRes.json() : [];
+  const eventCentroids: Record<string, { lat: number; lng: number }> = Object.fromEntries(
+    eventCentroidList.map((c) => [c.geo_unit_id, { lat: c.lat, lng: c.lng }])
+  );
 
   const claims = (claimsData ?? []) as TerritoryClaim[];
   const events = (eventsData ?? []) as CampaignEvent[];
@@ -100,7 +118,7 @@ export default async function CampaignPage({ params }: Props) {
   const actUserIds = [...new Set(actContribs.filter((c) => c.user_id).map((c) => c.user_id!))];
   const actGroupIds = [...new Set(actContribs.filter((c) => c.group_id).map((c) => c.group_id!))];
 
-  const allUserIds = [...new Set([...claimedUserIds, ...lbUserIds, ...actUserIds])];
+  const allUserIds = [...new Set([...claimedUserIds, ...lbUserIds, ...actUserIds, ...(user?.id ? [user.id] : [])])];
   const allGroupIds = [...new Set([...claimedGroupIds, ...lbGroupIds, ...actGroupIds, ...userGroupIds])];
 
   const [{ data: profilesData }, { data: groupsData }] = await Promise.all([
@@ -152,6 +170,7 @@ export default async function CampaignPage({ params }: Props) {
     const group = c.group_id ? groupsById.get(c.group_id) : null;
     return {
       id: c.id,
+      user_id: c.user_id,
       actorName: profile ? (profile.display_name ?? profile.username) : "Unknown",
       actorUsername: profile?.username ?? null,
       groupName: group?.name ?? null,
@@ -161,6 +180,10 @@ export default async function CampaignPage({ params }: Props) {
       submitted_at: c.submitted_at,
     };
   });
+
+  const currentUserProfile = user?.id ? profilesById.get(user.id) : null;
+  const userDisplayName = currentUserProfile ? (currentUserProfile.display_name ?? currentUserProfile.username) : null;
+  const userUsername = currentUserProfile?.username ?? null;
 
   const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type] ?? {
     icon: "🏁",
@@ -232,7 +255,7 @@ export default async function CampaignPage({ params }: Props) {
           </>
         )}
         {events.length > 0 && (
-          <CampaignStat label="Boss events" value={events.length} highlight />
+          <CampaignStat label="Hotspots" value={events.length} highlight />
         )}
       </div>
 
@@ -263,10 +286,14 @@ export default async function CampaignPage({ params }: Props) {
           activeEvents={events}
           claimLabels={claimLabels}
           userId={user?.id ?? null}
+          userDisplayName={userDisplayName}
+          userUsername={userUsername}
           userGroups={userGroups}
           leaderboard={leaderboard}
           activity={activity}
           unit={unit}
+          problemReports={problemReports}
+          eventCentroids={eventCentroids}
         />
       </div>
     </div>

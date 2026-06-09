@@ -698,7 +698,7 @@ function ReportModal({
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">📍</span>
           <p className="text-zinc-100 font-semibold text-center">
-            Report submitted! If enough reports come in, a Boss Event will spawn.
+            Report submitted! If enough reports come in, a Hotspot will spawn.
           </p>
           <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">
             Close

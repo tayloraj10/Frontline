@@ -10,6 +10,28 @@ from app.db.database import get_db
 router = APIRouter(prefix="/events", tags=["events"])
 
 
+@router.get("/campaign/{campaign_id}/centroids")
+async def get_event_geo_centroids(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Return centroid lat/lng for each active event's geo_unit. Used by the map to place markers regardless of viewport."""
+    result = await db.execute(
+        text("""
+            SELECT DISTINCT ce.geo_unit_id,
+                   ST_Y(ST_Centroid(gu.geometry::geometry)) AS centroid_lat,
+                   ST_X(ST_Centroid(gu.geometry::geometry)) AS centroid_lng
+            FROM campaign_events ce
+            JOIN geo_units gu ON gu.id = ce.geo_unit_id
+            WHERE ce.campaign_id = :campaign_id
+              AND ce.status = 'active'
+              AND ce.geo_unit_id IS NOT NULL
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    return [
+        {"geo_unit_id": str(r.geo_unit_id), "lat": r.centroid_lat, "lng": r.centroid_lng}
+        for r in result.fetchall()
+    ]
+
+
 @router.post("/check-triggers/{campaign_id}")
 async def check_event_triggers(
     campaign_id: UUID,
@@ -188,7 +210,7 @@ async def _check_report_count_trigger(campaign_id: UUID, trigger, db: AsyncSessi
     )
 
     for row in result.fetchall():
-        # Check cooldown — don't spawn duplicate active boss events
+        # Check cooldown — don't spawn duplicate active hotspots
         existing = await db.execute(
             text("""
                 SELECT id FROM campaign_events

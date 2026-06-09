@@ -52,7 +52,8 @@ async def get_h3_bloom_tile(
                         WHEN COALESCE(tc.total_value, 0) >= 600  THEN 4
                         WHEN COALESCE(tc.total_value, 0) >= 200  THEN 3
                         WHEN COALESCE(tc.total_value, 0) >= 50   THEN 2
-                        ELSE 1
+                        WHEN tc.total_value IS NOT NULL           THEN 1
+                        ELSE 0
                     END                                        AS bloom_stage,
                     gu.seed_source,
                     ST_AsMVTGeom(

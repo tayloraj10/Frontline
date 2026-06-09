@@ -10,6 +10,22 @@ type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
+export interface ProblemReportMapData {
+  id: string;
+  geo_unit_id: string | null;
+  severity: string;
+  reported_at: string;
+  photo_url: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+export interface ProblemReports {
+  reports: ProblemReportMapData[];
+  counts_by_geo_unit: Record<string, number>;
+  threshold: number | null;
+}
+
 interface Coords {
   latitude: number;
   longitude: number;
@@ -25,6 +41,7 @@ export interface LeaderboardEntry {
 
 export interface ActivityItem {
   id: string;
+  user_id: string | null;
   actorName: string;
   actorUsername: string | null;
   groupName: string | null;
@@ -40,10 +57,14 @@ interface Props {
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
   userId: string | null;
+  userDisplayName: string | null;
+  userUsername: string | null;
   userGroups: { id: string; name: string; logo_url?: string | null }[];
   leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
   activity: ActivityItem[];
   unit: string;
+  problemReports?: ProblemReports | null;
+  eventCentroids?: Record<string, { lat: number; lng: number }>;
 }
 
 interface NewContribution {
@@ -159,9 +180,9 @@ function displayUnit(value: number, unit: string): string {
   return `${n.toLocaleString()} ${unit.endsWith("s") ? unit : unit + "s"}`;
 }
 
-function ActivityPanel({ items, unit }: { items: ActivityItem[]; unit: string }) {
+function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { items: ActivityItem[]; unit: string; emptyMessage?: string }) {
   if (items.length === 0) {
-    return <div className="px-4 py-10 text-center text-zinc-600 text-xs">No activity yet.</div>;
+    return <div className="px-4 py-10 text-center text-zinc-600 text-xs">{emptyMessage}</div>;
   }
   return (
     <ul className="divide-y divide-zinc-800/50">
@@ -221,10 +242,14 @@ export default function CampaignPageClient({
   activeEvents,
   claimLabels,
   userId,
+  userDisplayName,
+  userUsername,
   userGroups,
   leaderboard,
   activity,
   unit,
+  problemReports,
+  eventCentroids,
 }: Props) {
   const [pinPickerActive, setPinPickerActive] = useState(false);
   const [pinPickerInitialCoords, setPinPickerInitialCoords] = useState<Coords | null>(null);
@@ -233,11 +258,29 @@ export default function CampaignPageClient({
   const [newContribution, setNewContribution] = useState<NewContribution | null>(null);
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [activeMapStyle, setActiveMapStyle] = useState("outdoor");
-  const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | null>(null);
+  const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | null>(null);
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
 
   const handleContributionSubmitted = (lat: number | null, lng: number | null, value: number, photoUrl?: string) => {
-    if (lat === null || lng === null) return; // no-location contributions don't update the map
-    setNewContribution({ lat, lng, value, photoUrl, key: Date.now() });
+    if (lat !== null && lng !== null) {
+      setNewContribution({ lat, lng, value, photoUrl, key: Date.now() });
+    }
+    if (userId) {
+      setActivityItems((prev) => [
+        {
+          id: `optimistic-${Date.now()}`,
+          user_id: userId,
+          actorName: userDisplayName ?? "You",
+          actorUsername: userUsername,
+          groupName: null,
+          groupSlug: null,
+          value,
+          notes: null,
+          submitted_at: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+    }
   };
 
   const handleEnterPinPicker = (coords: Coords, constrained = true) => {
@@ -259,7 +302,7 @@ export default function CampaignPageClient({
     setUserLocation(null);
   };
 
-  const togglePanel = (panel: "leaderboard" | "activity") => {
+  const togglePanel = (panel: "leaderboard" | "activity" | "mine") => {
     setOpenPanel((p) => (p === panel ? null : panel));
   };
 
@@ -290,6 +333,8 @@ export default function CampaignPageClient({
         newContribution={newContribution}
         userLocation={userLocation}
         activeStyle={activeMapStyle}
+        problemReports={problemReports}
+        eventCentroids={eventCentroids}
       />
 
       {/* Side panel */}
@@ -317,6 +362,18 @@ export default function CampaignPageClient({
             >
               Activity
             </button>
+            {userId && (
+              <button
+                onClick={() => setOpenPanel("mine")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors ${
+                  openPanel === "mine"
+                    ? "text-emerald-300 border-b-2 border-emerald-400"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Mine
+              </button>
+            )}
             <button
               onClick={() => setOpenPanel(null)}
               aria-label="Close panel"
@@ -330,7 +387,20 @@ export default function CampaignPageClient({
               <LeaderboardPanel users={leaderboard.users} groups={leaderboard.groups} unit={unit} campaignType={campaign.campaign_type ?? ""} />
             )}
             {openPanel === "activity" && (
-              <ActivityPanel items={activity} unit={unit} />
+              <ActivityPanel items={activityItems} unit={unit} />
+            )}
+            {openPanel === "mine" && (
+              <>
+                {userUsername && (
+                  <div className="px-4 pt-3 pb-1 flex items-center justify-between border-b border-zinc-800/60">
+                    <span className="text-xs text-zinc-500">Your submissions</span>
+                    <Link href={`/users/${userUsername}`} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+                      Manage on profile →
+                    </Link>
+                  </div>
+                )}
+                <ActivityPanel items={activityItems.filter((a) => a.user_id === userId)} unit={unit} emptyMessage="You haven't contributed yet." />
+              </>
             )}
           </div>
         </div>
@@ -351,32 +421,53 @@ export default function CampaignPageClient({
           >
             Activity
           </button>
+          {userId && (
+            <button
+              onClick={() => setOpenPanel("mine")}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-emerald-700/50 text-emerald-400 hover:text-emerald-200 hover:bg-zinc-800"
+            >
+              Mine
+            </button>
+          )}
         </div>
       )}
 
       {isHexBloom && !pinPickerActive && (
-        <div className="absolute top-28 sm:top-16 left-4 z-10 w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm pointer-events-none">
-          <div className="flex items-baseline justify-between mb-1">
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">World Bloom</span>
-            <span className="text-[10px] text-emerald-400/80 tabular-nums font-mono">
-              {bloomTotal.toLocaleString()} pts
-            </span>
-          </div>
-          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-1">
+        <div className="absolute top-14 sm:top-4 left-4 z-10 flex flex-col gap-2">
+          {activeEvents.map((event) => (
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-700 to-emerald-400 transition-all duration-700"
-              style={{ width: `${bloomProgressPct}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-emerald-400/60 font-medium">
-              {nextMilestone ? nextMilestone.label : "Max reached!"}
-            </span>
-            {nextMilestone && (
-              <span className="text-[10px] text-zinc-600 tabular-nums font-mono">
-                {(nextMilestone.threshold - bloomTotal).toLocaleString()} to go
+              key={event.id}
+              className="w-56 px-3 py-2 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm"
+            >
+              <p className="text-emerald-300 text-xs font-semibold">{event.title}</p>
+              {event.description && (
+                <p className="text-emerald-500 text-xs mt-0.5">{event.description}</p>
+              )}
+            </div>
+          ))}
+          <div className="w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm pointer-events-none">
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">World Bloom</span>
+              <span className="text-[10px] text-emerald-400/80 tabular-nums font-mono">
+                {bloomTotal.toLocaleString()} pts
               </span>
-            )}
+            </div>
+            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-1">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-700 to-emerald-400 transition-all duration-700"
+                style={{ width: `${bloomProgressPct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-emerald-400/60 font-medium">
+                {nextMilestone ? nextMilestone.label : "Max reached!"}
+              </span>
+              {nextMilestone && (
+                <span className="text-[10px] text-zinc-600 tabular-nums font-mono">
+                  {(nextMilestone.threshold - bloomTotal).toLocaleString()} to go
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}

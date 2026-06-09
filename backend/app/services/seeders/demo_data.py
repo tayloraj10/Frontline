@@ -758,6 +758,23 @@ class DemoDataSeeder(Seeder):
             except Exception as exc:
                 result.errors.append(f"event {ev['id']}: {exc}")
 
+        # Seed report_count event_trigger so hotspot threshold shows in territory panel
+        try:
+            await db.execute(
+                text("""
+                    INSERT INTO event_triggers
+                        (id, campaign_id, name, condition_type, condition_config,
+                         event_type, effect_config, is_active)
+                    VALUES
+                        (:id, :cid, 'Trash Hotspot Trigger', 'report_count',
+                         '{"threshold": 5}'::jsonb, 'boss_spawn', '{}'::jsonb, TRUE)
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {"id": _uid("trigger_trash_report_count"), "cid": TRASH_WAR_ID},
+            )
+        except Exception as exc:
+            result.errors.append(f"event_trigger trash: {exc}")
+
         await db.commit()
         return result
 

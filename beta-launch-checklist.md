@@ -35,7 +35,7 @@ Five topics to work through before pushing the app live.
 - [x] Frontend status banner on campaign page when status is `paused` or `completed` — not needed; only active campaigns surface in the listing
 - [x] Boss spawn score multiplier — active `score_multiplier` campaign events are fetched and applied to `effective_value` in `submit_contribution`
 - [x] `time_elapsed` condition type — `_check_time_elapsed_trigger` handler implemented in `events.py`
-- [ ] Verify end-to-end: trash report → `problem_reports` insert → report count threshold → boss event spawn → map marker
+- [ ] Verify end-to-end: trash report → `problem_reports` insert → report count threshold → hotspot spawn → map marker (orange dots for reports, 🔥 marker for hotspot, progress bar in ZIP panel)
 
 ### Solarpunk
 - [x] Solar panel aesthetic for Stage 0 hexes (dark fill + internal grid line overlay)
@@ -48,6 +48,21 @@ Five topics to work through before pushing the app live.
 - [x] Terms of Service page (`/legal/terms`)
 - [x] Privacy Policy page (`/legal/privacy`)
 - [x] Link both in signup flow (footer or checkbox acknowledgment)
+
+### Smoke Tests (manual QA before launch)
+- [ ] Sign up with email → receive confirmation email → confirm → log in
+- [ ] Forgot password → reset via email link → set new password → log in
+- [ ] Google OAuth sign-in
+- [ ] Profile edit — avatar upload, bio, display name
+- [ ] Group edit (as admin) — logo upload, description change
+- [ ] Remove a group member
+- [ ] Account settings — email change, password change
+- [ ] Delete account from settings (use a test account)
+- [ ] Submit a trash report → orange dot appears on map
+- [ ] Click a ZIP on the Trash War map → TerritoryPanel opens with report count / hotspot progress
+- [ ] Trash War E2E — submit enough reports to hit threshold → hotspot 🔥 marker appears on map
+- [ ] Submit a cleanup contribution → green dot animates on map, territory updates
+- [ ] Solarpunk hex bloom — submit a hex action → GSAP pulse plays
 
 ---
 

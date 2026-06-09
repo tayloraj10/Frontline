@@ -66,6 +66,56 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
     return {"geo_unit_id": geo_unit_id, "status": "submitted"}
 
 
+@router.get("/campaign/{campaign_id}")
+async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Return open problem reports with extracted lat/lng, per-geo-unit counts, and the hotspot threshold."""
+    rows_result = await db.execute(
+        text("""
+            SELECT id, geo_unit_id, severity, reported_at, photo_url,
+                   ST_Y(location::geometry) AS latitude,
+                   ST_X(location::geometry) AS longitude
+            FROM problem_reports
+            WHERE campaign_id = :campaign_id AND status = 'open'
+            ORDER BY reported_at DESC
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    rows = rows_result.fetchall()
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        if row.geo_unit_id:
+            counts[str(row.geo_unit_id)] = counts.get(str(row.geo_unit_id), 0) + 1
+
+    trigger_result = await db.execute(
+        text("""
+            SELECT condition_config FROM event_triggers
+            WHERE campaign_id = :campaign_id AND condition_type = 'report_count' AND is_active = TRUE
+            LIMIT 1
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    trigger_row = trigger_result.fetchone()
+    threshold = (trigger_row.condition_config or {}).get("threshold", 5) if trigger_row else None
+
+    return {
+        "reports": [
+            {
+                "id": str(row.id),
+                "geo_unit_id": str(row.geo_unit_id) if row.geo_unit_id else None,
+                "severity": row.severity,
+                "reported_at": str(row.reported_at),
+                "photo_url": row.photo_url,
+                "latitude": row.latitude,
+                "longitude": row.longitude,
+            }
+            for row in rows
+        ],
+        "counts_by_geo_unit": counts,
+        "threshold": threshold,
+    }
+
+
 async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncSession):
     count_result = await db.execute(
         text("""
@@ -115,7 +165,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
                 "trigger_id": str(trigger.id),
                 "geo_unit_id": geo_unit_id,
                 "event_type": trigger.event_type,
-                "title": "Trash Boss Event — Surge Needed!",
+                "title": "Trash Hotspot — Surge Needed!",
                 "description": "Reports have reached critical mass. Clean it up in 72 hours for bonus XP!",
                 "effect_config": trigger.effect_config,
             },

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { Database } from "@/types/database";
+import type { ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -22,6 +23,8 @@ interface Props {
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: string;
+  problemReports?: ProblemReports | null;
+  eventCentroids?: Record<string, { lat: number; lng: number }>;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {
@@ -29,11 +32,13 @@ const CampaignMap = dynamic(() => import("./CampaignMap"), {
   loading: () => <div className="absolute inset-0 bg-zinc-900 animate-pulse" />,
 });
 
-export default function CampaignMapWrapper({ activeStyle, ...rest }: Props) {
+export default function CampaignMapWrapper({ activeStyle, problemReports, eventCentroids, ...rest }: Props) {
   return (
     <CampaignMap
       {...rest}
       activeStyle={activeStyle as "outdoor" | "streets" | "hybrid" | undefined}
+      problemReports={problemReports}
+      eventCentroids={eventCentroids}
     />
   );
 }

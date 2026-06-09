@@ -91,7 +91,7 @@ function TypeBadge({ type }: { type: string }) {
 
 const CONDITION_TEMPLATES: Record<string, object> = {
   threshold_reached: { threshold: 1000, metric: "total_value", title: "Milestone Reached!", description: "A campaign milestone has been hit. Keep the momentum going!" },
-  report_count: { threshold: 5, title: "Boss Event!", description: "Reports have reached critical mass. Respond now!", duration_hours: 72 },
+  report_count: { threshold: 5, title: "Hotspot!", description: "Reports have reached critical mass. Respond now!", duration_hours: 72 },
   time_elapsed: { hours: 168, title: "Weekly Check-in", description: "Time-based event triggered." },
 };
 
@@ -104,7 +104,7 @@ const EFFECT_TEMPLATES: Record<string, object> = {
 };
 
 const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = {
-  boss_spawn:     { desc: "Spawns a boss battle in a geo unit when problem reports hit a threshold. Contributions in the affected area earn a score multiplier during the event. Trigger logic is live; score multiplier effect is stored but not yet applied by the scoring engine.", implemented: true },
+  boss_spawn:     { desc: "Spawns a hotspot in a geo unit when problem reports hit a threshold. Contributions in the affected area earn a score multiplier during the event. Trigger logic is live; score multiplier effect is stored but not yet applied by the scoring engine.", implemented: true },
   cascade_unlock: { desc: "Intended to unlock new zones or content when a contribution milestone is reached. The event record is created but no unlock handler exists yet.", implemented: false },
   notification:   { desc: "Meant to broadcast a message to campaign participants when a trigger fires. The event record is created but no message is dispatched anywhere yet.", implemented: false },
   seasonal_reset: { desc: "Signals a campaign-wide or weighted score reset. The event record is created but no reset logic is implemented yet.", implemented: false },
@@ -513,7 +513,7 @@ function TriggersTab({ campaigns, triggers, setTriggers }: {
 // ─── Events Tab ───────────────────────────────────────────────────────────────
 
 const EVENT_ICON: Record<string, string> = {
-  boss_spawn: "👹",
+  boss_spawn: "🔥",
   cascade_unlock: "🔓",
   notification: "🔔",
   seasonal_reset: "🔄",

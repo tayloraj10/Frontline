@@ -71,7 +71,7 @@ async def submit_contribution(
 
     if has_location:
         if campaign_geo_unit == "h3_hex":
-            h3_index = h3.latlng_to_cell(payload.latitude, payload.longitude, 5)
+            h3_index = h3.latlng_to_cell(payload.latitude, payload.longitude, 3)
 
             geo_result = await db.execute(
                 text("SELECT id::text FROM geo_units WHERE unit_type = 'h3_hex' AND unit_id = :h3_index"),
@@ -360,7 +360,7 @@ async def get_geo_unit_at_point(
     campaign_geo_unit = camp_row[0] if camp_row else "zip"
 
     if campaign_geo_unit == "h3_hex":
-        h3_index = h3.latlng_to_cell(lat, lng, 5)
+        h3_index = h3.latlng_to_cell(lat, lng, 3)
         result = await db.execute(
             text("SELECT id::text FROM geo_units WHERE unit_type = 'h3_hex' AND unit_id = :h3_index"),
             {"h3_index": h3_index},
@@ -382,6 +382,79 @@ async def get_geo_unit_at_point(
     if not row:
         return {"geo_unit_id": None, "display_name": None}
     return {"geo_unit_id": row[0], "display_name": row[1]}
+
+
+@router.delete("/{contribution_id}")
+async def delete_contribution(contribution_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Delete a user's own contribution and recalculate territory scores from remaining contributions."""
+    result = await db.execute(
+        text("SELECT campaign_id, geo_unit_id, user_id FROM contributions WHERE id = :id"),
+        {"id": str(contribution_id)},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Contribution not found")
+
+    campaign_id, geo_unit_id, owner_id = row
+
+    if str(owner_id) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    await db.execute(
+        text("DELETE FROM contributions WHERE id = :id"),
+        {"id": str(contribution_id)},
+    )
+
+    total: float | None = None
+    if geo_unit_id:
+        new_total = await db.execute(
+            text("""
+                SELECT COALESCE(SUM(value), 0)
+                FROM contributions
+                WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+            """),
+            {"campaign_id": str(campaign_id), "geo_unit_id": str(geo_unit_id)},
+        )
+        total = float(new_total.scalar())
+
+        if total == 0:
+            await db.execute(
+                text("""
+                    DELETE FROM territory_claims
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                """),
+                {"campaign_id": str(campaign_id), "geo_unit_id": str(geo_unit_id)},
+            )
+        else:
+            await db.execute(
+                text("""
+                    WITH top_group AS (
+                        SELECT group_id FROM contributions
+                        WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                          AND group_id IS NOT NULL
+                        GROUP BY group_id ORDER BY SUM(value) DESC LIMIT 1
+                    ),
+                    top_user AS (
+                        SELECT user_id FROM contributions
+                        WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                        GROUP BY user_id ORDER BY SUM(value) DESC LIMIT 1
+                    )
+                    UPDATE territory_claims SET
+                        total_value = :total,
+                        claimed_by_group = (SELECT group_id FROM top_group),
+                        claimed_by_user  = (SELECT user_id  FROM top_user),
+                        updated_at = NOW()
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                """),
+                {
+                    "campaign_id": str(campaign_id),
+                    "geo_unit_id": str(geo_unit_id),
+                    "total": total,
+                },
+            )
+
+    await db.commit()
+    return {"deleted": True, "new_bloom_score": total}
 
 
 @router.post("/process")

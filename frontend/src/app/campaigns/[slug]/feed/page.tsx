@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CampaignTabNav from "../CampaignTabNav";
+import FeedActivityList from "@/components/contributions/FeedActivityList";
 import type { Database } from "@/types/database";
 
 type Contribution = Database["public"]["Tables"]["contributions"]["Row"];
@@ -15,18 +16,6 @@ interface Props {
   searchParams: Promise<{ page?: string }>;
 }
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
 export default async function ActivityFeedPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { page: pageStr } = await searchParams;
@@ -35,11 +24,10 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
   const supabase = await createClient();
 
-  const { data: campaignData } = await supabase
-    .from("campaigns")
-    .select("id, title, description, campaign_type")
-    .eq("slug", slug)
-    .single();
+  const [{ data: campaignData }, { data: { user: currentUser } }] = await Promise.all([
+    supabase.from("campaigns").select("id, title, description, campaign_type").eq("slug", slug).single(),
+    supabase.auth.getUser(),
+  ]);
 
   if (!campaignData) notFound();
 
@@ -65,9 +53,6 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
       ? supabase.from("groups").select("id, name, slug").in("id", groupIds)
       : Promise.resolve({ data: [] as Group[] }),
   ]);
-
-  const profilesById = new Map((profilesData ?? []).map((p) => [p.id, p]));
-  const groupsById = new Map((groupsData ?? []).map((g) => [g.id, g]));
 
   const unit = campaignData.campaign_type === "territory" ? "bags" : "pts";
 
@@ -97,55 +82,13 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
               </span>
             </div>
 
-            {contribs.length === 0 ? (
-              <div className="px-5 py-10 text-center text-zinc-600 text-sm">No activity yet.</div>
-            ) : (
-              <ul className="divide-y divide-zinc-800/50">
-                {contribs.map((c) => {
-                  const profile = c.user_id ? profilesById.get(c.user_id) : null;
-                  const group = c.group_id ? groupsById.get(c.group_id) : null;
-                  const actorName = profile?.display_name ?? profile?.username ?? "Unknown";
-                  return (
-                    <li key={c.id} className="px-5 py-3 flex items-start gap-3">
-                      <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0 mt-0.5">
-                        {actorName[0].toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline gap-1.5 flex-wrap">
-                          <Link
-                            href={`/users/${profile?.username ?? ""}`}
-                            className="text-sm font-semibold text-zinc-200 hover:text-zinc-100 transition-colors"
-                          >
-                            {actorName}
-                          </Link>
-                          {group && (
-                            <>
-                              <span className="text-xs text-zinc-600">via</span>
-                              <Link
-                                href={`/groups/${group.slug}`}
-                                className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
-                              >
-                                {group.name}
-                              </Link>
-                            </>
-                          )}
-                          <span className="text-xs text-zinc-500">logged</span>
-                          <span className="text-xs font-semibold text-zinc-300 tabular-nums">
-                            {c.value ?? 1} {unit}
-                          </span>
-                        </div>
-                        {c.notes && (
-                          <p className="mt-0.5 text-xs text-zinc-500 line-clamp-2">{c.notes}</p>
-                        )}
-                      </div>
-                      <span className="text-xs text-zinc-600 shrink-0 mt-0.5">
-                        {timeAgo(c.submitted_at)}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <FeedActivityList
+              initialContribs={contribs as { id: string; user_id: string | null; group_id: string | null; value: number | null; contribution_type: string; notes: string | null; submitted_at: string }[]}
+              profiles={profilesData ?? []}
+              groups={groupsData ?? []}
+              unit={unit}
+              currentUserId={currentUser?.id ?? null}
+            />
           </div>
 
           {totalPages > 1 && (

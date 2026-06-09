@@ -2,6 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
+import UserActivityList from "@/components/contributions/UserActivityList";
+
+const CAMPAIGN_UNIT: Record<string, string> = {
+  territory: "bags",
+  choropleth: "registrations",
+  heatmap: "unfollows",
+  hex_bloom: "pts",
+};
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type Group = Pick<Database["public"]["Tables"]["groups"]["Row"], "id" | "name" | "slug">;
@@ -10,31 +18,6 @@ interface Props {
   params: Promise<{ username: string }>;
 }
 
-const CONTRIBUTION_ICON: Record<string, string> = {
-  cleanup: "🗑️",
-  photo: "📷",
-  registration: "🗳️",
-  advocacy: "✊",
-};
-
-const CONTRIBUTION_UNIT: Record<string, string> = {
-  cleanup: "bags",
-  photo: "photo",
-  registration: "registration",
-  advocacy: "action",
-};
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", year: "numeric" });
-}
 
 export default async function UserProfilePage({ params }: Props) {
   const { username } = await params;
@@ -184,7 +167,7 @@ export default async function UserProfilePage({ params }: Props) {
             {campaignEntries.map(([campaignId, stats]) => {
               const campaign = campaignsById.get(campaignId);
               if (!campaign) return null;
-              const unit = CONTRIBUTION_UNIT[campaign.campaign_type] ?? "pts";
+              const unit = CAMPAIGN_UNIT[campaign.campaign_type] ?? "pts";
               return (
                 <li key={campaignId} className="px-5 py-3 flex items-center gap-3">
                   <Link
@@ -237,48 +220,12 @@ export default async function UserProfilePage({ params }: Props) {
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Recent activity</span>
         </div>
-        {contribs.length === 0 ? (
-          <div className="px-5 py-8 text-center text-zinc-600 text-sm">No contributions yet.</div>
-        ) : (
-          <ul className="divide-y divide-zinc-800/60">
-            {contribs.map((c) => {
-              const campaign = c.campaign_id ? campaignsById.get(c.campaign_id) : null;
-              const icon = CONTRIBUTION_ICON[c.contribution_type] ?? "📌";
-              const unit = CONTRIBUTION_UNIT[c.contribution_type] ?? "pts";
-              return (
-                <li key={c.id} className="px-5 py-3 flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs shrink-0 mt-0.5">
-                    {icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                      <span className="text-sm font-semibold text-zinc-300 tabular-nums">
-                        {c.value ?? 1} {unit}
-                      </span>
-                      {campaign && (
-                        <>
-                          <span className="text-xs text-zinc-600">in</span>
-                          <Link
-                            href={`/campaigns/${campaign.slug}`}
-                            className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-                          >
-                            {campaign.title}
-                          </Link>
-                        </>
-                      )}
-                    </div>
-                    {c.notes && (
-                      <p className="mt-0.5 text-xs text-zinc-600 line-clamp-1">{c.notes}</p>
-                    )}
-                  </div>
-                  <span className="text-xs text-zinc-600 shrink-0 mt-0.5">
-                    {timeAgo(c.submitted_at)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <UserActivityList
+          initialContribs={contribs as { id: string; campaign_id: string | null; value: number | null; contribution_type: string; notes: string | null; submitted_at: string }[]}
+          campaigns={campaignsData ?? []}
+          isOwn={isOwn}
+          userId={currentUser?.id ?? null}
+        />
       </div>
     </main>
   );

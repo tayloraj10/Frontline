@@ -8,6 +8,7 @@ import { cellToBoundary } from "h3-js";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import type { ClaimLabel } from "./CampaignMapWrapper";
+import type { ProblemReports, ProblemReportMapData } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { Feature, Point } from "geojson";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -38,14 +39,14 @@ interface HexBloomEntry {
 }
 
 const BLOOM_STAGE_LABELS = [
-  "",             // index 0 unused
-  "Dormant",      // stage 1 — 0–49 pts
+  "Untouched",    // stage 0 — no contributions
+  "Dormant",      // stage 1 — 1–49 pts
   "Germinating",  // stage 2 — 50–199 pts
   "Growing",      // stage 3 — 200–599 pts
   "Thriving",     // stage 4 — 600–1499 pts
   "Flourishing",  // stage 5 — 1500+ pts
 ];
-const BLOOM_STAGE_COLORS = ["#1a2035", "#1a2035", "#1f3a18", "#2d5c24", "#3d7a2e", "#5ca84a"];
+const BLOOM_STAGE_COLORS = ["#3d4a5c", "#2a3d50", "#1f3a18", "#2d5c24", "#3d7a2e", "#5ca84a"];
 const BLOOM_THRESHOLDS = [null, 0, 50, 200, 600, 1500];
 
 function hexEntryToFeature(entry: HexBloomEntry): GeoJSON.Feature<GeoJSON.Polygon> {
@@ -79,6 +80,8 @@ interface Props {
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
+  problemReports?: ProblemReports | null;
+  eventCentroids?: Record<string, { lat: number; lng: number }>;
 }
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
@@ -294,13 +297,21 @@ function TerritoryPanel({
   displayName,
   claim,
   claimLabel,
+  reportCount,
+  reportThreshold,
+  reportPhotos,
   onClose,
+  onPhotoSelect,
 }: {
   geoUnitId: string;
   displayName: string;
   claim: TerritoryClaim | null;
   claimLabel: ClaimLabel | null;
+  reportCount: number;
+  reportThreshold: number | null;
+  reportPhotos: string[];
   onClose: () => void;
+  onPhotoSelect: (url: string) => void;
 }) {
   const [contribs, setContribs] = useState<ContribRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -431,6 +442,46 @@ function TerritoryPanel({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Hotspot progress */}
+      {reportThreshold !== null && (
+        <div className="px-4 py-3 border-t border-zinc-800">
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Hotspot Status</p>
+          {reportCount === 0 ? (
+            <p className="text-xs text-zinc-500">No reports yet</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-orange-400">⚠️ {reportCount} open report{reportCount !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-zinc-600 tabular-nums">{reportCount} / {reportThreshold}</span>
+              </div>
+              <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500 bg-orange-500"
+                  style={{ width: `${Math.min((reportCount / reportThreshold) * 100, 100)}%` }}
+                />
+              </div>
+              {reportCount >= reportThreshold && (
+                <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached — hotspot active!</p>
+              )}
+              {reportPhotos.length > 0 && (
+                <div className="mt-2 flex gap-1.5 flex-wrap">
+                  {reportPhotos.slice(0, 4).map((url, i) => (
+                    <button
+                      key={i}
+                      onClick={() => onPhotoSelect(url)}
+                      className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 transition-colors"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="Report photo" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -702,6 +753,8 @@ export default function CampaignMap({
   newContribution,
   userLocation,
   activeStyle = "outdoor",
+  problemReports,
+  eventCentroids,
 }: Props) {
   const isCollage = campaignType === "collage";
   const isChoropleth = campaignType === "choropleth";
@@ -718,14 +771,19 @@ export default function CampaignMap({
   const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
   const claimLabelsRef = useRef(claimLabels);
+  const problemReportsRef = useRef(problemReports);
+  const eventCentroidsRef = useRef(eventCentroids ?? {});
   const contributionFeaturesRef = useRef<Feature<Point>[]>([]);
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const eventTweensRef = useRef<gsap.core.Tween[]>([]);
+  const reportMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -740,6 +798,9 @@ export default function CampaignMap({
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
   useEffect(() => { claimLabelsRef.current = claimLabels; }, [claimLabels]);
+  useEffect(() => { problemReportsRef.current = problemReports; }, [problemReports]);
+  useEffect(() => { eventCentroidsRef.current = eventCentroids ?? {}; }, [eventCentroids]);
+  useEffect(() => { setSelectedZipRef.current = setSelectedZip; }, [setSelectedZip]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
 
@@ -754,40 +815,76 @@ export default function CampaignMap({
     for (const event of events) {
       if (!event.geo_unit_id) continue;
 
-      const features = map.current.querySourceFeatures("territory", {
-        sourceLayer: "territories",
-        filter: ["==", ["id"], event.geo_unit_id],
-      });
-      if (!features.length) continue;
+      // Prefer server-supplied centroid; fall back to computing from viewport features.
+      let lat: number;
+      let lng: number;
+      const centroid = eventCentroidsRef.current[event.geo_unit_id];
+      if (centroid) {
+        lat = centroid.lat;
+        lng = centroid.lng;
+      } else {
+        const features = map.current.querySourceFeatures("territory", {
+          sourceLayer: "territories",
+          filter: ["==", ["id"], event.geo_unit_id],
+        });
+        if (!features.length) continue;
+        const geom = features[0].geometry;
+        if (geom.type !== "Polygon" && geom.type !== "MultiPolygon") continue;
+        const ring = geom.type === "Polygon" ? geom.coordinates[0] : geom.coordinates[0][0];
+        lng = ring.reduce((s, c) => s + c[0], 0) / ring.length;
+        lat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
+      }
 
-      const geom = features[0].geometry;
-      if (geom.type !== "Polygon" && geom.type !== "MultiPolygon") continue;
+      const isHotspot = event.event_type === "boss_spawn";
 
-      const ring =
-        geom.type === "Polygon" ? geom.coordinates[0] : geom.coordinates[0][0];
-      const lng = ring.reduce((s, c) => s + c[0], 0) / ring.length;
-      const lat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
-
-      const isBoss = event.event_type === "boss_spawn";
-
+      // MapLibre sets `transform` on the provided element for geo-positioning.
+      // Animating `el` directly with GSAP would overwrite that transform and break placement.
+      // Instead, `el` is a transparent hit-area; GSAP animates the inner `innerEl`.
       const el = document.createElement("div");
-      el.style.cssText = isBoss
-        ? "display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;background:radial-gradient(circle,rgba(153,27,27,0.97) 0%,rgba(127,29,29,0.97) 100%);border:2px solid #ef4444;font-size:26px;box-shadow:0 0 0 4px rgba(239,68,68,0.18),0 0 22px rgba(239,68,68,0.45),0 4px 14px rgba(0,0,0,0.85);cursor:pointer;transform-origin:center"
-        : "display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(120,27,27,0.92);border:1.5px solid #f87171;font-size:17px;box-shadow:0 0 10px rgba(239,68,68,0.3),0 2px 8px rgba(0,0,0,0.65);cursor:pointer;transform-origin:center";
-      el.textContent = isBoss ? "🗑️" : "⚡";
-      el.title = event.title;
+      el.style.cssText = isHotspot
+        ? "width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer"
+        : "width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer";
+
+      const innerEl = document.createElement("div");
+      innerEl.style.cssText = isHotspot
+        ? "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.92);border:1.5px solid #ef4444;font-size:17px;box-shadow:0 0 8px rgba(239,68,68,0.3),0 2px 6px rgba(0,0,0,0.6);transform-origin:center"
+        : "display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(120,27,27,0.88);border:1px solid #f87171;font-size:12px;box-shadow:0 0 5px rgba(239,68,68,0.2),0 2px 4px rgba(0,0,0,0.5);transform-origin:center";
+      innerEl.textContent = isHotspot ? "🔥" : "⚡";
+      innerEl.title = event.title;
+      el.appendChild(innerEl);
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([lng, lat])
         .addTo(map.current!);
 
+      el.onclick = () => {
+        map.current?.flyTo({ center: [lng, lat], zoom: 13, duration: 800 });
+      };
+
       eventMarkersRef.current.push(marker);
 
-      const entranceTween = gsap.from(el, { scale: 0, duration: 0.55, ease: "back.out(1.7)" });
-      const pulseTween = isBoss
-        ? gsap.to(el, { scale: 1.25, duration: 0.85, repeat: -1, yoyo: true, ease: "power1.inOut", delay: 0.55 })
-        : gsap.to(el, { scale: 1.1, duration: 1.2, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.55 });
+      const entranceTween = gsap.from(innerEl, { scale: 0, duration: 0.4, ease: "back.out(1.4)" });
+      const pulseTween = gsap.to(innerEl, { scale: 1.08, duration: 1.6, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.4 });
       eventTweensRef.current.push(entranceTween, pulseTween);
+    }
+  }, []);
+
+  const updateReportMarkers = useCallback((reports: ProblemReportMapData[]) => {
+    if (!map.current) return;
+
+    reportMarkersRef.current.forEach((m) => m.remove());
+    reportMarkersRef.current = [];
+
+    for (const report of reports) {
+      const el = document.createElement("div");
+      el.style.cssText = "width:10px;height:10px;border-radius:50%;background:#f97316;border:1.5px solid #ea580c;opacity:0.9;pointer-events:none;flex-shrink:0";
+      el.title = `${report.severity} report`;
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([report.longitude, report.latitude])
+        .addTo(map.current!);
+
+      reportMarkersRef.current.push(marker);
     }
   }, []);
 
@@ -919,7 +1016,20 @@ export default function CampaignMap({
         maxzoom: 10,
       });
 
-      // Dormant hexes (stage 1): repeating solar panel grid
+      // Untouched hexes (stage 0): faint fill — no contributions yet
+      m.addLayer({
+        id: "hex-bloom-untouched",
+        type: "fill",
+        source: "hex-bloom",
+        "source-layer": "hexes",
+        filter: ["==", ["get", "bloom_stage"], 0],
+        paint: {
+          "fill-color": "#0d1520",
+          "fill-opacity": 0.08,
+        },
+      } as Parameters<typeof m.addLayer>[0]);
+
+      // Dormant hexes (stage 1): solar panel pattern — contributions started, not yet Germinating
       m.addLayer({
         id: "hex-bloom-dormant",
         type: "fill",
@@ -928,7 +1038,7 @@ export default function CampaignMap({
         filter: ["==", ["get", "bloom_stage"], 1],
         paint: {
           "fill-pattern": "hex-solar-panel",
-          "fill-opacity": 0.4,
+          "fill-opacity": 0.45,
         },
       } as Parameters<typeof m.addLayer>[0]);
 
@@ -952,7 +1062,7 @@ export default function CampaignMap({
             ["==", ["get", "bloom_stage"], 5], 0.5,
             ["==", ["get", "bloom_stage"], 4], 0.35,
             ["==", ["get", "bloom_stage"], 3], 0.25,
-            0.15,
+            0.25,
           ],
         },
       } as Parameters<typeof m.addLayer>[0]);
@@ -969,17 +1079,20 @@ export default function CampaignMap({
             ["==", ["get", "bloom_stage"], 4], "#3d7a2e",
             ["==", ["get", "bloom_stage"], 3], "#2d5c24",
             ["==", ["get", "bloom_stage"], 2], "#1f3a18",
+            ["==", ["get", "bloom_stage"], 1], "#2a3d50",
             "#1e2d3a",
           ],
           "line-width": [
             "case",
             [">=", ["get", "bloom_stage"], 2], 1.5,
+            ["==", ["get", "bloom_stage"], 1], 0.8,
             0.5,
           ],
           "line-opacity": [
             "case",
             [">=", ["get", "bloom_stage"], 2], 0.9,
-            0.3,
+            ["==", ["get", "bloom_stage"], 1], 0.45,
+            0.2,
           ],
         },
       } as Parameters<typeof m.addLayer>[0]);
@@ -1129,7 +1242,8 @@ export default function CampaignMap({
       applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
     }
     updateEventMarkers(activeEventsRef.current);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+    updateReportMarkers(problemReportsRef.current?.reports ?? []);
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -1290,11 +1404,8 @@ export default function CampaignMap({
         setSelectedZip({ geoUnitId, displayName });
       });
 
-      // Hex bloom hover + click
-      map.current.on("mouseenter", "hex-bloom-fill", () => {
-        if (map.current) map.current.getCanvas().style.cursor = "pointer";
-      });
-      map.current.on("mousemove", "hex-bloom-fill", (e) => {
+      // Hex bloom hover + click — shared handler for both dormant and active layers
+      const showHexTooltip = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
         if (!e.features?.[0] || pinPickerActiveRef.current) return;
         const props = e.features[0].properties as {
           bloom_stage?: number; bloom_score?: number; seed_source?: string | null;
@@ -1310,12 +1421,12 @@ export default function CampaignMap({
           `<div style="font-weight:700;font-size:12px;color:${color}">Stage ${stage} — ${label}</div>` +
           `<div style="color:#a1a1aa;font-size:11px;margin-top:3px">${score.toLocaleString()} bloom pts</div>` +
           (props.seed_source ? `<div style="color:#52525b;font-size:10px;margin-top:2px">🌍 pre-seeded</div>` : "");
-      });
-      map.current.on("mouseleave", "hex-bloom-fill", () => {
+      };
+      const hideHexTooltip = () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
-      });
-      map.current.on("click", "hex-bloom-fill", (e) => {
+      };
+      const handleHexClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
         if (!e.features?.[0] || pinPickerActiveRef.current) return;
         const props = e.features[0].properties as {
           geo_unit_id: string; h3_index: string; bloom_score: number; bloom_stage: number; seed_source: string | null;
@@ -1327,7 +1438,16 @@ export default function CampaignMap({
           bloom_stage: props.bloom_stage,
           seed_source: props.seed_source,
         });
-      });
+      };
+
+      for (const layerId of ["hex-bloom-untouched", "hex-bloom-dormant", "hex-bloom-fill"]) {
+        map.current.on("mouseenter", layerId, () => {
+          if (map.current) map.current.getCanvas().style.cursor = "pointer";
+        });
+        map.current.on("mousemove", layerId, showHexTooltip);
+        map.current.on("mouseleave", layerId, hideHexTooltip);
+        map.current.on("click", layerId, handleHexClick);
+      }
     });
 
     return () => {
@@ -1340,6 +1460,7 @@ export default function CampaignMap({
       eventTweensRef.current.forEach((t) => t.kill());
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
+      reportMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
       map.current?.remove();
@@ -1500,6 +1621,24 @@ export default function CampaignMap({
   // Supabase Realtime
   useEffect(() => {
     const supabase = createClient();
+    const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+
+    // Refresh report markers + panel count when a new problem report is submitted
+    const reportChannel = supabase
+      .channel(`problem_reports:${campaign.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "problem_reports", filter: `campaign_id=eq.${campaign.id}` },
+        async () => {
+          const res = await fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`).catch(() => null);
+          if (!res?.ok) return;
+          const data = await res.json() as ProblemReports;
+          problemReportsRef.current = data;
+          setLiveReports(data);
+          if (map.current) updateReportMarkers(data.reports);
+        },
+      )
+      .subscribe();
 
     const channel = supabase
       .channel(`territory_claims:${campaign.id}`)
@@ -1558,8 +1697,11 @@ export default function CampaignMap({
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [campaign.id, isChoropleth, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(reportChannel);
+    };
+  }, [campaign.id, isChoropleth, isHexBloom, refreshHexBloom, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleZipSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1602,7 +1744,11 @@ export default function CampaignMap({
             displayName={selectedZip.displayName}
             claim={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
             claimLabel={claimLabelsRef.current[selectedZip.geoUnitId] ?? null}
+            reportCount={liveReports?.counts_by_geo_unit[selectedZip.geoUnitId] ?? 0}
+            reportThreshold={liveReports?.threshold ?? null}
+            reportPhotos={(liveReports?.reports ?? []).filter(r => r.geo_unit_id === selectedZip.geoUnitId && r.photo_url).map(r => r.photo_url!)}
             onClose={() => setSelectedZip(null)}
+            onPhotoSelect={setSelectedPhoto}
           />
         )
       )}
@@ -1638,19 +1784,31 @@ export default function CampaignMap({
         </>
       )}
 
-      {!pinPickerActive && (activeEvents.length > 0 || campaign.geo_unit === "zip") && (
-        <div className="absolute top-4 left-4 z-10 space-y-2 max-w-xs">
-          {activeEvents.map((event) => (
-            <div
-              key={event.id}
-              className="px-3 py-2 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm"
-            >
-              <p className="text-red-300 text-xs font-semibold">{event.title}</p>
-              {event.description && (
-                <p className="text-red-400 text-xs mt-0.5">{event.description}</p>
-              )}
+      {!pinPickerActive && (activeEvents.length > 0 || campaign.geo_unit === "zip") && campaign.geo_unit !== "h3_hex" && (
+        <div className="absolute top-4 left-4 z-10 max-w-xs flex flex-col gap-2">
+          {activeEvents.length > 0 && (
+            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-0.5">
+              {activeEvents.map((event) => {
+                const centroid = eventCentroidsRef.current[event.geo_unit_id ?? ""];
+                return (
+                  <div
+                    key={event.id}
+                    onClick={() => {
+                      if (centroid && map.current) {
+                        map.current.flyTo({ center: [centroid.lng, centroid.lat], zoom: 13, duration: 800 });
+                      }
+                    }}
+                    className={`px-3 py-2 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm transition-colors${centroid ? " cursor-pointer hover:bg-red-900/90" : ""}`}
+                  >
+                    <p className="text-red-300 text-xs font-semibold">{event.title}</p>
+                    {event.description && (
+                      <p className="text-red-400 text-xs mt-0.5">{event.description}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
           {campaign.geo_unit === "zip" && (
             <form onSubmit={handleZipSearch} className="flex gap-1">
               <input
@@ -1735,6 +1893,14 @@ export default function CampaignMap({
               <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
                 <span className="text-zinc-300">Unclaimed</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
+                <span className="text-zinc-300">Open report</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="text-sm leading-none">🔥</span>
+                <span className="text-zinc-300">Hotspot</span>
               </div>
             </>
           )}
