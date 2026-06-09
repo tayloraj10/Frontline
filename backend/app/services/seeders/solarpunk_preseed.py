@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import h3
@@ -99,6 +100,76 @@ class SolarpunkPreseedSeeder(Seeder):
                     "campaign_id": str(SOLARPUNK_ID),
                     "geo_unit_id": geo_unit_id,
                     "bloom_score": bloom_score,
+                },
+            )
+            result.inserted += 1
+
+        await db.commit()
+
+        # Seed milestone event_triggers (idempotent via ON CONFLICT on id PK)
+        _NS = uuid.UUID("00000000-0000-0000-0000-000000000005")
+        milestones = [
+            {
+                "id": str(uuid.uuid5(_NS, "milestone_5k")),
+                "threshold": 5_000,
+                "label": "First Sparks",
+                "description": "The global solarpunk bloom has reached 5,000 points. A 1.25× boost activates for 48 hours.",
+                "multiplier": 1.25,
+                "duration_hours": 48,
+            },
+            {
+                "id": str(uuid.uuid5(_NS, "milestone_15k")),
+                "threshold": 15_000,
+                "label": "Growing Network",
+                "description": "15,000 bloom points reached — the network is spreading. 1.5× multiplier for 72 hours.",
+                "multiplier": 1.5,
+                "duration_hours": 72,
+            },
+            {
+                "id": str(uuid.uuid5(_NS, "milestone_40k")),
+                "threshold": 40_000,
+                "label": "Grid Rising",
+                "description": "40,000 points! The decentralised grid is rising. 1.75× multiplier for 72 hours.",
+                "multiplier": 1.75,
+                "duration_hours": 72,
+            },
+            {
+                "id": str(uuid.uuid5(_NS, "milestone_100k")),
+                "threshold": 100_000,
+                "label": "Solarpunk World",
+                "description": "100,000 bloom points — the solarpunk era has arrived. 2× multiplier for 120 hours.",
+                "multiplier": 2.0,
+                "duration_hours": 120,
+            },
+        ]
+        for m in milestones:
+            await db.execute(
+                text("""
+                    INSERT INTO event_triggers
+                        (id, campaign_id, name, condition_type, condition_config, event_type, effect_config, is_active)
+                    VALUES
+                        (:id, :campaign_id, :name, 'threshold_reached',
+                         CAST(:condition_config AS jsonb),
+                         'score_multiplier',
+                         CAST(:effect_config AS jsonb),
+                         TRUE)
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {
+                    "id": m["id"],
+                    "campaign_id": str(SOLARPUNK_ID),
+                    "name": f"Phase Unlocked — {m['label']}",
+                    "condition_config": json.dumps({
+                        "threshold": m["threshold"],
+                        "metric": "total_value",
+                        "title": f"Phase Unlocked — {m['label']}!",
+                        "description": m["description"],
+                    }),
+                    "effect_config": json.dumps({
+                        "type": "score_multiplier",
+                        "multiplier": m["multiplier"],
+                        "duration_hours": m["duration_hours"],
+                    }),
                 },
             )
             result.inserted += 1
