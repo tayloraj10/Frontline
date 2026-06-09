@@ -78,7 +78,7 @@ export default async function CampaignPage({ params }: Props) {
       : Promise.resolve(null),
   ]);
 
-  type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; latitude: number; longitude: number };
+  type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number };
   type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null };
   const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
 

@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "pub-*.r2.dev",
+      },
+      {
+        protocol: "https",
         hostname: "*.supabase.co",
         pathname: "/storage/v1/**",
       },
