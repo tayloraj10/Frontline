@@ -142,14 +142,14 @@ Each campaign is its own mini-game running on a shared geographic foundation. Th
 |---|---|---|
 | `threshold_reached` | ✅ Implemented | Fires when campaign-wide or geo-unit total crosses a numeric threshold |
 | `report_count` | ✅ Implemented | Fires when open problem reports in a geo unit reach a count threshold |
-| `time_elapsed` | ❌ Not implemented | In the admin dropdown and DB schema but no evaluation handler exists — triggers using it will silently never fire |
+| `time_elapsed` | ✅ Implemented | `_check_time_elapsed_trigger` handler implemented in `events.py` |
 | `decay_elapsed` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator |
 | `external_api` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator |
 
 #### Event types
 | Event type | Status | Notes |
 |---|---|---|
-| `boss_spawn` | ✅ Trigger fires | Event record created, displayed on map with icon. `score_multiplier` in `effect_config` is stored but **not applied** by the scoring engine — contributions during a boss event do not actually earn bonus points yet |
+| `boss_spawn` | ✅ Implemented | Event record created, displayed on map with icon. Active `score_multiplier` events are fetched and applied to `effective_value` in `submit_contribution` |
 | `notification` | ⚠️ Stub | Event record created but no message is dispatched — users are not notified |
 | `cascade_unlock` | ⚠️ Stub | Event record created but no unlock handler reads the `unlocks` key |
 | `seasonal_reset` | ⚠️ Stub | Event record created but no reset logic runs |
@@ -166,15 +166,12 @@ The `campaigns` table has a `status` field constrained to `draft | active | paus
 
 | Status | Frontend behavior | Backend behavior |
 |---|---|---|
-| `draft` | Hidden from `/campaigns` listing and homepage count | No enforcement — contributions and trigger evaluation still run |
-| `active` | Visible publicly; all features work normally | Same — this is the only status with observable effect |
-| `paused` | Hidden from public listing (same as draft) | No enforcement — contributions still accepted |
-| `completed` | Hidden from public listing | No enforcement — contributions still accepted, triggers still fire |
+| `draft` | Hidden from `/campaigns` listing and homepage count | Contributions rejected (403), trigger evaluation skipped |
+| `active` | Visible publicly; all features work normally | Contributions accepted, triggers evaluate normally |
+| `paused` | Hidden from public listing (same as draft) | Contributions rejected (403), trigger evaluation skipped |
+| `completed` | Hidden from public listing | Contributions rejected (403), trigger evaluation skipped |
 
 #### What still needs to be built
-- **Backend guard on contributions:** Reject `POST /api/contributions/process` with a 422 if the campaign is not `active`
-- **Backend guard on trigger evaluation:** Skip `_evaluate_triggers` for non-active campaigns
-- **Frontend enforcement for `paused`/`completed`:** Campaign detail page (`/campaigns/[slug]`) should show a status banner and disable the contribution form when status is not `active`
 - **`completed` transition logic:** Optional — auto-set status to `completed` when `ends_at` is passed or a win condition is met
 
 ---
@@ -709,7 +706,7 @@ Tables that drive live map updates:
 - [x] Enable PostGIS extension in Supabase (`CREATE EXTENSION postgis;`)
 - [x] Add spatial indexes to geo_units, contributions, problem_reports
 - [x] Configure Supabase Auth (email/password)
-- [ ] OAuth providers — Google sign-in (and any other Supabase-supported providers worth adding: GitHub, Apple, Discord, Twitter/X). Requires enabling each provider in Supabase dashboard, adding client ID/secret env vars, and wiring the sign-in button(s) into the login/signup UI.
+- [x] OAuth providers — Google sign-in (and any other Supabase-supported providers worth adding: GitHub, Apple, Discord, Twitter/X). Requires enabling each provider in Supabase dashboard, adding client ID/secret env vars, and wiring the sign-in button(s) into the login/signup UI.
 - [x] Initialize FastAPI project with health check endpoint (local; Railway deploy deferred)
 - [x] Configure Cloudflare R2 bucket + presigned URL upload flow
 - [x] Set up environment variable management (local `.env` / `.env.local`, VS Code launch.json)
@@ -850,15 +847,15 @@ Tables that drive live map updates:
 - [x] Backend: Pre-seed endpoint — `POST /admin/seed/solarpunk-preseed` loads baseline bloom scores for 12 research-validated hexes with `seed_source` metadata
 - [x] Frontend: H3 hex grid MapLibre layer — GeoJSON fill layer generated client-side via `h3-js cellToBoundary`; refreshed on contribution and Realtime events
 - [x] Frontend: Hex bloom stage coloring — `bloom_score` mapped to stage 0–4 palette (5 green shades) via `bloom_stage` property on each feature
-- [ ] Frontend: Solar panel aesthetic for Stage 0 hexes — dark fill, subtle internal grid line overlay
-- [ ] Frontend: GSAP bloom wave animation — ripple effect when a hex advances a stage
-- [ ] Frontend: Per-hex photo collage panel — thumbnail grid of `solarpunk_photo` contributions for the selected hex
+- [x] Frontend: Solar panel aesthetic for Stage 0 hexes — dark fill, subtle internal grid line overlay
+- [x] Frontend: GSAP bloom wave animation — ripple effect when a hex advances a stage
+- [x] Frontend: Per-hex photo collage panel — thumbnail grid of `solarpunk_photo` contributions for the selected hex
 - [x] Frontend: Global Bloom Score counter — World Bloom Score shown in the campaign stats bar (sum of all `territory_claims.total_value`)
 - [x] Frontend: Solarpunk action log form — 7-category / 35-action picker with point values, GPS capture, optional photo (`SolarpunkActionModal`)
 - [x] Frontend: Solarpunk in the Wild form — photo upload, GPS capture, optional caption (`SolarpunkPhotoModal`)
 - [x] Frontend: Pre-seeded hex info panel — `HexPanel` shows `seed_source` explanation and bloom progress bar on hex click
-- [ ] Seeder: Demo data — sample contributions across 8–10 cities, photo submissions, pre-seeded hexes at Stage 1–2
-- [ ] Milestone unlock system — when hex crosses a stage threshold, create a `campaign_events` record and award a badge to all contributors
+- [x] Seeder: Demo data — sample contributions across 8–10 cities, photo submissions, pre-seeded hexes at Stage 1–2
+- [x] Milestone unlock system — when hex crosses a stage threshold, create a `campaign_events` record and award a badge to all contributors
 - [ ] **Future: multi-resolution hex grid** — at high zoom levels (z ≥ 7), switch from res-3 (~120 km diameter) to res-5 (~9 km) hexes so dense cities show neighborhood-level bloom. Requires zoom-triggered tile source swap in MapLibre, a second MVT endpoint for res-5, and an aggregation model that rolls res-5 bloom scores up to their parent res-3 cell for the zoomed-out view.
 
 **Deliverable:** 5 campaigns live at launch — cooperative hex bloom map, full action log, photo collage per hex, pre-seeded world data visible on load
@@ -880,22 +877,22 @@ These imports are a hard dependency before launch — the Trash War campaign in 
 **Goal:** Production-ready auth flow and user account management before going public
 
 **Auth hardening:**
-- [ ] Password reset flow (Supabase magic link → reset page with new password form)
-- [ ] Email confirmation on signup (currently skipped in dev)
-- [ ] "Forgot password" link on login page
-- [ ] Account deletion — self-serve from settings (delete profile row + Supabase auth user, cascade via RLS/triggers)
-- [ ] Session expiry handling — graceful re-auth prompt instead of silent failure
+- [x] Password reset flow (Supabase magic link → reset page with new password form)
+- [x] Email confirmation on signup (currently skipped in dev)
+- [x] "Forgot password" link on login page
+- [x] Account deletion — self-serve from settings (delete profile row + Supabase auth user, cascade via RLS/triggers)
+- [x] Session expiry handling — middleware calls `getUser()` on every request, auto-refreshes token, redirects expired sessions to `/login?next=<path>`
 
 **Legal:**
-- [ ] Terms of Service page (`/terms`) — basic ToS covering UGC, conduct, data usage
-- [ ] Privacy Policy page (`/privacy`)
-- [ ] Link both in signup flow (checkbox or footer) so users acknowledge before creating an account
+- [x] Terms of Service page (`/legal/terms`) — basic ToS covering UGC, conduct, data usage
+- [x] Privacy Policy page (`/legal/privacy`)
+- [x] Link both in signup flow (footer links on signup page)
 
 **User profile:**
-- [ ] Profile image upload — presigned R2 upload, store URL in `profiles.avatar_url`, display everywhere avatars appear
-- [ ] Profile page (`/users/[username]`) — contribution history, joined groups, campaign activity stats, bio
-- [ ] Profile edit page — display name, bio, username change (with availability check), avatar upload
-- [ ] Account settings — email change, password change, danger zone (delete account)
+- [x] Profile image upload — presigned R2 upload, store URL in `profiles.avatar_url`, display everywhere avatars appear
+- [x] Profile page (`/users/[username]`) — contribution history, joined groups, campaign activity stats, bio
+- [x] Profile edit page — display name, bio, avatar upload (`/settings/profile`)
+- [x] Account settings — email change, password change, danger zone (`/settings/account`)
 
 ---
 
@@ -904,23 +901,22 @@ These imports are a hard dependency before launch — the Trash War campaign in 
 ### Groups Page Cleanup
 
 #### Create Group — access control
-`/groups/new` is restricted to site admins. The listing page hides the button for non-admins and the page server component redirects non-admins to `/groups`. The RLS `groups_insert` policy still only checks `auth.uid() = created_by` — add `is_site_admin()` to that policy to enforce the restriction at the DB layer as well.
+`/groups/new` is restricted to site admins. The listing page hides the button for non-admins and the page server component redirects non-admins to `/groups`. The RLS `groups_insert` policy enforces this at the DB layer via `auth.uid() = created_by OR is_site_admin()` (migration 015).
 
-#### Group profile page (`/groups/[slug]`) — known gaps
-The `isAdmin` flag is computed on the page but only used to show an "Admin" badge and suppress the join button. There is no edit path for group leaders. What needs to be built:
+#### Group profile page (`/groups/[slug]`) — what's built
 
-- **Edit group info** — name, description, website. Gate behind `isAdmin` check (already computed on the page). Recommend a dedicated `/groups/[slug]/edit` route rather than inline editing — keeps the read path simple. The RLS `groups_update` policy already allows group admins to update their own group row, so no DB changes needed.
-- **Profile picture upload** — `logo_url` column exists in the `groups` table but is never written or displayed; the UI falls back to a letter avatar. Wire up a presigned R2 upload (same pattern as contribution photo upload) and render the image in the avatar slot on both the group profile page and the groups listing cards.
-- **Standardized group schema** — a shared schema for group info fields is in progress and will eventually replace or extend the current `groups` table columns. Design the edit form to be forward-compatible: keep field names generic and avoid hardcoding assumptions about which fields exist.
-- **Member management** — group admins should be able to promote members to admin or remove them. The RLS `group_members_delete` policy already allows admins to delete any member row in their group; promoting requires an update policy (not yet defined).
-- **Edit button placement** — on `/groups/[slug]`, show an "Edit Group" link/button next to the group header, visible only when `isAdmin` is true. Route to `/groups/[slug]/edit`.
+- **Edit group info** — `/groups/[slug]/edit` route, gated behind `isAdmin`. Supports name, description, website.
+- **Profile picture upload** — presigned R2 upload wired in `GroupEditForm`; `logo_url` rendered in avatar slot on group profile and listing cards.
+- **Member management** — `MemberManager` component on the edit page; admins can promote members or remove them.
+- **Edit button** — visible on `/groups/[slug]` when `isAdmin` is true, routes to `/groups/[slug]/edit`.
 
 #### What works today
-- Group creation (site admins only — button hidden for non-admins, server-side redirect enforced)
+- Group creation (site admins only — button hidden for non-admins, server-side redirect enforced, DB-layer RLS guard)
 - Groups nav link hidden in `AppHeader` for logged-out users
-- Group profile display: name, description, website, verified badge, member list with roles
+- Group profile display: name, description, website, logo, verified badge, member list with roles
 - Join / leave membership (`GroupMembershipButton`)
 - Admin role badge display
+- Edit group info, logo upload, member management (admin only)
 
 ---
 

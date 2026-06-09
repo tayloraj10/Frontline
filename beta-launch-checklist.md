@@ -7,33 +7,33 @@ Five topics to work through before pushing the app live.
 ## Topic 1: Dev Tasks (Auth, Groups, Trash War)
 
 ### Login / Auth
-- [ ] Google sign-in (frontend button exists — enable OAuth provider in Supabase dashboard, add `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` env vars)
+- [x] Google sign-in (frontend button exists — enable OAuth provider in Supabase dashboard, add `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` env vars)
 - [ ] GitHub / Discord sign-in (optional but easy to add alongside Google)
 - [x] "Forgot password?" link on login page
 - [x] Password reset flow (`/forgot-password` → email → `/auth/callback?next=/auth/reset-password` → set new password)
 - [x] Email confirmation on signup — shows "check your email" state when Supabase returns no session
 - [x] Auth callback errors shown on login page (`?error=auth_failed`)
 - [x] Google OAuth button loading state on both login and signup pages
-- [ ] Session expiry handling — graceful re-auth prompt instead of silent failure
-- [ ] Account deletion — self-serve from settings
-- [ ] Account settings page (email change, password change, danger zone)
+- [x] Session expiry handling — graceful re-auth prompt instead of silent failure
+- [x] Account deletion — self-serve from settings
+- [x] Account settings page (email change, password change, danger zone)
 
 ### Groups
-- [ ] Profile picture upload — `logo_url` column exists but never written or displayed; wire presigned R2 upload
-- [ ] Edit group info page (`/groups/[slug]/edit`) — name, description, website; gate behind `isAdmin`
-- [ ] Member management — promote to admin, remove members (RLS `group_members` update policy needed)
-- [ ] RLS `groups_insert` policy — add `is_site_admin()` check at DB layer
+- [x] Profile picture upload — `logo_url` column exists but never written or displayed; wire presigned R2 upload
+- [x] Edit group info page (`/groups/[slug]/edit`) — name, description, website; gate behind `isAdmin`
+- [x] Member management — promote to admin, remove members (RLS `group_members` update policy needed)
+- [x] RLS `groups_insert` policy — add `is_site_admin()` check at DB layer
 
 ### User Profiles
-- [ ] Profile image upload — presigned R2 upload → `profiles.avatar_url`
-- [ ] Full profile page (`/users/[username]`) — contribution history, joined groups, stats, bio
-- [ ] Profile edit page — display name, bio, username (availability check), avatar
-- [ ] Account settings — email change, password change, danger zone
+- [x] Profile image upload — presigned R2 upload → `profiles.avatar_url`
+- [x] Full profile page (`/users/[username]`) — contribution history, joined groups, stats, bio
+- [x] Profile edit page — display name, bio, username (availability check), avatar
+- [x] Account settings — email change, password change, danger zone
 
 ### Trash War / Events
 - [x] Backend campaign status guard — `POST /api/contributions/submit` checks campaign status, returns 403 if not `active`
-- [ ] Backend trigger evaluation guard — skip `_evaluate_triggers` for non-active campaigns (note: only guarded via `submit` endpoint, not `process`)
-- [ ] Frontend status banner on campaign page when status is `paused` or `completed`
+- [x] Backend trigger evaluation guard — skip `_evaluate_triggers` for non-active campaigns (note: only guarded via `submit` endpoint, not `process`)
+- [x] Frontend status banner on campaign page when status is `paused` or `completed` — not needed; only active campaigns surface in the listing
 - [x] Boss spawn score multiplier — active `score_multiplier` campaign events are fetched and applied to `effective_value` in `submit_contribution`
 - [x] `time_elapsed` condition type — `_check_time_elapsed_trigger` handler implemented in `events.py`
 - [ ] Verify end-to-end: trash report → `problem_reports` insert → report count threshold → boss event spawn → map marker
@@ -46,9 +46,9 @@ Five topics to work through before pushing the app live.
 - [x] Milestone unlock system (cross stage threshold → `campaign_events` record + badge)
 
 ### Legal
-- [ ] Terms of Service page (`/terms`)
-- [ ] Privacy Policy page (`/privacy`)
-- [ ] Link both in signup flow (footer or checkbox acknowledgment)
+- [x] Terms of Service page (`/legal/terms`)
+- [x] Privacy Policy page (`/legal/privacy`)
+- [x] Link both in signup flow (footer or checkbox acknowledgment)
 
 ---
 

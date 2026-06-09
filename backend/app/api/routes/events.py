@@ -21,6 +21,14 @@ async def check_event_triggers(
 
 
 async def _evaluate_triggers(campaign_id: UUID, db: AsyncSession):
+    status_row = await db.execute(
+        text("SELECT status FROM campaigns WHERE id = :campaign_id"),
+        {"campaign_id": str(campaign_id)},
+    )
+    campaign = status_row.fetchone()
+    if not campaign or campaign.status != "active":
+        return
+
     triggers = await db.execute(
         text("""
             SELECT id, condition_type, condition_config, event_type, effect_config, cooldown_hours
