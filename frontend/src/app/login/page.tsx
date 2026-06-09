@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginForm() {
   const searchParams = useSearchParams();
   const callbackError = searchParams.get("error");
+  const next = searchParams.get("next");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,16 +28,18 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      window.location.href = "/campaigns";
+      window.location.href = next && next.startsWith("/") ? next : "/campaigns";
     }
   }
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
     const supabase = createClient();
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (next) callbackUrl.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: callbackUrl.toString() },
     });
   }
 
@@ -121,7 +124,20 @@ export default function LoginPage() {
             Sign up
           </Link>
         </p>
+
+        <div className="flex justify-center gap-4 text-xs text-zinc-600">
+          <Link href="/legal/terms" className="hover:text-zinc-400 transition-colors">Terms</Link>
+          <Link href="/legal/privacy" className="hover:text-zinc-400 transition-colors">Privacy</Link>
+        </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

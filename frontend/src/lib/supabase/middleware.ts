@@ -32,11 +32,14 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/auth/");
 
   const isPublicPage = request.nextUrl.pathname === "/" ||
-    request.nextUrl.pathname.startsWith("/campaigns");
+    request.nextUrl.pathname.startsWith("/campaigns") ||
+    request.nextUrl.pathname.startsWith("/legal") ||
+    request.nextUrl.pathname.startsWith("/users");
 
   if (!user && !isAuthPage && !isPublicPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
 
