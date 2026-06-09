@@ -52,8 +52,12 @@ export default async function GroupProfilePage({ params }: Props) {
 
       <div className="mt-6 mb-8 flex items-start justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
-          <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 text-2xl font-black text-zinc-300 shrink-0">
-            {group.name[0].toUpperCase()}
+          <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+            {group.logo_url ? (
+              <img src={group.logo_url} alt={group.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-2xl font-black text-zinc-300">{group.name[0].toUpperCase()}</span>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -85,19 +89,27 @@ export default async function GroupProfilePage({ params }: Props) {
           </div>
         </div>
 
-        {user && !isAdmin && (
-          <div className="shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {isAdmin && (
+            <Link
+              href={`/groups/${slug}/edit`}
+              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
+            >
+              Edit group
+            </Link>
+          )}
+          {user && !isAdmin && (
             <GroupMembershipButton groupId={group.id} userId={user.id} isMember={isMember} />
-          </div>
-        )}
-        {!user && (
-          <Link
-            href="/login"
-            className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            Join Group
-          </Link>
-        )}
+          )}
+          {!user && (
+            <Link
+              href="/login"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              Join Group
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="border border-zinc-800 rounded-xl overflow-hidden">
