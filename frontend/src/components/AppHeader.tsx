@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import UserNav from "./UserNav";
 import NotificationBellWrapper from "./NotificationBellWrapper";
+import SupportButton from "./SupportButton";
 
 export default async function AppHeader() {
   const supabase = await createClient();
@@ -31,6 +32,9 @@ export default async function AppHeader() {
             <span className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
               FRONTLINE
             </span>
+            <span className="text-[10px] font-semibold text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 tracking-wider">
+              {process.env.NEXT_PUBLIC_APP_VERSION ?? "beta"}
+            </span>
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
             <Link
@@ -58,6 +62,7 @@ export default async function AppHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          <SupportButton />
           {user && <NotificationBellWrapper userId={user.id} />}
           <UserNav user={user} />
         </div>

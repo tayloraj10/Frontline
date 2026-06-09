@@ -8,7 +8,6 @@ Five topics to work through before pushing the app live.
 
 ### Login / Auth
 - [x] Google sign-in (frontend button exists — enable OAuth provider in Supabase dashboard, add `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` env vars)
-- [ ] GitHub / Discord sign-in (optional but easy to add alongside Google)
 - [x] "Forgot password?" link on login page
 - [x] Password reset flow (`/forgot-password` → email → `/auth/callback?next=/auth/reset-password` → set new password)
 - [x] Email confirmation on signup — shows "check your email" state when Supabase returns no session
@@ -54,9 +53,9 @@ Five topics to work through before pushing the app live.
 
 ## Topic 2: Beta UI
 
-- [ ] Beta banner — sticky top-of-layout bar communicating this is a beta version
-- [ ] App version — `NEXT_PUBLIC_APP_VERSION` env var (`0.1.0-beta`), displayed in footer or nav
-- [ ] Support email — visible in footer and/or beta banner
+- [x] Beta banner — version pill (`NEXT_PUBLIC_APP_VERSION`) inline in `AppHeader` next to the FRONTLINE wordmark; falls back to "beta" if unset
+- [x] App version — `NEXT_PUBLIC_APP_VERSION=0.1.0-beta` in `.env.local`; displayed in header pill
+- [x] Support email — `collectiveactionsupport@gmail.com` as a `support` mailto link on the right side of `AppHeader`
 
 ---
 

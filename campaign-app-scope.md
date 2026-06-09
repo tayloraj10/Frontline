@@ -706,7 +706,7 @@ Tables that drive live map updates:
 - [x] Enable PostGIS extension in Supabase (`CREATE EXTENSION postgis;`)
 - [x] Add spatial indexes to geo_units, contributions, problem_reports
 - [x] Configure Supabase Auth (email/password)
-- [x] OAuth providers — Google sign-in (and any other Supabase-supported providers worth adding: GitHub, Apple, Discord, Twitter/X). Requires enabling each provider in Supabase dashboard, adding client ID/secret env vars, and wiring the sign-in button(s) into the login/signup UI.
+- [x] OAuth providers — Google sign-in implemented and active. Additional providers (GitHub, Apple, Discord, Twitter/X) are supported by Supabase; deferred to post-beta. See Post-MVP section.
 - [x] Initialize FastAPI project with health check endpoint (local; Railway deploy deferred)
 - [x] Configure Cloudflare R2 bucket + presigned URL upload flow
 - [x] Set up environment variable management (local `.env` / `.env.local`, VS Code launch.json)
@@ -927,3 +927,11 @@ These imports are a hard dependency before launch — the Trash War campaign in 
 - Weather API integration for dynamic environmental events
 - Advanced moderation layer for user-generated content
 - Ground Truth (Campaign 5) — crowdsourced global news map
+
+### Post-Beta: Additional Sign-In Methods
+Supabase supports additional OAuth providers with minimal effort — each requires enabling the provider in the Supabase dashboard, adding a client ID/secret env var pair, and wiring a sign-in button in the login/signup UI. Candidates to evaluate:
+- **GitHub** — natural fit for early adopters and tech-adjacent users
+- **Apple** — required for iOS App Store compliance once mobile app ships
+- **Discord** — strong fit for community/gaming-adjacent campaign types
+- **Twitter/X** — high reach for civic action campaigns (Road to Independence, BRAINROT)
+- **Passkeys / magic link** — passwordless options Supabase supports out of the box; lowers friction for non-technical users
