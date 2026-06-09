@@ -57,13 +57,17 @@ async def submit_contribution(
     geo_unit_id = None
     location_verified = False
 
-    # Determine campaign geo_unit type
+    # Verify campaign is active and get its geo_unit type
     camp_result = await db.execute(
-        text("SELECT geo_unit FROM campaigns WHERE id = :campaign_id"),
+        text("SELECT geo_unit, status FROM campaigns WHERE id = :campaign_id"),
         {"campaign_id": str(payload.campaign_id)},
     )
     camp_row = camp_result.fetchone()
-    campaign_geo_unit = camp_row[0] if camp_row else "zip"
+    if not camp_row:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if camp_row[1] != "active":
+        raise HTTPException(status_code=403, detail="Campaign is not accepting contributions")
+    campaign_geo_unit = camp_row[0]
 
     if has_location:
         if campaign_geo_unit == "h3_hex":
@@ -118,6 +122,26 @@ async def submit_contribution(
                 )
                 location_verified = bool(prox.scalar())
 
+    # Apply active score_multiplier events (campaign-wide or geo-unit-scoped)
+    effective_value = payload.value or 1
+    if geo_unit_id:
+        multiplier_result = await db.execute(
+            text("""
+                SELECT effect_config FROM campaign_events
+                WHERE campaign_id = :campaign_id
+                  AND status = 'active'
+                  AND (geo_unit_id IS NULL OR geo_unit_id = :geo_unit_id)
+                  AND (ends_at IS NULL OR ends_at > NOW())
+                  AND effect_config->>'type' = 'score_multiplier'
+                LIMIT 1
+            """),
+            {"campaign_id": str(payload.campaign_id), "geo_unit_id": geo_unit_id},
+        )
+        multiplier_row = multiplier_result.fetchone()
+        if multiplier_row:
+            multiplier = float((multiplier_row[0] or {}).get("multiplier", 1))
+            effective_value = effective_value * multiplier
+
     if has_location:
         await db.execute(
             text("""
@@ -136,7 +160,7 @@ async def submit_contribution(
                 "group_id": str(payload.group_id) if payload.group_id else None,
                 "geo_unit_id": geo_unit_id,
                 "contribution_type": payload.contribution_type,
-                "value": payload.value or 1,
+                "value": effective_value,
                 "photo_url": payload.photo_url,
                 "lon": payload.longitude,
                 "lat": payload.latitude,
@@ -159,7 +183,7 @@ async def submit_contribution(
                 "user_id": str(payload.user_id),
                 "group_id": str(payload.group_id) if payload.group_id else None,
                 "contribution_type": payload.contribution_type,
-                "value": payload.value or 1,
+                "value": effective_value,
                 "photo_url": payload.photo_url,
                 "notes": payload.notes,
             },
@@ -183,7 +207,7 @@ async def submit_contribution(
                 "geo_unit_id": geo_unit_id,
                 "user_id": str(payload.user_id),
                 "group_id": str(payload.group_id) if payload.group_id else None,
-                "value": payload.value or 1,
+                "value": effective_value,
             },
         )
         await db.execute(
@@ -247,6 +271,38 @@ async def get_hex_bloom(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
             "bloom_score": float(row.bloom_score or 0),
             "bloom_stage": _bloom_stage(float(row.bloom_score or 0)),
             "seed_source": row.seed_source,
+        }
+        for row in rows
+    ]
+
+
+@router.get("/{campaign_id}/hex/{h3_index}/photos")
+async def get_hex_photos(campaign_id: UUID, h3_index: str, db: AsyncSession = Depends(get_db)):
+    """Return recent contributions with photos for a specific H3 hex in a campaign."""
+    result = await db.execute(
+        text("""
+            SELECT c.photo_url, c.submitted_at, p.display_name, p.username
+            FROM contributions c
+            LEFT JOIN profiles p ON p.id = c.user_id
+            WHERE c.campaign_id = :campaign_id
+              AND c.photo_url IS NOT NULL
+              AND c.geo_unit_id = (
+                  SELECT id FROM geo_units
+                  WHERE unit_type = 'h3_hex' AND unit_id = :h3_index
+                  LIMIT 1
+              )
+            ORDER BY c.submitted_at DESC
+            LIMIT 9
+        """),
+        {"campaign_id": str(campaign_id), "h3_index": h3_index},
+    )
+    rows = result.fetchall()
+    return [
+        {
+            "photo_url": row.photo_url,
+            "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
+            "display_name": row.display_name,
+            "username": row.username,
         }
         for row in rows
     ]
