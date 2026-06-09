@@ -528,6 +528,24 @@ function StatePanel({
   );
 }
 
+function makeSolarPanelPattern(): ImageData {
+  const size = 16;
+  const data = new Uint8ClampedArray(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    const o = i * 4;
+    data[o] = 13; data[o + 1] = 20; data[o + 2] = 36; data[o + 3] = 255; // #0d1424
+  }
+  for (let k = 4; k < size; k += 4) {
+    for (let i = 0; i < size; i++) {
+      const h = (k * size + i) * 4;
+      data[h] = 30; data[h + 1] = 53; data[h + 2] = 88; data[h + 3] = 255; // #1e3558
+      const v = (i * size + k) * 4;
+      data[v] = 30; data[v + 1] = 53; data[v + 2] = 88; data[v + 3] = 255;
+    }
+  }
+  return new ImageData(data, size, size);
+}
+
 function pulseClaim(m: maplibregl.Map, geoUnitId: string): void {
   const obj = { v: 0.45 };
   gsap.to(obj, {
@@ -545,10 +563,29 @@ function pulseClaim(m: maplibregl.Map, geoUnitId: string): void {
 
 // ─── Hex bloom detail panel ───────────────────────────────────────────────────
 
-function HexPanel({ entry, onClose }: { entry: HexBloomEntry; onClose: () => void }) {
+type HexPhoto = { photo_url: string; display_name: string | null; submitted_at: string | null };
+
+function HexPanel({
+  entry,
+  campaignId,
+  onClose,
+}: {
+  entry: HexBloomEntry;
+  campaignId: string;
+  onClose: () => void;
+}) {
   const nextThreshold = BLOOM_THRESHOLDS[entry.bloom_stage + 1] ?? null;
   const stageColor = BLOOM_STAGE_COLORS[entry.bloom_stage];
   const stageLabel = BLOOM_STAGE_LABELS[entry.bloom_stage];
+  const [photos, setPhotos] = useState<HexPhoto[]>([]);
+
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_FASTAPI_URL;
+    fetch(`${base}/api/contributions/${campaignId}/hex/${entry.h3_index}/photos`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setPhotos)
+      .catch(() => {});
+  }, [campaignId, entry.h3_index]);
 
   return (
     <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
@@ -583,6 +620,19 @@ function HexPanel({ entry, onClose }: { entry: HexBloomEntry; onClose: () => voi
         )}
         {entry.seed_source && (
           <p className="mt-3 text-xs text-zinc-500">🌍 {entry.seed_source}</p>
+        )}
+        {photos.length > 0 && (
+          <div className="mt-3 grid grid-cols-3 gap-1">
+            {photos.map((p, i) => (
+              <div key={i} className="aspect-square overflow-hidden rounded-md bg-zinc-800">
+                <img
+                  src={p.photo_url}
+                  alt={p.display_name ?? "contribution"}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+          </div>
         )}
         <p className="mt-3 text-[10px] text-zinc-700 font-mono break-all">{entry.h3_index}</p>
       </div>
@@ -861,6 +911,7 @@ export default function CampaignMap({
       } catch {
         // non-critical — fit button just won't work
       }
+      m.addImage("hex-solar-panel", makeSolarPanelPattern());
       m.addSource("hex-bloom", {
         type: "vector",
         tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/h3-bloom/${campaign.id}/{z}/{x}/{y}.mvt`],
@@ -868,27 +919,40 @@ export default function CampaignMap({
         maxzoom: 10,
       });
 
+      // Dormant hexes (stage 1): repeating solar panel grid
+      m.addLayer({
+        id: "hex-bloom-dormant",
+        type: "fill",
+        source: "hex-bloom",
+        "source-layer": "hexes",
+        filter: ["==", ["get", "bloom_stage"], 1],
+        paint: {
+          "fill-pattern": "hex-solar-panel",
+          "fill-opacity": 0.4,
+        },
+      } as Parameters<typeof m.addLayer>[0]);
+
+      // Active hexes (stage 2+): filled with bloom colours
       m.addLayer({
         id: "hex-bloom-fill",
         type: "fill",
         source: "hex-bloom",
         "source-layer": "hexes",
+        filter: [">=", ["get", "bloom_stage"], 2],
         paint: {
           "fill-color": [
             "case",
             ["==", ["get", "bloom_stage"], 5], "#5ca84a",
             ["==", ["get", "bloom_stage"], 4], "#3d7a2e",
             ["==", ["get", "bloom_stage"], 3], "#2d5c24",
-            ["==", ["get", "bloom_stage"], 2], "#1f3a18",
-            "#1a2035",
+            "#1f3a18",
           ],
           "fill-opacity": [
             "case",
             ["==", ["get", "bloom_stage"], 5], 0.5,
             ["==", ["get", "bloom_stage"], 4], 0.35,
             ["==", ["get", "bloom_stage"], 3], 0.25,
-            ["==", ["get", "bloom_stage"], 2], 0.15,
-            0.08,
+            0.15,
           ],
         },
       } as Parameters<typeof m.addLayer>[0]);
@@ -1402,6 +1466,22 @@ export default function CampaignMap({
     }
 
     if (isHexBloom) {
+      if (map.current) {
+        const el = document.createElement("div");
+        el.style.cssText =
+          "width:36px;height:36px;border-radius:50%;pointer-events:none;" +
+          "border:2px solid rgba(92,168,74,0.95);box-sizing:border-box";
+        const wave = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat([newContribution.lng, newContribution.lat])
+          .addTo(map.current);
+        gsap.to(el, {
+          scale: 5,
+          opacity: 0,
+          duration: 1.3,
+          ease: "power2.out",
+          onComplete: () => wave.remove(),
+        });
+      }
       refreshHexBloom();
       return;
     }
@@ -1528,7 +1608,7 @@ export default function CampaignMap({
       )}
 
       {selectedHex && !pinPickerActive && (
-        <HexPanel entry={selectedHex} onClose={() => setSelectedHex(null)} />
+        <HexPanel entry={selectedHex} campaignId={campaign.id} onClose={() => setSelectedHex(null)} />
       )}
 
       {pinPickerActive && (

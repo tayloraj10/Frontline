@@ -1219,16 +1219,18 @@ function ModalShell({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-5">
+      <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
         {title && (
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
             <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
             <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">
               ×
             </button>
           </div>
         )}
-        {children}
+        <div className={`overflow-y-auto ${title ? "px-5 pb-5" : "p-5"}`}>
+          {children}
+        </div>
       </div>
     </div>
   );

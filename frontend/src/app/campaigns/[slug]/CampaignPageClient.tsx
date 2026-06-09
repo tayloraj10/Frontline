@@ -208,6 +208,13 @@ function ActivityPanel({ items, unit }: { items: ActivityItem[]; unit: string })
   );
 }
 
+const BLOOM_MILESTONES = [
+  { threshold: 5_000,   label: "First Sparks" },
+  { threshold: 15_000,  label: "Growing Network" },
+  { threshold: 40_000,  label: "Grid Rising" },
+  { threshold: 100_000, label: "Solarpunk World" },
+] as const;
+
 export default function CampaignPageClient({
   campaign,
   claims,
@@ -253,6 +260,17 @@ export default function CampaignPageClient({
   const togglePanel = (panel: "leaderboard" | "activity") => {
     setOpenPanel((p) => (p === panel ? null : panel));
   };
+
+  const isHexBloom = campaign.campaign_type === "hex_bloom";
+  const bloomTotal = isHexBloom
+    ? Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0))
+    : 0;
+  const nextMilestoneIdx = BLOOM_MILESTONES.findIndex((m) => bloomTotal < m.threshold);
+  const nextMilestone = nextMilestoneIdx >= 0 ? BLOOM_MILESTONES[nextMilestoneIdx] : null;
+  const prevThreshold = nextMilestoneIdx > 0 ? BLOOM_MILESTONES[nextMilestoneIdx - 1].threshold : 0;
+  const bloomProgressPct = nextMilestone
+    ? Math.min(((bloomTotal - prevThreshold) / (nextMilestone.threshold - prevThreshold)) * 100, 100)
+    : 100;
 
   return (
     <>
@@ -331,6 +349,33 @@ export default function CampaignPageClient({
           >
             Activity
           </button>
+        </div>
+      )}
+
+      {isHexBloom && !pinPickerActive && (
+        <div className="absolute top-28 sm:top-16 left-4 z-10 w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm pointer-events-none">
+          <div className="flex items-baseline justify-between mb-1">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">World Bloom</span>
+            <span className="text-[10px] text-emerald-400/80 tabular-nums font-mono">
+              {bloomTotal.toLocaleString()} pts
+            </span>
+          </div>
+          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-1">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-700 to-emerald-400 transition-all duration-700"
+              style={{ width: `${bloomProgressPct}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-emerald-400/60 font-medium">
+              {nextMilestone ? nextMilestone.label : "Max reached!"}
+            </span>
+            {nextMilestone && (
+              <span className="text-[10px] text-zinc-600 tabular-nums font-mono">
+                {(nextMilestone.threshold - bloomTotal).toLocaleString()} to go
+              </span>
+            )}
+          </div>
         </div>
       )}
 
