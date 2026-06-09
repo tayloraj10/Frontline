@@ -35,6 +35,8 @@ async def _evaluate_triggers(campaign_id: UUID, db: AsyncSession):
             await _check_report_count_trigger(campaign_id, trigger, db)
         elif trigger.condition_type == "threshold_reached":
             await _check_threshold_trigger(campaign_id, trigger, db)
+        elif trigger.condition_type == "time_elapsed":
+            await _check_time_elapsed_trigger(campaign_id, trigger, db)
 
     await db.commit()
 
@@ -101,6 +103,54 @@ async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession)
             "title": config.get("title", f"Milestone reached — {int(current_value):,} {metric.replace('_', ' ')}!"),
             "description": config.get("description", "A campaign milestone has been hit. Keep the momentum going!"),
             "effect_config": trigger.effect_config,
+        },
+    )
+
+
+async def _check_time_elapsed_trigger(campaign_id: UUID, trigger, db: AsyncSession):
+    """Fire when the campaign has been running for at least elapsed_hours since it became active."""
+    config = trigger.condition_config or {}
+    elapsed_hours = config.get("elapsed_hours", 24)
+
+    result = await db.execute(
+        text("""
+            SELECT EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600 AS hours_elapsed
+            FROM campaigns WHERE id = :campaign_id
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    row = result.fetchone()
+    if not row or float(row[0]) < elapsed_hours:
+        return
+
+    existing = await db.execute(
+        text("""
+            SELECT id FROM campaign_events
+            WHERE campaign_id = :campaign_id AND trigger_id = :trigger_id AND status = 'active'
+            LIMIT 1
+        """),
+        {"campaign_id": str(campaign_id), "trigger_id": str(trigger.id)},
+    )
+    if existing.fetchone():
+        return
+
+    duration_hours = int(config.get("duration_hours", 48))
+    await db.execute(
+        text("""
+            INSERT INTO campaign_events
+                (campaign_id, trigger_id, geo_unit_id, event_type, title, description, effect_config, ends_at)
+            VALUES
+                (:campaign_id, :trigger_id, NULL, :event_type, :title, :description, :effect_config,
+                 NOW() + (:duration_hours * INTERVAL '1 hour'))
+        """),
+        {
+            "campaign_id": str(campaign_id),
+            "trigger_id": str(trigger.id),
+            "event_type": trigger.event_type,
+            "title": config.get("title", f"Time milestone — {int(elapsed_hours)}h in!"),
+            "description": config.get("description", "A time-based campaign event has been triggered."),
+            "effect_config": trigger.effect_config,
+            "duration_hours": duration_hours,
         },
     )
 
