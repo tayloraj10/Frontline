@@ -250,11 +250,13 @@ export default function CampaignPageClient({
   const handlePinPlaced = (lat: number, lng: number) => {
     setPlacedPinCoords({ latitude: lat, longitude: lng });
     setPinPickerActive(false);
+    setUserLocation(null);
   };
 
   const handlePinCancelled = () => {
     setPlacedPinCoords(null);
     setPinPickerActive(false);
+    setUserLocation(null);
   };
 
   const togglePanel = (panel: "leaderboard" | "activity") => {

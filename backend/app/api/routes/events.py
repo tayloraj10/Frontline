@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends
@@ -110,7 +111,7 @@ async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession)
             "event_type": trigger.event_type,
             "title": config.get("title", f"Milestone reached — {int(current_value):,} {metric.replace('_', ' ')}!"),
             "description": config.get("description", "A campaign milestone has been hit. Keep the momentum going!"),
-            "effect_config": trigger.effect_config,
+            "effect_config": json.dumps(trigger.effect_config) if isinstance(trigger.effect_config, dict) else trigger.effect_config,
         },
     )
 

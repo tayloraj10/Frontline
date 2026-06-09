@@ -73,14 +73,18 @@ function StatusBadge({ status }: { status: string }) {
 
 function TypeBadge({ type }: { type: string }) {
   const colors: Record<string, string> = {
-    territory: "bg-red-900/40 text-red-400",
-    collage: "bg-purple-900/40 text-purple-400",
+    territory:  "bg-red-900/40 text-red-400",
+    collage:    "bg-purple-900/40 text-purple-400",
     choropleth: "bg-blue-900/40 text-blue-400",
-    heatmap: "bg-orange-900/40 text-orange-400",
+    heatmap:    "bg-orange-900/40 text-orange-400",
+    hex_bloom:  "bg-emerald-900/40 text-emerald-400",
+  };
+  const labels: Record<string, string> = {
+    hex_bloom: "Hex Bloom",
   };
   return (
     <span className={`px-2 py-0.5 rounded text-xs capitalize ${colors[type] ?? "bg-zinc-800 text-zinc-400"}`}>
-      {type}
+      {labels[type] ?? type}
     </span>
   );
 }

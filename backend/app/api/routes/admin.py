@@ -1,9 +1,12 @@
 import asyncio
 from functools import partial
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.database import get_db
 from app.services import geo
 from app.services.seeders import REGISTRY, StatesSeeder
@@ -114,3 +117,64 @@ async def seed_solarpunk_preseed(wipe: bool = False, db: AsyncSession = Depends(
     except Exception as exc:
         raise HTTPException(500, f"Solarpunk preseed failed: {exc}")
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
+
+
+@router.post("/wipe")
+async def wipe_seed_data(db: AsyncSession = Depends(get_db)):
+    """
+    Delete all demo/user data while preserving campaigns, event_triggers, and geo_units.
+    Preserves: campaigns, event_triggers, geo_units.
+    Wipes: contributions, territory_claims, leaderboard_entries, campaign_events,
+           problem_reports, user_notifications, group_members, groups, profiles,
+           and all Supabase auth users.
+    Run POST /admin/seed/demo-data afterwards to restore demo users and activity.
+    """
+    # Collect all profile IDs before wiping so we can delete auth users
+    profile_rows = await db.execute(text("SELECT id FROM profiles"))
+    profile_ids = [str(r[0]) for r in profile_rows.fetchall()]
+
+    # Delete in FK-safe leaf-first order
+    tables = [
+        "leaderboard_entries",
+        "campaign_events",
+        "contributions",
+        "problem_reports",
+        "territory_claims",
+        "user_notifications",
+        "group_members",
+        "groups",
+        "profiles",
+    ]
+    counts: dict[str, int] = {}
+    for table in tables:
+        result = await db.execute(text(f"DELETE FROM {table}"))
+        counts[table] = result.rowcount
+
+    await db.commit()
+
+    # Delete auth users from Supabase
+    auth_deleted = 0
+    auth_errors: list[str] = []
+    async with httpx.AsyncClient() as client:
+        for uid in profile_ids:
+            try:
+                resp = await client.delete(
+                    f"{settings.supabase_url}/auth/v1/admin/users/{uid}",
+                    headers={
+                        "apikey": settings.supabase_service_role_key,
+                        "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                    },
+                    timeout=10,
+                )
+                if resp.status_code in (200, 204):
+                    auth_deleted += 1
+                else:
+                    auth_errors.append(f"{uid}: {resp.status_code}")
+            except Exception as exc:
+                auth_errors.append(f"{uid}: {exc}")
+
+    return {
+        "wiped": counts,
+        "auth_users_deleted": auth_deleted,
+        "auth_errors": auth_errors[:20],
+    }
