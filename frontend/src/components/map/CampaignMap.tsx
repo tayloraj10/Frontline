@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import gsap from "gsap";
@@ -278,7 +278,16 @@ function addPhotoMarker(
 
 // ─── Territory detail panel ───────────────────────────────────────────────────
 
-type ContribRow = { value: number | null; submitted_at: string | null };
+const GROUP_PALETTE = ["#10b981", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6"];
+
+type ContribRow = {
+  value: number | null;
+  submitted_at: string | null;
+  group_id: string | null;
+  user_id: string | null;
+  profiles: { display_name: string | null; username: string } | null;
+  groups: { name: string } | null;
+};
 
 function TerritoryPanel({
   geoUnitId,
@@ -298,28 +307,58 @@ function TerritoryPanel({
 
   useEffect(() => {
     const supabase = createClient();
-    supabase
+    (supabase
       .from("contributions")
-      .select("value, submitted_at")
+      .select("value, submitted_at, group_id, user_id, profiles(display_name, username), groups(name)")
       .eq("geo_unit_id", geoUnitId)
       .order("submitted_at", { ascending: false })
-      .limit(8)
+      .limit(20) as unknown as Promise<{ data: ContribRow[] | null }>)
       .then(({ data }) => {
-        setContribs((data ?? []) as ContribRow[]);
+        setContribs(data ?? []);
         setLoading(false);
       });
   }, [geoUnitId]);
 
-  const bags = claim?.total_value ?? 0;
-  const isGroup = claimLabel?.isGroup ?? false;
-  const isClaimed = !!(claim?.claimed_by_group || claim?.claimed_by_user);
+  const holdingGroupId = claim?.claimed_by_group ?? null;
 
-  const accentHex = isClaimed ? (isGroup ? "#10b981" : "#3b82f6") : "#3f3f46";
+  const groupBreakdown = useMemo(() => {
+    const map = new Map<string, { name: string; bags: number }>();
+    for (const c of contribs) {
+      if (!c.group_id) continue;
+      const name = c.groups?.name ?? "Unknown";
+      const bags = c.value ?? 1;
+      const existing = map.get(c.group_id);
+      if (existing) existing.bags += bags;
+      else map.set(c.group_id, { name, bags });
+    }
+    return Array.from(map.entries())
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => b.bags - a.bags);
+  }, [contribs]);
+
+  const groupColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    let idx = 1;
+    for (const g of groupBreakdown) {
+      if (g.id === holdingGroupId) colors[g.id] = GROUP_PALETTE[0];
+      else { colors[g.id] = GROUP_PALETTE[idx % GROUP_PALETTE.length]; idx++; }
+    }
+    return colors;
+  }, [groupBreakdown, holdingGroupId]);
+
+  const totalBags = claim?.total_value ?? 0;
+  const isContested = groupBreakdown.length > 1;
+  const isClaimed = !!(claim?.claimed_by_group || claim?.claimed_by_user);
+  const maxGroupBags = groupBreakdown[0]?.bags ?? 1;
+  const isGroup = claimLabel?.isGroup ?? false;
+
+  const accentHex = isClaimed
+    ? (holdingGroupId ? (groupColors[holdingGroupId] ?? GROUP_PALETTE[0]) : "#3b82f6")
+    : "#3f3f46";
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-60 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
-      {/* Colored left accent strip */}
-      <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentHex }} />
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+      <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
 
       {/* Header */}
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
@@ -328,54 +367,109 @@ function TerritoryPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Territory</p>
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">ZIP {displayName}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 transition-colors hover:text-zinc-300"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-2 mt-0.5">
+            {isClaimed && (
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                isContested
+                  ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
+                  : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
+              }`}>
+                {isContested ? "Contested" : "Claimed"}
+              </span>
+            )}
+            <button onClick={onClose} className="text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+          </div>
         </div>
 
         <div className="mt-2.5">
           {claimLabel ? (
             <div className="flex items-center gap-1.5">
               <span className="text-sm">{isGroup ? "👥" : "👤"}</span>
-              <span className={`truncate text-sm font-semibold ${isGroup ? "text-emerald-400" : "text-blue-400"}`}>
+              <span className="truncate text-sm font-semibold" style={{ color: accentHex }}>
                 {claimLabel.name}
               </span>
+              <span className="ml-auto text-[10px] text-zinc-600 shrink-0">holds</span>
             </div>
           ) : (
             <span className="text-sm text-zinc-600">Unclaimed</span>
           )}
           {isClaimed && (
-            <p className="mt-1 text-xs text-zinc-500">{bags} bag{bags !== 1 ? "s" : ""} collected</p>
+            <p className="mt-0.5 text-xs text-zinc-500">{totalBags} bag{totalBags !== 1 ? "s" : ""} total in ZIP</p>
           )}
         </div>
       </div>
 
-      {/* Recent cleanups */}
-      <div className="pb-3 pl-4 pr-3 pt-3">
-        <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Cleanups</p>
+      <div className="overflow-y-auto max-h-80">
+      {/* Group battle bars */}
+      {isContested && (
+        <div className="border-b border-zinc-800 px-4 py-3">
+          <p className="mb-2.5 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Group Battle</p>
+          <div className="space-y-2.5">
+            {groupBreakdown.map((g) => {
+              const color = groupColors[g.id] ?? "#71717a";
+              const isHolder = g.id === holdingGroupId;
+              const pct = (g.bags / maxGroupBags) * 100;
+              return (
+                <div key={g.id}>
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-start gap-1.5">
+                      <div className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
+                      <span className={`text-xs break-words ${isHolder ? "font-semibold" : "text-zinc-400"}`}
+                        style={isHolder ? { color } : {}}>
+                        {g.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {isHolder && <span className="text-[10px] text-zinc-500 leading-none">holds</span>}
+                      <span className="text-xs font-mono tabular-nums text-zinc-300">{g.bags}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Recent activity */}
+      <div className="px-4 py-3">
+        <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Activity</p>
         {loading ? (
           <p className="text-xs text-zinc-700">Loading…</p>
         ) : contribs.length === 0 ? (
           <p className="text-xs text-zinc-700">No cleanups logged yet</p>
         ) : (
           <div className="space-y-1.5">
-            {contribs.map((c, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <span className="text-xs text-zinc-300">
-                  🗑️ {c.value ?? 1} bag{(c.value ?? 1) !== 1 ? "s" : ""}
-                </span>
-                <span className="text-xs text-zinc-600">
-                  {c.submitted_at
-                    ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    : ""}
-                </span>
-              </div>
-            ))}
+            {contribs.slice(0, 7).map((c, i) => {
+              const name = c.profiles?.display_name ?? c.profiles?.username ?? "Anonymous";
+              const groupName = c.groups?.name;
+              const dotColor = c.group_id ? (groupColors[c.group_id] ?? "#71717a") : null;
+              return (
+                <div key={i} className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    {dotColor
+                      ? <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
+                      : <div className="w-1.5 h-1.5 shrink-0" />}
+                    <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{name}</span>
+                    <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{c.value ?? 1} bags</span>
+                    <span className="text-xs text-zinc-600 shrink-0">
+                      {c.submitted_at
+                        ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                        : ""}
+                    </span>
+                  </div>
+                  {groupName && (
+                    <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">{groupName}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -568,6 +662,9 @@ export default function CampaignMap({
   const map = useRef<maplibregl.Map | null>(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [selectedZip, setSelectedZip] = useState<SelectedZip | null>(null);
+  const [zipSearch, setZipSearch] = useState("");
+  const [zipError, setZipError] = useState<string | null>(null);
+  const zipErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
@@ -1384,6 +1481,24 @@ export default function CampaignMap({
     return () => { supabase.removeChannel(channel); };
   }, [campaign.id, isChoropleth, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleZipSearch = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const zip = zipSearch.trim();
+    if (zip.length !== 5) return;
+    const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/geo-units/zip/${zip}/centroid`);
+    if (!res.ok) {
+      setZipError("ZIP not found");
+      if (zipErrorTimerRef.current) clearTimeout(zipErrorTimerRef.current);
+      zipErrorTimerRef.current = setTimeout(() => setZipError(null), 3000);
+      return;
+    }
+    const data = await res.json();
+    map.current?.fitBounds(
+      [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]],
+      { padding: 40, maxZoom: 14 },
+    );
+  }, [zipSearch]);
+
   const handleConfirmPin = () => {
     const pos = pinPickerMarkerRef.current?.getLngLat();
     if (pos) onPinPlaced?.(pos.lat, pos.lng);
@@ -1443,7 +1558,7 @@ export default function CampaignMap({
         </>
       )}
 
-      {activeEvents.length > 0 && !pinPickerActive && (
+      {!pinPickerActive && (activeEvents.length > 0 || campaign.geo_unit === "zip") && (
         <div className="absolute top-4 left-4 z-10 space-y-2 max-w-xs">
           {activeEvents.map((event) => (
             <div
@@ -1456,11 +1571,32 @@ export default function CampaignMap({
               )}
             </div>
           ))}
+          {campaign.geo_unit === "zip" && (
+            <form onSubmit={handleZipSearch} className="flex gap-1">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={5}
+                placeholder="Go to ZIP…"
+                value={zipSearch}
+                onChange={(e) => setZipSearch(e.target.value.replace(/\D/g, ""))}
+                className={`w-28 px-2 py-1.5 text-xs bg-zinc-900/90 border rounded text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${zipError ? "border-red-600" : "border-zinc-700"}`}
+              />
+              <button
+                type="submit"
+                disabled={zipSearch.length !== 5}
+                className="px-2.5 py-1.5 text-xs bg-zinc-800/90 border border-zinc-700 rounded text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+              >
+                Go
+              </button>
+            </form>
+          )}
+          {zipError && <p className="text-xs text-red-400 px-1">{zipError}</p>}
         </div>
       )}
 
       {tilesLoading && (
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
           <div className="w-3 h-3 rounded-full border-2 border-zinc-600 border-t-zinc-300 animate-spin" />
           <span className="text-zinc-400 text-xs">Loading map…</span>
         </div>

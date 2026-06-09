@@ -137,6 +137,54 @@ _TRASH = [
     ("destiny", "gcc",  "78205",  29.4241,  -98.4936,  7, 17.0, 13),
     # Detroit 48226
     ("marcus",  "ccc",  "48226",  42.3314,  -83.0457, 10, 22.0,  9),
+
+    # ---- Contested ZIPs: rival groups fighting over the same territory ----
+
+    # Chicago 60601 — CCC established (19 bags), GCC mounts late challenge and holds claim
+    ("jordan",  "gcc",  "60601",  41.8829,  -87.6236,  9,  2.5, 11),
+    ("destiny", "gcc",  "60601",  41.8829,  -87.6236,  8,  0.5, 16),
+
+    # Seattle 98104 — three-way: TB vs CCC vs MS; MS swoops in and holds by recency
+    ("tyler",   "ms",   "98104",  47.6005, -122.3342,  9,  5.5, 13),
+    ("maya",    "ms",   "98104",  47.6005, -122.3342,  5,  1.0, 10),
+
+    # Atlanta 30303 — MS was established, GCC invades from the south and takes claim
+    ("jordan",  "gcc",  "30303",  33.7536,  -84.3911,  8,  4.5, 12),
+    ("destiny", "gcc",  "30303",  33.7536,  -84.3911,  5,  1.5, 15),
+
+    # Denver 80203 — MS stronghold by volume, CCC surprise raid claims it by recency
+    ("priya",   "ccc",  "80203",  39.7294, -104.9834, 10,  3.5, 12),
+    ("sam",     "ccc",  "80203",  39.7294, -104.9834,  7,  0.5, 17),
+
+    # Miami 33132 — GCC home turf (21 bags), CCC made an incursion and holds claim
+    ("alex",    "ccc",  "33132",  25.7743,  -80.1938, 11,  5.0, 11),
+    ("marcus",  "ccc",  "33132",  25.7743,  -80.1938,  7,  1.0, 14),
+
+    # ---- New battleground ZIPs ----
+
+    # Orlando 32801 — GCC vs CCC borderland: GCC has more bags, CCC holds claim
+    ("jordan",  "gcc",  "32801",  28.5421,  -81.3790, 11,  8.0,  9),
+    ("destiny", "gcc",  "32801",  28.5421,  -81.3790,  8,  5.0, 14),
+    ("priya",   "ccc",  "32801",  28.5421,  -81.3790,  9,  3.0, 10),
+    ("sam",     "ccc",  "32801",  28.5421,  -81.3790,  7,  1.0, 15),
+
+    # St. Louis 63101 — MS vs GCC midlands clash: tied on bags, GCC holds by recency
+    ("tyler",   "ms",   "63101",  38.6270,  -90.1994, 12,  9.0,  8),
+    ("maya",    "ms",   "63101",  38.6270,  -90.1994,  8,  6.0, 14),
+    ("destiny", "gcc",  "63101",  38.6270,  -90.1994, 11,  4.0, 10),
+    ("jordan",  "gcc",  "63101",  38.6270,  -90.1994,  9,  0.5, 16),
+
+    # NYC Lower East Side 10002 — GCC raids CCC's home turf; CCC has more bags but GCC holds
+    ("marcus",  "ccc",  "10002",  40.7157,  -73.9863, 14, 12.0,  9),
+    ("alex",    "ccc",  "10002",  40.7157,  -73.9863,  9,  7.0, 14),
+    ("jordan",  "gcc",  "10002",  40.7157,  -73.9863, 13,  3.0, 10),
+    ("destiny", "gcc",  "10002",  40.7157,  -73.9863,  8,  0.5, 13),
+
+    # Minneapolis 55408 — CCC pushes into MS stronghold; MS retakes by recency
+    ("priya",   "ccc",  "55408",  44.9338,  -93.3107, 10,  4.0, 10),
+    ("sam",     "ccc",  "55408",  44.9338,  -93.3107,  8,  2.0, 14),
+    ("tyler",   "ms",   "55408",  44.9338,  -93.3107, 14,  3.0,  9),
+    ("maya",    "ms",   "55408",  44.9338,  -93.3107,  9,  0.5, 11),
 ]
 
 # (user_key, group_key_or_None, lat, lng, photo_seed, days_back, hour, notes)
@@ -681,6 +729,16 @@ class DemoDataSeeder(Seeder):
                 "effect": json.dumps({"bonus_registrations": 50}),
                 "ends_at": _ts(-14, 12),
             },
+            {
+                "id": _uid("event_battle_stlouis"),
+                "cid": TRASH_WAR_ID,
+                "geo_id": zip_geos.get("63101"),
+                "etype": "boss_spawn",
+                "title": "Battle Zone: St. Louis Gateway",
+                "desc": "Midwest Sweepers and Gulf Coast Crew are deadlocked at 20 bags each. Every bag is a tiebreaker.",
+                "effect": json.dumps({"multiplier": 1.5, "duration_hours": 48}),
+                "ends_at": _ts(-3, 18),
+            },
         ]
         for ev in events:
             try:
@@ -722,6 +780,7 @@ class DemoDataSeeder(Seeder):
             _uid("event_boss_chicago"),
             _uid("event_boss_houston"),
             _uid("event_road_surge"),
+            _uid("event_battle_stlouis"),
         ]
 
         await db.execute(
@@ -734,6 +793,10 @@ class DemoDataSeeder(Seeder):
         )
         await db.execute(
             text("DELETE FROM territory_claims WHERE claimed_by_user = ANY(:ids)"),
+            {"ids": demo_user_ids},
+        )
+        await db.execute(
+            text("DELETE FROM problem_reports WHERE reported_by = ANY(:ids)"),
             {"ids": demo_user_ids},
         )
         await db.execute(

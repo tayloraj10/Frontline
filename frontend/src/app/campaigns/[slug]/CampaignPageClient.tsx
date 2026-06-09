@@ -40,7 +40,7 @@ interface Props {
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
   userId: string | null;
-  userGroups: { id: string; name: string }[];
+  userGroups: { id: string; name: string; logo_url?: string | null }[];
   leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
   activity: ActivityItem[];
   unit: string;

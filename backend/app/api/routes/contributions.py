@@ -174,8 +174,6 @@ async def submit_contribution(
                     (:campaign_id, :geo_unit_id, :user_id, :group_id, :value, NOW())
                 ON CONFLICT (campaign_id, geo_unit_id) DO UPDATE SET
                     total_value = territory_claims.total_value + EXCLUDED.total_value,
-                    claimed_by_user = EXCLUDED.claimed_by_user,
-                    claimed_by_group = EXCLUDED.claimed_by_group,
                     last_contribution_at = NOW(),
                     decay_starts_at = NULL,
                     updated_at = NOW()
@@ -186,6 +184,29 @@ async def submit_contribution(
                 "user_id": str(payload.user_id),
                 "group_id": str(payload.group_id) if payload.group_id else None,
                 "value": payload.value or 1,
+            },
+        )
+        await db.execute(
+            text("""
+                WITH top_group AS (
+                    SELECT group_id FROM contributions
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                      AND group_id IS NOT NULL
+                    GROUP BY group_id ORDER BY SUM(value) DESC LIMIT 1
+                ),
+                top_user AS (
+                    SELECT user_id FROM contributions
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                    GROUP BY user_id ORDER BY SUM(value) DESC LIMIT 1
+                )
+                UPDATE territory_claims SET
+                    claimed_by_group = (SELECT group_id FROM top_group),
+                    claimed_by_user  = (SELECT user_id  FROM top_user)
+                WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+            """),
+            {
+                "campaign_id": str(payload.campaign_id),
+                "geo_unit_id": geo_unit_id,
             },
         )
 
@@ -349,8 +370,6 @@ async def process_contribution(payload: ContributionRequest, db: AsyncSession = 
             VALUES (:campaign_id, :geo_unit_id, :user_id, :group_id, :value, NOW())
             ON CONFLICT (campaign_id, geo_unit_id) DO UPDATE SET
                 total_value = territory_claims.total_value + EXCLUDED.total_value,
-                claimed_by_user = EXCLUDED.claimed_by_user,
-                claimed_by_group = EXCLUDED.claimed_by_group,
                 last_contribution_at = NOW(),
                 decay_starts_at = NULL,
                 updated_at = NOW()
@@ -361,6 +380,29 @@ async def process_contribution(payload: ContributionRequest, db: AsyncSession = 
             "user_id": str(payload.user_id),
             "group_id": claimed_by_group,
             "value": payload.value or 1,
+        },
+    )
+    await db.execute(
+        text("""
+            WITH top_group AS (
+                SELECT group_id FROM contributions
+                WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                  AND group_id IS NOT NULL
+                GROUP BY group_id ORDER BY SUM(value) DESC LIMIT 1
+            ),
+            top_user AS (
+                SELECT user_id FROM contributions
+                WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                GROUP BY user_id ORDER BY SUM(value) DESC LIMIT 1
+            )
+            UPDATE territory_claims SET
+                claimed_by_group = (SELECT group_id FROM top_group),
+                claimed_by_user  = (SELECT user_id  FROM top_user)
+            WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+        """),
+        {
+            "campaign_id": str(payload.campaign_id),
+            "geo_unit_id": str(geo_unit_id),
         },
     )
     await db.commit()

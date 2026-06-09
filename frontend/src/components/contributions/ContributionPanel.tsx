@@ -168,7 +168,7 @@ interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
   userId: string;
-  userGroups?: { id: string; name: string }[];
+  userGroups?: { id: string; name: string; logo_url?: string | null }[];
   onEnterPinPicker: (coords: Coords, constrained?: boolean) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
@@ -325,7 +325,7 @@ function ContributeModal({
   campaignId: string;
   campaignContributionType: string;
   userId: string;
-  userGroups: { id: string; name: string }[];
+  userGroups: { id: string; name: string; logo_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -346,7 +346,14 @@ function ContributeModal({
   const [notes, setNotes] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("frontline:contrib:group");
+      if (stored === "__individual__") return null;
+      if (stored && userGroups.some((g) => g.id === stored)) return stored;
+    }
+    return userGroups.length === 1 ? userGroups[0].id : null;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -492,7 +499,7 @@ function ContributeModal({
             <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
-                onClick={() => setSelectedGroupId(null)}
+                onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                   selectedGroupId === null
                     ? "bg-zinc-700 border-zinc-500 text-zinc-100"
@@ -505,13 +512,20 @@ function ContributeModal({
                 <button
                   key={g.id}
                   type="button"
-                  onClick={() => setSelectedGroupId(g.id)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                     selectedGroupId === g.id
                       ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
                       : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
                   }`}
                 >
+                  {g.logo_url ? (
+                    <img src={g.logo_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
+                      {g.name[0].toUpperCase()}
+                    </span>
+                  )}
                   {g.name}
                 </button>
               ))}
@@ -795,7 +809,7 @@ function SolarpunkActionModal({
 }: {
   campaignId: string;
   userId: string;
-  userGroups: { id: string; name: string }[];
+  userGroups: { id: string; name: string; logo_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -806,7 +820,14 @@ function SolarpunkActionModal({
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState<number | null>(null);
   const [selectedAction, setSelectedAction] = useState<{ key: string; label: string; points: number } | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("frontline:contrib:group");
+      if (stored === "__individual__") return null;
+      if (stored && userGroups.some((g) => g.id === stored)) return stored;
+    }
+    return userGroups.length === 1 ? userGroups[0].id : null;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -949,16 +970,23 @@ function SolarpunkActionModal({
             <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
-                onClick={() => setSelectedGroupId(null)}
+                onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
               >Individual</button>
               {userGroups.map((g) => (
                 <button
                   key={g.id}
                   type="button"
-                  onClick={() => setSelectedGroupId(g.id)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
+                  onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
                 >
+                  {g.logo_url ? (
+                    <img src={g.logo_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
+                      {g.name[0].toUpperCase()}
+                    </span>
+                  )}
                   {g.name}
                 </button>
               ))}
@@ -1011,7 +1039,7 @@ function SolarpunkPhotoModal({
 }: {
   campaignId: string;
   userId: string;
-  userGroups: { id: string; name: string }[];
+  userGroups: { id: string; name: string; logo_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -1021,7 +1049,14 @@ function SolarpunkPhotoModal({
 }) {
   const [photo, setPhoto] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("frontline:contrib:group");
+      if (stored === "__individual__") return null;
+      if (stored && userGroups.some((g) => g.id === stored)) return stored;
+    }
+    return userGroups.length === 1 ? userGroups[0].id : null;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1128,13 +1163,20 @@ function SolarpunkPhotoModal({
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
             <div className="flex flex-wrap gap-1.5">
-              <button type="button" onClick={() => setSelectedGroupId(null)}
+              <button type="button" onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
                 Individual
               </button>
               {userGroups.map((g) => (
-                <button key={g.id} type="button" onClick={() => setSelectedGroupId(g.id)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
+                <button key={g.id} type="button" onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
+                  {g.logo_url ? (
+                    <img src={g.logo_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
+                      {g.name[0].toUpperCase()}
+                    </span>
+                  )}
                   {g.name}
                 </button>
               ))}
