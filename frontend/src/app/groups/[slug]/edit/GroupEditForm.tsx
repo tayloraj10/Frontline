@@ -35,7 +35,7 @@ export default function GroupEditForm({ groupId, slug, name, description, websit
   const uploadLogo = async (file: File): Promise<string> => {
     const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
     const res = await fetch(
-      `${fastApiUrl}/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}`
+      `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}`
     );
     if (!res.ok) throw new Error("Failed to get upload URL");
     const { upload_url, public_url } = await res.json();
