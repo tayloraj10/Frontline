@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -9,42 +9,123 @@ interface Props {
   username: string;
   displayName: string | null;
   bio: string | null;
+  avatarUrl: string | null;
 }
 
-export default function ProfileEditForm({ userId, username, displayName, bio }: Props) {
+export default function ProfileEditForm({ userId, username, displayName, bio, avatarUrl }: Props) {
   const router = useRouter();
   const [display, setDisplay] = useState(displayName ?? "");
   const [bioVal, setBioVal] = useState(bio ?? "");
+  const [currentAvatar, setCurrentAvatar] = useState(avatarUrl);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const uploadAvatar = async (file: File): Promise<string> => {
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+    const res = await fetch(
+      `${fastApiUrl}/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}`
+    );
+    if (!res.ok) throw new Error("Failed to get upload URL");
+    const { upload_url, public_url } = await res.json();
+
+    const uploadRes = await fetch(upload_url, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type },
+    });
+    if (!uploadRes.ok) throw new Error("Upload failed");
+    return public_url;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({
-        display_name: display.trim() || null,
-        bio: bioVal.trim() || null,
-      })
-      .eq("id", userId);
+    try {
+      let newAvatarUrl = currentAvatar;
 
-    setSaving(false);
+      if (avatarFile) {
+        newAvatarUrl = await uploadAvatar(avatarFile);
+      }
 
-    if (updateError) {
-      setError(updateError.message);
-      return;
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          display_name: display.trim() || null,
+          bio: bioVal.trim() || null,
+          avatar_url: newAvatarUrl,
+        })
+        .eq("id", userId);
+
+      if (updateError) throw new Error(updateError.message);
+
+      setCurrentAvatar(newAvatarUrl);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      router.push(`/users/${username}`);
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
     }
-
-    router.push(`/users/${username}`);
-    router.refresh();
   };
+
+  const displayAvatar = avatarPreview ?? currentAvatar;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Avatar */}
+      <div>
+        <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
+          Profile photo
+        </label>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+          >
+            {displayAvatar ? (
+              <img src={displayAvatar} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span className="flex items-center justify-center w-full h-full text-2xl font-black text-zinc-300">
+                {(displayName ?? username)[0].toUpperCase()}
+              </span>
+            )}
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+          </button>
+          <div className="text-xs text-zinc-500 space-y-0.5">
+            <p>JPG, PNG or WebP</p>
+            <p>Max 5 MB</p>
+          </div>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleAvatarChange}
+        />
+      </div>
+
       <div>
         <label className="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">
           Display name

@@ -127,8 +127,14 @@ export default async function UserProfilePage({ params }: Props) {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
-          <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 text-2xl font-black text-zinc-300 shrink-0">
-            {(profile.display_name ?? profile.username)[0].toUpperCase()}
+          <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt={profile.display_name ?? profile.username} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-2xl font-black text-zinc-300">
+                {(profile.display_name ?? profile.username)[0].toUpperCase()}
+              </span>
+            )}
           </div>
           <div className="min-w-0">
             <h1 className="text-2xl font-black text-zinc-100 leading-tight">
