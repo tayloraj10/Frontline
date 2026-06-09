@@ -83,6 +83,11 @@ export default async function HomePage() {
           </span>
         ))}
       </div>
+
+      <div className="relative flex gap-4 text-xs text-zinc-600">
+        <Link href="/legal/terms" className="hover:text-zinc-400 transition-colors">Terms</Link>
+        <Link href="/legal/privacy" className="hover:text-zinc-400 transition-colors">Privacy</Link>
+      </div>
     </main>
   );
 }
