@@ -31,19 +31,19 @@ Five topics to work through before pushing the app live.
 - [ ] Account settings — email change, password change, danger zone
 
 ### Trash War / Events
-- [ ] Backend campaign status guard — reject `POST /api/contributions/process` if campaign is not `active`
-- [ ] Backend trigger evaluation guard — skip `_evaluate_triggers` for non-active campaigns
+- [x] Backend campaign status guard — `POST /api/contributions/submit` checks campaign status, returns 403 if not `active`
+- [ ] Backend trigger evaluation guard — skip `_evaluate_triggers` for non-active campaigns (note: only guarded via `submit` endpoint, not `process`)
 - [ ] Frontend status banner on campaign page when status is `paused` or `completed`
-- [ ] Boss spawn score multiplier — `effect_config.score_multiplier` is stored but not applied by scoring engine
-- [ ] `time_elapsed` condition type — in schema and admin UI but evaluator has no handler (silently never fires)
+- [x] Boss spawn score multiplier — active `score_multiplier` campaign events are fetched and applied to `effective_value` in `submit_contribution`
+- [x] `time_elapsed` condition type — `_check_time_elapsed_trigger` handler implemented in `events.py`
 - [ ] Verify end-to-end: trash report → `problem_reports` insert → report count threshold → boss event spawn → map marker
 
 ### Solarpunk
-- [ ] Solar panel aesthetic for Stage 0 hexes (dark fill + internal grid line overlay)
-- [ ] GSAP bloom wave animation when a hex advances a stage
-- [ ] Per-hex photo collage panel (thumbnail grid of `solarpunk_photo` submissions)
-- [ ] Demo data seeder
-- [ ] Milestone unlock system (cross stage threshold → `campaign_events` record + badge)
+- [x] Solar panel aesthetic for Stage 0 hexes (dark fill + internal grid line overlay)
+- [x] GSAP bloom wave animation when a hex advances a stage
+- [x] Per-hex photo collage panel (thumbnail grid of `solarpunk_photo` submissions)
+- [x] Demo data seeder
+- [x] Milestone unlock system (cross stage threshold → `campaign_events` record + badge)
 
 ### Legal
 - [ ] Terms of Service page (`/terms`)
