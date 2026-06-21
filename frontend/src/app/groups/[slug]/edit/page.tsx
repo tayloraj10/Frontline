@@ -39,7 +39,7 @@ export default async function GroupEditPage({ params }: Props) {
 
   const userIds = (membersData ?? []).map((m) => m.user_id);
   const { data: profilesData } = userIds.length > 0
-    ? await supabase.from("profiles").select("id, username, display_name").in("id", userIds)
+    ? await supabase.schema("public").from("profiles").select("id, username, display_name").in("id", userIds)
     : { data: [] };
 
   const profilesById = new Map((profilesData ?? []).map((p) => [p.id, p]));

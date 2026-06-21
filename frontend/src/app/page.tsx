@@ -11,7 +11,7 @@ export default async function HomePage() {
   if (user) redirect("/campaigns");
 
   const [{ count: campaignCount }, { count: contribCount }] = await Promise.all([
-    supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active"),
+    supabase.schema("public").from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active"),
     supabase.from("contributions").select("*", { count: "exact", head: true }),
   ]);
 

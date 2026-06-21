@@ -61,6 +61,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
 
       const supabase = createClient();
       const { error: updateError } = await supabase
+        .schema("public")
         .from("profiles")
         .update({
           display_name: display.trim() || null,

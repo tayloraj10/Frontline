@@ -3,7 +3,12 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-engine = create_async_engine(settings.database_url, echo=not settings.is_production)
+search_path = "public" if settings.is_production else "dev,public"
+engine = create_async_engine(
+    settings.database_url,
+    echo=not settings.is_production,
+    connect_args={"server_settings": {"search_path": search_path}},
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

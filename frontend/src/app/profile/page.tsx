@@ -7,6 +7,7 @@ export default async function ProfileRedirectPage() {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
+    .schema("public")
     .from("profiles")
     .select("username")
     .eq("id", user.id)

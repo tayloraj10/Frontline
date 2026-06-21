@@ -125,6 +125,7 @@ export default async function LeaderboardPage({ params }: Props) {
   const supabase = await createClient();
 
   const { data: campaignData } = await supabase
+    .schema("public")
     .from("campaigns")
     .select("id, title, description, campaign_type, contribution_type")
     .eq("slug", slug)
@@ -158,7 +159,7 @@ export default async function LeaderboardPage({ params }: Props) {
 
   const [{ data: profilesData }, { data: groupsData }] = await Promise.all([
     userIds.length > 0
-      ? supabase.from("profiles").select("id, username, display_name").in("id", userIds)
+      ? supabase.schema("public").from("profiles").select("id, username, display_name").in("id", userIds)
       : Promise.resolve({ data: [] as Profile[] }),
     groupIds.length > 0
       ? supabase.from("groups").select("id, name").in("id", groupIds)

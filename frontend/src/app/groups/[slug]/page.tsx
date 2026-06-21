@@ -34,7 +34,7 @@ export default async function GroupProfilePage({ params }: Props) {
   const userIds = members.map((m) => m.user_id);
 
   const { data: profilesData } = userIds.length > 0
-    ? await supabase.from("profiles").select("id, username, display_name").in("id", userIds)
+    ? await supabase.schema("public").from("profiles").select("id, username, display_name").in("id", userIds)
     : { data: [] as Pick<Profile, "id" | "username" | "display_name">[] };
 
   const profilesById = new Map((profilesData ?? []).map((p) => [p.id, p]));

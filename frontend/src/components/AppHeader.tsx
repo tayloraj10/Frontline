@@ -13,6 +13,7 @@ export default async function AppHeader() {
   let isAdmin = false;
   if (user) {
     const { data: profile } = await supabase
+      .schema("public")
       .from("profiles")
       .select("is_admin")
       .eq("id", user.id)

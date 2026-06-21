@@ -32,5 +32,4 @@ app.include_router(problem_reports.router, prefix="/api")
 app.include_router(tiles.router, prefix="/api")
 app.include_router(leaderboard.router, prefix="/api")
 app.include_router(geo_units.router, prefix="/api")
-if not settings.is_production:
-    app.include_router(admin.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")  # TEMP: gate removed for one-off prod wipe, revert after

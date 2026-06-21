@@ -8,6 +8,7 @@ export default async function ProfileSettingsPage() {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
+    .schema("public")
     .from("profiles")
     .select("id, username, display_name, bio, avatar_url")
     .eq("id", user.id)

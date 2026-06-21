@@ -15,6 +15,8 @@ type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
+const DB_SCHEMA = process.env.NEXT_PUBLIC_DB_SCHEMA || "public";
+
 interface ContributionPoint {
   id: string;
   user_id: string | null;
@@ -320,12 +322,23 @@ function TerritoryPanel({
     const supabase = createClient();
     (supabase
       .from("contributions")
-      .select("value, submitted_at, group_id, user_id, profiles(display_name, username), groups(name)")
+      .select("value, submitted_at, group_id, user_id, groups(name)")
       .eq("geo_unit_id", geoUnitId)
       .order("submitted_at", { ascending: false })
-      .limit(20) as unknown as Promise<{ data: ContribRow[] | null }>)
-      .then(({ data }) => {
-        setContribs(data ?? []);
+      .limit(20) as unknown as Promise<{ data: Omit<ContribRow, "profiles">[] | null }>)
+      .then(async ({ data }) => {
+        const rows = data ?? [];
+        const userIds = [...new Set(rows.map((r) => r.user_id).filter((id): id is string => !!id))];
+        const profilesById = new Map<string, { display_name: string | null; username: string }>();
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .schema("public")
+            .from("profiles")
+            .select("id, display_name, username")
+            .in("id", userIds);
+          for (const p of profiles ?? []) profilesById.set(p.id, p);
+        }
+        setContribs(rows.map((r) => ({ ...r, profiles: r.user_id ? profilesById.get(r.user_id) ?? null : null })));
         setLoading(false);
       });
   }, [geoUnitId]);
@@ -1628,7 +1641,7 @@ export default function CampaignMap({
       .channel(`problem_reports:${campaign.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "problem_reports", filter: `campaign_id=eq.${campaign.id}` },
+        { event: "INSERT", schema: DB_SCHEMA, table: "problem_reports", filter: `campaign_id=eq.${campaign.id}` },
         async () => {
           const res = await fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`).catch(() => null);
           if (!res?.ok) return;
@@ -1646,7 +1659,7 @@ export default function CampaignMap({
         "postgres_changes",
         {
           event: "*",
-          schema: "public",
+          schema: DB_SCHEMA,
           table: "territory_claims",
           filter: `campaign_id=eq.${campaign.id}`,
         },

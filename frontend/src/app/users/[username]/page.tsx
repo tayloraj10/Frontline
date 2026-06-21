@@ -25,7 +25,7 @@ export default async function UserProfilePage({ params }: Props) {
 
   const [{ data: { user: currentUser } }, { data: profileData }] = await Promise.all([
     supabase.auth.getUser(),
-    supabase.from("profiles").select("*").eq("username", username).single(),
+    supabase.schema("public").from("profiles").select("*").eq("username", username).single(),
   ]);
 
   const profile = profileData as Profile | null;
@@ -85,7 +85,7 @@ export default async function UserProfilePage({ params }: Props) {
       ? supabase.from("groups").select("id, name, slug").in("id", groupIds)
       : Promise.resolve({ data: [] as Group[] }),
     allNeededCampaignIds.length > 0
-      ? supabase.from("campaigns").select("id, title, slug, campaign_type").in("id", allNeededCampaignIds)
+      ? supabase.schema("public").from("campaigns").select("id, title, slug, campaign_type").in("id", allNeededCampaignIds)
       : Promise.resolve({ data: [] as { id: string; title: string; slug: string; campaign_type: string }[] }),
   ]);
 

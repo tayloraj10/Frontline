@@ -15,7 +15,7 @@ export default async function GroupsPage() {
 
   let isAdmin = false;
   if (user) {
-    const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
+    const { data: profile } = await supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single();
     isAdmin = profile?.is_admin ?? false;
   }
 

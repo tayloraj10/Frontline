@@ -7,6 +7,8 @@ import type { Database } from "@/types/database";
 
 type UserNotification = Database["public"]["Tables"]["user_notifications"]["Row"];
 
+const DB_SCHEMA = process.env.NEXT_PUBLIC_DB_SCHEMA || "public";
+
 const TYPE_ICON: Record<string, string> = {
   event: "⚡",
   tract_claimed: "⚑",
@@ -47,7 +49,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
         "postgres_changes",
         {
           event: "INSERT",
-          schema: "public",
+          schema: DB_SCHEMA,
           table: "user_notifications",
           filter: `user_id=eq.${userId}`,
         },

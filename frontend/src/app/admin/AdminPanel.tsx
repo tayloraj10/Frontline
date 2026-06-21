@@ -148,6 +148,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
 
     const supabase = createClient();
     const { data, error: insertErr } = await supabase
+      .schema("public")
       .from("campaigns")
       .insert({
         slug: slug.trim(),
@@ -179,7 +180,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
 
   const handleStatusChange = async (campaignId: string, newStatus: string) => {
     const supabase = createClient();
-    await supabase.from("campaigns").update({ status: newStatus }).eq("id", campaignId);
+    await supabase.schema("public").from("campaigns").update({ status: newStatus }).eq("id", campaignId);
     setCampaigns(campaigns.map(c => c.id === campaignId ? { ...c, status: newStatus } : c));
   };
 
@@ -355,6 +356,7 @@ function TriggersTab({ campaigns, triggers, setTriggers }: {
 
     const supabase = createClient();
     const { data, error: insertErr } = await supabase
+      .schema("public")
       .from("event_triggers")
       .insert({
         campaign_id: campaignId,
@@ -388,7 +390,7 @@ function TriggersTab({ campaigns, triggers, setTriggers }: {
 
   const handleToggle = async (trigger: Trigger) => {
     const supabase = createClient();
-    await supabase.from("event_triggers").update({ is_active: !trigger.is_active }).eq("id", trigger.id);
+    await supabase.schema("public").from("event_triggers").update({ is_active: !trigger.is_active }).eq("id", trigger.id);
     setTriggers(triggers.map(t => t.id === trigger.id ? { ...t, is_active: !t.is_active } : t));
   };
 

@@ -25,7 +25,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
   const supabase = await createClient();
 
   const [{ data: campaignData }, { data: { user: currentUser } }] = await Promise.all([
-    supabase.from("campaigns").select("id, title, description, campaign_type").eq("slug", slug).single(),
+    supabase.schema("public").from("campaigns").select("id, title, description, campaign_type").eq("slug", slug).single(),
     supabase.auth.getUser(),
   ]);
 
@@ -47,7 +47,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
   const [{ data: profilesData }, { data: groupsData }] = await Promise.all([
     userIds.length > 0
-      ? supabase.from("profiles").select("id, username, display_name").in("id", userIds)
+      ? supabase.schema("public").from("profiles").select("id, username, display_name").in("id", userIds)
       : Promise.resolve({ data: [] as Profile[] }),
     groupIds.length > 0
       ? supabase.from("groups").select("id, name, slug").in("id", groupIds)

@@ -79,7 +79,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
 export default async function CampaignsPage() {
   const supabase = await createClient();
   const [{ data }, { data: { user } }] = await Promise.all([
-    supabase.from("campaigns").select("*").eq("status", "active").order("created_at", { ascending: false }),
+    supabase.schema("public").from("campaigns").select("*").eq("status", "active").order("created_at", { ascending: false }),
     supabase.auth.getUser(),
   ]);
 

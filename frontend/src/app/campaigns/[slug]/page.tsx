@@ -39,7 +39,7 @@ export default async function CampaignPage({ params }: Props) {
 
   const [{ data: { user } }, { data }] = await Promise.all([
     supabase.auth.getUser(),
-    supabase.from("campaigns").select("*").eq("slug", slug).single(),
+    supabase.schema("public").from("campaigns").select("*").eq("slug", slug).single(),
   ]);
 
   const campaign = data as Campaign | null;
@@ -123,7 +123,7 @@ export default async function CampaignPage({ params }: Props) {
 
   const [{ data: profilesData }, { data: groupsData }] = await Promise.all([
     allUserIds.length > 0
-      ? supabase.from("profiles").select("id, username, display_name").in("id", allUserIds)
+      ? supabase.schema("public").from("profiles").select("id, username, display_name").in("id", allUserIds)
       : Promise.resolve({ data: [] as { id: string; username: string; display_name: string | null }[] }),
     allGroupIds.length > 0
       ? supabase.from("groups").select("id, name, slug, image_url").in("id", allGroupIds)
