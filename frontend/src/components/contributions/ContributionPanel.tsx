@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -167,7 +168,7 @@ const SOLARPUNK_ACTIONS: {
 interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
-  userId: string;
+  userId: string | null;
   userGroups?: { id: string; name: string; image_url?: string | null }[];
   onEnterPinPicker: (coords: Coords, constrained?: boolean) => void;
   pinPickerActive: boolean;
@@ -324,7 +325,7 @@ function ContributeModal({
 }: {
   campaignId: string;
   campaignContributionType: string;
-  userId: string;
+  userId: string | null;
   userGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
@@ -370,7 +371,7 @@ function ContributeModal({
   })();
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !userId) return;
     setSubmitting(true);
     setError(null);
 
@@ -619,13 +620,22 @@ function ContributeModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
-          >
-            {submitting ? "Submitting…" : "Submit"}
-          </button>
+          {userId ? (
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              {submitting ? "Submitting…" : "Submit"}
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold text-center transition-colors"
+            >
+              Sign in to submit
+            </Link>
+          )}
         </div>
       </div>
     </ModalShell>
@@ -644,7 +654,7 @@ function ReportModal({
   activeMapStyle,
 }: {
   campaignId: string;
-  userId: string;
+  userId: string | null;
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -662,7 +672,7 @@ function ReportModal({
   const submitCoords = overrideCoords ?? gps.coords;
 
   const handleSubmit = async () => {
-    if (!submitCoords || !photo) return;
+    if (!submitCoords || !photo || !userId) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -781,13 +791,22 @@ function ReportModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!submitCoords || !photo || submitting}
-            className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
-          >
-            {submitting ? "Submitting…" : "Report"}
-          </button>
+          {userId ? (
+            <button
+              onClick={handleSubmit}
+              disabled={!submitCoords || !photo || submitting}
+              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              {submitting ? "Submitting…" : "Report"}
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold text-center transition-colors"
+            >
+              Sign in to report
+            </Link>
+          )}
         </div>
       </div>
     </ModalShell>
@@ -808,7 +827,7 @@ function SolarpunkActionModal({
   activeMapStyle,
 }: {
   campaignId: string;
-  userId: string;
+  userId: string | null;
   userGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
@@ -836,7 +855,7 @@ function SolarpunkActionModal({
   const canSubmit = !submitting && !!selectedAction && !!submitCoords;
 
   const handleSubmit = async () => {
-    if (!canSubmit || !selectedAction) return;
+    if (!canSubmit || !selectedAction || !userId) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -1011,13 +1030,22 @@ function SolarpunkActionModal({
           <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors">
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
-          >
-            {submitting ? "Submitting…" : selectedAction ? `Submit (+${selectedAction.points} pts)` : "Submit"}
-          </button>
+          {userId ? (
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              {submitting ? "Submitting…" : selectedAction ? `Submit (+${selectedAction.points} pts)` : "Submit"}
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold text-center transition-colors"
+            >
+              {selectedAction ? `Sign in to log (+${selectedAction.points} pts)` : "Sign in to log"}
+            </Link>
+          )}
         </div>
       </div>
     </ModalShell>
@@ -1038,7 +1066,7 @@ function SolarpunkPhotoModal({
   activeMapStyle,
 }: {
   campaignId: string;
-  userId: string;
+  userId: string | null;
   userGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
@@ -1065,7 +1093,7 @@ function SolarpunkPhotoModal({
   const canSubmit = !submitting && !!photo && !!submitCoords;
 
   const handleSubmit = async () => {
-    if (!canSubmit || !photo) return;
+    if (!canSubmit || !photo || !userId) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -1190,13 +1218,22 @@ function SolarpunkPhotoModal({
           <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors">
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
-          >
-            {submitting ? "Uploading…" : "Submit (+2 pts)"}
-          </button>
+          {userId ? (
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              {submitting ? "Uploading…" : "Submit (+2 pts)"}
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold text-center transition-colors"
+            >
+              Sign in to submit (+2 pts)
+            </Link>
+          )}
         </div>
       </div>
     </ModalShell>
