@@ -151,8 +151,8 @@ async def submit_contribution(
                      metrics_small_bags, submitted_by_user_id, attended_user_ids)
                 VALUES
                     (:campaign_id, :geo_unit_id,
-                     CASE WHEN :lon IS NOT NULL AND :lat IS NOT NULL
-                          THEN ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
+                     CASE WHEN CAST(:lon AS double precision) IS NOT NULL AND CAST(:lat AS double precision) IS NOT NULL
+                          THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
                           ELSE NULL END,
                      'completed', :image_urls, :metrics_small_bags, :user_id, ARRAY[:user_id]::uuid[])
                 RETURNING id
