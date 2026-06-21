@@ -71,8 +71,8 @@ export default async function GroupEditPage({ params }: Props) {
           slug={slug}
           name={groupData.name}
           description={groupData.description}
-          website={groupData.website}
-          logoUrl={groupData.logo_url}
+          socialLinks={groupData.social_links}
+          logoUrl={groupData.image_url}
         />
       </div>
 

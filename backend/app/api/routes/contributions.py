@@ -142,17 +142,44 @@ async def submit_contribution(
             multiplier = float((multiplier_row[0] or {}).get("multiplier", 1))
             effective_value = effective_value * multiplier
 
+    cleanup_id = None
+    if payload.contribution_type == "cleanup":
+        cleanup_result = await db.execute(
+            text("""
+                INSERT INTO cleanups
+                    (campaign_id, geo_unit_id, location, status, image_urls,
+                     metrics_small_bags, submitted_by_user_id, attended_user_ids)
+                VALUES
+                    (:campaign_id, :geo_unit_id,
+                     CASE WHEN :lon IS NOT NULL AND :lat IS NOT NULL
+                          THEN ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
+                          ELSE NULL END,
+                     'completed', :image_urls, :metrics_small_bags, :user_id, ARRAY[:user_id]::uuid[])
+                RETURNING id
+            """),
+            {
+                "campaign_id": str(payload.campaign_id),
+                "geo_unit_id": geo_unit_id,
+                "lon": payload.longitude,
+                "lat": payload.latitude,
+                "image_urls": [payload.photo_url] if payload.photo_url else [],
+                "metrics_small_bags": payload.value,
+                "user_id": str(payload.user_id),
+            },
+        )
+        cleanup_id = str(cleanup_result.scalar())
+
     if has_location:
         await db.execute(
             text("""
                 INSERT INTO contributions
                     (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
-                     value, photo_url, location, location_verified, notes)
+                     value, photo_url, location, location_verified, notes, cleanup_id)
                 VALUES
                     (:campaign_id, :user_id, :group_id, :geo_unit_id, :contribution_type,
                      :value, :photo_url,
                      ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
-                     :location_verified, :notes)
+                     :location_verified, :notes, :cleanup_id)
             """),
             {
                 "campaign_id": str(payload.campaign_id),
@@ -166,6 +193,7 @@ async def submit_contribution(
                 "lat": payload.latitude,
                 "location_verified": location_verified,
                 "notes": payload.notes,
+                "cleanup_id": cleanup_id,
             },
         )
     else:
@@ -173,10 +201,10 @@ async def submit_contribution(
             text("""
                 INSERT INTO contributions
                     (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
-                     value, photo_url, location_verified, notes)
+                     value, photo_url, location_verified, notes, cleanup_id)
                 VALUES
                     (:campaign_id, :user_id, :group_id, NULL, :contribution_type,
-                     :value, :photo_url, FALSE, :notes)
+                     :value, :photo_url, FALSE, :notes, :cleanup_id)
             """),
             {
                 "campaign_id": str(payload.campaign_id),
@@ -186,6 +214,7 @@ async def submit_contribution(
                 "value": effective_value,
                 "photo_url": payload.photo_url,
                 "notes": payload.notes,
+                "cleanup_id": cleanup_id,
             },
         )
 

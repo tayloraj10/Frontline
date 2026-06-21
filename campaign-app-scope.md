@@ -863,13 +863,11 @@ Tables that drive live map updates:
 ---
 
 ### Pre-Launch Requirement: External Model Imports
-Before going live, the following models must be imported from a separate API currently under development:
+- [x] **Groups** — `groups` table reshaped to match the DOGS `DirectoryEntry` shape (`image_url`, `social_links`, `categories`, `featured`). `group_members` remains the source of truth for membership/roles; DOGS's `user_ids` is treated as derived, never synced.
+- [x] **Cleanups** — new `cleanups` table matching the DOGS `Cleanup` shape (location, image_urls, structured metrics, organizer/rsvp/attended user id arrays). Trash War cleanup contributions now create a linked `cleanups` row (`contributions.cleanup_id`).
+- [x] **Trash Reports** — `problem_reports` reshaped to match the DOGS `TrashReport` shape (`submitted_by_user_id`, `image_urls`, full `ActivityStatus` enum, `resolved_by_user_id`/`resolved_by_cleanup_id`/`resolved_at`). Table name unchanged to avoid touching Realtime subscriptions.
 
-- **Groups** — the organization/group schema, membership, and roles. The current `groups` table is a placeholder; the canonical model lives in the external API.
-- **Cleanups** — the full cleanup event model with structured data (location, photos, bag counts, organizer, participants). Trash War contributions currently store a simplified cleanup record; the external API owns the authoritative schema.
-- **Trash Reports** — community-submitted trash reports used to seed Trash War campaign data and generate cleanup events. The external API owns this model.
-
-These imports are a hard dependency before launch — the Trash War campaign in particular relies on cleanups and trash reports from this external API to function as designed.
+Per decision, Frontline does not call the live DOGS API at runtime — all data stays in Frontline's own Supabase DB; DOGS's OpenAPI schema (`frontend/src/types/dogs.ts`) is only the shape contract these tables/types were aligned to. Deferred: RSVP/scheduling UI for cleanups, and category-tagging UI for groups — schema exists, UI does not yet.
 
 ---
 

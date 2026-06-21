@@ -9,15 +9,15 @@ interface Props {
   slug: string;
   name: string;
   description: string | null;
-  website: string | null;
+  socialLinks: Record<string, string | null> | null;
   logoUrl: string | null;
 }
 
-export default function GroupEditForm({ groupId, slug, name, description, website, logoUrl }: Props) {
+export default function GroupEditForm({ groupId, slug, name, description, socialLinks, logoUrl }: Props) {
   const router = useRouter();
   const [nameVal, setNameVal] = useState(name);
   const [descVal, setDescVal] = useState(description ?? "");
-  const [websiteVal, setWebsiteVal] = useState(website ?? "");
+  const [websiteVal, setWebsiteVal] = useState(socialLinks?.website ?? "");
   const [currentLogo, setCurrentLogo] = useState(logoUrl);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -63,8 +63,8 @@ export default function GroupEditForm({ groupId, slug, name, description, websit
         .update({
           name: nameVal.trim(),
           description: descVal.trim() || null,
-          website: websiteVal.trim() || null,
-          logo_url: newLogoUrl,
+          social_links: { ...socialLinks, website: websiteVal.trim() || null },
+          image_url: newLogoUrl,
         })
         .eq("id", groupId);
 

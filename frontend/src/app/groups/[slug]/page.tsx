@@ -53,8 +53,8 @@ export default async function GroupProfilePage({ params }: Props) {
       <div className="mt-6 mb-8 flex items-start justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
           <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
-            {group.logo_url ? (
-              <img src={group.logo_url} alt={group.name} className="w-full h-full object-cover" />
+            {group.image_url ? (
+              <img src={group.image_url} alt={group.name} className="w-full h-full object-cover" />
             ) : (
               <span className="text-2xl font-black text-zinc-300">{group.name[0].toUpperCase()}</span>
             )}
@@ -76,14 +76,14 @@ export default async function GroupProfilePage({ params }: Props) {
             {group.description && (
               <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{group.description}</p>
             )}
-            {group.website && (
+            {group.social_links?.website && (
               <a
-                href={group.website}
+                href={group.social_links.website}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-1.5 inline-block text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
               >
-                {group.website.replace(/^https?:\/\//, "")} ↗
+                {group.social_links.website.replace(/^https?:\/\//, "")} ↗
               </a>
             )}
           </div>

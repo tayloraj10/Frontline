@@ -168,7 +168,7 @@ interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
   userId: string;
-  userGroups?: { id: string; name: string; logo_url?: string | null }[];
+  userGroups?: { id: string; name: string; image_url?: string | null }[];
   onEnterPinPicker: (coords: Coords, constrained?: boolean) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
@@ -325,7 +325,7 @@ function ContributeModal({
   campaignId: string;
   campaignContributionType: string;
   userId: string;
-  userGroups: { id: string; name: string; logo_url?: string | null }[];
+  userGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -519,8 +519,8 @@ function ContributeModal({
                       : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
                   }`}
                 >
-                  {g.logo_url ? (
-                    <img src={g.logo_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                  {g.image_url ? (
+                    <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
                   ) : (
                     <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
                       {g.name[0].toUpperCase()}
@@ -675,7 +675,7 @@ function ReportModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             campaign_id: campaignId,
-            reported_by: userId,
+            submitted_by_user_id: userId,
             photo_url: photoUrl,
             latitude: submitCoords.latitude,
             longitude: submitCoords.longitude,
@@ -809,7 +809,7 @@ function SolarpunkActionModal({
 }: {
   campaignId: string;
   userId: string;
-  userGroups: { id: string; name: string; logo_url?: string | null }[];
+  userGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -980,8 +980,8 @@ function SolarpunkActionModal({
                   onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
                 >
-                  {g.logo_url ? (
-                    <img src={g.logo_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                  {g.image_url ? (
+                    <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
                   ) : (
                     <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
                       {g.name[0].toUpperCase()}
@@ -1039,7 +1039,7 @@ function SolarpunkPhotoModal({
 }: {
   campaignId: string;
   userId: string;
-  userGroups: { id: string; name: string; logo_url?: string | null }[];
+  userGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
@@ -1170,8 +1170,8 @@ function SolarpunkPhotoModal({
               {userGroups.map((g) => (
                 <button key={g.id} type="button" onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
-                  {g.logo_url ? (
-                    <img src={g.logo_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                  {g.image_url ? (
+                    <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
                   ) : (
                     <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
                       {g.name[0].toUpperCase()}

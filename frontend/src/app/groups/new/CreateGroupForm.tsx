@@ -43,7 +43,13 @@ export default function CreateGroupForm({ userId }: { userId: string }) {
 
     const { data: group, error: insertErr } = await supabase
       .from("groups")
-      .insert({ name: name.trim(), slug, description: description.trim() || null, website: website.trim() || null, created_by: userId })
+      .insert({
+        name: name.trim(),
+        slug,
+        description: description.trim() || null,
+        social_links: website.trim() ? { website: website.trim() } : null,
+        created_by: userId,
+      })
       .select("id, slug")
       .single();
 

@@ -8,7 +8,17 @@ export type EntityType = "user" | "group";
 export type MemberRole = "admin" | "member";
 export type EventStatus = "active" | "resolved" | "expired";
 export type ReportSeverity = "low" | "medium" | "high";
-export type ReportStatus = "open" | "addressed" | "verified";
+export type ActivityStatus = "open" | "scheduled" | "in_progress" | "completed" | "addressed" | "verified" | "cancelled";
+export type ReportStatus = ActivityStatus;
+
+export interface SocialLinks {
+  website?: string | null;
+  instagram?: string | null;
+  tiktok?: string | null;
+  youtube?: string | null;
+  facebook?: string | null;
+  twitter?: string | null;
+}
 
 export interface Database {
   public: {
@@ -35,16 +45,22 @@ export interface Database {
           name: string;
           slug: string;
           description: string | null;
-          logo_url: string | null;
-          website: string | null;
+          image_url: string | null;
+          social_links: SocialLinks | null;
+          categories: string[];
+          featured: boolean;
           verified: boolean;
           created_by: string | null;
           created_at: string;
+          updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["groups"]["Row"], "id" | "verified" | "created_at"> & {
+        Insert: Omit<Database["public"]["Tables"]["groups"]["Row"], "id" | "categories" | "featured" | "verified" | "created_at" | "updated_at"> & {
           id?: string;
+          categories?: string[];
+          featured?: boolean;
           verified?: boolean;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["groups"]["Insert"]>;
       };
@@ -109,6 +125,7 @@ export interface Database {
           notes: string | null;
           submitted_at: string;
           validated_at: string | null;
+          cleanup_id: string | null;
         };
         Insert: Omit<Database["public"]["Tables"]["contributions"]["Row"], "id" | "location_verified" | "submitted_at"> & {
           id?: string;
@@ -232,20 +249,62 @@ export interface Database {
           id: string;
           campaign_id: string | null;
           geo_unit_id: string | null;
-          reported_by: string | null;
-          photo_url: string;
+          submitted_by_user_id: string | null;
+          image_urls: string[];
           location: unknown;
           severity: ReportSeverity;
           status: ReportStatus;
+          resolved_by_user_id: string | null;
+          resolved_by_cleanup_id: string | null;
+          resolved_at: string | null;
           reported_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["problem_reports"]["Row"], "id" | "severity" | "status" | "reported_at"> & {
+        Insert: Omit<Database["public"]["Tables"]["problem_reports"]["Row"], "id" | "image_urls" | "severity" | "status" | "resolved_by_user_id" | "resolved_by_cleanup_id" | "resolved_at" | "reported_at"> & {
           id?: string;
+          image_urls?: string[];
           severity?: ReportSeverity;
           status?: ReportStatus;
+          resolved_by_user_id?: string | null;
+          resolved_by_cleanup_id?: string | null;
+          resolved_at?: string | null;
           reported_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["problem_reports"]["Insert"]>;
+      };
+      cleanups: {
+        Row: {
+          id: string;
+          campaign_id: string | null;
+          geo_unit_id: string | null;
+          title: string;
+          description: string | null;
+          location: unknown | null;
+          scheduled_start: string | null;
+          scheduled_end: string | null;
+          status: ActivityStatus;
+          image_urls: string[];
+          metrics_small_bags: number | null;
+          metrics_large_bags: number | null;
+          metrics_pounds: number | null;
+          submitted_by_user_id: string | null;
+          organizer_user_ids: string[];
+          rsvp_user_ids: string[];
+          attended_user_ids: string[];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["cleanups"]["Row"], "id" | "title" | "status" | "image_urls" | "organizer_user_ids" | "rsvp_user_ids" | "attended_user_ids" | "created_at" | "updated_at"> & {
+          id?: string;
+          title?: string;
+          status?: ActivityStatus;
+          image_urls?: string[];
+          organizer_user_ids?: string[];
+          rsvp_user_ids?: string[];
+          attended_user_ids?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cleanups"]["Insert"]>;
       };
     };
     Views: Record<string, never>;

@@ -59,7 +59,7 @@ interface Props {
   userId: string | null;
   userDisplayName: string | null;
   userUsername: string | null;
-  userGroups: { id: string; name: string; logo_url?: string | null }[];
+  userGroups: { id: string; name: string; image_url?: string | null }[];
   leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
   activity: ActivityItem[];
   unit: string;

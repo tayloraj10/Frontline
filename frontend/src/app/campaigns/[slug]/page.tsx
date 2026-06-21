@@ -126,8 +126,8 @@ export default async function CampaignPage({ params }: Props) {
       ? supabase.from("profiles").select("id, username, display_name").in("id", allUserIds)
       : Promise.resolve({ data: [] as { id: string; username: string; display_name: string | null }[] }),
     allGroupIds.length > 0
-      ? supabase.from("groups").select("id, name, slug, logo_url").in("id", allGroupIds)
-      : Promise.resolve({ data: [] as { id: string; name: string; slug: string; logo_url: string | null }[] }),
+      ? supabase.from("groups").select("id, name, slug, image_url").in("id", allGroupIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; slug: string; image_url: string | null }[] }),
   ]);
 
   const profilesById = new Map((profilesData ?? []).map((p) => [p.id, p]));
@@ -149,8 +149,8 @@ export default async function CampaignPage({ params }: Props) {
   // User groups for contribution panel
   const userGroups = userGroupIds
     .map((id) => groupsById.get(id))
-    .filter((g): g is { id: string; name: string; slug: string; logo_url: string | null } => !!g)
-    .map((g) => ({ id: g.id, name: g.name, logo_url: g.logo_url }));
+    .filter((g): g is { id: string; name: string; slug: string; image_url: string | null } => !!g)
+    .map((g) => ({ id: g.id, name: g.name, image_url: g.image_url }));
 
   // Enriched leaderboard
   const leaderboard = {

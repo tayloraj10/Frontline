@@ -481,22 +481,37 @@ class DemoDataSeeder(Seeder):
                 continue
             geo_id = zip_geos.get(zip_code)
             ts = _ts(d_back, hour)
+            cleanup_id = _uid(f"cleanup_{i}")
             try:
+                await db.execute(
+                    text("""
+                        INSERT INTO cleanups
+                            (id, campaign_id, geo_unit_id, location, status,
+                             metrics_small_bags, submitted_by_user_id, attended_user_ids, created_at)
+                        VALUES
+                            (:id, :cid, :geo_id,
+                             ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                             'completed', :bags, :uid, ARRAY[:uid]::uuid[], :ts)
+                        ON CONFLICT (id) DO NOTHING
+                    """),
+                    {"id": cleanup_id, "cid": TRASH_WAR_ID, "geo_id": geo_id,
+                     "lng": lng, "lat": lat, "bags": bags, "uid": uid, "ts": ts},
+                )
                 await db.execute(
                     text("""
                         INSERT INTO contributions
                             (id, campaign_id, user_id, group_id, geo_unit_id,
-                             contribution_type, value, location, location_verified, submitted_at)
+                             contribution_type, value, location, location_verified, submitted_at, cleanup_id)
                         VALUES
                             (:id, :cid, :uid, :gid, :geo_id,
                              'cleanup', :value,
                              ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
-                             :verified, :ts)
+                             :verified, :ts, :cleanup_id)
                         ON CONFLICT (id) DO NOTHING
                     """),
                     {"id": _uid(f"trash_{i}"), "cid": TRASH_WAR_ID, "uid": uid, "gid": gid,
                      "geo_id": geo_id, "value": bags, "lng": lng, "lat": lat,
-                     "verified": geo_id is not None, "ts": ts},
+                     "verified": geo_id is not None, "ts": ts, "cleanup_id": cleanup_id},
                 )
                 result.inserted += 1
             except Exception as exc:
@@ -813,7 +828,11 @@ class DemoDataSeeder(Seeder):
             {"ids": demo_user_ids},
         )
         await db.execute(
-            text("DELETE FROM problem_reports WHERE reported_by = ANY(:ids)"),
+            text("DELETE FROM cleanups WHERE submitted_by_user_id = ANY(:ids)"),
+            {"ids": demo_user_ids},
+        )
+        await db.execute(
+            text("DELETE FROM problem_reports WHERE submitted_by_user_id = ANY(:ids)"),
             {"ids": demo_user_ids},
         )
         await db.execute(

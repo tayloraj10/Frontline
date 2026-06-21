@@ -124,7 +124,7 @@ async def wipe_seed_data(db: AsyncSession = Depends(get_db)):
     """
     Delete all demo/user data while preserving campaigns, event_triggers, and geo_units.
     Preserves: campaigns, event_triggers, geo_units.
-    Wipes: contributions, territory_claims, leaderboard_entries, campaign_events,
+    Wipes: contributions, cleanups, territory_claims, leaderboard_entries, campaign_events,
            problem_reports, user_notifications, group_members, groups, profiles,
            and all Supabase auth users.
     Run POST /admin/seed/demo-data afterwards to restore demo users and activity.
@@ -138,6 +138,7 @@ async def wipe_seed_data(db: AsyncSession = Depends(get_db)):
         "leaderboard_entries",
         "campaign_events",
         "contributions",
+        "cleanups",
         "problem_reports",
         "territory_claims",
         "user_notifications",

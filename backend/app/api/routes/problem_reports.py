@@ -12,7 +12,7 @@ router = APIRouter(prefix="/problem-reports", tags=["problem-reports"])
 
 class ProblemReportRequest(BaseModel):
     campaign_id: UUID
-    reported_by: UUID
+    submitted_by_user_id: UUID
     photo_url: str
     latitude: float
     longitude: float
@@ -43,15 +43,15 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
 
     await db.execute(
         text("""
-            INSERT INTO problem_reports (campaign_id, geo_unit_id, reported_by, photo_url, location, severity)
-            VALUES (:campaign_id, :geo_unit_id, :reported_by, :photo_url,
+            INSERT INTO problem_reports (campaign_id, geo_unit_id, submitted_by_user_id, image_urls, location, severity)
+            VALUES (:campaign_id, :geo_unit_id, :submitted_by_user_id, :image_urls,
                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :severity)
         """),
         {
             "campaign_id": str(payload.campaign_id),
             "geo_unit_id": geo_unit_id,
-            "reported_by": str(payload.reported_by),
-            "photo_url": payload.photo_url,
+            "submitted_by_user_id": str(payload.submitted_by_user_id),
+            "image_urls": [payload.photo_url],
             "lon": payload.longitude,
             "lat": payload.latitude,
             "severity": payload.severity,
@@ -71,7 +71,7 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
     """Return open problem reports with extracted lat/lng, per-geo-unit counts, and the hotspot threshold."""
     rows_result = await db.execute(
         text("""
-            SELECT id, geo_unit_id, severity, reported_at, photo_url,
+            SELECT id, geo_unit_id, severity, reported_at, image_urls,
                    ST_Y(location::geometry) AS latitude,
                    ST_X(location::geometry) AS longitude
             FROM problem_reports
@@ -105,7 +105,7 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
                 "geo_unit_id": str(row.geo_unit_id) if row.geo_unit_id else None,
                 "severity": row.severity,
                 "reported_at": str(row.reported_at),
-                "photo_url": row.photo_url,
+                "photo_url": row.image_urls[0] if row.image_urls else None,
                 "latitude": row.latitude,
                 "longitude": row.longitude,
             }

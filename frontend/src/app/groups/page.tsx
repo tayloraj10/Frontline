@@ -79,8 +79,8 @@ export default async function GroupsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
-                        {group.logo_url ? (
-                          <img src={group.logo_url} alt={group.name} className="w-full h-full object-cover" />
+                        {group.image_url ? (
+                          <img src={group.image_url} alt={group.name} className="w-full h-full object-cover" />
                         ) : (
                           <span className="text-sm font-bold text-zinc-300">{(group.name || "?")[0].toUpperCase()}</span>
                         )}
