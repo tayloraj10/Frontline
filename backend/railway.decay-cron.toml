@@ -1,0 +1,8 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python scripts/run_decay.py"
+cronSchedule = "0 * * * *"
+restartPolicyType = "NEVER"

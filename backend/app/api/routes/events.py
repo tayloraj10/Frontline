@@ -32,6 +32,29 @@ async def get_event_geo_centroids(campaign_id: UUID, db: AsyncSession = Depends(
     ]
 
 
+@router.post("/expire")
+async def expire_events(db: AsyncSession = Depends(get_db)):
+    """
+    Marks active campaign_events as expired once their ends_at has passed.
+    Intended to be called by a Railway cron or Cloud Run scheduler, same as POST /decay/run.
+    """
+    result = await db.execute(
+        text("""
+            UPDATE campaign_events
+            SET status = 'expired',
+                resolved_at = NOW()
+            WHERE status = 'active'
+            AND ends_at IS NOT NULL
+            AND ends_at < NOW()
+            RETURNING id, campaign_id
+        """)
+    )
+    expired = result.fetchall()
+    await db.commit()
+
+    return {"expired_count": len(expired), "events": [{"id": str(r[0]), "campaign_id": str(r[1])} for r in expired]}
+
+
 @router.post("/check-triggers/{campaign_id}")
 async def check_event_triggers(
     campaign_id: UUID,
