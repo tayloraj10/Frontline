@@ -14,6 +14,14 @@ interface Coords {
   longitude: number;
 }
 
+// A kitchen trash bag (13-gal) holds ~3x the volume of a plastic grocery bag.
+const LARGE_BAG_VALUE = 3;
+const SMALL_BAG_VALUE = 1;
+
+function cleanupValue(smallBags: number, largeBags: number): number {
+  return smallBags * SMALL_BAG_VALUE + largeBags * LARGE_BAG_VALUE;
+}
+
 const MAP_STYLES = [
   { id: "outdoor", label: "Terrain" },
   { id: "streets", label: "Streets" },
@@ -343,7 +351,10 @@ function ContributeModal({
 
   const config = MODAL_CONFIG[campaignContributionType] ?? MODAL_CONFIG.cleanup;
 
-  const [bagCount, setBagCount] = useState(1);
+  const [smallBags, setSmallBags] = useState("1");
+  const [largeBags, setLargeBags] = useState("0");
+  const smallBagsNum = Number(smallBags) || 0;
+  const largeBagsNum = Number(largeBags) || 0;
   const [notes, setNotes] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
@@ -364,6 +375,7 @@ function ContributeModal({
   const canSubmit = (() => {
     if (submitting) return false;
     if ((isCleanup || isPhoto) && !submitCoords) return false;
+    if (isCleanup && smallBagsNum + largeBagsNum <= 0) return false;
     if (isPhoto && !photo) return false;
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
@@ -379,7 +391,7 @@ function ContributeModal({
       let photoUrl: string | null = null;
       if (photo) photoUrl = await uploadToR2(photo);
 
-      const value = isCleanup ? bagCount : 1;
+      const value = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 1;
       const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
 
       const body: Record<string, unknown> = {
@@ -391,6 +403,11 @@ function ContributeModal({
         photo_url: photoUrl,
         notes: computedNotes,
       };
+
+      if (isCleanup) {
+        body.small_bags = smallBagsNum;
+        body.large_bags = largeBagsNum;
+      }
 
       if (submitCoords) {
         body.latitude = submitCoords.latitude;
@@ -538,13 +555,35 @@ function ContributeModal({
         {isCleanup && (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
-            <input
-              type="number"
-              min={1}
-              value={bagCount}
-              onChange={(e) => setBagCount(Math.max(1, Number(e.target.value)))}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
-            />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] text-zinc-600 mb-1">Plastic grocery bags</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={smallBags}
+                  onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-zinc-600 mb-1">Kitchen trash bags</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={largeBags}
+                  onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-zinc-500">
+              Territory value:{" "}
+              <span className="text-lg font-bold text-emerald-400">
+                {cleanupValue(smallBagsNum, largeBagsNum).toFixed(0)}
+              </span>
+              <span className="ml-1 text-zinc-600">(kitchen bags count {LARGE_BAG_VALUE}x)</span>
+            </p>
           </div>
         )}
 

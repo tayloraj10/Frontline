@@ -787,6 +787,7 @@ export default function CampaignMap({
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
+  const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
 
@@ -1671,6 +1672,7 @@ export default function CampaignMap({
           const claim = payload.new as TerritoryClaim;
           if (!claim?.geo_unit_id) return;
           const totalValue = claim.total_value ?? 0;
+          setLiveClaims((prev) => ({ ...prev, [claim.geo_unit_id as string]: claim }));
           if (isHexBloom) {
             refreshHexBloom();
             return;
@@ -1751,14 +1753,14 @@ export default function CampaignMap({
           <StatePanel
             geoUnitId={selectedZip.geoUnitId}
             displayName={selectedZip.displayName}
-            totalActions={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId)?.total_value ?? 0}
+            totalActions={(liveClaims[selectedZip.geoUnitId] ?? claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId))?.total_value ?? 0}
             onClose={() => setSelectedZip(null)}
           />
         ) : (
           <TerritoryPanel
             geoUnitId={selectedZip.geoUnitId}
             displayName={selectedZip.displayName}
-            claim={claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
+            claim={liveClaims[selectedZip.geoUnitId] ?? claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
             claimLabel={claimLabelsRef.current[selectedZip.geoUnitId] ?? null}
             reportCount={liveReports?.counts_by_geo_unit[selectedZip.geoUnitId] ?? 0}
             reportThreshold={liveReports?.threshold ?? null}

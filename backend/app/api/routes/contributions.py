@@ -38,6 +38,8 @@ class ContributionRequest(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     notes: str | None = None
+    small_bags: int | None = None
+    large_bags: int | None = None
 
 
 @router.post("/submit")
@@ -148,13 +150,13 @@ async def submit_contribution(
             text("""
                 INSERT INTO cleanups
                     (campaign_id, geo_unit_id, location, status, image_urls,
-                     metrics_small_bags, submitted_by_user_id, attended_user_ids)
+                     metrics_small_bags, metrics_large_bags, submitted_by_user_id, attended_user_ids)
                 VALUES
                     (:campaign_id, :geo_unit_id,
                      CASE WHEN CAST(:lon AS double precision) IS NOT NULL AND CAST(:lat AS double precision) IS NOT NULL
                           THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
                           ELSE NULL END,
-                     'completed', :image_urls, :metrics_small_bags, :user_id, ARRAY[:user_id]::uuid[])
+                     'completed', :image_urls, :metrics_small_bags, :metrics_large_bags, :user_id, ARRAY[:user_id]::uuid[])
                 RETURNING id
             """),
             {
@@ -163,7 +165,8 @@ async def submit_contribution(
                 "lon": payload.longitude,
                 "lat": payload.latitude,
                 "image_urls": [payload.photo_url] if payload.photo_url else [],
-                "metrics_small_bags": payload.value,
+                "metrics_small_bags": payload.small_bags if payload.small_bags is not None else payload.value,
+                "metrics_large_bags": payload.large_bags,
                 "user_id": str(payload.user_id),
             },
         )
