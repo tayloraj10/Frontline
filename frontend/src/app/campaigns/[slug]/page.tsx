@@ -134,12 +134,13 @@ export default async function CampaignPage({ params }: Props) {
   const groupsById = new Map((groupsData ?? []).map((g) => [g.id, g]));
 
   // Claim labels for map
-  type ClaimLabel = { name: string; isGroup: boolean };
+  type ClaimLabel = { name: string; isGroup: boolean; groupSlug?: string };
   const claimLabels: Record<string, ClaimLabel> = {};
   for (const claim of claims) {
     if (!claim.geo_unit_id) continue;
     if (claim.claimed_by_group && groupsById.has(claim.claimed_by_group)) {
-      claimLabels[claim.geo_unit_id] = { name: groupsById.get(claim.claimed_by_group)!.name, isGroup: true };
+      const g = groupsById.get(claim.claimed_by_group)!;
+      claimLabels[claim.geo_unit_id] = { name: g.name, isGroup: true, groupSlug: g.slug };
     } else if (claim.claimed_by_user && profilesById.has(claim.claimed_by_user)) {
       const p = profilesById.get(claim.claimed_by_user)!;
       claimLabels[claim.geo_unit_id] = { name: p.display_name ?? p.username, isGroup: false };

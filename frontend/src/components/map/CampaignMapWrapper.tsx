@@ -7,7 +7,7 @@ import type { ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
-export type ClaimLabel = { name: string; isGroup: boolean };
+export type ClaimLabel = { name: string; isGroup: boolean; groupSlug?: string };
 
 interface Props {
   campaign: Campaign;

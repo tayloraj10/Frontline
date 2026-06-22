@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import Link from "next/link";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import gsap from "gsap";
@@ -410,9 +411,19 @@ function TerritoryPanel({
           {claimLabel ? (
             <div className="flex items-center gap-1.5">
               <span className="text-sm">{isGroup ? "👥" : "👤"}</span>
-              <span className="truncate text-sm font-semibold" style={{ color: accentHex }}>
-                {claimLabel.name}
-              </span>
+              {isGroup && claimLabel.groupSlug ? (
+                <Link
+                  href={`/groups/${claimLabel.groupSlug}`}
+                  className="truncate text-sm font-semibold hover:underline"
+                  style={{ color: accentHex }}
+                >
+                  {claimLabel.name}
+                </Link>
+              ) : (
+                <span className="truncate text-sm font-semibold" style={{ color: accentHex }}>
+                  {claimLabel.name}
+                </span>
+              )}
               <span className="ml-auto text-[10px] text-zinc-600 shrink-0">holds</span>
             </div>
           ) : (

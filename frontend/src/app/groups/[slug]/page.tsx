@@ -8,6 +8,15 @@ type Group = Database["public"]["Tables"]["groups"]["Row"];
 type GroupMember = Database["public"]["Tables"]["group_members"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
+const SOCIAL_LABELS: { key: keyof NonNullable<Group["social_links"]>; label: string }[] = [
+  { key: "website", label: "Website" },
+  { key: "instagram", label: "Instagram" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "youtube", label: "YouTube" },
+  { key: "facebook", label: "Facebook" },
+  { key: "twitter", label: "Twitter / X" },
+];
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
@@ -76,15 +85,24 @@ export default async function GroupProfilePage({ params }: Props) {
             {group.description && (
               <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{group.description}</p>
             )}
-            {group.social_links?.website && (
-              <a
-                href={group.social_links.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1.5 inline-block text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-              >
-                {group.social_links.website.replace(/^https?:\/\//, "")} ↗
-              </a>
+            {group.social_links && Object.values(group.social_links).some(Boolean) && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                {SOCIAL_LABELS.map(({ key, label }) => {
+                  const url = group.social_links?.[key];
+                  if (!url) return null;
+                  return (
+                    <a
+                      key={key}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      {key === "website" ? url.replace(/^https?:\/\//, "") : label} ↗
+                    </a>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

@@ -22,14 +22,20 @@ def _r2_client():
     )
 
 
+UPLOAD_KINDS = {"contributions", "groups", "profiles"}
+
+
 @router.get("/presign")
 async def get_presigned_url(
     filename: str = Query(...),
     content_type: str = Query("image/jpeg"),
+    kind: str = Query("contributions"),
 ):
+    if kind not in UPLOAD_KINDS:
+        raise HTTPException(400, f"Invalid kind. Must be one of: {', '.join(sorted(UPLOAD_KINDS))}")
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
     prefix = "uploads" if settings.is_production else "dev/uploads"
-    key = f"{prefix}/{uuid.uuid4()}.{ext}"
+    key = f"{prefix}/{kind}/{uuid.uuid4()}.{ext}"
 
     client = _r2_client()
     upload_url = client.generate_presigned_url(

@@ -18,6 +18,10 @@ interface Coords {
 const LARGE_BAG_VALUE = 3;
 const SMALL_BAG_VALUE = 1;
 
+// Matches the hex bloom wave duration in CampaignMap.tsx (1.3s) plus a short buffer,
+// so the success modal doesn't cover the map before the animation finishes.
+const BLOOM_ANIMATION_MS = 1500;
+
 function cleanupValue(smallBags: number, largeBags: number): number {
   return smallBags * SMALL_BAG_VALUE + largeBags * LARGE_BAG_VALUE;
 }
@@ -887,6 +891,7 @@ function SolarpunkActionModal({
     return userGroups.length === 1 ? userGroups[0].id : null;
   });
   const [submitting, setSubmitting] = useState(false);
+  const [animating, setAnimating] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -922,13 +927,19 @@ function SolarpunkActionModal({
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as { claimed_territory: boolean };
       onContributionSubmitted?.(submitCoords!.latitude, submitCoords!.longitude, selectedAction.points, photoUrl ?? undefined);
-      setResult(data.claimed_territory ? "success" : "outside");
+      setAnimating(true);
+      setTimeout(() => {
+        setAnimating(false);
+        setResult(data.claimed_territory ? "success" : "outside");
+      }, BLOOM_ANIMATION_MS);
     } catch {
       setError("Submission failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (animating) return null;
 
   if (result) {
     return (
@@ -1125,6 +1136,7 @@ function SolarpunkPhotoModal({
     return userGroups.length === 1 ? userGroups[0].id : null;
   });
   const [submitting, setSubmitting] = useState(false);
+  const [animating, setAnimating] = useState(false);
   const [result, setResult] = useState<"success" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -1157,13 +1169,19 @@ function SolarpunkPhotoModal({
       );
       if (!res.ok) throw new Error(await res.text());
       onContributionSubmitted?.(submitCoords!.latitude, submitCoords!.longitude, 2, photoUrl);
-      setResult("success");
+      setAnimating(true);
+      setTimeout(() => {
+        setAnimating(false);
+        setResult("success");
+      }, BLOOM_ANIMATION_MS);
     } catch {
       setError("Submission failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (animating) return null;
 
   if (result) {
     return (

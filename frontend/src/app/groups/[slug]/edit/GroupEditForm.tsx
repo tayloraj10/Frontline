@@ -13,11 +13,27 @@ interface Props {
   logoUrl: string | null;
 }
 
+const SOCIAL_PLATFORMS: { key: string; label: string; baseUrl: string }[] = [
+  { key: "instagram", label: "Instagram", baseUrl: "https://instagram.com/" },
+  { key: "tiktok", label: "TikTok", baseUrl: "https://tiktok.com/@" },
+  { key: "youtube", label: "YouTube", baseUrl: "https://youtube.com/@" },
+  { key: "facebook", label: "Facebook", baseUrl: "https://facebook.com/" },
+  { key: "twitter", label: "Twitter / X", baseUrl: "https://x.com/" },
+];
+
+function extractHandle(url: string | null | undefined, baseUrl: string): string {
+  if (!url) return "";
+  return url.startsWith(baseUrl) ? url.slice(baseUrl.length) : url.replace(/^https?:\/\/(www\.)?[^/]+\/@?/, "");
+}
+
 export default function GroupEditForm({ groupId, slug, name, description, socialLinks, logoUrl }: Props) {
   const router = useRouter();
   const [nameVal, setNameVal] = useState(name);
   const [descVal, setDescVal] = useState(description ?? "");
   const [websiteVal, setWebsiteVal] = useState(socialLinks?.website ?? "");
+  const [handles, setHandles] = useState<Record<string, string>>(
+    Object.fromEntries(SOCIAL_PLATFORMS.map((p) => [p.key, extractHandle(socialLinks?.[p.key], p.baseUrl)]))
+  );
   const [currentLogo, setCurrentLogo] = useState(logoUrl);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -35,7 +51,7 @@ export default function GroupEditForm({ groupId, slug, name, description, social
   const uploadLogo = async (file: File): Promise<string> => {
     const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
     const res = await fetch(
-      `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}`
+      `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}&kind=groups`
     );
     if (!res.ok) throw new Error("Failed to get upload URL");
     const { upload_url, public_url } = await res.json();
@@ -63,7 +79,15 @@ export default function GroupEditForm({ groupId, slug, name, description, social
         .update({
           name: nameVal.trim(),
           description: descVal.trim() || null,
-          social_links: { ...socialLinks, website: websiteVal.trim() || null },
+          social_links: {
+            website: websiteVal.trim() || null,
+            ...Object.fromEntries(
+              SOCIAL_PLATFORMS.map((p) => {
+                const handle = handles[p.key]?.trim().replace(/^@/, "");
+                return [p.key, handle ? `${p.baseUrl}${handle}` : null];
+              })
+            ),
+          },
           image_url: newLogoUrl,
         })
         .eq("id", groupId);
@@ -153,17 +177,35 @@ export default function GroupEditForm({ groupId, slug, name, description, social
         />
       </div>
 
-      <div>
-        <label className="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">
-          Website
+      <div className="space-y-4">
+        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+          Social links
         </label>
-        <input
-          type="url"
-          value={websiteVal}
-          onChange={(e) => setWebsiteVal(e.target.value)}
-          placeholder="https://yourorg.org"
-          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
-        />
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Website</label>
+          <input
+            type="url"
+            value={websiteVal}
+            onChange={(e) => setWebsiteVal(e.target.value)}
+            placeholder="https://yourorg.org"
+            className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+          />
+        </div>
+        {SOCIAL_PLATFORMS.map((p) => (
+          <div key={p.key}>
+            <label className="block text-xs text-zinc-500 mb-1.5">{p.label}</label>
+            <div className="flex items-center rounded-lg bg-zinc-800 border border-zinc-700 focus-within:border-zinc-500 transition-colors overflow-hidden">
+              <span className="pl-3 text-sm text-zinc-500 select-none">{p.baseUrl.replace(/^https?:\/\//, "")}</span>
+              <input
+                type="text"
+                value={handles[p.key] ?? ""}
+                onChange={(e) => setHandles((prev) => ({ ...prev, [p.key]: e.target.value.replace(/^@/, "") }))}
+                placeholder="yourorg"
+                className="flex-1 px-2 py-2.5 bg-transparent text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none"
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
       {error && (
