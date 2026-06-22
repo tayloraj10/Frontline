@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.services import geo
 from app.services.seeders import REGISTRY, StatesSeeder
-from app.services.seeders.demo_data import DemoDataSeeder
+from app.services.seeders.demo_data import DemoDataSeeder, _uid as _demo_uid
 from app.services.seeders.global_hexes import GlobalHexSeeder
 from app.services.seeders.solarpunk_preseed import SolarpunkPreseedSeeder
 from app.services.seeders.zip_codes import ZipCodeSeeder
@@ -122,34 +122,108 @@ async def seed_solarpunk_preseed(wipe: bool = False, db: AsyncSession = Depends(
 @router.post("/wipe")
 async def wipe_seed_data(db: AsyncSession = Depends(get_db)):
     """
-    Delete all demo/user data while preserving campaigns, event_triggers, and geo_units.
-    Preserves: campaigns, event_triggers, geo_units.
-    Wipes: contributions, cleanups, territory_claims, leaderboard_entries, campaign_events,
-           problem_reports, user_notifications, group_members, groups, profiles,
-           and all Supabase auth users.
+    Delete demo/test data only while preserving campaigns, event_triggers, and geo_units.
+    Only touches profiles (and their associated rows) whose auth email matches the demo
+    seeder's pattern (*.demo@frontline.app) — real user accounts are never wiped.
+    Preserves: campaigns, event_triggers, geo_units, and all non-demo user data.
+    Wipes (demo users only): contributions, cleanups, territory_claims, leaderboard_entries,
+           campaign_events, problem_reports, user_notifications, group_members, groups,
+           profiles, and their Supabase auth users.
     Run POST /admin/seed/demo-data afterwards to restore demo users and activity.
     """
-    # Collect all profile IDs before wiping so we can delete auth users
-    profile_rows = await db.execute(text("SELECT id FROM profiles"))
+    # Only collect profile IDs belonging to demo/test accounts (matched via auth email)
+    profile_rows = await db.execute(
+        text("""
+            SELECT p.id FROM profiles p
+            JOIN auth.users u ON u.id = p.id
+            WHERE u.email LIKE '%.demo@frontline.app'
+        """)
+    )
     profile_ids = [str(r[0]) for r in profile_rows.fetchall()]
 
-    # Delete in FK-safe leaf-first order
-    tables = [
-        "leaderboard_entries",
-        "campaign_events",
-        "contributions",
-        "cleanups",
-        "problem_reports",
-        "territory_claims",
-        "user_notifications",
-        "group_members",
-        "groups",
-        "profiles",
+    if not profile_ids:
+        return {"wiped": {}, "auth_users_deleted": 0, "auth_errors": []}
+
+    # Demo groups are any groups created by a demo user
+    group_rows = await db.execute(
+        text("SELECT id FROM groups WHERE created_by = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    group_ids = [str(r[0]) for r in group_rows.fetchall()]
+
+    # Demo campaign_events come from the DemoDataSeeder's fixed boss/cascade events
+    demo_event_ids = [
+        _demo_uid("event_boss_chicago"),
+        _demo_uid("event_boss_houston"),
+        _demo_uid("event_road_surge"),
+        _demo_uid("event_battle_stlouis"),
     ]
+
     counts: dict[str, int] = {}
-    for table in tables:
-        result = await db.execute(text(f"DELETE FROM {table}"))
-        counts[table] = result.rowcount
+
+    result = await db.execute(
+        text("""
+            DELETE FROM leaderboard_entries
+            WHERE (entity_type = 'user' AND entity_id = ANY(:uids))
+               OR (entity_type = 'group' AND entity_id = ANY(:gids))
+        """),
+        {"uids": profile_ids, "gids": group_ids},
+    )
+    counts["leaderboard_entries"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM campaign_events WHERE id = ANY(:ids)"),
+        {"ids": demo_event_ids},
+    )
+    counts["campaign_events"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM contributions WHERE user_id = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    counts["contributions"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM cleanups WHERE submitted_by_user_id = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    counts["cleanups"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM problem_reports WHERE reported_by = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    counts["problem_reports"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM territory_claims WHERE claimed_by_user = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    counts["territory_claims"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM user_notifications WHERE user_id = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    counts["user_notifications"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM group_members WHERE user_id = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    counts["group_members"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM groups WHERE id = ANY(:ids)"),
+        {"ids": group_ids},
+    )
+    counts["groups"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM profiles WHERE id = ANY(:ids)"),
+        {"ids": profile_ids},
+    )
+    counts["profiles"] = result.rowcount
 
     await db.commit()
 
