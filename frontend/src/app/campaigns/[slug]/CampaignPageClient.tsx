@@ -335,6 +335,7 @@ export default function CampaignPageClient({
   problemReports,
   eventCentroids,
 }: Props) {
+  const [hexEventsExpanded, setHexEventsExpanded] = useState(false);
   const [pinPickerActive, setPinPickerActive] = useState(false);
   const [pinPickerInitialCoords, setPinPickerInitialCoords] = useState<Coords | null>(null);
   const [pinPickerConstrained, setPinPickerConstrained] = useState(true);
@@ -422,7 +423,9 @@ export default function CampaignPageClient({
         problemReports={problemReports}
         eventCentroids={eventCentroids}
         onMobileStatsClick={
-          statsButtonActive && showEventsChip ? () => togglePanel("leaderboard") : undefined
+          statsButtonActive && (showEventsChip || campaign.geo_unit === "zip")
+            ? () => togglePanel("leaderboard")
+            : undefined
         }
       />
 
@@ -531,7 +534,7 @@ export default function CampaignPageClient({
           {/* Mobile: next to the Events chip if it's showing (handled inside CampaignMap), otherwise
               upper-left — stacked above the World Bloom widget for hex_bloom campaigns via the
               shared flex column below, so it never overlaps it. */}
-          {!showEventsChip && !isHexBloom && (
+          {!showEventsChip && !isHexBloom && campaign.geo_unit !== "zip" && (
             <div className="sm:hidden absolute left-4 z-20 top-4">
               <button
                 onClick={() => togglePanel("leaderboard")}
@@ -546,17 +549,29 @@ export default function CampaignPageClient({
 
       {isHexBloom && !pinPickerActive && (
         <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
-          {activeEvents.map((event) => (
-            <div
-              key={event.id}
-              className="w-56 px-3 py-2 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm"
+          {activeEvents.length > 0 && (
+            <button
+              onClick={() => setHexEventsExpanded((e) => !e)}
+              className="self-start sm:hidden px-3 py-1.5 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm text-emerald-300 text-xs font-semibold"
             >
-              <p className="text-emerald-300 text-xs font-semibold">{event.title}</p>
-              {event.description && (
-                <p className="text-emerald-500 text-xs mt-0.5">{event.description}</p>
-              )}
+              ⚡ {activeEvents.length} Event{activeEvents.length > 1 ? "s" : ""} {hexEventsExpanded ? "▲" : "▼"}
+            </button>
+          )}
+          {activeEvents.length > 0 && (
+            <div className={`${hexEventsExpanded ? "flex" : "hidden"} sm:flex flex-col gap-2`}>
+              {activeEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="w-56 px-3 py-2 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm"
+                >
+                  <p className="text-emerald-300 text-xs font-semibold">{event.title}</p>
+                  {event.description && (
+                    <p className="text-emerald-500 text-xs mt-0.5">{event.description}</p>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
           <div className="flex items-start gap-2">
             <div className="w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm pointer-events-none">
               <div className="flex items-baseline justify-between mb-1">

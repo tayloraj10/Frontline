@@ -1856,6 +1856,14 @@ export default function CampaignMap({
               })}
             </div>
           )}
+          {activeEvents.length === 0 && onMobileStatsClick && (
+            <button
+              onClick={onMobileStatsClick}
+              className="self-start sm:hidden px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
+            >
+              📊 Activity
+            </button>
+          )}
           {campaign.geo_unit === "zip" && (
             <form onSubmit={handleZipSearch} className="flex gap-1">
               <input
