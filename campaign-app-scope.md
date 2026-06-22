@@ -145,6 +145,7 @@ Each campaign is its own mini-game running on a shared geographic foundation. Th
 | `time_elapsed` | ✅ Implemented | `_check_time_elapsed_trigger` handler implemented in `events.py` |
 | `decay_elapsed` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator. Nothing sets `territory_claims.decay_starts_at`, so the deployed decay cron (`POST /api/decay/run`) is currently a no-op — it has no rows to act on |
 | `external_api` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator |
+| `group_tie` | ❌ Not designed yet | Not in DB schema or evaluator. Idea: detect when two groups are tied (or within a small margin) on contribution totals for the same geo unit. Requires aggregating `contributions` by `(geo_unit_id, group_id)` since `territory_claims` only stores the current claimant, not per-group totals — no existing table tracks runner-up standings. Proposed first version: don't auto-spawn an event; fire a `notification` to admin users so they can review and manually create an event (boss spawn, tiebreaker challenge, etc.) rather than guessing the right automatic response. |
 
 #### Event types
 | Event type | Status | Notes |
