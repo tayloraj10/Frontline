@@ -899,7 +899,7 @@ Per decision, Frontline does not call the live DOGS API at runtime — all data 
 ### Groups Page Cleanup
 
 #### Create Group — access control
-`/groups/new` is restricted to site admins. The listing page hides the button for non-admins and the page server component redirects non-admins to `/groups`. The RLS `groups_insert` policy enforces this at the DB layer via `auth.uid() = created_by OR is_site_admin()` (migration 015).
+`/groups/new` is open to any logged-in user who has at least one contribution on record. The listing page hides the button otherwise, and the page server component redirects users with no contributions back to `/groups`. The RLS `groups_insert` policy enforces creation at the DB layer via `auth.uid() = created_by OR is_site_admin()` (migration 015) — any authenticated user can already insert a group for themselves; the app-level gate just adds the "has contributed" requirement on top.
 
 #### Group profile page (`/groups/[slug]`) — what's built
 
@@ -909,7 +909,7 @@ Per decision, Frontline does not call the live DOGS API at runtime — all data 
 - **Edit button** — visible on `/groups/[slug]` when `isAdmin` is true, routes to `/groups/[slug]/edit`.
 
 #### What works today
-- Group creation (site admins only — button hidden for non-admins, server-side redirect enforced, DB-layer RLS guard)
+- Group creation (any logged-in user with a contribution — button hidden otherwise, server-side redirect enforced, DB-layer RLS guard)
 - Groups nav link hidden in `AppHeader` for logged-out users
 - Group profile display: name, description, website, logo, verified badge, member list with roles
 - Join / leave membership (`GroupMembershipButton`)

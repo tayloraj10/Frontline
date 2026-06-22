@@ -13,10 +13,15 @@ export default async function GroupsPage() {
     supabase.from("group_members").select("group_id, user_id"),
   ]);
 
-  let isAdmin = false;
+  let canCreateGroup = false;
   if (user) {
-    const { data: profile } = await supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single();
-    isAdmin = profile?.is_admin ?? false;
+    const { data: contribution } = await supabase
+      .from("contributions")
+      .select("id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    canCreateGroup = !!contribution;
   }
 
   const groups = (groupsData ?? []) as Group[];
@@ -39,7 +44,7 @@ export default async function GroupsPage() {
             {groups.length} group{groups.length !== 1 ? "s" : ""} — organize your collective.
           </p>
         </div>
-        {isAdmin && (
+        {canCreateGroup && (
           <Link
             href="/groups/new"
             className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
@@ -53,7 +58,7 @@ export default async function GroupsPage() {
         <div className="text-center py-28 text-zinc-600">
           <p className="text-5xl mb-4">🏴</p>
           <p className="font-semibold text-zinc-500">No groups yet.</p>
-          {isAdmin && (
+          {canCreateGroup && (
             <p className="text-sm mt-1">
               <Link href="/groups/new" className="text-emerald-400 hover:text-emerald-300">
                 Create the first one.

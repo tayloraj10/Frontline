@@ -7,8 +7,13 @@ export default async function NewGroupPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single();
-  if (!profile?.is_admin) redirect("/groups");
+  const { data: contribution } = await supabase
+    .from("contributions")
+    .select("id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+  if (!contribution) redirect("/groups");
 
   return <CreateGroupForm userId={user.id} />;
 }
