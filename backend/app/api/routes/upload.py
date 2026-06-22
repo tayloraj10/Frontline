@@ -28,7 +28,8 @@ async def get_presigned_url(
     content_type: str = Query("image/jpeg"),
 ):
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
-    key = f"uploads/{uuid.uuid4()}.{ext}"
+    prefix = "uploads" if settings.is_production else "dev/uploads"
+    key = f"{prefix}/{uuid.uuid4()}.{ext}"
 
     client = _r2_client()
     upload_url = client.generate_presigned_url(
