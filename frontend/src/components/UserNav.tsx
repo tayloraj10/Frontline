@@ -60,7 +60,7 @@ export default function UserNav({ user }: { user: User | null }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl z-50 py-1 text-sm">
+        <div className="absolute right-0 mt-1 w-48 max-w-[calc(100vw-2rem)] bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl z-50 py-1 text-sm">
           <Link
             href="/profile"
             onClick={() => setOpen(false)}

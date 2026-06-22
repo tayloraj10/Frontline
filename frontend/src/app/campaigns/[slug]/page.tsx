@@ -196,7 +196,7 @@ export default async function CampaignPage({ params }: Props) {
 
   return (
     <div className="flex flex-col flex-1">
-      <div className="px-4 sm:px-6 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
+      <div className="px-4 sm:px-6 py-3 border-b border-zinc-800 bg-zinc-900/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/campaigns"
@@ -210,12 +210,12 @@ export default async function CampaignPage({ params }: Props) {
               {campaign.title}
             </h1>
             {campaign.description && (
-              <p className="text-zinc-500 text-xs truncate">{campaign.description}</p>
+              <p className="text-zinc-500 text-xs whitespace-nowrap overflow-x-auto scrollbar-none">{campaign.description}</p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
           {events.length > 0 && (
             <span className="px-3 py-1 bg-red-900/40 border border-red-700/60 text-red-300 text-xs font-semibold rounded-full animate-pulse">
               ⚡ {events.length} Event{events.length > 1 ? "s" : ""}

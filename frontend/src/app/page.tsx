@@ -29,7 +29,7 @@ export default async function HomePage() {
           <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
           {campaignCount ?? 0} campaign{campaignCount !== 1 ? "s" : ""} live now
         </div>
-        <h1 className="text-5xl sm:text-7xl font-black tracking-tighter bg-gradient-to-b from-white via-zinc-100 to-zinc-500 bg-clip-text text-transparent leading-none">
+        <h1 className="text-4xl sm:text-7xl font-black tracking-tighter bg-gradient-to-b from-white via-zinc-100 to-zinc-500 bg-clip-text text-transparent leading-none">
           FRONTLINE
         </h1>
         <p className="text-zinc-400 text-lg max-w-sm mx-auto leading-relaxed">

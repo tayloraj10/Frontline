@@ -25,6 +25,7 @@ interface Props {
   activeStyle?: string;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
+  onMobileStatsClick?: () => void;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {

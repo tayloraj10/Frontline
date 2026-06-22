@@ -84,6 +84,7 @@ interface Props {
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
+  onMobileStatsClick?: () => void;
 }
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
@@ -768,6 +769,7 @@ export default function CampaignMap({
   activeStyle = "outdoor",
   problemReports,
   eventCentroids,
+  onMobileStatsClick,
 }: Props) {
   const isCollage = campaignType === "collage";
   const isChoropleth = campaignType === "choropleth";
@@ -785,6 +787,7 @@ export default function CampaignMap({
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
+  const [eventsExpanded, setEventsExpanded] = useState(false);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const claimsRef = useRef(claims);
@@ -1798,9 +1801,27 @@ export default function CampaignMap({
       )}
 
       {!pinPickerActive && (activeEvents.length > 0 || campaign.geo_unit === "zip") && campaign.geo_unit !== "h3_hex" && (
-        <div className="absolute top-4 left-4 z-10 max-w-xs flex flex-col gap-2">
+        <div className="absolute top-4 left-4 z-10 max-w-[calc(100vw-2rem)] sm:max-w-xs flex flex-col gap-2">
           {activeEvents.length > 0 && (
-            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-0.5">
+            <div className="flex items-center gap-1.5 sm:hidden">
+              <button
+                onClick={() => setEventsExpanded((e) => !e)}
+                className="self-start px-3 py-1.5 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm text-red-300 text-xs font-semibold"
+              >
+                ⚡ {activeEvents.length} Event{activeEvents.length > 1 ? "s" : ""} {eventsExpanded ? "▲" : "▼"}
+              </button>
+              {onMobileStatsClick && (
+                <button
+                  onClick={onMobileStatsClick}
+                  className="self-start px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
+                >
+                  📊 Activity
+                </button>
+              )}
+            </div>
+          )}
+          {activeEvents.length > 0 && (
+            <div className={`${eventsExpanded ? "flex" : "hidden"} sm:flex flex-col gap-2 max-h-64 overflow-y-auto pr-0.5`}>
               {activeEvents.map((event) => {
                 const centroid = eventCentroidsRef.current[event.geo_unit_id ?? ""];
                 return (

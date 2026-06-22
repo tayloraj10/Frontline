@@ -98,7 +98,7 @@ export default async function CampaignsPage() {
     <main className="max-w-5xl mx-auto px-6 py-10 w-full">
       {user && <OnboardingModalClient campaigns={campaigns} />}
       <div className="mb-10">
-        <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+        <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
           Active Campaigns
         </h1>
         <p className="text-zinc-500 mt-2 text-sm">
@@ -128,11 +128,9 @@ export default async function CampaignsPage() {
             })}
           </div>
           {extraCampaigns.length > 0 && (
-            <div className="mt-4 flex justify-center gap-4">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {extraCampaigns.map((campaign) => (
-                <div key={campaign.id} className="w-full sm:w-[calc(50%-8px)]">
-                  <CampaignCard campaign={campaign} />
-                </div>
+                <CampaignCard key={campaign.id} campaign={campaign} />
               ))}
             </div>
           )}

@@ -174,6 +174,90 @@ function LeaderboardPanel({
   );
 }
 
+function daysSince(dateStr: string): number {
+  return Math.max(1, Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000));
+}
+
+function StatsPanel({
+  claims,
+  leaderboard,
+  campaignType,
+  unit,
+  eventCount,
+  startsAt,
+  userId,
+}: {
+  claims: TerritoryClaim[];
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  campaignType: string;
+  unit: string;
+  eventCount: number;
+  startsAt: string | null;
+  userId: string | null;
+}) {
+  const totalValue = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
+  const claimedLabel =
+    campaignType === "territory" ? "Tracts claimed" :
+    campaignType === "choropleth" ? "States claimed" :
+    campaignType === "hex_bloom" ? "Hexes claimed" :
+    "Areas claimed";
+  const contributorCount = leaderboard.users.length + leaderboard.groups.length;
+  const topUser = leaderboard.users[0];
+  const topGroup = leaderboard.groups[0];
+  const daysRunning = startsAt ? daysSince(startsAt) : null;
+  const userRank = userId ? leaderboard.users.findIndex((u) => u.entity_id === userId) + 1 : 0;
+
+  const stats: { label: string; value: string }[] = [
+    { label: "Total contributed", value: displayUnit(totalValue, unit) },
+    { label: claimedLabel, value: claims.length.toLocaleString() },
+    { label: "Contributors", value: contributorCount.toLocaleString() },
+    { label: "Active events", value: eventCount.toLocaleString() },
+  ];
+  if (daysRunning !== null) {
+    stats.push({ label: "Days running", value: daysRunning.toLocaleString() });
+  }
+
+  return (
+    <div className="py-3">
+      <dl className="grid grid-cols-2 gap-3 px-4">
+        {stats.map((s) => (
+          <div key={s.label} className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5">
+            <dt className="text-xs text-zinc-500">{s.label}</dt>
+            <dd className="text-sm font-semibold text-zinc-200 tabular-nums mt-0.5">{s.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {(topUser || topGroup) && (
+        <div className="mt-4 px-4 space-y-2">
+          <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Leading the way</div>
+          {topUser && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-zinc-300">🏆 {topUser.name}</span>
+              <span className="text-zinc-500 tabular-nums">{displayUnit(topUser.total_value, unit)}</span>
+            </div>
+          )}
+          {topGroup && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-emerald-400">🏆 {topGroup.name}</span>
+              <span className="text-zinc-500 tabular-nums">{displayUnit(topGroup.total_value, unit)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {userRank > 0 && (
+        <div className="mt-4 px-4">
+          <div className="bg-emerald-950/30 border border-emerald-800/40 rounded-lg px-3 py-2.5 flex items-center justify-between">
+            <span className="text-xs text-emerald-300">Your rank</span>
+            <span className="text-sm font-bold text-emerald-300 tabular-nums">#{userRank}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function displayUnit(value: number, unit: string): string {
   const n = Math.round(value);
   if (n === 1) return `1 ${unit.replace(/s$/, "")}`;
@@ -258,7 +342,7 @@ export default function CampaignPageClient({
   const [newContribution, setNewContribution] = useState<NewContribution | null>(null);
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [activeMapStyle, setActiveMapStyle] = useState("outdoor");
-  const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | null>(null);
+  const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | "stats" | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
 
   const handleContributionSubmitted = (lat: number | null, lng: number | null, value: number, photoUrl?: string) => {
@@ -302,11 +386,13 @@ export default function CampaignPageClient({
     setUserLocation(null);
   };
 
-  const togglePanel = (panel: "leaderboard" | "activity" | "mine") => {
+  const togglePanel = (panel: "leaderboard" | "activity" | "mine" | "stats") => {
     setOpenPanel((p) => (p === panel ? null : panel));
   };
 
   const isHexBloom = campaign.campaign_type === "hex_bloom";
+  const showEventsChip = activeEvents.length > 0 && !isHexBloom;
+  const statsButtonActive = !openPanel && !pinPickerActive;
   const bloomTotal = isHexBloom
     ? Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0))
     : 0;
@@ -335,11 +421,14 @@ export default function CampaignPageClient({
         activeStyle={activeMapStyle}
         problemReports={problemReports}
         eventCentroids={eventCentroids}
+        onMobileStatsClick={
+          statsButtonActive && showEventsChip ? () => togglePanel("leaderboard") : undefined
+        }
       />
 
       {/* Side panel */}
       {openPanel && !pinPickerActive && (
-        <div className="absolute bottom-0 left-0 right-0 h-[55vh] sm:h-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-t sm:border-t-0 sm:border-l border-zinc-800 flex flex-col z-10 overflow-hidden">
+        <div className="absolute bottom-0 left-0 right-0 h-[55vh] sm:h-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-t sm:border-t-0 sm:border-l border-zinc-800 flex flex-col z-20 overflow-hidden">
           {/* Header: tab buttons + close */}
           <div className="flex items-center border-b border-zinc-800 shrink-0 px-2 pt-2 pb-0 gap-1">
             <button
@@ -375,6 +464,16 @@ export default function CampaignPageClient({
               </button>
             )}
             <button
+              onClick={() => setOpenPanel("stats")}
+              className={`flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors ${
+                openPanel === "stats"
+                  ? "text-zinc-100 border-b-2 border-zinc-300"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Stats
+            </button>
+            <button
               onClick={() => setOpenPanel(null)}
               aria-label="Close panel"
               className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 mb-0.5"
@@ -402,38 +501,51 @@ export default function CampaignPageClient({
                 <ActivityPanel items={activityItems.filter((a) => a.user_id === userId)} unit={unit} emptyMessage="You haven't contributed yet." />
               </>
             )}
+            {openPanel === "stats" && (
+              <StatsPanel
+                claims={claims}
+                leaderboard={leaderboard}
+                campaignType={campaign.campaign_type ?? ""}
+                unit={unit}
+                eventCount={activeEvents.length}
+                startsAt={campaign.starts_at}
+                userId={userId}
+              />
+            )}
           </div>
         </div>
       )}
 
-      {/* Floating toggle buttons — only visible when panel is closed */}
-      {!openPanel && !pinPickerActive && (
-        <div className="absolute top-14 sm:top-3 left-4 sm:left-auto sm:right-[3.25rem] z-20 flex gap-1.5">
-          <button
-            onClick={() => setOpenPanel("leaderboard")}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-          >
-            Leaderboard
-          </button>
-          <button
-            onClick={() => setOpenPanel("activity")}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-          >
-            Activity
-          </button>
-          {userId && (
+      {/* Activity button — opens the Leaderboard/Activity/Mine panel. Hidden when panel open. */}
+      {statsButtonActive && (
+        <>
+          {/* Desktop: always top-right, clear of native map controls */}
+          <div className="hidden sm:block absolute top-3 right-[3.25rem] z-20">
             <button
-              onClick={() => setOpenPanel("mine")}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-emerald-700/50 text-emerald-400 hover:text-emerald-200 hover:bg-zinc-800"
+              onClick={() => togglePanel("leaderboard")}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
             >
-              Mine
+              📊 Activity
             </button>
+          </div>
+          {/* Mobile: next to the Events chip if it's showing (handled inside CampaignMap), otherwise
+              upper-left — stacked above the World Bloom widget for hex_bloom campaigns via the
+              shared flex column below, so it never overlaps it. */}
+          {!showEventsChip && !isHexBloom && (
+            <div className="sm:hidden absolute left-4 z-20 top-4">
+              <button
+                onClick={() => togglePanel("leaderboard")}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              >
+                📊 Activity
+              </button>
+            </div>
           )}
-        </div>
+        </>
       )}
 
       {isHexBloom && !pinPickerActive && (
-        <div className="absolute top-14 sm:top-4 left-4 z-10 flex flex-col gap-2">
+        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
           {activeEvents.map((event) => (
             <div
               key={event.id}
@@ -445,29 +557,41 @@ export default function CampaignPageClient({
               )}
             </div>
           ))}
-          <div className="w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm pointer-events-none">
-            <div className="flex items-baseline justify-between mb-1">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">World Bloom</span>
-              <span className="text-[10px] text-emerald-400/80 tabular-nums font-mono">
-                {bloomTotal.toLocaleString()} pts
-              </span>
-            </div>
-            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-1">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-700 to-emerald-400 transition-all duration-700"
-                style={{ width: `${bloomProgressPct}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-emerald-400/60 font-medium">
-                {nextMilestone ? nextMilestone.label : "Max reached!"}
-              </span>
-              {nextMilestone && (
-                <span className="text-[10px] text-zinc-600 tabular-nums font-mono">
-                  {(nextMilestone.threshold - bloomTotal).toLocaleString()} to go
+          <div className="flex items-start gap-2">
+            <div className="w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm pointer-events-none">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">World Bloom</span>
+                <span className="text-[10px] text-emerald-400/80 tabular-nums font-mono">
+                  {bloomTotal.toLocaleString()} pts
                 </span>
-              )}
+              </div>
+              <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-1">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-700 to-emerald-400 transition-all duration-700"
+                  style={{ width: `${bloomProgressPct}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-emerald-400/60 font-medium">
+                  {nextMilestone ? nextMilestone.label : "Max reached!"}
+                </span>
+                {nextMilestone && (
+                  <span className="text-[10px] text-zinc-600 tabular-nums font-mono">
+                    {(nextMilestone.threshold - bloomTotal).toLocaleString()} to go
+                  </span>
+                )}
+              </div>
             </div>
+            {statsButtonActive && (
+              <div className="sm:hidden z-20 shrink-0">
+                <button
+                  onClick={() => togglePanel("leaderboard")}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                >
+                  📊 Activity
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
