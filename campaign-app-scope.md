@@ -143,7 +143,7 @@ Each campaign is its own mini-game running on a shared geographic foundation. Th
 | `threshold_reached` | ✅ Implemented | Fires when campaign-wide or geo-unit total crosses a numeric threshold |
 | `report_count` | ✅ Implemented | Fires when open problem reports in a geo unit reach a count threshold |
 | `time_elapsed` | ✅ Implemented | `_check_time_elapsed_trigger` handler implemented in `events.py` |
-| `decay_elapsed` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator |
+| `decay_elapsed` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator. Nothing sets `territory_claims.decay_starts_at`, so the deployed decay cron (`POST /api/decay/run`) is currently a no-op — it has no rows to act on |
 | `external_api` | ❌ Not implemented | In DB schema only, not in admin UI or evaluator |
 
 #### Event types
@@ -753,7 +753,7 @@ Tables that drive live map updates:
 - [x] Problem reporting flow (photo + GPS → problem_reports table)
 - [x] Boss event trigger: X reports in a tract → spawn campaign_event
 - [x] Boss event visible on map (trash pile animation with GSAP)
-- [x] Territory decay cron job (FastAPI background task)
+- [~] Territory decay cron job (FastAPI background task) — `POST /api/decay/run` + Railway cron deployed and running every 6h, but it's currently a no-op: nothing in the codebase ever sets `decay_starts_at` to a future timestamp, so the `WHERE decay_starts_at < NOW()` filter never matches. Need a `decay_elapsed` trigger/job that sets `decay_starts_at = last_contribution_at + decay window` once a claim goes stale. See condition types table below.
 
 **Deliverable:** End-to-end Trash War campaign playable by real users
 
