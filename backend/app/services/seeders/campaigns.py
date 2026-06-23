@@ -38,15 +38,17 @@ class CampaignSeeder(Seeder):
                      geo_unit, status, geo_scope, scoring_rules, win_condition)
                 VALUES (
                     :id, 'trash-war', 'Trash War',
-                    'Claim territory by cleaning up trash. The group with the most bags cleaned in a ZIP code controls it.',
-                    'territory', 'cleanup', 'zip', 'active',
+                    'Claim territory by cleaning up trash. The group with the most bags cleaned in a ZIP code or postcode district controls it.',
+                    'territory', 'cleanup', ARRAY['zip', 'uk_postcode_district']::text[], 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
-                ON CONFLICT (slug) DO UPDATE SET geo_unit = 'zip', geo_scope = EXCLUDED.geo_scope
+                ON CONFLICT (slug) DO UPDATE SET
+                    geo_unit = ARRAY['zip', 'uk_postcode_district']::text[],
+                    geo_scope = EXCLUDED.geo_scope
             """),
             {
                 "id": str(TRASH_WAR_ID),
-                "geo_scope": json.dumps({"scope": "nationwide"}),
+                "geo_scope": json.dumps({"scope": "nationwide", "countries": ["US", "UK"]}),
                 "scoring_rules": json.dumps({"unit": "bags", "per_contribution": 1}),
                 "win_condition": json.dumps({"type": "open_ended"}),
             },
@@ -60,7 +62,7 @@ class CampaignSeeder(Seeder):
                 VALUES (
                     :id, 'touch-grass', 'Touch Grass',
                     'Get outside and submit a photo from wherever you are. Anywhere on Earth counts.',
-                    'collage', 'photo', 'point', 'active',
+                    'collage', 'photo', ARRAY['point']::text[], 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
                 ON CONFLICT (slug) DO NOTHING
@@ -81,7 +83,7 @@ class CampaignSeeder(Seeder):
                 VALUES (
                     :id, 'road-to-independence', 'Road to Independence',
                     'Break free from the two-party system. Log civic actions and help grow America''s independence movement.',
-                    'choropleth', 'civic_action', 'state', 'active',
+                    'choropleth', 'civic_action', ARRAY['state']::text[], 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
                 ON CONFLICT (slug) DO UPDATE SET
@@ -117,7 +119,7 @@ class CampaignSeeder(Seeder):
                 VALUES (
                     :id, 'brainrot', 'BRAINROT',
                     'Building Resistance Against Influencers, Narcissism, Ragebait, Overconsumption, and Time-wasting. Log every account you unfollow and help dethrone the biggest offenders.',
-                    'heatmap', 'unfollow', 'point', 'active',
+                    'heatmap', 'unfollow', ARRAY['point']::text[], 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
                 ON CONFLICT (slug) DO UPDATE SET
@@ -140,7 +142,7 @@ class CampaignSeeder(Seeder):
                 VALUES (
                     :id, 'solarpunk', 'Solarpunk',
                     'Build a regenerative future, one hex at a time. Log real-world actions and photo-document solarpunk happening in the wild.',
-                    'hex_bloom', 'solarpunk_action', 'h3_hex', 'active',
+                    'hex_bloom', 'solarpunk_action', ARRAY['h3_hex']::text[], 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )
                 ON CONFLICT (slug) DO UPDATE SET

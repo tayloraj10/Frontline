@@ -5,6 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.services.seeders import GeoUnitType
 
 router = APIRouter(prefix="/tiles", tags=["tiles"])
 
@@ -19,9 +20,22 @@ _SIMPLIFY_TOLERANCE = {
     range(9, 12): 0.001,
 }
 
+# Tighter tolerance for unit types whose adjacent polygons must share borders
+# (independent per-row simplification otherwise breaks shared edges and opens
+# visible gaps between neighboring shapes). Falls back to _SIMPLIFY_TOLERANCE
+# for any unit_type not listed here. Keyed by GeoUnitType (not raw strings) so
+# adding a new country's geography here can't silently typo-mismatch the
+# unit_type written by its seeder.
+_SIMPLIFY_TOLERANCE_BY_UNIT_TYPE: dict[GeoUnitType, dict] = {
+    GeoUnitType.UK_POSTCODE_DISTRICT: {
+        range(0, 9): 0.0001,
+    },
+}
 
-def _tolerance(z: int) -> float:
-    for r, t in _SIMPLIFY_TOLERANCE.items():
+
+def _tolerance(z: int, unit_type_table: dict | None = None) -> float:
+    table = unit_type_table or _SIMPLIFY_TOLERANCE
+    for r, t in table.items():
         if z in r:
             return t
     return 0.0
@@ -101,12 +115,22 @@ async def get_tile(
             headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
         )
 
-    tolerance = _tolerance(z)
-    geom_expr = (
-        f"ST_SimplifyPreserveTopology(g.geometry, {tolerance})"
-        if tolerance > 0
+    default_tolerance = _tolerance(z)
+    case_clauses = []
+    for unit_type, table in _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE.items():
+        tolerance = _tolerance(z, table)
+        clause = (
+            f"WHEN g.unit_type = '{unit_type.value}' THEN ST_SimplifyPreserveTopology(g.geometry, {tolerance})"
+            if tolerance > 0
+            else f"WHEN g.unit_type = '{unit_type.value}' THEN g.geometry"
+        )
+        case_clauses.append(clause)
+    default_clause = (
+        f"ST_SimplifyPreserveTopology(g.geometry, {default_tolerance})"
+        if default_tolerance > 0
         else "g.geometry"
     )
+    geom_expr = "CASE " + " ".join(case_clauses) + f" ELSE {default_clause} END"
 
     result = await db.execute(
         text(f"""
@@ -120,6 +144,7 @@ async def get_tile(
                 SELECT
                     g.id::text AS geo_unit_id,
                     COALESCE(g.display_name, g.unit_id) AS display_name,
+                    g.unit_type AS unit_type,
                     ST_AsMVTGeom(
                         ST_Transform({geom_expr}, 3857),
                         bounds.geom_3857,
@@ -128,7 +153,7 @@ async def get_tile(
                 FROM geo_units g
                 CROSS JOIN bounds
                 WHERE
-                    g.unit_type = (SELECT geo_unit FROM campaigns WHERE id = :campaign_id)
+                    g.unit_type = ANY(SELECT unnest(geo_unit) FROM campaigns WHERE id = :campaign_id)
                     AND g.geometry && bounds.geom_4326
                     AND ST_Intersects(g.geometry, bounds.geom_4326)
             )

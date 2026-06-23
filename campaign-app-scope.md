@@ -863,6 +863,31 @@ Tables that drive live map updates:
 
 ---
 
+### Trash War: UK Expansion
+**Goal:** Extend Trash War coverage from US ZIP codes to UK postcode districts (e.g. `SW1A`, `M1`, `EH3`), so the campaign is playable in both countries simultaneously.
+
+**New technical dependencies:**
+- New `geo_unit` type: `uk_postcode_district` (unit_id = UK postcode district code), separately namespaced from `zip`
+- `campaigns.geo_unit` converted from scalar `TEXT` to `TEXT[]` so a single campaign can span multiple geo unit types at once
+
+**Data model additions:**
+- Migration `020_uk_postcode_districts.sql` — drops old `geo_unit` CHECK, converts column to `TEXT[]`, adds new CHECK including `uk_postcode_district`
+- Boundary polygons sourced from doogal.co.uk's free OGL-licensed postcode district KML export (2,877 districts)
+
+**Development checklist:**
+- [x] KML → simplified GeoJSON conversion (`geo.py: simplify_uk_postcode_districts`) — handles `MultiGeometry` and interior rings/holes
+- [x] `UkPostcodeDistrictSeeder` + `POST /admin/load-geo-units/uk-postcode-districts` loader (mirrors `ZipCodeSeeder`)
+- [x] DB migration: `campaigns.geo_unit` TEXT → TEXT[], CHECK constraint includes `uk_postcode_district`
+- [x] Backend: all point-in-polygon/tile queries switched from `=` to `= ANY(...)` for array-typed `geo_unit` (`tiles.py`, `contributions.py`, `problem_reports.py`)
+- [x] Backend: `GET /geo-units/uk-postcode/{postcode}/centroid` endpoint for map search-to-postcode
+- [x] Trash War campaign row updated: `geo_unit = ARRAY['zip', 'uk_postcode_district']`, `geo_scope` includes `countries: ["US", "UK"]`
+- [x] Frontend: `GeoUnit`/`campaigns.geo_unit` types changed to arrays; all scalar equality checks converted to `.includes(...)`
+- [x] Frontend: UK postcode search form on the map (parallel to existing ZIP search), map bounds/center widened to cover both US and UK when applicable
+
+**Deliverable:** Trash War playable across both US ZIP codes and UK postcode districts on the same map/campaign
+
+---
+
 ### Pre-Launch Requirement: External Model Imports
 - [x] **Groups** — `groups` table reshaped to match the DOGS `DirectoryEntry` shape (`image_url`, `social_links`, `categories`, `featured`). `group_members` remains the source of truth for membership/roles; DOGS's `user_ids` is treated as derived, never synced.
 - [x] **Cleanups** — new `cleanups` table matching the DOGS `Cleanup` shape (location, image_urls, structured metrics, organizer/rsvp/attended user id arrays). Trash War cleanup contributions now create a linked `cleanups` row (`contributions.cleanup_id`).

@@ -11,7 +11,7 @@ export type Campaign = {
   description: string | null;
   campaign_type: string;
   contribution_type: string;
-  geo_unit: string | null;
+  geo_unit: string[] | null;
   status: string;
   created_at: string;
 };
@@ -156,7 +156,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
         description: description.trim() || null,
         campaign_type: campaignType,
         contribution_type: contributionType,
-        geo_unit: geoUnit || null,
+        geo_unit: geoUnit ? [geoUnit] : null,
         status,
         geo_scope: geoScope,
         scoring_rules: scoringRules,
@@ -234,6 +234,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
               <label className="text-xs text-zinc-500">Geo unit</label>
               <select className={inputCls} value={geoUnit} onChange={e => setGeoUnit(e.target.value)}>
                 <option value="zip">zip</option>
+                <option value="uk_postcode_district">uk_postcode_district</option>
                 <option value="census_tract">census_tract</option>
                 <option value="state">state</option>
                 <option value="point">point</option>

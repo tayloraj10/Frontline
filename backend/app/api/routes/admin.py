@@ -9,10 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.database import get_db
 from app.services import geo
-from app.services.seeders import REGISTRY, StatesSeeder
+from app.services.seeders import GEO_UNIT_SEEDERS, REGISTRY, GeoUnitType, StatesSeeder
 from app.services.seeders.demo_data import DemoDataSeeder, _uid as _demo_uid
 from app.services.seeders.global_hexes import GlobalHexSeeder
 from app.services.seeders.solarpunk_preseed import SolarpunkPreseedSeeder
+from app.services.seeders.uk_postcode_districts import UkPostcodeDistrictSeeder
 from app.services.seeders.zip_codes import ZipCodeSeeder
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -37,6 +38,37 @@ async def simplify_zipcodes(tolerance: float = 0.001, precision: int = 4):
         result = await loop.run_in_executor(
             None,
             partial(geo.simplify_zipcodes, tolerance=tolerance, precision=precision),
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Simplification failed: {exc}")
+
+    return {
+        "input_size_mb": round(result.input_size_mb, 1),
+        "output_size_mb": round(result.output_size_mb, 1),
+        "feature_count": result.feature_count,
+        "skipped_count": result.skipped_count,
+    }
+
+
+@router.post("/simplify-uk-postcode-districts")
+async def simplify_uk_postcode_districts(tolerance: float = 0.0001, precision: int = 5):
+    """
+    Convert and simplify backend/data/uk_postcode_districts.kml →
+    backend/data/uk_postcode_districts.geojson. CPU-bound; takes a few seconds.
+    Run this before POST /admin/load-geo-units/uk-postcode-districts.
+    """
+    if not geo.RAW_UK_POSTCODE_FILE.exists():
+        raise HTTPException(
+            404,
+            f"Source file not found: {geo.RAW_UK_POSTCODE_FILE}. "
+            "Copy uk_postcode_districts.kml to backend/data/.",
+        )
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            partial(geo.simplify_uk_postcode_districts, tolerance=tolerance, precision=precision),
         )
     except Exception as exc:
         raise HTTPException(500, f"Simplification failed: {exc}")
@@ -77,6 +109,52 @@ async def load_geo_units_zips(db: AsyncSession = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(500, str(exc))
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
+
+
+@router.post("/load-geo-units/uk-postcode-districts")
+async def load_geo_units_uk_postcode_districts(db: AsyncSession = Depends(get_db)):
+    """Load UK postcode district boundaries into geo_units. Run POST /admin/simplify-uk-postcode-districts first."""
+    try:
+        result = await UkPostcodeDistrictSeeder().run(db, {})
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
+
+
+@router.post("/geo-units/{unit_type}/reload")
+async def reload_geo_unit_type(unit_type: GeoUnitType, db: AsyncSession = Depends(get_db)):
+    """
+    Wipe and repopulate a single geographic boundary dataset in geo_units.
+    Deletes every geo_units row matching the chosen unit_type, then re-runs
+    that type's seeder from its source file. Other unit_types are untouched.
+    For zip/uk_postcode_district, run the corresponding /admin/simplify-*
+    endpoint first if the source GeoJSON hasn't been generated yet.
+    """
+    seeder_cls = GEO_UNIT_SEEDERS[unit_type]
+
+    deleted = await db.execute(
+        text("DELETE FROM geo_units WHERE unit_type = :unit_type"),
+        {"unit_type": unit_type.value},
+    )
+    deleted_count = deleted.rowcount
+    await db.commit()
+
+    try:
+        result = await seeder_cls().run(db, {})
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+    return {
+        "unit_type": unit_type.value,
+        "deleted": deleted_count,
+        "inserted": result.inserted,
+        "skipped": result.skipped,
+        "errors": result.errors[:20],
+    }
 
 
 @router.post("/seed/demo-data")

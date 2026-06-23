@@ -3,7 +3,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json } | 
 export type CampaignType = "territory" | "collage" | "choropleth" | "heatmap" | "hex_bloom";
 export type ContributionType = "cleanup" | "photo" | "registration" | "advocacy" | "civic_action" | "unfollow" | "solarpunk_action" | "solarpunk_photo";
 export type CampaignStatus = "draft" | "active" | "completed" | "paused";
-export type GeoUnit = "census_tract" | "zip" | "state" | "point" | "h3_hex";
+export type GeoUnit = "census_tract" | "zip" | "state" | "point" | "h3_hex" | "uk_postcode_district";
 export type EntityType = "user" | "group";
 export type MemberRole = "admin" | "member";
 export type EventStatus = "active" | "resolved" | "expired";
@@ -95,7 +95,7 @@ export interface Database {
           campaign_type: CampaignType;
           contribution_type: ContributionType;
           geo_scope: Json | null;
-          geo_unit: GeoUnit | null;
+          geo_unit: GeoUnit[] | null;
           win_condition: Json | null;
           scoring_rules: Json | null;
           status: CampaignStatus;

@@ -26,14 +26,14 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
         {"campaign_id": str(payload.campaign_id)},
     )
     camp_row = camp_result.fetchone()
-    campaign_geo_unit = camp_row[0] if camp_row else "zip"
+    campaign_geo_unit = camp_row[0] if camp_row and camp_row[0] else ["zip"]
 
     # Find geo_unit via point-in-polygon
     geo_result = await db.execute(
         text("""
             SELECT id FROM geo_units
             WHERE ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
-            AND unit_type = :geo_unit
+            AND unit_type = ANY(:geo_unit)
             LIMIT 1
         """),
         {"lon": payload.longitude, "lat": payload.latitude, "geo_unit": campaign_geo_unit},

@@ -31,6 +31,7 @@ interface ContributionPoint {
 interface SelectedZip {
   geoUnitId: string;
   displayName: string;
+  unitLabel: string;
 }
 
 interface HexBloomEntry {
@@ -299,6 +300,7 @@ type ContribRow = {
 function TerritoryPanel({
   geoUnitId,
   displayName,
+  unitLabel,
   claim,
   claimLabel,
   reportCount,
@@ -309,6 +311,7 @@ function TerritoryPanel({
 }: {
   geoUnitId: string;
   displayName: string;
+  unitLabel: string;
   claim: TerritoryClaim | null;
   claimLabel: ClaimLabel | null;
   reportCount: number;
@@ -391,7 +394,7 @@ function TerritoryPanel({
         <div className="flex items-start justify-between">
           <div>
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Territory</p>
-            <p className="text-xl font-black leading-none tracking-tight text-zinc-100">ZIP {displayName}</p>
+            <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{unitLabel} {displayName}</p>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {isClaimed && (
@@ -430,7 +433,7 @@ function TerritoryPanel({
             <span className="text-sm text-zinc-600">Unclaimed</span>
           )}
           {isClaimed && (
-            <p className="mt-0.5 text-xs text-zinc-500">{totalBags} bag{totalBags !== 1 ? "s" : ""} total in ZIP</p>
+            <p className="mt-0.5 text-xs text-zinc-500">{totalBags} bag{totalBags !== 1 ? "s" : ""} total in {unitLabel}</p>
           )}
         </div>
       </div>
@@ -786,14 +789,15 @@ export default function CampaignMap({
   const isChoropleth = campaignType === "choropleth";
   const isHeatmap = campaignType === "heatmap";
   const isHexBloom = campaignType === "hex_bloom";
+  const pinPickerUnitLabel = campaign.geo_unit?.includes("uk_postcode_district") ? "Postcode" : "ZIP";
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [selectedZip, setSelectedZip] = useState<SelectedZip | null>(null);
-  const [zipSearch, setZipSearch] = useState("");
-  const [zipError, setZipError] = useState<string | null>(null);
-  const zipErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [geoSearch, setGeoSearch] = useState("");
+  const [geoSearchError, setGeoSearchError] = useState<string | null>(null);
+  const geoSearchErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
@@ -1128,8 +1132,10 @@ export default function CampaignMap({
       return;
     }
 
-    // Territory/choropleth campaigns are US-scoped
-    dataBoundsRef.current = [[-125, 24], [-66, 49]];
+    // Territory/choropleth campaigns are US-scoped, unless they also cover UK postcode districts
+    dataBoundsRef.current = (campaign.geo_unit?.includes("uk_postcode_district") ?? false)
+      ? [[-125, 24], [2, 61]]
+      : [[-125, 24], [-66, 49]];
 
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
 
@@ -1299,8 +1305,12 @@ export default function CampaignMap({
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: styleUrl("outdoor"),
-      center: (isHeatmap || isHexBloom) ? [0, 20] : [-98.5795, 39.8283],
-      zoom: (isHeatmap || isHexBloom) ? 2 : 4,
+      center: (isHeatmap || isHexBloom)
+        ? [0, 20]
+        : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) ? [-40, 45] : [-98.5795, 39.8283],
+      zoom: (isHeatmap || isHexBloom)
+        ? 2
+        : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) ? 2 : 4,
       attributionControl: false,
     });
 
@@ -1381,13 +1391,14 @@ export default function CampaignMap({
             );
           }
           lastHoveredId = featId;
-          const props = e.features[0].properties as { display_name?: string };
+          const props = e.features[0].properties as { display_name?: string; unit_type?: string };
           const featureState = e.features[0].state as {
             total_value?: number;
             claimed_label?: string | null;
             claim_is_group?: boolean;
           };
           const displayName = props.display_name ?? "—";
+          const featureUnitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
           const totalVal = featureState.total_value ?? 0;
           if (isChoropleth) {
             const lean = US_STATE_LEAN[displayName] ?? 0;
@@ -1406,7 +1417,7 @@ export default function CampaignMap({
               `<div style="color:#a1a1aa;font-size:11px;margin-top:1px">${bags} bag${bags !== 1 ? "s" : ""}</div>`
               : `<div style="color:#52525b;font-size:11px;margin-top:4px">Unclaimed</div>`;
             hoverDiv.innerHTML =
-              `<div style="font-weight:700;font-size:13px;color:#f4f4f5">ZIP ${displayName}</div>` + claimerHtml;
+              `<div style="font-weight:700;font-size:13px;color:#f4f4f5">${featureUnitLabel} ${displayName}</div>` + claimerHtml;
           }
         }
       });
@@ -1426,10 +1437,11 @@ export default function CampaignMap({
 
       map.current.on("click", "territory-fill", (e) => {
         if (!e.features?.[0] || pinPickerActiveRef.current) return;
-        const props = e.features[0].properties as { display_name?: string; geo_unit_id?: string };
+        const props = e.features[0].properties as { display_name?: string; geo_unit_id?: string; unit_type?: string };
         const geoUnitId = String(e.features[0].id ?? props.geo_unit_id ?? "");
         const displayName = props.display_name ?? geoUnitId;
-        setSelectedZip({ geoUnitId, displayName });
+        const unitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
+        setSelectedZip({ geoUnitId, displayName, unitLabel });
       });
 
       // Hex bloom hover + click — shared handler for both dormant and active layers
@@ -1732,15 +1744,24 @@ export default function CampaignMap({
     };
   }, [campaign.id, isChoropleth, isHexBloom, refreshHexBloom, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleZipSearch = useCallback(async (e: React.FormEvent) => {
+  const supportsZipSearch = campaign.geo_unit?.includes("zip") ?? false;
+  const supportsUkPostcodeSearch = campaign.geo_unit?.includes("uk_postcode_district") ?? false;
+
+  const handleGeoSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    const zip = zipSearch.trim();
-    if (zip.length !== 5) return;
-    const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/geo-units/zip/${zip}/centroid`);
+    const query = geoSearch.trim();
+    if (!query) return;
+    // When a campaign supports both ZIP and UK postcode lookup, route purely
+    // numeric input to the ZIP endpoint and everything else to UK postcodes.
+    const useZip = supportsZipSearch && (/^\d+$/.test(query) || !supportsUkPostcodeSearch);
+    const endpoint = useZip
+      ? `/api/geo-units/zip/${query}/centroid`
+      : `/api/geo-units/uk-postcode/${query}/centroid`;
+    const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}${endpoint}`);
     if (!res.ok) {
-      setZipError("ZIP not found");
-      if (zipErrorTimerRef.current) clearTimeout(zipErrorTimerRef.current);
-      zipErrorTimerRef.current = setTimeout(() => setZipError(null), 3000);
+      setGeoSearchError(useZip ? "ZIP not found" : "Postcode district not found");
+      if (geoSearchErrorTimerRef.current) clearTimeout(geoSearchErrorTimerRef.current);
+      geoSearchErrorTimerRef.current = setTimeout(() => setGeoSearchError(null), 3000);
       return;
     }
     const data = await res.json();
@@ -1748,7 +1769,7 @@ export default function CampaignMap({
       [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]],
       { padding: 40, maxZoom: 14 },
     );
-  }, [zipSearch]);
+  }, [geoSearch, supportsZipSearch, supportsUkPostcodeSearch]);
 
   const handleConfirmPin = () => {
     const pos = pinPickerMarkerRef.current?.getLngLat();
@@ -1771,6 +1792,7 @@ export default function CampaignMap({
           <TerritoryPanel
             geoUnitId={selectedZip.geoUnitId}
             displayName={selectedZip.displayName}
+            unitLabel={selectedZip.unitLabel}
             claim={liveClaims[selectedZip.geoUnitId] ?? claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
             claimLabel={claimLabelsRef.current[selectedZip.geoUnitId] ?? null}
             reportCount={liveReports?.counts_by_geo_unit[selectedZip.geoUnitId] ?? 0}
@@ -1793,7 +1815,7 @@ export default function CampaignMap({
               : "bg-zinc-900/95 border-zinc-700 text-zinc-200"
             }`}>
             {outOfZoneWarning
-              ? "Pin must stay within your ZIP code"
+              ? `Pin must stay within your ${pinPickerUnitLabel === "ZIP" ? "ZIP code" : "postcode"}`
               : "Drag the pin to your exact cleanup location"}
           </div>
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
@@ -1813,7 +1835,7 @@ export default function CampaignMap({
         </>
       )}
 
-      {!pinPickerActive && (activeEvents.length > 0 || campaign.geo_unit === "zip") && campaign.geo_unit !== "h3_hex" && (
+      {!pinPickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
         <div className="absolute top-4 left-4 z-10 max-w-[calc(100vw-2rem)] sm:max-w-xs flex flex-col gap-2">
           {activeEvents.length > 0 && (
             <div className="flex items-center gap-1.5 sm:hidden">
@@ -1864,27 +1886,39 @@ export default function CampaignMap({
               📊 Activity
             </button>
           )}
-          {campaign.geo_unit === "zip" && (
-            <form onSubmit={handleZipSearch} className="flex gap-1">
+          {(supportsZipSearch || supportsUkPostcodeSearch) && (
+            <form onSubmit={handleGeoSearch} className="flex gap-1">
               <input
                 type="text"
-                inputMode="numeric"
+                inputMode={supportsZipSearch && !supportsUkPostcodeSearch ? "numeric" : "text"}
                 maxLength={5}
-                placeholder="Go to ZIP…"
-                value={zipSearch}
-                onChange={(e) => setZipSearch(e.target.value.replace(/\D/g, ""))}
-                className={`w-28 px-2 py-1.5 text-xs bg-zinc-900/90 border rounded text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${zipError ? "border-red-600" : "border-zinc-700"}`}
+                placeholder={
+                  supportsZipSearch && supportsUkPostcodeSearch
+                    ? "Go to ZIP or postcode"
+                    : supportsZipSearch
+                    ? "Go to ZIP"
+                    : "Go to postcode"
+                }
+                value={geoSearch}
+                onChange={(e) =>
+                  setGeoSearch(
+                    supportsZipSearch && !supportsUkPostcodeSearch
+                      ? e.target.value.replace(/\D/g, "")
+                      : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
+                  )
+                }
+                className={`w-[8.5rem] px-2 py-1.5 text-xs bg-zinc-900/90 border rounded text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${geoSearchError ? "border-red-600" : "border-zinc-700"}`}
               />
               <button
                 type="submit"
-                disabled={zipSearch.length !== 5}
+                disabled={!geoSearch}
                 className="px-2.5 py-1.5 text-xs bg-zinc-800/90 border border-zinc-700 rounded text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
               >
                 Go
               </button>
             </form>
           )}
-          {zipError && <p className="text-xs text-red-400 px-1">{zipError}</p>}
+          {geoSearchError && <p className="text-xs text-red-400 px-1">{geoSearchError}</p>}
         </div>
       )}
 

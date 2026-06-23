@@ -44,6 +44,9 @@ export default async function CampaignPage({ params }: Props) {
 
   const campaign = data as Campaign | null;
   if (!campaign) notFound();
+  // geo_unit can come back from Postgres as a nested array (e.g. [['zip', 'uk_postcode_district']])
+  // depending on how it was last written; flatten once here so callers can rely on a flat array.
+  campaign.geo_unit = campaign.geo_unit?.flat() ?? null;
 
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
@@ -71,10 +74,10 @@ export default async function CampaignPage({ params }: Props) {
       .order("submitted_at", { ascending: false })
       .limit(20),
     campaign.campaign_type === "territory"
-      ? fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`, { next: { revalidate: 60 } }).catch(() => null)
+      ? fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`, { cache: "no-store" }).catch(() => null)
       : Promise.resolve(null),
     campaign.campaign_type === "territory"
-      ? fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/centroids`, { next: { revalidate: 60 } }).catch(() => null)
+      ? fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/centroids`, { cache: "no-store" }).catch(() => null)
       : Promise.resolve(null),
   ]);
 

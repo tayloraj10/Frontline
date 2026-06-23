@@ -72,7 +72,7 @@ async def submit_contribution(
     campaign_geo_unit = camp_row[0]
 
     if has_location:
-        if campaign_geo_unit == "h3_hex":
+        if campaign_geo_unit and "h3_hex" in campaign_geo_unit:
             h3_index = h3.latlng_to_cell(payload.latitude, payload.longitude, 3)
 
             geo_result = await db.execute(
@@ -103,7 +103,7 @@ async def submit_contribution(
                 text("""
                     SELECT id FROM geo_units
                     WHERE ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
-                    AND unit_type = :geo_unit
+                    AND unit_type = ANY(:geo_unit)
                     LIMIT 1
                 """),
                 {"lon": payload.longitude, "lat": payload.latitude, "geo_unit": campaign_geo_unit},
@@ -389,9 +389,9 @@ async def get_geo_unit_at_point(
         {"campaign_id": str(campaign_id)},
     )
     camp_row = camp_result.fetchone()
-    campaign_geo_unit = camp_row[0] if camp_row else "zip"
+    campaign_geo_unit = camp_row[0] if camp_row and camp_row[0] else ["zip"]
 
-    if campaign_geo_unit == "h3_hex":
+    if "h3_hex" in campaign_geo_unit:
         h3_index = h3.latlng_to_cell(lat, lng, 3)
         result = await db.execute(
             text("SELECT id::text FROM geo_units WHERE unit_type = 'h3_hex' AND unit_id = :h3_index"),
@@ -404,7 +404,7 @@ async def get_geo_unit_at_point(
         text("""
             SELECT id::text, display_name
             FROM geo_units
-            WHERE unit_type = :geo_unit
+            WHERE unit_type = ANY(:geo_unit)
               AND ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326))
             LIMIT 1
         """),
@@ -500,7 +500,7 @@ async def process_contribution(payload: ContributionRequest, db: AsyncSession = 
         text("""
             SELECT id FROM geo_units
             WHERE ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
-            AND unit_type = (SELECT geo_unit FROM campaigns WHERE id = :campaign_id)
+            AND unit_type = ANY(SELECT unnest(geo_unit) FROM campaigns WHERE id = :campaign_id)
             LIMIT 1
         """),
         {"lon": payload.longitude, "lat": payload.latitude, "campaign_id": str(payload.campaign_id)},

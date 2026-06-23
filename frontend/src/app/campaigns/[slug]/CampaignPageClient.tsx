@@ -423,7 +423,7 @@ export default function CampaignPageClient({
         problemReports={problemReports}
         eventCentroids={eventCentroids}
         onMobileStatsClick={
-          statsButtonActive && (showEventsChip || campaign.geo_unit === "zip")
+          statsButtonActive && (showEventsChip || (campaign.geo_unit?.includes("zip") ?? false))
             ? () => togglePanel("leaderboard")
             : undefined
         }
@@ -534,7 +534,7 @@ export default function CampaignPageClient({
           {/* Mobile: next to the Events chip if it's showing (handled inside CampaignMap), otherwise
               upper-left — stacked above the World Bloom widget for hex_bloom campaigns via the
               shared flex column below, so it never overlaps it. */}
-          {!showEventsChip && !isHexBloom && campaign.geo_unit !== "zip" && (
+          {!showEventsChip && !isHexBloom && !(campaign.geo_unit?.includes("zip") ?? false) && (
             <div className="sm:hidden absolute left-4 z-20 top-4">
               <button
                 onClick={() => togglePanel("leaderboard")}
