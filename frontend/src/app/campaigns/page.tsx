@@ -37,9 +37,11 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
                 {CONTRIBUTION_LABELS[campaign.contribution_type] ?? campaign.contribution_type}
               </span>
             )}
-            {(campaign.geo_scope as { scope?: string } | null)?.scope === "nationwide" && (
+            {(campaign.geo_scope as { scope?: string; countries?: string[] } | null)?.scope === "nationwide" && (
               <span className="rounded-full border border-red-700/50 bg-red-900/20 px-2.5 py-1 text-xs font-semibold text-red-400">
-                US only
+                {(campaign.geo_scope as { countries?: string[] }).countries?.length
+                  ? `${(campaign.geo_scope as { countries?: string[] }).countries!.join(" & ")} only`
+                  : "US only"}
               </span>
             )}
             <span className="ml-auto flex items-center gap-1 text-[10px] font-bold tracking-widest text-emerald-400">
