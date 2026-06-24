@@ -322,6 +322,7 @@ function TerritoryPanel({
 }) {
   const [contribs, setContribs] = useState<ContribRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cleanupPhotos, setCleanupPhotos] = useState<string[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -345,6 +346,17 @@ function TerritoryPanel({
         }
         setContribs(rows.map((r) => ({ ...r, profiles: r.user_id ? profilesById.get(r.user_id) ?? null : null })));
         setLoading(false);
+      });
+
+    supabase
+      .from("cleanups")
+      .select("image_urls")
+      .eq("geo_unit_id", geoUnitId)
+      .order("created_at", { ascending: false })
+      .limit(10)
+      .then(({ data }) => {
+        const urls = (data ?? []).flatMap((c: { image_urls: string[] | null }) => c.image_urls ?? []);
+        setCleanupPhotos(urls);
       });
   }, [geoUnitId]);
 
@@ -510,6 +522,25 @@ function TerritoryPanel({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Cleanup photos */}
+      {cleanupPhotos.length > 0 && (
+        <div className="px-4 py-3 border-t border-zinc-800">
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Cleanup Photos</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {cleanupPhotos.slice(0, 4).map((url, i) => (
+              <button
+                key={i}
+                onClick={() => onPhotoSelect(url)}
+                className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 transition-colors"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="Cleanup photo" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
