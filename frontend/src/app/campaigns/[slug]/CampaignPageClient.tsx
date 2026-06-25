@@ -339,6 +339,7 @@ export default function CampaignPageClient({
   const [pinPickerActive, setPinPickerActive] = useState(false);
   const [pinPickerInitialCoords, setPinPickerInitialCoords] = useState<Coords | null>(null);
   const [pinPickerConstrained, setPinPickerConstrained] = useState(true);
+  const [pinPickerLabel, setPinPickerLabel] = useState<string | undefined>(undefined);
   const [placedPinCoords, setPlacedPinCoords] = useState<Coords | null>(null);
   const [newContribution, setNewContribution] = useState<NewContribution | null>(null);
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
@@ -368,10 +369,11 @@ export default function CampaignPageClient({
     }
   };
 
-  const handleEnterPinPicker = (coords: Coords, constrained = true) => {
+  const handleEnterPinPicker = (coords: Coords, constrained = true, label?: string) => {
     setPlacedPinCoords(null);
     setPinPickerInitialCoords(coords);
     setPinPickerConstrained(constrained);
+    setPinPickerLabel(label);
     setPinPickerActive(true);
   };
 
@@ -415,6 +417,7 @@ export default function CampaignPageClient({
         pinPickerActive={pinPickerActive}
         pinPickerInitialCoords={pinPickerInitialCoords}
         pinPickerConstrained={pinPickerConstrained}
+        pinPickerLabel={pinPickerLabel}
         onPinPlaced={handlePinPlaced}
         onPinCancelled={handlePinCancelled}
         newContribution={newContribution}

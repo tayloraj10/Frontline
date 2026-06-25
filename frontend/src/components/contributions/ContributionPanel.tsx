@@ -32,6 +32,16 @@ const MAP_STYLES = [
   { id: "hybrid",  label: "Satellite" },
 ] as const;
 
+const CONTRIBUTION_LOCATION_NOUN: Record<string, string> = {
+  cleanup:          "cleanup",
+  photo:            "photo",
+  registration:     "registration",
+  advocacy:         "action",
+  civic_action:     "civic action",
+  unfollow:         "unfollow",
+  solarpunk_action: "action",
+};
+
 const PANEL_BUTTON: Record<string, { icon: string; label: string }> = {
   cleanup:         { icon: "🗑️", label: "Log Cleanup" },
   photo:           { icon: "📷", label: "Submit Photo" },
@@ -182,7 +192,7 @@ interface ContributionPanelProps {
   campaignContributionType: string;
   userId: string | null;
   userGroups?: { id: string; name: string; image_url?: string | null }[];
-  onEnterPinPicker: (coords: Coords, constrained?: boolean) => void;
+  onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
   onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
@@ -1384,7 +1394,8 @@ export default function ContributionPanel({
     if (!gps.coords) return;
     prePinPickerModeRef.current = "contribute";
     setMode(null);
-    onEnterPinPicker(gps.coords, !isSolarpunk);
+    const noun = CONTRIBUTION_LOCATION_NOUN[campaignContributionType] ?? "cleanup";
+    onEnterPinPicker(gps.coords, !isSolarpunk, `Drag the pin to your exact ${noun} location`);
   };
 
   const handleEnterPinPickerForSolarpunkPhoto = () => {
@@ -1392,7 +1403,7 @@ export default function ContributionPanel({
     if (!coords) return;
     prePinPickerModeRef.current = "solarpunk_photo";
     setMode(null);
-    onEnterPinPicker(coords, false);
+    onEnterPinPicker(coords, false, "Drag the pin to where you spotted it");
   };
 
   const handleEnterPinPickerForReport = () => {
@@ -1400,7 +1411,7 @@ export default function ContributionPanel({
     if (!coords) return;
     prePinPickerModeRef.current = "report";
     setMode(null);
-    onEnterPinPicker(coords, false);
+    onEnterPinPicker(coords, false, "Drag the pin to the trash location");
   };
 
   const showReport = campaignContributionType === "cleanup";

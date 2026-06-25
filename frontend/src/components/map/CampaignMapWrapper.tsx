@@ -18,6 +18,7 @@ interface Props {
   pinPickerActive?: boolean;
   pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
   pinPickerConstrained?: boolean;
+  pinPickerLabel?: string;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;

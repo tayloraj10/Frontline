@@ -79,6 +79,7 @@ interface Props {
   pinPickerActive?: boolean;
   pinPickerInitialCoords?: { latitude: number; longitude: number } | null;
   pinPickerConstrained?: boolean;
+  pinPickerLabel?: string;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
@@ -807,6 +808,7 @@ export default function CampaignMap({
   pinPickerActive = false,
   pinPickerInitialCoords,
   pinPickerConstrained = true,
+  pinPickerLabel,
   onPinPlaced,
   onPinCancelled,
   newContribution,
@@ -1847,7 +1849,7 @@ export default function CampaignMap({
             }`}>
             {outOfZoneWarning
               ? `Pin must stay within your ${pinPickerUnitLabel === "ZIP" ? "ZIP code" : "postcode"}`
-              : "Drag the pin to your exact cleanup location"}
+              : pinPickerLabel ?? "Drag the pin to your exact cleanup location"}
           </div>
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
             <button
