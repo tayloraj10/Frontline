@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     environment: str = "development"
     sentry_dsn: str = ""
 
-    cors_origins: str = "http://localhost:3000,https://frontlinemaps.vercel.app"
+    cors_origins: str = (
+        "http://localhost:3000,"
+        "https://frontlinemaps.vercel.app,"
+        "https://frontlinemaps.com,"
+        "https://www.frontlinemaps.com"
+    )
 
     @property
     def is_production(self) -> bool:
