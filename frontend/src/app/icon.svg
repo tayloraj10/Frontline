@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark background -->
+  <rect width="32" height="32" rx="6" fill="#09090b"/>
+  <!-- Flag pole -->
+  <rect x="8" y="5" width="3" height="22" rx="1.5" fill="#a1a1aa"/>
+  <!-- Flag -->
+  <polygon points="11,5 27,10.5 11,17" fill="#22c55e"/>
+  <!-- Pin base -->
+  <circle cx="9.5" cy="27" r="2.5" fill="#71717a"/>
+</svg>
