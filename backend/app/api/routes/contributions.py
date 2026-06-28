@@ -324,7 +324,7 @@ async def get_hex_photos(campaign_id: UUID, h3_index: str, db: AsyncSession = De
                   LIMIT 1
               )
             ORDER BY c.submitted_at DESC
-            LIMIT 9
+            LIMIT 20
         """),
         {"campaign_id": str(campaign_id), "h3_index": h3_index},
     )

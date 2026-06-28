@@ -260,10 +260,11 @@ function addPhotoMarker(
   m: maplibregl.Map,
   loc: { latitude: number; longitude: number; photo_url: string | null; submitted_at?: string | null },
   onSelect: (url: string) => void,
+  size = 48,
 ): maplibregl.Marker {
   const el = document.createElement("div");
   el.style.cssText =
-    "width:48px;height:48px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.7);" +
+    `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.7);` +
     "box-shadow:0 2px 10px rgba(0,0,0,0.6);cursor:pointer;flex-shrink:0;background:#27272a";
 
   if (loc.photo_url) {
@@ -680,10 +681,14 @@ function HexPanel({
   entry,
   campaignId,
   onClose,
+  onPhotoSelect,
+  refreshKey,
 }: {
   entry: HexBloomEntry;
   campaignId: string;
   onClose: () => void;
+  onPhotoSelect: (url: string) => void;
+  refreshKey: number;
 }) {
   const nextThreshold = BLOOM_THRESHOLDS[entry.bloom_stage + 1] ?? null;
   const stageColor = BLOOM_STAGE_COLORS[entry.bloom_stage];
@@ -696,7 +701,7 @@ function HexPanel({
       .then((r) => (r.ok ? r.json() : []))
       .then(setPhotos)
       .catch(() => {});
-  }, [campaignId, entry.h3_index]);
+  }, [campaignId, entry.h3_index, refreshKey]);
 
   return (
     <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
@@ -733,16 +738,25 @@ function HexPanel({
           <p className="mt-3 text-xs text-zinc-500">🌍 {entry.seed_source}</p>
         )}
         {photos.length > 0 && (
-          <div className="mt-3 grid grid-cols-3 gap-1">
-            {photos.map((p, i) => (
-              <div key={i} className="aspect-square overflow-hidden rounded-md bg-zinc-800">
-                <img
-                  src={p.photo_url}
-                  alt={p.display_name ?? "contribution"}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ))}
+          <div className="mt-3">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 mb-1.5">
+              Photos ({photos.length})
+            </p>
+            <div className="grid grid-cols-3 gap-1 max-h-56 overflow-y-auto">
+              {photos.map((p, i) => (
+                <div
+                  key={i}
+                  className="aspect-square overflow-hidden rounded-md bg-zinc-800 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => onPhotoSelect(p.photo_url)}
+                >
+                  <img
+                    src={p.photo_url}
+                    alt={p.display_name ?? "contribution"}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )}
         <p className="mt-3 text-[10px] text-zinc-700 font-mono break-all">{entry.h3_index}</p>
@@ -832,6 +846,7 @@ export default function CampaignMap({
   const [geoSearchError, setGeoSearchError] = useState<string | null>(null);
   const geoSearchErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
+  const [hexPhotoVersion, setHexPhotoVersion] = useState(0);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
@@ -1050,6 +1065,26 @@ export default function CampaignMap({
     }
 
     if (isHexBloom) {
+      // Load photo markers for all submitted spot-it photos
+      photoMarkersRef.current.forEach((mk) => mk.remove());
+      photoMarkersRef.current = [];
+      try {
+        const locRes = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/locations`,
+        );
+        if (locRes.ok) {
+          const locations = (await locRes.json()) as ContributionPoint[];
+          for (const loc of locations) {
+            if (loc.photo_url) {
+              const marker = addPhotoMarker(m, loc, setSelectedPhoto, 32);
+              photoMarkersRef.current.push(marker);
+            }
+          }
+        }
+      } catch {
+        // non-critical
+      }
+
       // Fetch hex data to compute extent for the fit-to-extent button.
       // Prefer stage 2+ cells; fall back to all cells if none qualify.
       try {
@@ -1675,8 +1710,19 @@ export default function CampaignMap({
           ease: "power2.out",
           onComplete: () => wave.remove(),
         });
+        if (newContribution.photoUrl) {
+          const marker = addPhotoMarker(
+            map.current,
+            { latitude: newContribution.lat, longitude: newContribution.lng, photo_url: newContribution.photoUrl },
+            setSelectedPhoto,
+            32,
+          );
+          photoMarkersRef.current.push(marker);
+          gsap.from(marker.getElement(), { y: -30, opacity: 0, duration: 0.5, ease: "bounce.out" });
+        }
       }
       refreshHexBloom();
+      if (newContribution.photoUrl) setHexPhotoVersion((v) => v + 1);
       return;
     }
 
@@ -1838,7 +1884,7 @@ export default function CampaignMap({
       )}
 
       {selectedHex && !pinPickerActive && (
-        <HexPanel entry={selectedHex} campaignId={campaign.id} onClose={() => setSelectedHex(null)} />
+        <HexPanel entry={selectedHex} campaignId={campaign.id} onClose={() => setSelectedHex(null)} onPhotoSelect={setSelectedPhoto} refreshKey={hexPhotoVersion} />
       )}
 
       {pinPickerActive && (
