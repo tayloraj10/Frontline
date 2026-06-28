@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -356,6 +357,7 @@ function ContributeModal({
   onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
   activeMapStyle?: string;
 }) {
+  const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
   const isPhoto = campaignContributionType === "photo";
   const isCivicAction = campaignContributionType === "civic_action";
@@ -683,7 +685,7 @@ function ContributeModal({
             </button>
           ) : (
             <Link
-              href="/login"
+              href={`/login?next=${pathname}`}
               className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold text-center transition-colors"
             >
               Sign in to submit
@@ -714,6 +716,7 @@ function ReportModal({
   onClose: () => void;
   activeMapStyle?: string;
 }) {
+  const pathname = usePathname();
   const [photo, setPhoto] = useState<File | null>(null);
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
   const [submitting, setSubmitting] = useState(false);
@@ -854,7 +857,7 @@ function ReportModal({
             </button>
           ) : (
             <Link
-              href="/login"
+              href={`/login?next=${pathname}`}
               className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold text-center transition-colors"
             >
               Sign in to report
@@ -889,6 +892,7 @@ function SolarpunkActionModal({
   onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
   activeMapStyle?: string;
 }) {
+  const pathname = usePathname();
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState<number | null>(null);
   const [selectedAction, setSelectedAction] = useState<{ key: string; label: string; points: number } | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
@@ -1100,7 +1104,7 @@ function SolarpunkActionModal({
             </button>
           ) : (
             <Link
-              href="/login"
+              href={`/login?next=${pathname}`}
               className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold text-center transition-colors"
             >
               {selectedAction ? `Sign in to log (+${selectedAction.points} pts)` : "Sign in to log"}
@@ -1135,6 +1139,7 @@ function SolarpunkPhotoModal({
   onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
   activeMapStyle?: string;
 }) {
+  const pathname = usePathname();
   const [photo, setPhoto] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
@@ -1295,7 +1300,7 @@ function SolarpunkPhotoModal({
             </button>
           ) : (
             <Link
-              href="/login"
+              href={`/login?next=${pathname}`}
               className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold text-center transition-colors"
             >
               Sign in to submit (+2 pts)

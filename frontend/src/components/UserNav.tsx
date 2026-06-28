@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
 export default function UserNav({ user }: { user: User | null }) {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,7 +33,7 @@ export default function UserNav({ user }: { user: User | null }) {
   if (!user) {
     return (
       <Link
-        href="/login"
+        href={`/login?next=${pathname}`}
         className="px-4 py-1.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
       >
         Sign In

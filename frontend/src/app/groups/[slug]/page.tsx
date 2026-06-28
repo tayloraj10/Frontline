@@ -121,7 +121,7 @@ export default async function GroupProfilePage({ params }: Props) {
           )}
           {!user && (
             <Link
-              href="/login"
+              href={`/login?next=/groups/${slug}`}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
             >
               Join Group
