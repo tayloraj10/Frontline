@@ -159,7 +159,7 @@ const SOLARPUNK_ACTIONS: {
   {
     category: "Nature", icon: "🌳",
     actions: [
-      { key: "plant_tree",        label: "Planted a tree",                points: 20 },
+      { key: "plant_tree",        label: "Planted a tree or native plants", points: 20 },
       { key: "rewilding",         label: "Rewilded part of your yard",    points: 25 },
       { key: "local_cleanup",     label: "Organized a local cleanup",     points: 15 },
       { key: "water_catchment",   label: "Installed rainwater catchment", points: 30 },
