@@ -412,11 +412,10 @@ function TerritoryPanel({
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {isClaimed && (
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${
-                isContested
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${isContested
                   ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
                   : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
-              }`}>
+                }`}>
                 {isContested ? "Contested" : "Claimed"}
               </span>
             )}
@@ -453,135 +452,135 @@ function TerritoryPanel({
       </div>
 
       <div className="overflow-y-auto max-h-80">
-      {/* Group battle bars */}
-      {isContested && (
-        <div className="border-b border-zinc-800 px-4 py-3">
-          <p className="mb-2.5 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Group Battle</p>
-          <div className="space-y-2.5">
-            {groupBreakdown.map((g) => {
-              const color = groupColors[g.id] ?? "#71717a";
-              const isHolder = g.id === holdingGroupId;
-              const pct = (g.bags / maxGroupBags) * 100;
-              return (
-                <div key={g.id}>
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="flex items-start gap-1.5">
-                      <div className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
-                      <span className={`text-xs break-words ${isHolder ? "font-semibold" : "text-zinc-400"}`}
-                        style={isHolder ? { color } : {}}>
-                        {g.name}
-                      </span>
+        {/* Group battle bars */}
+        {isContested && (
+          <div className="border-b border-zinc-800 px-4 py-3">
+            <p className="mb-2.5 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Group Battle</p>
+            <div className="space-y-2.5">
+              {groupBreakdown.map((g) => {
+                const color = groupColors[g.id] ?? "#71717a";
+                const isHolder = g.id === holdingGroupId;
+                const pct = (g.bags / maxGroupBags) * 100;
+                return (
+                  <div key={g.id}>
+                    <div className="flex items-start justify-between mb-1">
+                      <div className="flex items-start gap-1.5">
+                        <div className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
+                        <span className={`text-xs break-words ${isHolder ? "font-semibold" : "text-zinc-400"}`}
+                          style={isHolder ? { color } : {}}>
+                          {g.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        {isHolder && <span className="text-[10px] text-zinc-500 leading-none">holds</span>}
+                        <span className="text-xs font-mono tabular-nums text-zinc-300">{g.bags}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      {isHolder && <span className="text-[10px] text-zinc-500 leading-none">holds</span>}
-                      <span className="text-xs font-mono tabular-nums text-zinc-300">{g.bags}</span>
+                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
                     </div>
                   </div>
-                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Hotspot progress */}
-      {reportThreshold !== null && (
-        <div className="px-4 py-3 border-t border-zinc-800">
-          <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Hotspot Status</p>
-          {reportCount === 0 ? (
-            <p className="text-xs text-zinc-500">No reports yet</p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-orange-400">⚠️ {reportCount} open report{reportCount !== 1 ? "s" : ""}</span>
-                <span className="text-xs text-zinc-600 tabular-nums">{reportCount} / {reportThreshold}</span>
-              </div>
-              <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500 bg-orange-500"
-                  style={{ width: `${Math.min((reportCount / reportThreshold) * 100, 100)}%` }}
-                />
-              </div>
-              {reportCount >= reportThreshold && (
-                <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached — hotspot active!</p>
-              )}
-              {reportPhotos.length > 0 && (
-                <div className="mt-2 flex gap-1.5 flex-wrap">
-                  {reportPhotos.slice(0, 4).map((url, i) => (
-                    <button
-                      key={i}
-                      onClick={() => onPhotoSelect(url)}
-                      className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 transition-colors"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt="Report photo" className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Cleanup photos */}
-      {cleanupPhotos.length > 0 && (
-        <div className="px-4 py-3 border-t border-zinc-800">
-          <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Cleanup Photos</p>
-          <div className="flex gap-1.5 flex-wrap">
-            {cleanupPhotos.slice(0, 4).map((url, i) => (
-              <button
-                key={i}
-                onClick={() => onPhotoSelect(url)}
-                className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 transition-colors"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="Cleanup photo" className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Recent activity */}
-      <div className="px-4 py-3">
-        <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Activity</p>
-        {loading ? (
-          <p className="text-xs text-zinc-700">Loading…</p>
-        ) : contribs.length === 0 ? (
-          <p className="text-xs text-zinc-700">No cleanups logged yet</p>
-        ) : (
-          <div className="space-y-1.5">
-            {contribs.slice(0, 7).map((c, i) => {
-              const name = c.profiles?.display_name ?? c.profiles?.username ?? "Anonymous";
-              const groupName = c.groups?.name;
-              const dotColor = c.group_id ? (groupColors[c.group_id] ?? "#71717a") : null;
-              return (
-                <div key={i} className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    {dotColor
-                      ? <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
-                      : <div className="w-1.5 h-1.5 shrink-0" />}
-                    <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{name}</span>
-                    <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{c.value ?? 1} bags</span>
-                    <span className="text-xs text-zinc-600 shrink-0">
-                      {c.submitted_at
-                        ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                        : ""}
-                    </span>
-                  </div>
-                  {groupName && (
-                    <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">{groupName}</p>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
-      </div>
+
+        {/* Hotspot progress */}
+        {reportThreshold !== null && (
+          <div className="px-4 py-3 border-t border-zinc-800">
+            <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Hotspot Status</p>
+            {reportCount === 0 ? (
+              <p className="text-xs text-zinc-500">No reports yet</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-orange-400">⚠️ {reportCount} open report{reportCount !== 1 ? "s" : ""}</span>
+                  <span className="text-xs text-zinc-600 tabular-nums">{reportCount} / {reportThreshold}</span>
+                </div>
+                <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500 bg-orange-500"
+                    style={{ width: `${Math.min((reportCount / reportThreshold) * 100, 100)}%` }}
+                  />
+                </div>
+                {reportCount >= reportThreshold && (
+                  <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached — hotspot active!</p>
+                )}
+                {reportPhotos.length > 0 && (
+                  <div className="mt-2 flex gap-1.5 flex-wrap">
+                    {reportPhotos.slice(0, 4).map((url, i) => (
+                      <button
+                        key={i}
+                        onClick={() => onPhotoSelect(url)}
+                        className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 transition-colors"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="Report photo" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Cleanup photos */}
+        {cleanupPhotos.length > 0 && (
+          <div className="px-4 py-3 border-t border-zinc-800">
+            <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Cleanup Photos</p>
+            <div className="flex gap-1.5 flex-wrap">
+              {cleanupPhotos.slice(0, 4).map((url, i) => (
+                <button
+                  key={i}
+                  onClick={() => onPhotoSelect(url)}
+                  className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 transition-colors"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="Cleanup photo" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent activity */}
+        <div className="px-4 py-3">
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Activity</p>
+          {loading ? (
+            <p className="text-xs text-zinc-700">Loading…</p>
+          ) : contribs.length === 0 ? (
+            <p className="text-xs text-zinc-700">No cleanups logged yet</p>
+          ) : (
+            <div className="space-y-1.5">
+              {contribs.slice(0, 7).map((c, i) => {
+                const name = c.profiles?.display_name ?? c.profiles?.username ?? "Anonymous";
+                const groupName = c.groups?.name;
+                const dotColor = c.group_id ? (groupColors[c.group_id] ?? "#71717a") : null;
+                return (
+                  <div key={i} className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {dotColor
+                        ? <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
+                        : <div className="w-1.5 h-1.5 shrink-0" />}
+                      <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{name}</span>
+                      <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{c.value ?? 1} bags</span>
+                      <span className="text-xs text-zinc-600 shrink-0">
+                        {c.submitted_at
+                          ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                          : ""}
+                      </span>
+                    </div>
+                    {groupName && (
+                      <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">{groupName}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -690,6 +689,7 @@ function HexPanel({
   onPhotoSelect: (url: string) => void;
   refreshKey: number;
 }) {
+  const stageFloor = BLOOM_THRESHOLDS[entry.bloom_stage] ?? 0;
   const nextThreshold = BLOOM_THRESHOLDS[entry.bloom_stage + 1] ?? null;
   const stageColor = BLOOM_STAGE_COLORS[entry.bloom_stage];
   const stageLabel = BLOOM_STAGE_LABELS[entry.bloom_stage];
@@ -700,7 +700,7 @@ function HexPanel({
     fetch(`${base}/api/contributions/${campaignId}/hex/${entry.h3_index}/photos`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setPhotos)
-      .catch(() => {});
+      .catch(() => { });
   }, [campaignId, entry.h3_index, refreshKey]);
 
   return (
@@ -728,7 +728,7 @@ function HexPanel({
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
-                width: `${Math.min((entry.bloom_score / nextThreshold) * 100, 100)}%`,
+                width: `${Math.min(((entry.bloom_score - stageFloor) / (nextThreshold - stageFloor)) * 100, 100)}%`,
                 background: stageColor,
               }}
             />
@@ -1044,14 +1044,14 @@ export default function CampaignMap({
               "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 9, 4],
               "heatmap-color": [
                 "interpolate", ["linear"], ["heatmap-density"],
-                0,    "rgba(0,0,0,0)",
+                0, "rgba(0,0,0,0)",
                 0.08, "rgba(0,80,255,0.9)",
                 0.25, "rgba(0,200,180,1)",
                 0.42, "rgba(0,210,60,1)",
                 0.58, "rgba(200,220,0,1)",
                 0.72, "rgba(255,140,0,1)",
                 0.88, "rgba(230,30,0,1)",
-                1,    "rgba(160,0,0,1)",
+                1, "rgba(160,0,0,1)",
               ],
               "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 20, 5, 30, 9, 45],
               "heatmap-opacity": 0.9,
@@ -1890,8 +1890,8 @@ export default function CampaignMap({
       {pinPickerActive && (
         <>
           <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap transition-colors duration-200 ${outOfZoneWarning
-              ? "bg-red-950/95 border-red-700 text-red-300"
-              : "bg-zinc-900/95 border-zinc-700 text-zinc-200"
+            ? "bg-red-950/95 border-red-700 text-red-300"
+            : "bg-zinc-900/95 border-zinc-700 text-zinc-200"
             }`}>
             {outOfZoneWarning
               ? `Pin must stay within your ${pinPickerUnitLabel === "ZIP" ? "ZIP code" : "postcode"}`
@@ -1975,8 +1975,8 @@ export default function CampaignMap({
                   supportsZipSearch && supportsUkPostcodeSearch
                     ? "Go to ZIP or postcode"
                     : supportsZipSearch
-                    ? "Go to ZIP"
-                    : "Go to postcode"
+                      ? "Go to ZIP"
+                      : "Go to postcode"
                 }
                 value={geoSearch}
                 onChange={(e) =>

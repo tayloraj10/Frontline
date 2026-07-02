@@ -11,20 +11,23 @@ SOLARPUNK_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
 H3_RESOLUTION = 3
 
 # Cities and regions with documented solarpunk-aligned policies, practices, or culture.
-# bloom_score puts each in stage 2 (Growing ≥200) or stage 3 (Thriving ≥600).
+# bloom_score is pinned to the minimum of its bloom stage bucket (see tiles.py bloom_stage
+# CASE: stage 3 "Growing" >=200, stage 4 "Thriving" >=600) so each location sits at the
+# floor of its stage rather than partway toward the next one.
+# Total is kept below the 5,000 "First Sparks" milestone (see milestones below) so real
+# player contributions are what crosses it, not preseed data alone.
 PRESEED_LOCATIONS = [
-    (64.13,  -21.91, 800, "Iceland — ~99% renewable energy, geothermal pioneer"),
-    (55.68,   12.57, 750, "Copenhagen — carbon-neutral city target, cycling capital"),
-    ( 9.93,  -84.09, 700, "Costa Rica — 100% renewable electricity, mass reforestation"),
-    (52.09,    5.12, 600, "Netherlands — cycling nation, water management innovation"),
-    (27.47,   89.64, 900, "Bhutan — carbon-negative, 72% forest cover, Gross National Happiness"),
-    (48.00,    7.84, 650, "Freiburg — Solar City, car-free Vauban quarter"),
-    (-34.90, -56.19, 600, "Uruguay — 97% renewable electricity, regional sustainability leader"),
-    (  1.35,  103.82, 550, "Singapore — biophilic city, vertical gardens, urban food production"),
-    (  6.25,  -75.56, 600, "Medellín — cable car transit innovation, urban green corridors"),
-    (-25.43,  -49.27, 580, "Curitiba — world's first BRT, recycling culture, urban forests"),
-    (48.21,   16.37, 650, "Vienna — most livable city, social housing, cycling infrastructure"),
-    (52.37,    4.90, 680, "Amsterdam — circular economy pioneer, cycling utopia, housing co-ops"),
+    (64.13,  -21.91, 600, "Iceland — ~99% renewable energy, geothermal pioneer"),
+    (55.68,   12.57, 200, "Copenhagen — carbon-neutral city target, cycling capital"),
+    ( 9.93,  -84.09, 600, "Costa Rica — 100% renewable electricity, mass reforestation"),
+    (27.47,   89.64, 600, "Bhutan — carbon-negative, 72% forest cover, Gross National Happiness"),
+    (48.00,    7.84, 600, "Freiburg — Solar City, car-free Vauban quarter"),
+    (-34.90, -56.19, 200, "Uruguay — 97% renewable electricity, regional sustainability leader"),
+    (  1.35,  103.82, 200, "Singapore — biophilic city, vertical gardens, urban food production"),
+    (  6.25,  -75.56, 200, "Medellín — cable car transit innovation, urban green corridors"),
+    (-25.43,  -49.27, 200, "Curitiba — world's first BRT, recycling culture, urban forests"),
+    (48.21,   16.37, 200, "Vienna — most livable city, social housing, cycling infrastructure"),
+    (52.37,    4.90, 600, "Amsterdam — circular economy pioneer, cycling utopia, housing co-ops"),
 ]
 
 

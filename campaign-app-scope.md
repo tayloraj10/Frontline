@@ -358,7 +358,6 @@ Research-backed baseline scores seeded into specific hexes at campaign launch, r
 - Iceland (near-100% renewable energy)
 - Denmark / Copenhagen (cycling infrastructure, wind energy, district heating)
 - Costa Rica (biodiversity, renewable electricity)
-- Netherlands (cycling, green urban design, circular economy)
 - Bhutan (carbon negative, Gross National Happiness policy)
 - Germany (Energiewende, community solar — Freiburg especially)
 - Uruguay (high renewable electricity share)
@@ -842,10 +841,10 @@ Tables that drive live map updates:
 
 **Development checklist:**
 - [x] Research and finalize pre-seed hex list with sources (renewable energy data, green index data)
-- [x] Build H3 hex loader — `POST /admin/seed/solarpunk-preseed` — `SolarpunkPreseedSeeder` upserts 12 pre-seeded cities into `geo_units` + `territory_claims`
+- [x] Build H3 hex loader — `POST /admin/seed/solarpunk-preseed` — `SolarpunkPreseedSeeder` upserts 11 pre-seeded cities into `geo_units` + `territory_claims`
 - [x] Backend: H3 hex assignment on contribution submit — replace PostGIS point-in-polygon with `h3.latlng_to_cell` (faster, no polygon needed); auto-creates `geo_unit` row if needed
 - [x] Backend: Bloom score upsert logic — accumulates points via `territory_claims.total_value` (bloom_score) on each contribution
-- [x] Backend: Pre-seed endpoint — `POST /admin/seed/solarpunk-preseed` loads baseline bloom scores for 12 research-validated hexes with `seed_source` metadata
+- [x] Backend: Pre-seed endpoint — `POST /admin/seed/solarpunk-preseed` loads baseline bloom scores for 11 research-validated hexes with `seed_source` metadata (kept under the 5,000-point "First Sparks" milestone so real contributions are what cross it)
 - [x] Frontend: H3 hex grid MapLibre layer — GeoJSON fill layer generated client-side via `h3-js cellToBoundary`; refreshed on contribution and Realtime events
 - [x] Frontend: Hex bloom stage coloring — `bloom_score` mapped to stage 0–4 palette (5 green shades) via `bloom_stage` property on each feature
 - [x] Frontend: Solar panel aesthetic for Stage 0 hexes — dark fill, subtle internal grid line overlay
