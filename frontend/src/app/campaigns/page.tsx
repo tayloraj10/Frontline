@@ -1,10 +1,29 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS, CAMPAIGN_SLUG_ORDER } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 import OnboardingModalClient from "@/components/OnboardingModalClient";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
+
+// Public, RLS-open data shared across all visitors — bounds the query to
+// once per 30s regardless of traffic instead of once per page view.
+const getActiveCampaigns = unstable_cache(
+  async () => {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .schema("public")
+      .from("campaigns")
+      .select("*")
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+    return (data ?? []) as Campaign[];
+  },
+  ["active-campaigns"],
+  { revalidate: 30 }
+);
 
 function CampaignCard({ campaign }: { campaign: Campaign }) {
   const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type] ?? {
@@ -80,12 +99,12 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
 
 export default async function CampaignsPage() {
   const supabase = await createClient();
-  const [{ data }, { data: { user } }] = await Promise.all([
-    supabase.schema("public").from("campaigns").select("*").eq("status", "active").order("created_at", { ascending: false }),
+  const [campaignsData, { data: { user } }] = await Promise.all([
+    getActiveCampaigns(),
     supabase.auth.getUser(),
   ]);
 
-  const campaigns = (data ?? [] as Campaign[]).sort((a, b) => {
+  const campaigns = [...campaignsData].sort((a, b) => {
     const ai = CAMPAIGN_SLUG_ORDER.indexOf(a.slug);
     const bi = CAMPAIGN_SLUG_ORDER.indexOf(b.slug);
     const aOrder = ai === -1 ? Infinity : ai;

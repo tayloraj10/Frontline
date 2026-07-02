@@ -1,16 +1,36 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { Database } from "@/types/database";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
 
+// Public, RLS-open data shared across all visitors — bounds these two
+// (currently unfiltered, whole-table) queries to once per 30s regardless of
+// traffic instead of once per page view.
+const getGroupsListData = unstable_cache(
+  async () => {
+    const supabase = createPublicClient();
+    const [{ data: groupsData }, { data: membersData }] = await Promise.all([
+      supabase.from("groups").select("*").order("created_at", { ascending: false }),
+      supabase.from("group_members").select("group_id, user_id"),
+    ]);
+    return {
+      groups: (groupsData ?? []) as Group[],
+      members: membersData ?? ([] as { group_id: string; user_id: string }[]),
+    };
+  },
+  ["groups-list-data"],
+  { revalidate: 30 }
+);
+
 export default async function GroupsPage() {
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupsData }, { data: membersData }] = await Promise.all([
+  const [{ data: { user } }, { groups: groupsData, members: membersData }] = await Promise.all([
     supabase.auth.getUser(),
-    supabase.from("groups").select("*").order("created_at", { ascending: false }),
-    supabase.from("group_members").select("group_id, user_id"),
+    getGroupsListData(),
   ]);
 
   let canCreateGroup = false;

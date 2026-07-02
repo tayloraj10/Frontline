@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import CampaignPageClient from "./CampaignPageClient";
 import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
@@ -33,66 +35,101 @@ function CampaignStat({
   );
 }
 
+type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number };
+type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null };
+type EventCentroid = { geo_unit_id: string; lat: number; lng: number };
+type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
+
+// Everything here is public, RLS-open data (or FastAPI-computed data with no
+// per-user variance), so it's safe to share one cache entry across all
+// visitors. Bounds Supabase/FastAPI reads to once per REVALIDATE_SECONDS
+// regardless of traffic, instead of once per page view. In-session updates
+// (new claims, cleanups, reports) still arrive live via the Supabase
+// Realtime subscriptions in CampaignMap.tsx, so this only affects how fresh
+// a brand-new page load's initial numbers are.
+const REVALIDATE_SECONDS = 20;
+
+const getCampaignPageData = unstable_cache(
+  async (slug: string, fastapiUrl: string) => {
+    const supabase = createPublicClient();
+
+    const { data } = await supabase.schema("public").from("campaigns").select("*").eq("slug", slug).single();
+    const campaign = data as Campaign | null;
+    if (!campaign) return null;
+    // geo_unit can come back from Postgres as a nested array (e.g. [['zip', 'uk_postcode_district']])
+    // depending on how it was last written; flatten once here so callers can rely on a flat array.
+    campaign.geo_unit = campaign.geo_unit?.flat() ?? null;
+
+    const [
+      { data: claimsData },
+      { data: eventsData },
+      { count: contribCount },
+      lbRes,
+      { data: actContribsData },
+      problemReportsRes,
+      eventCentroidsRes,
+    ] = await Promise.all([
+      supabase.from("territory_claims").select("*").eq("campaign_id", campaign.id),
+      supabase.from("campaign_events").select("*").eq("campaign_id", campaign.id).eq("status", "active"),
+      supabase.from("contributions").select("*", { count: "exact", head: true }).eq("campaign_id", campaign.id),
+      fetch(`${fastapiUrl}/api/campaigns/${campaign.id}/leaderboard`, { cache: "no-store" }).catch(() => null),
+      supabase
+        .from("contributions")
+        .select("id, user_id, group_id, value, notes, submitted_at")
+        .eq("campaign_id", campaign.id)
+        .order("submitted_at", { ascending: false })
+        .limit(20),
+      campaign.campaign_type === "territory"
+        ? fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`, { cache: "no-store" }).catch(() => null)
+        : Promise.resolve(null),
+      campaign.campaign_type === "territory"
+        ? fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/centroids`, { cache: "no-store" }).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
+
+    const eventCentroidList: EventCentroid[] = eventCentroidsRes?.ok ? await eventCentroidsRes.json() : [];
+    const eventCentroids: Record<string, { lat: number; lng: number }> = Object.fromEntries(
+      eventCentroidList.map((c) => [c.geo_unit_id, { lat: c.lat, lng: c.lng }])
+    );
+
+    const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[] } = lbRes?.ok
+      ? await lbRes.json()
+      : { users: [], groups: [] };
+
+    return {
+      campaign,
+      claims: (claimsData ?? []) as TerritoryClaim[],
+      events: (eventsData ?? []) as CampaignEvent[],
+      contribCount: contribCount ?? 0,
+      actContribs: actContribsData ?? [],
+      problemReports,
+      eventCentroids,
+      lbRaw,
+    };
+  },
+  ["campaign-page-data"],
+  { revalidate: REVALIDATE_SECONDS }
+);
+
 export default async function CampaignPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
-
-  const [{ data: { user } }, { data }] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase.schema("public").from("campaigns").select("*").eq("slug", slug).single(),
-  ]);
-
-  const campaign = data as Campaign | null;
-  if (!campaign) notFound();
-  // geo_unit can come back from Postgres as a nested array (e.g. [['zip', 'uk_postcode_district']])
-  // depending on how it was last written; flatten once here so callers can rely on a flat array.
-  campaign.geo_unit = campaign.geo_unit?.flat() ?? null;
-
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
-  const [
-    { data: claimsData },
-    { data: eventsData },
-    { count: contribCount },
-    { data: membershipData },
-    lbRes,
-    { data: actContribsData },
-    problemReportsRes,
-    eventCentroidsRes,
-  ] = await Promise.all([
-    supabase.from("territory_claims").select("*").eq("campaign_id", campaign.id),
-    supabase.from("campaign_events").select("*").eq("campaign_id", campaign.id).eq("status", "active"),
-    supabase.from("contributions").select("*", { count: "exact", head: true }).eq("campaign_id", campaign.id),
-    user
-      ? supabase.from("group_members").select("group_id").eq("user_id", user.id)
-      : Promise.resolve({ data: [] as { group_id: string }[] }),
-    fetch(`${fastapiUrl}/api/campaigns/${campaign.id}/leaderboard`, { next: { revalidate: 30 } }).catch(() => null),
-    supabase
-      .from("contributions")
-      .select("id, user_id, group_id, value, notes, submitted_at")
-      .eq("campaign_id", campaign.id)
-      .order("submitted_at", { ascending: false })
-      .limit(20),
-    campaign.campaign_type === "territory"
-      ? fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`, { cache: "no-store" }).catch(() => null)
-      : Promise.resolve(null),
-    campaign.campaign_type === "territory"
-      ? fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/centroids`, { cache: "no-store" }).catch(() => null)
-      : Promise.resolve(null),
+  const [{ data: { user } }, pageData] = await Promise.all([
+    supabase.auth.getUser(),
+    getCampaignPageData(slug, fastapiUrl),
   ]);
 
-  type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number };
-  type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null };
-  const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
+  if (!pageData) notFound();
+  const { campaign, claims, events, contribCount, actContribs, problemReports, eventCentroids, lbRaw } = pageData;
 
-  type EventCentroid = { geo_unit_id: string; lat: number; lng: number };
-  const eventCentroidList: EventCentroid[] = eventCentroidsRes?.ok ? await eventCentroidsRes.json() : [];
-  const eventCentroids: Record<string, { lat: number; lng: number }> = Object.fromEntries(
-    eventCentroidList.map((c) => [c.geo_unit_id, { lat: c.lat, lng: c.lng }])
-  );
+  const { data: membershipData } = user
+    ? await supabase.from("group_members").select("group_id").eq("user_id", user.id)
+    : { data: [] as { group_id: string }[] };
 
-  const claims = (claimsData ?? []) as TerritoryClaim[];
-  const events = (eventsData ?? []) as CampaignEvent[];
   const tractsCount = claims.length;
   const totalBags = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const contributionCount = contribCount ?? 0;
@@ -103,14 +140,6 @@ export default async function CampaignPage({ params }: Props) {
     campaign.campaign_type === "heatmap" ? "unfollows" :
     campaign.campaign_type === "hex_bloom" ? "bloom points" :
     "photos";
-
-  // Leaderboard raw data
-  type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
-  const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[] } = lbRes?.ok
-    ? await lbRes.json()
-    : { users: [], groups: [] };
-
-  const actContribs = actContribsData ?? [];
 
   // Collect all IDs to resolve
   const userGroupIds = (membershipData ?? []).map((m) => m.group_id);
