@@ -28,6 +28,33 @@ def _h3_boundary_wkt(h3_index: str) -> str:
     return "POLYGON((" + ", ".join(f"{x} {y}" for x, y in coords) + "))"
 
 
+async def _get_or_create_h3_geo_unit(db: AsyncSession, lat: float, lng: float, resolution: int = 3) -> str:
+    h3_index = h3.latlng_to_cell(lat, lng, resolution)
+
+    geo_result = await db.execute(
+        text("SELECT id::text FROM geo_units WHERE unit_type = 'h3_hex' AND unit_id = :h3_index"),
+        {"h3_index": h3_index},
+    )
+    geo_row = geo_result.fetchone()
+    if geo_row:
+        return geo_row[0]
+
+    wkt = _h3_boundary_wkt(h3_index)
+    new_result = await db.execute(
+        text("""
+            INSERT INTO geo_units (unit_type, unit_id, geometry, display_name)
+            VALUES ('h3_hex', :h3_index, ST_Multi(ST_GeomFromText(:wkt, 4326)), :h3_index)
+            ON CONFLICT (unit_type, unit_id) DO UPDATE SET unit_id = EXCLUDED.unit_id
+            RETURNING id::text
+        """),
+        {"h3_index": h3_index, "wkt": wkt},
+    )
+    return new_result.scalar()
+
+
+TRASH_WAR_SOLARPUNK_CREDIT = 8
+
+
 class ContributionRequest(BaseModel):
     campaign_id: UUID
     user_id: UUID
@@ -73,29 +100,7 @@ async def submit_contribution(
 
     if has_location:
         if campaign_geo_unit and "h3_hex" in campaign_geo_unit:
-            h3_index = h3.latlng_to_cell(payload.latitude, payload.longitude, 3)
-
-            geo_result = await db.execute(
-                text("SELECT id::text FROM geo_units WHERE unit_type = 'h3_hex' AND unit_id = :h3_index"),
-                {"h3_index": h3_index},
-            )
-            geo_row = geo_result.fetchone()
-
-            if geo_row:
-                geo_unit_id = geo_row[0]
-            else:
-                wkt = _h3_boundary_wkt(h3_index)
-                new_result = await db.execute(
-                    text("""
-                        INSERT INTO geo_units (unit_type, unit_id, geometry, display_name)
-                        VALUES ('h3_hex', :h3_index, ST_Multi(ST_GeomFromText(:wkt, 4326)), :h3_index)
-                        ON CONFLICT (unit_type, unit_id) DO UPDATE SET unit_id = EXCLUDED.unit_id
-                        RETURNING id::text
-                    """),
-                    {"h3_index": h3_index, "wkt": wkt},
-                )
-                geo_unit_id = new_result.scalar()
-
+            geo_unit_id = await _get_or_create_h3_geo_unit(db, payload.latitude, payload.longitude)
             location_verified = True
 
         else:
@@ -266,9 +271,61 @@ async def submit_contribution(
             },
         )
 
+    solarpunk_credit_id = None
+    if payload.contribution_type == "cleanup" and has_location:
+        solarpunk_result = await db.execute(
+            text("SELECT id FROM campaigns WHERE slug = 'solarpunk' AND status = 'active'")
+        )
+        solarpunk_row = solarpunk_result.fetchone()
+        if solarpunk_row:
+            solarpunk_credit_id = solarpunk_row[0]
+            solarpunk_geo_unit_id = await _get_or_create_h3_geo_unit(db, payload.latitude, payload.longitude)
+
+            await db.execute(
+                text("""
+                    INSERT INTO contributions
+                        (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
+                         value, location, location_verified, notes)
+                    VALUES
+                        (:campaign_id, :user_id, :group_id, :geo_unit_id, 'solarpunk_action',
+                         :value, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, TRUE, 'trash_war_cleanup_credit')
+                """),
+                {
+                    "campaign_id": str(solarpunk_credit_id),
+                    "user_id": str(payload.user_id),
+                    "group_id": str(payload.group_id) if payload.group_id else None,
+                    "geo_unit_id": solarpunk_geo_unit_id,
+                    "value": TRASH_WAR_SOLARPUNK_CREDIT,
+                    "lon": payload.longitude,
+                    "lat": payload.latitude,
+                },
+            )
+            await db.execute(
+                text("""
+                    INSERT INTO territory_claims
+                        (campaign_id, geo_unit_id, claimed_by_user, claimed_by_group, total_value, last_contribution_at)
+                    VALUES
+                        (:campaign_id, :geo_unit_id, :user_id, :group_id, :value, NOW())
+                    ON CONFLICT (campaign_id, geo_unit_id) DO UPDATE SET
+                        total_value = territory_claims.total_value + EXCLUDED.total_value,
+                        last_contribution_at = NOW(),
+                        decay_starts_at = NULL,
+                        updated_at = NOW()
+                """),
+                {
+                    "campaign_id": str(solarpunk_credit_id),
+                    "geo_unit_id": solarpunk_geo_unit_id,
+                    "user_id": str(payload.user_id),
+                    "group_id": str(payload.group_id) if payload.group_id else None,
+                    "value": TRASH_WAR_SOLARPUNK_CREDIT,
+                },
+            )
+
     await db.commit()
 
     background_tasks.add_task(_evaluate_triggers, payload.campaign_id, db)
+    if solarpunk_credit_id:
+        background_tasks.add_task(_evaluate_triggers, solarpunk_credit_id, db)
 
     return {
         "geo_unit_id": geo_unit_id,

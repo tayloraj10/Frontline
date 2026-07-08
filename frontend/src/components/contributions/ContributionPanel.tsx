@@ -114,76 +114,90 @@ const CIVIC_ACTIONS: { key: string; icon: string; label: string }[] = [
 const SOLARPUNK_ACTIONS: {
   category: string;
   icon: string;
-  actions: { key: string; label: string; points: number }[];
+  actions: ({ key: string; label: string; points: number } | { key: string; label: string; link: string })[];
 }[] = [
   {
     category: "Energy", icon: "⚡",
     actions: [
-      { key: "solar_panels",  label: "Installed solar panels",            points: 50 },
-      { key: "green_energy",  label: "Switched to green energy tariff",   points: 20 },
-      { key: "energy_audit",  label: "Completed home energy audit",       points: 15 },
-      { key: "led_lighting",  label: "Replaced all lighting with LEDs",   points: 8  },
-      { key: "solar_charger", label: "Using a solar charger",             points: 5  },
+      { key: "unplug_electronics", label: "Unplugged unused electronics/chargers when not in use", points: 5  },
+      { key: "solar_charger",      label: "Used a solar charger for your devices",                  points: 8  },
+      { key: "led_lighting",       label: "Switched all lighting to LEDs",                           points: 10 },
+      { key: "energy_audit",       label: "Completed a home energy audit",                           points: 14 },
+      { key: "weatherize",         label: "Weatherstripped, air-sealed, or upgraded insulation",     points: 22 },
+      { key: "green_energy",       label: "Switched to a green energy tariff/provider",               points: 26 },
+      { key: "solar_panels",       label: "Installed solar panels, or joined a community solar subscription", points: 55 },
     ],
   },
   {
     category: "Food", icon: "🌱",
     actions: [
-      { key: "grow_food",         label: "Grew food (any amount)",        points: 15 },
-      { key: "community_garden",  label: "Joined a community garden",     points: 20 },
-      { key: "composted",         label: "Started composting",            points: 10 },
-      { key: "saved_seeds",       label: "Saved seeds for next season",   points: 12 },
-      { key: "foraged",           label: "Foraged / wildcrafted food",    points: 8  },
+      { key: "foraged",          label: "Foraged or wildcrafted food",                          points: 6  },
+      { key: "plant_based_week", label: "Ate plant-based meals for a full week",                points: 10 },
+      { key: "saved_seeds",      label: "Saved seeds for next season's planting",                points: 12 },
+      { key: "composted",        label: "Started a compost bin",                                points: 15 },
+      { key: "grow_food",        label: "Grew your own fruits, vegetables, or herbs for a season", points: 22 },
+      { key: "csa_coop",         label: "Joined a CSA or food co-op",                             points: 28 },
+      { key: "community_garden", label: "Started or joined a community garden",                   points: 38 },
     ],
   },
   {
     category: "Transport", icon: "🚲",
     actions: [
-      { key: "bike_commute",   label: "Biked instead of drove (week)", points: 10 },
-      { key: "transit_month",  label: "Used transit for a month",      points: 20 },
-      { key: "car_free_week",  label: "Car-free week",                 points: 25 },
-      { key: "ev_switch",      label: "Switched to electric vehicle",  points: 40 },
-      { key: "flight_avoided", label: "Avoided or offset a flight",    points: 30 },
+      { key: "walk_bike_trip",    label: "Walked or biked instead of driving for a trip",              points: 5  },
+      { key: "carpool",           label: "Carpooled or rideshared instead of driving alone",            points: 8  },
+      { key: "transit_day",       label: "Used public transit instead of driving for a day",            points: 12 },
+      { key: "bike_commute_week", label: "Biked or walked as your commute for a week",                  points: 18 },
+      { key: "car_free_week",     label: "Went car-free for a week",                                    points: 26 },
+      { key: "transit_month",     label: "Used public transit as your primary commute for a month",     points: 34 },
+      { key: "ev_switch",         label: "Replaced a car with an e-bike or EV for regular use",          points: 50 },
     ],
   },
   {
     category: "Community", icon: "🤝",
     actions: [
-      { key: "repair_cafe",  label: "Attended a repair café",       points: 15 },
-      { key: "skill_share",  label: "Hosted a skill share",         points: 20 },
-      { key: "tool_library", label: "Used or joined a tool library", points: 10 },
-      { key: "mutual_aid",   label: "Participated in mutual aid",   points: 15 },
-      { key: "cooperative",  label: "Joined a cooperative",         points: 25 },
+      { key: "help_neighbor",         label: "Helped a neighbor with a tangible task (yard work, errands, repairs, childcare)", points: 5  },
+      { key: "tool_library",          label: "Used or donated to a tool library",                        points: 8  },
+      { key: "repair_cafe",           label: "Attended a repair café",                                   points: 12 },
+      { key: "mutual_aid",            label: "Participated in a mutual aid network (gave or received support)", points: 16 },
+      { key: "skill_share",           label: "Hosted a skill share",                                     points: 22 },
+      { key: "organize_repair_drive", label: "Organized a repair café or mutual aid drive",              points: 32 },
+      { key: "cooperative",           label: "Joined or helped start a cooperative",                     points: 45 },
     ],
   },
   {
     category: "Nature", icon: "🌳",
     actions: [
-      { key: "plant_tree",        label: "Planted a tree or native plants", points: 20 },
-      { key: "rewilding",         label: "Rewilded part of your yard",    points: 25 },
-      { key: "local_cleanup",     label: "Organized a local cleanup",     points: 15 },
-      { key: "water_catchment",   label: "Installed rainwater catchment", points: 30 },
-      { key: "pollinator_garden", label: "Created pollinator garden",     points: 18 },
+      { key: "trash_war_link",      label: "Picked up litter or ran a cleanup? Log it in Trash War for credit",  link: "/campaigns/trash-war?ref=solarpunk" },
+      { key: "bird_house",          label: "Built or hung a bird, bee, or bat house",                        points: 8  },
+      { key: "plant_natives",       label: "Planted native plants or trees (yard, container, or public space)", points: 16 },
+      { key: "remove_invasives",    label: "Removed invasive plant species from a natural area",             points: 20 },
+      { key: "rewild_lawn",         label: "Left part of a lawn unmowed or rewilded it with native plants",   points: 24 },
+      { key: "rain_barrel",         label: "Installed a rain barrel or greywater system",                    points: 34 },
+      { key: "habitat_restoration", label: "Led a habitat, wetland, or trail restoration project",            points: 45 },
     ],
   },
   {
     category: "Consumption", icon: "♻️",
     actions: [
-      { key: "repair_item",      label: "Repaired instead of replacing",   points: 10 },
-      { key: "secondhand",       label: "Bought something secondhand",     points: 8  },
-      { key: "zero_waste_month", label: "Zero-waste shopping month",       points: 20 },
-      { key: "clothing_swap",    label: "Organized a clothing swap",       points: 15 },
-      { key: "refused_plastic",  label: "Refused single-use plastics (month)", points: 12 },
+      { key: "reusable",              label: "Brought your own bag, cup, or container instead of using disposable ones", points: 5  },
+      { key: "repair_item",           label: "Repaired something instead of replacing it",                  points: 8  },
+      { key: "secondhand",            label: "Bought something secondhand instead of new",                 points: 10 },
+      { key: "plastic_free_week",     label: "Went a full week avoiding single-use plastic and packaging", points: 16 },
+      { key: "clothing_swap",         label: "Organized or attended a clothing/goods swap",                 points: 20 },
+      { key: "zero_waste_month",      label: "Went a full month without single-use plastic or disposable packaging (groceries, takeout, shopping)", points: 28 },
+      { key: "zero_waste_initiative", label: "Organized a community-wide zero-waste or repair initiative",  points: 38 },
     ],
   },
   {
     category: "Advocacy", icon: "✊",
     actions: [
-      { key: "contact_official", label: "Contacted an elected official",     points: 15 },
-      { key: "attend_council",   label: "Attended a city council meeting",   points: 20 },
-      { key: "wrote_article",    label: "Wrote about solarpunk values",      points: 15 },
-      { key: "organized_event",  label: "Organized a community event",       points: 25 },
-      { key: "taught_class",     label: "Taught a sustainability workshop",  points: 20 },
+      { key: "petition",           label: "Signed or shared a petition or campaign",                                    points: 5  },
+      { key: "contact_official",   label: "Contacted an elected official",                                              points: 10 },
+      { key: "wrote_article",      label: "Wrote about solarpunk values (post, letter, article)",                       points: 12 },
+      { key: "attend_council",     label: "Attended a city council or town hall meeting",                               points: 16 },
+      { key: "taught_class",       label: "Taught a sustainability workshop or class",                                  points: 24 },
+      { key: "organized_event",    label: "Organized a community sustainability event (workshop series, fundraiser, tree-planting day)", points: 34 },
+      { key: "sustained_campaign", label: "Helped lead a sustained local advocacy campaign or initiative (months-long organizing effort)", points: 48 },
     ],
   },
 ];
@@ -367,6 +381,11 @@ function ContributeModal({
 
   const config = MODAL_CONFIG[campaignContributionType] ?? MODAL_CONFIG.cleanup;
 
+  const [fromSolarpunk] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("ref") === "solarpunk";
+  });
+
   const [smallBags, setSmallBags] = useState("1");
   const [largeBags, setLargeBags] = useState("0");
   const smallBagsNum = Number(smallBags) || 0;
@@ -467,6 +486,17 @@ function ContributeModal({
           <p className="text-zinc-100 font-semibold text-center">
             {result === "success" ? config.successClaimed : config.successUnclaimed}
           </p>
+          {isCleanup && fromSolarpunk && (
+            <>
+              <p className="text-xs text-lime-400 text-center">+8 Solarpunk bloom points earned 🌱</p>
+              <Link
+                href="/campaigns/solarpunk"
+                className="mt-1 text-sm text-lime-400 hover:text-lime-300 font-medium"
+              >
+                🌱 Check out Solarpunk →
+              </Link>
+            </>
+          )}
           <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">
             Close
           </button>
@@ -524,6 +554,20 @@ function ContributeModal({
 
         {needsLocation && submitCoords && (
           <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+        )}
+
+        {/* Cross-credit notice — only shown when arriving via the Solarpunk campaign's link */}
+        {isCleanup && fromSolarpunk && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-lime-800/60 bg-lime-950/30 text-xs text-lime-300">
+            <span className="text-base shrink-0">🌱</span>
+            <span>
+              This also earns your{" "}
+              <Link href="/campaigns/solarpunk" className="underline font-semibold hover:text-lime-200">
+                Solarpunk
+              </Link>{" "}
+              hex +8 bloom points.
+            </span>
+          </div>
         )}
 
         {/* Group selection */}
@@ -1025,23 +1069,35 @@ function SolarpunkActionModal({
           <div>
             <label className="block text-xs text-zinc-500 mb-2">Action</label>
             <div className="flex flex-col gap-1.5">
-              {activeCat.actions.map((a) => (
-                <button
-                  key={a.key}
-                  type="button"
-                  onClick={() => setSelectedAction(a)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${
-                    selectedAction?.key === a.key
-                      ? "bg-lime-900/60 border-lime-600 text-lime-200"
-                      : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-                  }`}
-                >
-                  <span>{a.label}</span>
-                  <span className={`ml-2 shrink-0 font-bold ${selectedAction?.key === a.key ? "text-lime-400" : "text-zinc-600"}`}>
-                    +{a.points}pts
-                  </span>
-                </button>
-              ))}
+              {activeCat.actions.map((a) =>
+                "link" in a ? (
+                  <Link
+                    key={a.key}
+                    href={a.link}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 transition-colors"
+                  >
+                    <span className="text-base shrink-0">🗑️</span>
+                    <span className="flex-1">{a.label}</span>
+                    <span className="shrink-0 text-emerald-400">→</span>
+                  </Link>
+                ) : (
+                  <button
+                    key={a.key}
+                    type="button"
+                    onClick={() => setSelectedAction(a)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${
+                      selectedAction?.key === a.key
+                        ? "bg-lime-900/60 border-lime-600 text-lime-200"
+                        : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                    }`}
+                  >
+                    <span>{a.label}</span>
+                    <span className={`ml-2 shrink-0 font-bold ${selectedAction?.key === a.key ? "text-lime-400" : "text-zinc-600"}`}>
+                      +{a.points}pts
+                    </span>
+                  </button>
+                )
+              )}
             </div>
           </div>
         )}
@@ -1312,6 +1368,62 @@ function SolarpunkPhotoModal({
   );
 }
 
+// ─── All actions overview modal ──────────────────────────────────────────────
+
+function AllActionsModal({
+  onClose,
+  onLogAction,
+}: {
+  onClose: () => void;
+  onLogAction: () => void;
+}) {
+  return (
+    <ModalShell title="All Solarpunk Actions" onClose={onClose}>
+      <div className="flex flex-col gap-5">
+        {SOLARPUNK_ACTIONS.map((cat) => (
+          <div key={cat.category}>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-base">{cat.icon}</span>
+              <span className="text-xs font-semibold text-zinc-300">{cat.category}</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              {cat.actions.map((a) =>
+                "link" in a ? (
+                  <Link
+                    key={a.key}
+                    href={a.link}
+                    onClick={onClose}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 transition-colors"
+                  >
+                    <span className="text-base shrink-0">🗑️</span>
+                    <span className="flex-1">{a.label}</span>
+                    <span className="shrink-0 text-emerald-400">→</span>
+                  </Link>
+                ) : (
+                  <div
+                    key={a.key}
+                    className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-zinc-800/40 text-xs text-zinc-400"
+                  >
+                    <span>{a.label}</span>
+                    <span className="ml-2 shrink-0 font-bold text-zinc-500">+{a.points}pts</span>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={onLogAction}
+          className="py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold transition-colors"
+        >
+          Log an Action
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 // ─── Modal shell ──────────────────────────────────────────────────────────────
 
 function ModalShell({
@@ -1363,7 +1475,7 @@ export default function ContributionPanel({
   const isSolarpunk = campaignContributionType === "solarpunk_action";
 
   const gps = useGPS();
-  const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | null>(null);
+  const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | "all_actions" | null>(null);
   const [reportOverrideCoords, setReportOverrideCoords] = useState<Coords | null>(null);
   const prevPinPickerActiveRef = useRef(false);
   const prePinPickerModeRef = useRef<"contribute" | "report" | "solarpunk_photo" | null>(null);
@@ -1426,12 +1538,24 @@ export default function ContributionPanel({
     <>
       {!pinPickerActive && (
         <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 items-start">
-          <button
-            onClick={openContribute}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
-          >
-            {btn.icon} {btn.label}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openContribute}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+            >
+              {btn.icon} {btn.label}
+            </button>
+            {isSolarpunk && (
+              <button
+                onClick={() => setMode("all_actions")}
+                title="View all actions"
+                aria-label="View all Solarpunk actions"
+                className="flex items-center justify-center w-9 h-9 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-bold backdrop-blur-sm transition-colors shadow-lg"
+              >
+                ℹ️
+              </button>
+            )}
+          </div>
           {isSolarpunk && (
             <button
               onClick={() => { setMode("solarpunk_photo"); if (gps.status === "idle") gps.capture(); }}
@@ -1495,6 +1619,12 @@ export default function ContributionPanel({
             activeMapStyle={activeMapStyle}
           />
         )
+      )}
+      {mode === "all_actions" && !pinPickerActive && (
+        <AllActionsModal
+          onClose={() => setMode(null)}
+          onLogAction={() => { setMode("contribute"); if (gps.status === "idle") gps.capture(); }}
+        />
       )}
       {mode === "solarpunk_photo" && !pinPickerActive && (
         <SolarpunkPhotoModal
