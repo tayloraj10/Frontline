@@ -243,7 +243,7 @@ export default async function CampaignPage({ params }: Props) {
               {campaign.title}
             </h1>
             {campaign.description && (
-              <p className="text-zinc-500 text-xs whitespace-nowrap overflow-x-auto scrollbar-none">{campaign.description}</p>
+              <p className="text-zinc-500 text-xs break-words">{campaign.description}</p>
             )}
           </div>
         </div>
