@@ -874,6 +874,8 @@ export default function CampaignMap({
   const choroplethListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
   const hexDataRef = useRef<HexBloomEntry[]>([]);
+  const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const geoPermissionStatusRef = useRef<PermissionStatus | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
@@ -1384,13 +1386,39 @@ export default function CampaignMap({
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
     if (navigator.geolocation) {
-      map.current.addControl(
-        new maplibregl.GeolocateControl({
+      const addGeolocateControl = () => {
+        if (!map.current) return;
+        const control = new maplibregl.GeolocateControl({
           positionOptions: { enableHighAccuracy: true },
           trackUserLocation: true,
-        }),
-        "top-right",
-      );
+        });
+        geolocateControlRef.current = control;
+        map.current.addControl(control, "top-right");
+        return control;
+      };
+      addGeolocateControl();
+
+      // GeolocateControl permanently disables its button after a PERMISSION_DENIED
+      // error and never re-checks. If the user grants location access afterward
+      // (e.g. via browser site settings) without a full page reload, the button
+      // stays dead. Watch the Permissions API for a live grant and rebuild the
+      // control so it works immediately instead of requiring a refresh.
+      navigator.permissions
+        ?.query({ name: "geolocation" as PermissionName })
+        .then((status) => {
+          geoPermissionStatusRef.current = status;
+          status.onchange = () => {
+            if (status.state === "granted" && map.current) {
+              const old = geolocateControlRef.current;
+              if (old) map.current.removeControl(old);
+              const fresh = addGeolocateControl();
+              fresh?.trigger();
+            }
+          };
+        })
+        .catch(() => {
+          // Permissions API not supported for geolocation (e.g. Safari) — no-op.
+        });
     }
     map.current.addControl(
       new FitExtentControl(() => dataBoundsRef.current),
@@ -1559,6 +1587,10 @@ export default function CampaignMap({
     });
 
     return () => {
+      if (geoPermissionStatusRef.current) {
+        geoPermissionStatusRef.current.onchange = null;
+        geoPermissionStatusRef.current = null;
+      }
       if (hoverDivRef.current) {
         document.body.removeChild(hoverDivRef.current);
         hoverDivRef.current = null;
