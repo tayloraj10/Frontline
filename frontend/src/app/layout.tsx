@@ -7,7 +7,7 @@ const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Frontline",
-  description: "Gamified collective action on the map",
+  description: "Collective Action on the Map",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
