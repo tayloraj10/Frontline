@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
-import CampaignPageClient from "./CampaignPageClient";
+import CampaignPageClient, { CampaignStatBar } from "./CampaignPageClient";
 import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
@@ -14,25 +14,6 @@ type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 interface Props {
   params: Promise<{ slug: string }>;
-}
-
-function CampaignStat({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string | number;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline gap-1.5 shrink-0">
-      <span className={`text-sm font-bold tabular-nums ${highlight ? "text-red-400" : "text-zinc-100"}`}>
-        {value}
-      </span>
-      <span className="text-xs text-zinc-500">{label}</span>
-    </div>
-  );
 }
 
 type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number };
@@ -94,7 +75,7 @@ const getCampaignPageData = unstable_cache(
       eventCentroidList.map((c) => [c.geo_unit_id, { lat: c.lat, lng: c.lng }])
     );
 
-    const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[] } = lbRes?.ok
+    const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number } = lbRes?.ok
       ? await lbRes.json()
       : { users: [], groups: [] };
 
@@ -131,7 +112,9 @@ export default async function CampaignPage({ params }: Props) {
     : { data: [] as { group_id: string }[] };
 
   const tractsCount = claims.length;
-  const totalBags = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
+  const totalBags = Math.round(
+    lbRaw.total_value ?? claims.reduce((s, c) => s + (c.total_value ?? 0), 0)
+  );
   const contributionCount = contribCount ?? 0;
 
   const unit =
@@ -263,34 +246,14 @@ export default async function CampaignPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center gap-6 overflow-x-auto scrollbar-none">
-        {campaign.campaign_type === "collage" ? (
-          <CampaignStat label="Photos submitted" value={contributionCount.toLocaleString()} />
-        ) : campaign.campaign_type === "choropleth" ? (
-          <>
-            <CampaignStat label="Total registrations" value={totalBags.toLocaleString()} />
-            <CampaignStat label="States active" value={tractsCount} />
-            <CampaignStat label="Contributions" value={contributionCount.toLocaleString()} />
-          </>
-        ) : campaign.campaign_type === "heatmap" ? (
-          <CampaignStat label="Unfollows logged" value={contributionCount.toLocaleString()} />
-        ) : campaign.campaign_type === "hex_bloom" ? (
-          <>
-            <CampaignStat label="World Bloom Score" value={totalBags.toLocaleString()} />
-            <CampaignStat label="Hexes bloomed" value={tractsCount} />
-            <CampaignStat label="Actions logged" value={contributionCount.toLocaleString()} />
-          </>
-        ) : (
-          <>
-            <CampaignStat label="Tracts claimed" value={tractsCount} />
-            <CampaignStat label="Bags collected" value={totalBags.toLocaleString()} />
-            <CampaignStat label="Contributions" value={contributionCount.toLocaleString()} />
-          </>
-        )}
-        {events.length > 0 && (
-          <CampaignStat label="Hotspots" value={events.length} highlight />
-        )}
-      </div>
+      <CampaignStatBar
+        campaignId={campaign.id}
+        campaignType={campaign.campaign_type}
+        eventsCount={events.length}
+        initialTotalBags={totalBags}
+        initialTractsCount={tractsCount}
+        initialContributionCount={contributionCount}
+      />
 
       {campaign.campaign_type === "heatmap" && (
         <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/60 flex items-center gap-2 flex-wrap">

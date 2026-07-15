@@ -1,14 +1,117 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import CampaignMapWrapper, { type ClaimLabel } from "@/components/map/CampaignMapWrapper";
 import ContributionPanel from "@/components/contributions/ContributionPanel";
+import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
+
+const DB_SCHEMA = process.env.NEXT_PUBLIC_DB_SCHEMA || "public";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
+type Contribution = Database["public"]["Tables"]["contributions"]["Row"];
+
+function displayStatValue(n: number): string {
+  return n.toLocaleString();
+}
+
+function StatBarItem({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string | number;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline gap-1.5 shrink-0">
+      <span className={`text-sm font-bold tabular-nums ${highlight ? "text-red-400" : "text-zinc-100"}`}>
+        {value}
+      </span>
+      <span className="text-xs text-zinc-500">{label}</span>
+    </div>
+  );
+}
+
+export function CampaignStatBar({
+  campaignId,
+  campaignType,
+  eventsCount,
+  initialTotalBags,
+  initialTractsCount,
+  initialContributionCount,
+}: {
+  campaignId: string;
+  campaignType: string | null;
+  eventsCount: number;
+  initialTotalBags: number;
+  initialTractsCount: number;
+  initialContributionCount: number;
+}) {
+  const [totalBags, setTotalBags] = useState(initialTotalBags);
+  const [tractsCount, setTractsCount] = useState(initialTractsCount);
+  const [contributionCount, setContributionCount] = useState(initialContributionCount);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`stat-bar:${campaignId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: DB_SCHEMA, table: "contributions", filter: `campaign_id=eq.${campaignId}` },
+        (payload) => {
+          const contribution = payload.new as Contribution;
+          setTotalBags((prev) => prev + (contribution?.value ?? 0));
+          setContributionCount((prev) => prev + 1);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: DB_SCHEMA, table: "territory_claims", filter: `campaign_id=eq.${campaignId}` },
+        () => {
+          setTractsCount((prev) => prev + 1);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [campaignId]);
+
+  return (
+    <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center gap-6 overflow-x-auto scrollbar-none">
+      {campaignType === "collage" ? (
+        <StatBarItem label="Photos submitted" value={displayStatValue(contributionCount)} />
+      ) : campaignType === "choropleth" ? (
+        <>
+          <StatBarItem label="Total registrations" value={displayStatValue(totalBags)} />
+          <StatBarItem label="States active" value={tractsCount} />
+          <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
+        </>
+      ) : campaignType === "heatmap" ? (
+        <StatBarItem label="Unfollows logged" value={displayStatValue(contributionCount)} />
+      ) : campaignType === "hex_bloom" ? (
+        <>
+          <StatBarItem label="World Bloom Score" value={displayStatValue(totalBags)} />
+          <StatBarItem label="Hexes bloomed" value={tractsCount} />
+          <StatBarItem label="Actions logged" value={displayStatValue(contributionCount)} />
+        </>
+      ) : (
+        <>
+          <StatBarItem label="Tracts claimed" value={tractsCount} />
+          <StatBarItem label="Bags collected" value={displayStatValue(totalBags)} />
+          <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
+        </>
+      )}
+      {eventsCount > 0 && <StatBarItem label="Hotspots" value={eventsCount} highlight />}
+    </div>
+  );
+}
 
 export interface ProblemReportMapData {
   id: string;

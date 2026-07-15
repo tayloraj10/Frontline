@@ -30,27 +30,27 @@ function cleanupValue(smallBags: number, largeBags: number): number {
 const MAP_STYLES = [
   { id: "outdoor", label: "Terrain" },
   { id: "streets", label: "Streets" },
-  { id: "hybrid",  label: "Satellite" },
+  { id: "hybrid", label: "Satellite" },
 ] as const;
 
 const CONTRIBUTION_LOCATION_NOUN: Record<string, string> = {
-  cleanup:          "cleanup",
-  photo:            "photo",
-  registration:     "registration",
-  advocacy:         "action",
-  civic_action:     "civic action",
-  unfollow:         "unfollow",
+  cleanup: "cleanup",
+  photo: "photo",
+  registration: "registration",
+  advocacy: "action",
+  civic_action: "civic action",
+  unfollow: "unfollow",
   solarpunk_action: "action",
 };
 
 const PANEL_BUTTON: Record<string, { icon: string; label: string }> = {
-  cleanup:         { icon: "🗑️", label: "Log Cleanup" },
-  photo:           { icon: "📷", label: "Submit Photo" },
-  registration:    { icon: "🗳️", label: "Register" },
-  advocacy:        { icon: "✊", label: "Take Action" },
-  civic_action:    { icon: "🗽", label: "Log Civic Action" },
-  unfollow:        { icon: "🧠", label: "Log Unfollow" },
-  solarpunk_action:{ icon: "🌿", label: "Log Action" },
+  cleanup: { icon: "🗑️", label: "Log Cleanup" },
+  photo: { icon: "📷", label: "Submit Photo" },
+  registration: { icon: "🗳️", label: "Register" },
+  advocacy: { icon: "✊", label: "Take Action" },
+  civic_action: { icon: "🗽", label: "Log Civic Action" },
+  unfollow: { icon: "🧠", label: "Log Unfollow" },
+  solarpunk_action: { icon: "🌿", label: "Log Action" },
   solarpunk_photo: { icon: "📸", label: "Spot It" },
 };
 
@@ -62,7 +62,7 @@ const MODAL_CONFIG: Record<string, {
   cleanup: {
     title: "Log Cleanup",
     successClaimed: "Cleanup logged! Territory updated.",
-    successUnclaimed: "Cleanup logged! Location was outside the campaign area.",
+    successUnclaimed: "No territory claimed, but your cleanup was still recorded!",
   },
   photo: {
     title: "Submit Photo",
@@ -102,13 +102,13 @@ const MODAL_CONFIG: Record<string, {
 };
 
 const CIVIC_ACTIONS: { key: string; icon: string; label: string }[] = [
-  { key: "register_independent",    icon: "🗳️", label: "Register as Independent" },
-  { key: "town_hall",               icon: "🏛️", label: "Attend a Town Hall" },
-  { key: "contact_representative",  icon: "📬", label: "Contact Your Rep" },
-  { key: "volunteer",               icon: "🤝", label: "Volunteer for Civic Org" },
-  { key: "visit_landmark",          icon: "🗽", label: "Visit a Landmark" },
-  { key: "attend_protest",          icon: "✊", label: "Attend a Protest" },
-  { key: "read_founding_document",  icon: "📜", label: "Read a Founding Document" },
+  { key: "register_independent", icon: "🗳️", label: "Register as Independent" },
+  { key: "town_hall", icon: "🏛️", label: "Attend a Town Hall" },
+  { key: "contact_representative", icon: "📬", label: "Contact Your Rep" },
+  { key: "volunteer", icon: "🤝", label: "Volunteer for Civic Org" },
+  { key: "visit_landmark", icon: "🗽", label: "Visit a Landmark" },
+  { key: "attend_protest", icon: "✊", label: "Attend a Protest" },
+  { key: "read_founding_document", icon: "📜", label: "Read a Founding Document" },
 ];
 
 const SOLARPUNK_ACTIONS: {
@@ -116,91 +116,91 @@ const SOLARPUNK_ACTIONS: {
   icon: string;
   actions: ({ key: string; label: string; points: number } | { key: string; label: string; link: string })[];
 }[] = [
-  {
-    category: "Energy", icon: "⚡",
-    actions: [
-      { key: "unplug_electronics", label: "Unplugged unused electronics/chargers when not in use", points: 5  },
-      { key: "solar_charger",      label: "Used a solar charger for your devices",                  points: 8  },
-      { key: "led_lighting",       label: "Switched all lighting to LEDs",                           points: 10 },
-      { key: "energy_audit",       label: "Completed a home energy audit",                           points: 14 },
-      { key: "weatherize",         label: "Weatherstripped, air-sealed, or upgraded insulation",     points: 22 },
-      { key: "green_energy",       label: "Switched to a green energy tariff/provider",               points: 26 },
-      { key: "solar_panels",       label: "Installed solar panels, or joined a community solar subscription", points: 55 },
-    ],
-  },
-  {
-    category: "Food", icon: "🌱",
-    actions: [
-      { key: "foraged",          label: "Foraged or wildcrafted food",                          points: 6  },
-      { key: "plant_based_week", label: "Ate plant-based meals for a full week",                points: 10 },
-      { key: "saved_seeds",      label: "Saved seeds for next season's planting",                points: 12 },
-      { key: "composted",        label: "Started a compost bin",                                points: 15 },
-      { key: "grow_food",        label: "Grew your own fruits, vegetables, or herbs for a season", points: 22 },
-      { key: "csa_coop",         label: "Joined a CSA or food co-op",                             points: 28 },
-      { key: "community_garden", label: "Started or joined a community garden",                   points: 38 },
-    ],
-  },
-  {
-    category: "Transport", icon: "🚲",
-    actions: [
-      { key: "walk_bike_trip",    label: "Walked or biked instead of driving for a trip",              points: 5  },
-      { key: "carpool",           label: "Carpooled or rideshared instead of driving alone",            points: 8  },
-      { key: "transit_day",       label: "Used public transit instead of driving for a day",            points: 12 },
-      { key: "bike_commute_week", label: "Biked or walked as your commute for a week",                  points: 18 },
-      { key: "car_free_week",     label: "Went car-free for a week",                                    points: 26 },
-      { key: "transit_month",     label: "Used public transit as your primary commute for a month",     points: 34 },
-      { key: "ev_switch",         label: "Replaced a car with an e-bike or EV for regular use",          points: 50 },
-    ],
-  },
-  {
-    category: "Community", icon: "🤝",
-    actions: [
-      { key: "help_neighbor",         label: "Helped a neighbor with a tangible task (yard work, errands, repairs, childcare)", points: 5  },
-      { key: "tool_library",          label: "Used or donated to a tool library",                        points: 8  },
-      { key: "repair_cafe",           label: "Attended a repair café",                                   points: 12 },
-      { key: "mutual_aid",            label: "Participated in a mutual aid network (gave or received support)", points: 16 },
-      { key: "skill_share",           label: "Hosted a skill share",                                     points: 22 },
-      { key: "organize_repair_drive", label: "Organized a repair café or mutual aid drive",              points: 32 },
-      { key: "cooperative",           label: "Joined or helped start a cooperative",                     points: 45 },
-    ],
-  },
-  {
-    category: "Nature", icon: "🌳",
-    actions: [
-      { key: "trash_war_link",      label: "Picked up litter or ran a cleanup? Log it in Trash War for credit",  link: "/campaigns/trash-war?ref=solarpunk" },
-      { key: "bird_house",          label: "Built or hung a bird, bee, or bat house",                        points: 8  },
-      { key: "plant_natives",       label: "Planted native plants or trees (yard, container, or public space)", points: 16 },
-      { key: "remove_invasives",    label: "Removed invasive plant species from a natural area",             points: 20 },
-      { key: "rewild_lawn",         label: "Left part of a lawn unmowed or rewilded it with native plants",   points: 24 },
-      { key: "rain_barrel",         label: "Installed a rain barrel or greywater system",                    points: 34 },
-      { key: "habitat_restoration", label: "Led a habitat, wetland, or trail restoration project",            points: 45 },
-    ],
-  },
-  {
-    category: "Consumption", icon: "♻️",
-    actions: [
-      { key: "reusable",              label: "Brought your own bag, cup, or container instead of using disposable ones", points: 5  },
-      { key: "repair_item",           label: "Repaired something instead of replacing it",                  points: 8  },
-      { key: "secondhand",            label: "Bought something secondhand instead of new",                 points: 10 },
-      { key: "plastic_free_week",     label: "Went a full week avoiding single-use plastic and packaging", points: 16 },
-      { key: "clothing_swap",         label: "Organized or attended a clothing/goods swap",                 points: 20 },
-      { key: "zero_waste_month",      label: "Went a full month without single-use plastic or disposable packaging (groceries, takeout, shopping)", points: 28 },
-      { key: "zero_waste_initiative", label: "Organized a community-wide zero-waste or repair initiative",  points: 38 },
-    ],
-  },
-  {
-    category: "Advocacy", icon: "✊",
-    actions: [
-      { key: "petition",           label: "Signed or shared a petition or campaign",                                    points: 5  },
-      { key: "contact_official",   label: "Contacted an elected official",                                              points: 10 },
-      { key: "wrote_article",      label: "Wrote about solarpunk values (post, letter, article)",                       points: 12 },
-      { key: "attend_council",     label: "Attended a city council or town hall meeting",                               points: 16 },
-      { key: "taught_class",       label: "Taught a sustainability workshop or class",                                  points: 24 },
-      { key: "organized_event",    label: "Organized a community sustainability event (workshop series, fundraiser, tree-planting day)", points: 34 },
-      { key: "sustained_campaign", label: "Helped lead a sustained local advocacy campaign or initiative (months-long organizing effort)", points: 48 },
-    ],
-  },
-];
+    {
+      category: "Energy", icon: "⚡",
+      actions: [
+        { key: "unplug_electronics", label: "Unplugged unused electronics/chargers when not in use", points: 5 },
+        { key: "solar_charger", label: "Used a solar charger for your devices", points: 8 },
+        { key: "led_lighting", label: "Switched all lighting to LEDs", points: 10 },
+        { key: "energy_audit", label: "Completed a home energy audit", points: 14 },
+        { key: "weatherize", label: "Weatherstripped, air-sealed, or upgraded insulation", points: 22 },
+        { key: "green_energy", label: "Switched to a green energy tariff/provider", points: 26 },
+        { key: "solar_panels", label: "Installed solar panels, or joined a community solar subscription", points: 55 },
+      ],
+    },
+    {
+      category: "Food", icon: "🌱",
+      actions: [
+        { key: "foraged", label: "Foraged or wildcrafted food", points: 6 },
+        { key: "plant_based_week", label: "Ate plant-based meals for a full week", points: 10 },
+        { key: "saved_seeds", label: "Saved seeds for next season's planting", points: 12 },
+        { key: "composted", label: "Started a compost bin", points: 15 },
+        { key: "grow_food", label: "Grew your own fruits, vegetables, or herbs for a season", points: 22 },
+        { key: "csa_coop", label: "Joined a CSA or food co-op", points: 28 },
+        { key: "community_garden", label: "Started or joined a community garden", points: 38 },
+      ],
+    },
+    {
+      category: "Transport", icon: "🚲",
+      actions: [
+        { key: "walk_bike_trip", label: "Walked or biked instead of driving for a trip", points: 5 },
+        { key: "carpool", label: "Carpooled or rideshared instead of driving alone", points: 8 },
+        { key: "transit_day", label: "Used public transit instead of driving for a day", points: 12 },
+        { key: "bike_commute_week", label: "Biked or walked as your commute for a week", points: 18 },
+        { key: "car_free_week", label: "Went car-free for a week", points: 26 },
+        { key: "transit_month", label: "Used public transit as your primary commute for a month", points: 34 },
+        { key: "ev_switch", label: "Replaced a car with an e-bike or EV for regular use", points: 50 },
+      ],
+    },
+    {
+      category: "Community", icon: "🤝",
+      actions: [
+        { key: "help_neighbor", label: "Helped a neighbor with a tangible task (yard work, errands, repairs, childcare)", points: 5 },
+        { key: "tool_library", label: "Used or donated to a tool library", points: 8 },
+        { key: "repair_cafe", label: "Attended a repair café", points: 12 },
+        { key: "mutual_aid", label: "Participated in a mutual aid network (gave or received support)", points: 16 },
+        { key: "skill_share", label: "Hosted a skill share", points: 22 },
+        { key: "organize_repair_drive", label: "Organized a repair café or mutual aid drive", points: 32 },
+        { key: "cooperative", label: "Joined or helped start a cooperative", points: 45 },
+      ],
+    },
+    {
+      category: "Nature", icon: "🌳",
+      actions: [
+        { key: "trash_war_link", label: "Picked up litter or ran a cleanup? Log it in Trash War for credit", link: "/campaigns/trash-war?ref=solarpunk" },
+        { key: "bird_house", label: "Built or hung a bird, bee, or bat house", points: 8 },
+        { key: "plant_natives", label: "Planted native plants or trees (yard, container, or public space)", points: 16 },
+        { key: "remove_invasives", label: "Removed invasive plant species from a natural area", points: 20 },
+        { key: "rewild_lawn", label: "Left part of a lawn unmowed or rewilded it with native plants", points: 24 },
+        { key: "rain_barrel", label: "Installed a rain barrel or greywater system", points: 34 },
+        { key: "habitat_restoration", label: "Led a habitat, wetland, or trail restoration project", points: 45 },
+      ],
+    },
+    {
+      category: "Consumption", icon: "♻️",
+      actions: [
+        { key: "reusable", label: "Brought your own bag, cup, or container instead of using disposable ones", points: 5 },
+        { key: "repair_item", label: "Repaired something instead of replacing it", points: 8 },
+        { key: "secondhand", label: "Bought something secondhand instead of new", points: 10 },
+        { key: "plastic_free_week", label: "Went a full week avoiding single-use plastic and packaging", points: 16 },
+        { key: "clothing_swap", label: "Organized or attended a clothing/goods swap", points: 20 },
+        { key: "zero_waste_month", label: "Went a full month without single-use plastic or disposable packaging (groceries, takeout, shopping)", points: 28 },
+        { key: "zero_waste_initiative", label: "Organized a community-wide zero-waste or repair initiative", points: 38 },
+      ],
+    },
+    {
+      category: "Advocacy", icon: "✊",
+      actions: [
+        { key: "petition", label: "Signed or shared a petition or campaign", points: 5 },
+        { key: "contact_official", label: "Contacted an elected official", points: 10 },
+        { key: "wrote_article", label: "Wrote about solarpunk values (post, letter, article)", points: 12 },
+        { key: "attend_council", label: "Attended a city council or town hall meeting", points: 16 },
+        { key: "taught_class", label: "Taught a sustainability workshop or class", points: 24 },
+        { key: "organized_event", label: "Organized a community sustainability event (workshop series, fundraiser, tree-planting day)", points: 34 },
+        { key: "sustained_campaign", label: "Helped lead a sustained local advocacy campaign or initiative (months-long organizing effort)", points: 48 },
+      ],
+    },
+  ];
 
 interface ContributionPanelProps {
   campaignId: string;
@@ -578,11 +578,10 @@ function ContributeModal({
               <button
                 type="button"
                 onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  selectedGroupId === null
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null
                     ? "bg-zinc-700 border-zinc-500 text-zinc-100"
                     : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
-                }`}
+                  }`}
               >
                 Individual
               </button>
@@ -591,11 +590,10 @@ function ContributeModal({
                   key={g.id}
                   type="button"
                   onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                    selectedGroupId === g.id
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id
                       ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
                       : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
-                  }`}
+                    }`}
                 >
                   {g.image_url ? (
                     <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
@@ -657,11 +655,10 @@ function ContributeModal({
                   key={a.key}
                   type="button"
                   onClick={() => setSelectedAction(a.key)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${
-                    selectedAction === a.key
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${selectedAction === a.key
                       ? "bg-blue-900/60 border-blue-500 text-blue-200"
                       : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
-                  }`}
+                    }`}
                 >
                   <span className="text-base shrink-0">{a.icon}</span>
                   <span className="leading-tight">{a.label}</span>
@@ -866,15 +863,14 @@ function ReportModal({
               <button
                 key={s}
                 onClick={() => setSeverity(s)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize ${
-                  severity === s
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize ${severity === s
                     ? s === "high"
                       ? "bg-red-900/60 border-red-600 text-red-300"
                       : s === "medium"
                         ? "bg-yellow-900/60 border-yellow-600 text-yellow-300"
                         : "bg-zinc-700 border-zinc-500 text-zinc-200"
                     : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
-                }`}
+                  }`}
               >
                 {s}
               </button>
@@ -1051,11 +1047,10 @@ function SolarpunkActionModal({
                 key={cat.category}
                 type="button"
                 onClick={() => { setSelectedCategoryIdx(i); setSelectedAction(null); }}
-                className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg border text-xs font-medium transition-colors ${
-                  selectedCategoryIdx === i
+                className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg border text-xs font-medium transition-colors ${selectedCategoryIdx === i
                     ? "bg-lime-900/60 border-lime-600 text-lime-300"
                     : "bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
-                }`}
+                  }`}
               >
                 <span className="text-base">{cat.icon}</span>
                 <span className="leading-tight text-center">{cat.category}</span>
@@ -1085,11 +1080,10 @@ function SolarpunkActionModal({
                     key={a.key}
                     type="button"
                     onClick={() => setSelectedAction(a)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${
-                      selectedAction?.key === a.key
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${selectedAction?.key === a.key
                         ? "bg-lime-900/60 border-lime-600 text-lime-200"
                         : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-                    }`}
+                      }`}
                   >
                     <span>{a.label}</span>
                     <span className={`ml-2 shrink-0 font-bold ${selectedAction?.key === a.key ? "text-lime-400" : "text-zinc-600"}`}>
@@ -1578,11 +1572,10 @@ export default function ContributionPanel({
                 <button
                   key={s.id}
                   onClick={() => onStyleChange(s.id)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                    activeMapStyle === s.id
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${activeMapStyle === s.id
                       ? "bg-zinc-600 text-zinc-100"
                       : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
-                  }`}
+                    }`}
                 >
                   {s.label}
                 </button>

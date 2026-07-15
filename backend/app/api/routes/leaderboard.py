@@ -11,6 +11,19 @@ router = APIRouter(prefix="/campaigns", tags=["leaderboard"])
 
 @router.get("/{campaign_id}/leaderboard")
 async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    totals_row = (
+        await db.execute(
+            text("""
+                SELECT
+                    COALESCE(SUM(value), 0)::float AS total_value,
+                    COUNT(*)::int                   AS contribution_count
+                FROM contributions
+                WHERE campaign_id = :cid
+            """),
+            {"cid": str(campaign_id)},
+        )
+    ).fetchone()
+
     user_rows = (
         await db.execute(
             text("""
@@ -76,6 +89,8 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
     }
 
     return {
+        "total_value": totals_row.total_value,
+        "contribution_count": totals_row.contribution_count,
         "users": [
             {
                 "entity_id": r.user_id,
