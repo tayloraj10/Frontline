@@ -1534,12 +1534,33 @@ export default function CampaignMap({
         ? UK_BOUNDS
         : CONTINENTAL_US_BOUNDS;
 
+    // Matches the "sm" Tailwind breakpoint used for the rest of the mobile-specific
+    // chrome in this component (see the `sm:hidden` overlays below).
+    const isMobileViewport = window.innerWidth < 640;
+    // Extra bottom padding on mobile keeps the fitted bounds clear of the floating
+    // stats/event chip and zoom-control overlays anchored near the bottom of the
+    // screen there (see the `absolute bottom-*` overlays below).
+    const initialFitPadding = isMobileViewport
+      ? { top: 20, bottom: 90, left: 20, right: 20 }
+      : { top: 20, bottom: 20, left: 20, right: 20 };
+
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: styleUrl("outdoor"),
       bounds: initialBounds,
-      fitBoundsOptions: { padding: 20 },
+      fitBoundsOptions: { padding: initialFitPadding },
       attributionControl: false,
+    });
+
+    // The initial `bounds` fit above runs synchronously against whatever size the
+    // container reports at construction time. On mobile that's occasionally a stale/
+    // pre-layout size (address-bar chrome, font-driven reflow, etc.), which locks in
+    // the wrong zoom — the later ResizeObserver-driven `.resize()` call below just
+    // re-renders at that same wrong zoom rather than recomputing it. Re-fitting once
+    // the style/tiles have actually loaded guarantees the fit runs against the real,
+    // settled container size.
+    map.current.once("load", () => {
+      map.current?.fitBounds(initialBounds, { padding: initialFitPadding, animate: false });
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
