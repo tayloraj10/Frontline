@@ -7,6 +7,7 @@ import CampaignPageClient, { CampaignStatBar } from "./CampaignPageClient";
 import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
+import type { MapBusiness } from "@/components/map/CampaignMap";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -20,6 +21,10 @@ type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: 
 type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null };
 type EventCentroid = { geo_unit_id: string; lat: number; lng: number };
 type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
+type PartnerBusinessRow = {
+  id: string; name: string; slug: string; description: string | null; logo_url: string | null;
+  website_url: string | null; google_maps_url: string | null; lat: number | null; lng: number | null; status: string;
+};
 
 // Everything here is public, RLS-open data (or FastAPI-computed data with no
 // per-user variance), so it's safe to share one cache entry across all
@@ -75,6 +80,37 @@ const getCampaignPageData = unstable_cache(
       eventCentroidList.map((c) => [c.geo_unit_id, { lat: c.lat, lng: c.lng }])
     );
 
+    const events = (eventsData ?? []) as CampaignEvent[];
+    const eventIds = events.map((e) => e.id);
+    const { data: eventGeoUnitRows } = eventIds.length > 0
+      ? await supabase.from("campaign_event_geo_units").select("event_id, geo_unit_id").in("event_id", eventIds)
+      : { data: [] as { event_id: string; geo_unit_id: string }[] };
+    const eventGeoUnitIds: Record<string, string[]> = {};
+    for (const row of eventGeoUnitRows ?? []) {
+      (eventGeoUnitIds[row.event_id] ??= []).push(row.geo_unit_id);
+    }
+
+    const { data: businessLinkRows } = await supabase
+      .from("campaign_partner_businesses")
+      .select(
+        "partner_businesses(id, name, slug, description, logo_url, website_url, google_maps_url, lat, lng, status)"
+      )
+      .eq("campaign_id", campaign.id);
+    const partnerBusinesses: MapBusiness[] = (businessLinkRows ?? [])
+      .map((row) => row.partner_businesses as unknown as PartnerBusinessRow | null)
+      .filter((b): b is PartnerBusinessRow => !!b && b.status === "active" && b.lat !== null && b.lng !== null)
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        slug: b.slug,
+        description: b.description,
+        logo_url: b.logo_url,
+        website_url: b.website_url,
+        google_maps_url: b.google_maps_url,
+        lat: b.lat as number,
+        lng: b.lng as number,
+      }));
+
     const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number } = lbRes?.ok
       ? await lbRes.json()
       : { users: [], groups: [] };
@@ -82,11 +118,13 @@ const getCampaignPageData = unstable_cache(
     return {
       campaign,
       claims: (claimsData ?? []) as TerritoryClaim[],
-      events: (eventsData ?? []) as CampaignEvent[],
+      events,
       contribCount: contribCount ?? 0,
       actContribs: actContribsData ?? [],
       problemReports,
       eventCentroids,
+      eventGeoUnitIds,
+      partnerBusinesses,
       lbRaw,
     };
   },
@@ -105,11 +143,17 @@ export default async function CampaignPage({ params }: Props) {
   ]);
 
   if (!pageData) notFound();
-  const { campaign, claims, events, contribCount, actContribs, problemReports, eventCentroids, lbRaw } = pageData;
+  const { campaign, claims, events, contribCount, actContribs, problemReports, eventCentroids, eventGeoUnitIds, partnerBusinesses, lbRaw } = pageData;
 
-  const { data: membershipData } = user
-    ? await supabase.from("group_members").select("group_id").eq("user_id", user.id)
-    : { data: [] as { group_id: string }[] };
+  const [{ data: membershipData }, { data: adminProfile }] = await Promise.all([
+    user
+      ? supabase.from("group_members").select("group_id").eq("user_id", user.id)
+      : Promise.resolve({ data: [] as { group_id: string }[] }),
+    user
+      ? supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single()
+      : Promise.resolve({ data: null as { is_admin: boolean } | null }),
+  ]);
+  const isAdmin = adminProfile?.is_admin ?? false;
 
   const tractsCount = claims.length;
   const totalBags = Math.round(
@@ -282,6 +326,7 @@ export default async function CampaignPage({ params }: Props) {
           activeEvents={events}
           claimLabels={claimLabels}
           userId={user?.id ?? null}
+          isAdmin={isAdmin}
           userDisplayName={userDisplayName}
           userUsername={userUsername}
           userGroups={userGroups}
@@ -290,6 +335,8 @@ export default async function CampaignPage({ params }: Props) {
           unit={unit}
           problemReports={problemReports}
           eventCentroids={eventCentroids}
+          eventGeoUnitIds={eventGeoUnitIds}
+          partnerBusinesses={partnerBusinesses}
         />
       </div>
     </div>

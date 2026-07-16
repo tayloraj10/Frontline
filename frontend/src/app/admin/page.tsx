@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "./AdminPanel";
-import type { Campaign, ActiveEvent, Trigger } from "./AdminPanel";
+import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, PartnerOfferCode, BusinessCampaignLink } from "./AdminPanel";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -22,6 +22,9 @@ export default async function AdminPage() {
     { data: campaigns },
     { data: activeEvents },
     { data: triggers },
+    { data: businesses },
+    { data: offers },
+    { data: codes },
   ] = await Promise.all([
     supabase
       .schema("public")
@@ -30,7 +33,7 @@ export default async function AdminPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("campaign_events")
-      .select("id, event_type, title, description, status, started_at, ends_at, campaign_id")
+      .select("id, event_type, title, description, image_url, effect_config, status, started_at, ends_at, campaign_id")
       .in("status", ["active", "paused"])
       .order("started_at", { ascending: false }),
     supabase
@@ -38,7 +41,28 @@ export default async function AdminPage() {
       .from("event_triggers")
       .select("id, name, condition_type, event_type, cooldown_hours, is_active, campaign_id, campaigns(title, slug)")
       .order("campaign_id"),
+    supabase
+      .schema("public")
+      .from("partner_businesses")
+      .select(
+        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+      )
+      .order("created_at", { ascending: false }),
+    supabase
+      .schema("public")
+      .from("partner_offers")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, status, starts_at, ends_at, created_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .schema("public")
+      .from("partner_offer_codes")
+      .select("id, offer_id, status"),
   ]);
+
+  const { data: businessCampaignLinks } = await supabase
+    .schema("public")
+    .from("campaign_partner_businesses")
+    .select("business_id, campaign_id");
 
   const eventCampaignIds = [...new Set((activeEvents ?? []).map((e) => e.campaign_id).filter(Boolean) as string[])];
   const { data: eventCampaignsData } = eventCampaignIds.length > 0
@@ -55,6 +79,10 @@ export default async function AdminPage() {
       initialCampaigns={(campaigns ?? []) as Campaign[]}
       initialEvents={eventsWithCampaigns as unknown as ActiveEvent[]}
       initialTriggers={(triggers ?? []) as unknown as Trigger[]}
+      initialBusinesses={(businesses ?? []) as PartnerBusiness[]}
+      initialOffers={(offers ?? []) as PartnerOffer[]}
+      initialCodes={(codes ?? []) as PartnerOfferCode[]}
+      initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
     />
   );
 }

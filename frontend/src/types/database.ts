@@ -206,6 +206,7 @@ export interface Database {
           started_at: string;
           ends_at: string | null;
           resolved_at: string | null;
+          image_url: string | null;
         };
         Insert: Omit<Database["public"]["Tables"]["campaign_events"]["Row"], "id" | "status" | "started_at"> & {
           id?: string;
@@ -213,6 +214,19 @@ export interface Database {
           started_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["campaign_events"]["Insert"]>;
+      };
+      campaign_event_geo_units: {
+        Row: {
+          id: string;
+          event_id: string;
+          geo_unit_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["campaign_event_geo_units"]["Row"], "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["campaign_event_geo_units"]["Insert"]>;
       };
       user_notifications: {
         Row: {
