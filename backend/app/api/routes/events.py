@@ -57,12 +57,18 @@ async def get_active_multiplier(
 
     result = await db.execute(
         text("""
-            SELECT effect_config, title FROM campaign_events
+            SELECT effect_config, title FROM campaign_events ce
             WHERE campaign_id = :campaign_id
               AND status = 'active'
-              AND geo_unit_id = :geo_unit_id
               AND (ends_at IS NULL OR ends_at > NOW())
               AND effect_config->>'type' = 'score_multiplier'
+              AND (
+                geo_unit_id = :geo_unit_id
+                OR EXISTS (
+                  SELECT 1 FROM campaign_event_geo_units cegu
+                  WHERE cegu.event_id = ce.id AND cegu.geo_unit_id = :geo_unit_id
+                )
+              )
             LIMIT 1
         """),
         {"campaign_id": str(campaign_id), "geo_unit_id": geo_unit_id},
@@ -81,10 +87,13 @@ async def get_active_multiplier(
 
 @router.get("/campaign/{campaign_id}/centroids")
 async def get_event_geo_centroids(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Return centroid lat/lng for each active event's geo_unit. Used by the map to place markers regardless of viewport."""
+    """Return centroid lat/lng for each active event's geo_unit(s). Covers both the
+    legacy single geo_unit_id column (trigger-created events) and the
+    campaign_event_geo_units join table (admin-created multi-area events). Used by
+    the map to place markers regardless of viewport."""
     result = await db.execute(
         text("""
-            SELECT DISTINCT ce.geo_unit_id,
+            SELECT DISTINCT gu.id AS geo_unit_id,
                    ST_Y(ST_Centroid(gu.geometry::geometry)) AS centroid_lat,
                    ST_X(ST_Centroid(gu.geometry::geometry)) AS centroid_lng
             FROM campaign_events ce
@@ -92,6 +101,17 @@ async def get_event_geo_centroids(campaign_id: UUID, db: AsyncSession = Depends(
             WHERE ce.campaign_id = :campaign_id
               AND ce.status = 'active'
               AND ce.geo_unit_id IS NOT NULL
+
+            UNION
+
+            SELECT DISTINCT gu.id AS geo_unit_id,
+                   ST_Y(ST_Centroid(gu.geometry::geometry)) AS centroid_lat,
+                   ST_X(ST_Centroid(gu.geometry::geometry)) AS centroid_lng
+            FROM campaign_events ce
+            JOIN campaign_event_geo_units cegu ON cegu.event_id = ce.id
+            JOIN geo_units gu ON gu.id = cegu.geo_unit_id
+            WHERE ce.campaign_id = :campaign_id
+              AND ce.status = 'active'
         """),
         {"campaign_id": str(campaign_id)},
     )
