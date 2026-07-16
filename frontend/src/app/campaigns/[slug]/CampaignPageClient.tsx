@@ -3,7 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import CampaignMapWrapper, { type ClaimLabel } from "@/components/map/CampaignMapWrapper";
+import type { MapBusiness } from "@/components/map/CampaignMap";
 import ContributionPanel from "@/components/contributions/ContributionPanel";
+import CreateTimedEventButton from "@/components/events/CreateTimedEventButton";
+import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 
@@ -159,6 +162,7 @@ interface Props {
   activeEvents: CampaignEvent[];
   claimLabels: Record<string, ClaimLabel>;
   userId: string | null;
+  isAdmin?: boolean;
   userDisplayName: string | null;
   userUsername: string | null;
   userGroups: { id: string; name: string; image_url?: string | null }[];
@@ -167,6 +171,8 @@ interface Props {
   unit: string;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
+  eventGeoUnitIds?: Record<string, string[]>;
+  partnerBusinesses?: MapBusiness[];
 }
 
 interface NewContribution {
@@ -437,6 +443,7 @@ export default function CampaignPageClient({
   activeEvents,
   claimLabels,
   userId,
+  isAdmin,
   userDisplayName,
   userUsername,
   userGroups,
@@ -445,6 +452,8 @@ export default function CampaignPageClient({
   unit,
   problemReports,
   eventCentroids,
+  eventGeoUnitIds,
+  partnerBusinesses,
 }: Props) {
   const [hexEventsExpanded, setHexEventsExpanded] = useState(false);
   const [pinPickerActive, setPinPickerActive] = useState(false);
@@ -464,6 +473,11 @@ export default function CampaignPageClient({
   const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | "stats" | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
   const [localProblemReports, setLocalProblemReports] = useState<ProblemReports | null | undefined>(problemReports);
+  const [areaPickerActive, setAreaPickerActive] = useState(false);
+  const [pickedAreas, setPickedAreas] = useState<SelectedArea[]>([]);
+  const [showTimedEventModal, setShowTimedEventModal] = useState(false);
+  const [activeEventsList, setActiveEventsList] = useState<CampaignEvent[]>(activeEvents);
+  const [localEventGeoUnitIds, setLocalEventGeoUnitIds] = useState<Record<string, string[]>>(eventGeoUnitIds ?? {});
 
   const handleContributionSubmitted = (
     lat: number | null,
@@ -524,9 +538,29 @@ export default function CampaignPageClient({
     setOpenPanel((p) => (p === panel ? null : panel));
   };
 
+  const handleRequestAreaPick = () => {
+    setShowTimedEventModal(false);
+    setAreaPickerActive(true);
+  };
+
+  const handleTimedEventModalOpenChange = (open: boolean) => {
+    setShowTimedEventModal(open);
+    if (!open) setPickedAreas([]);
+  };
+
+  const handleAreaPickerConfirm = () => {
+    setAreaPickerActive(false);
+    setShowTimedEventModal(true);
+  };
+
+  const handleAreaPickerCancel = () => {
+    setAreaPickerActive(false);
+    setShowTimedEventModal(true);
+  };
+
   const isHexBloom = campaign.campaign_type === "hex_bloom";
-  const showEventsChip = activeEvents.length > 0 && !isHexBloom;
-  const statsButtonActive = !openPanel && !pinPickerActive;
+  const showEventsChip = activeEventsList.length > 0 && !isHexBloom;
+  const statsButtonActive = !openPanel && !pinPickerActive && !areaPickerActive;
   const bloomTotal = isHexBloom
     ? Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0))
     : 0;
@@ -542,7 +576,7 @@ export default function CampaignPageClient({
       <CampaignMapWrapper
         campaign={campaign}
         claims={claims}
-        activeEvents={activeEvents}
+        activeEvents={activeEventsList}
         claimLabels={claimLabels}
         campaignType={campaign.campaign_type ?? undefined}
         pinPickerActive={pinPickerActive}
@@ -551,12 +585,18 @@ export default function CampaignPageClient({
         pinPickerLabel={pinPickerLabel}
         onPinPlaced={handlePinPlaced}
         onPinCancelled={handlePinCancelled}
+        areaPickerActive={areaPickerActive}
+        onAreaPickerChange={setPickedAreas}
+        onAreaPickerConfirm={handleAreaPickerConfirm}
+        onAreaPickerCancel={handleAreaPickerCancel}
         newContribution={newContribution}
         newReport={newReport}
         userLocation={userLocation}
         activeStyle={activeMapStyle}
         problemReports={localProblemReports}
         eventCentroids={eventCentroids}
+        eventGeoUnitIds={localEventGeoUnitIds}
+        partnerBusinesses={partnerBusinesses}
         onUserLocationChange={(coords) => {
           setUserLocation(coords);
           if (coords) setLocationError(null);
@@ -571,7 +611,7 @@ export default function CampaignPageClient({
       />
 
       {/* Side panel */}
-      {openPanel && !pinPickerActive && (
+      {openPanel && !pinPickerActive && !areaPickerActive && (
         <div className="absolute bottom-0 left-0 right-0 h-[55vh] sm:h-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-t sm:border-t-0 sm:border-l border-zinc-800 flex flex-col z-20 overflow-hidden">
           {/* Header: tab buttons + close */}
           <div className="flex items-center border-b border-zinc-800 shrink-0 px-2 pt-2 pb-0 gap-1">
@@ -651,7 +691,7 @@ export default function CampaignPageClient({
                 leaderboard={leaderboard}
                 campaignType={campaign.campaign_type ?? ""}
                 unit={unit}
-                eventCount={activeEvents.length}
+                eventCount={activeEventsList.length}
                 startsAt={campaign.starts_at}
                 userId={userId}
               />
@@ -688,19 +728,56 @@ export default function CampaignPageClient({
         </>
       )}
 
-      {isHexBloom && !pinPickerActive && (
+      {isAdmin && !pinPickerActive && (
+        <div className="absolute z-20 top-4 right-4 sm:top-11 sm:right-[3.25rem]">
+          <CreateTimedEventButton
+            campaignId={campaign.id}
+            open={showTimedEventModal}
+            onOpenChange={handleTimedEventModalOpenChange}
+            areaPicker={{ mode: "external", areas: pickedAreas, onRequestPick: handleRequestAreaPick }}
+            onCreated={(event) => {
+              setActiveEventsList((prev) => [
+                {
+                  id: event.id,
+                  campaign_id: event.campaign_id,
+                  trigger_id: null,
+                  geo_unit_id: pickedAreas[0]?.geoUnitId ?? null,
+                  event_type: event.event_type,
+                  title: event.title,
+                  description: event.description,
+                  effect_config: null,
+                  status: event.status as CampaignEvent["status"],
+                  started_at: event.started_at,
+                  ends_at: event.ends_at,
+                  resolved_at: null,
+                  image_url: event.image_url,
+                },
+                ...prev,
+              ]);
+              setLocalEventGeoUnitIds((prev) => ({
+                ...prev,
+                [event.id]: pickedAreas.map((a) => a.geoUnitId),
+              }));
+              setPickedAreas([]);
+            }}
+            hideTrigger={areaPickerActive}
+          />
+        </div>
+      )}
+
+      {isHexBloom && !pinPickerActive && !areaPickerActive && (
         <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
-          {activeEvents.length > 0 && (
+          {activeEventsList.length > 0 && (
             <button
               onClick={() => setHexEventsExpanded((e) => !e)}
               className="self-start sm:hidden px-3 py-1.5 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm text-emerald-300 text-xs font-semibold"
             >
-              ⚡ {activeEvents.length} Event{activeEvents.length > 1 ? "s" : ""} {hexEventsExpanded ? "▲" : "▼"}
+              ⚡ {activeEventsList.length} Event{activeEventsList.length > 1 ? "s" : ""} {hexEventsExpanded ? "▲" : "▼"}
             </button>
           )}
-          {activeEvents.length > 0 && (
+          {activeEventsList.length > 0 && (
             <div className={`${hexEventsExpanded ? "flex" : "hidden"} sm:flex flex-col gap-2`}>
-              {activeEvents.map((event) => (
+              {activeEventsList.map((event) => (
                 <div
                   key={event.id}
                   className="w-56 px-3 py-2 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm"

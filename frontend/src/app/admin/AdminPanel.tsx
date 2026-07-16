@@ -1,8 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import type { SelectedArea } from "./EventAreaMapPicker";
+import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
+import AddressAutocomplete from "./AddressAutocomplete";
+import TimedEventForm from "@/components/events/TimedEventForm";
+import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
+import { updateEvent } from "@/lib/events";
+import type { Json } from "@/types/database";
 
 export type Campaign = {
   id: string;
@@ -21,6 +28,8 @@ export type ActiveEvent = {
   event_type: string;
   title: string;
   description: string | null;
+  image_url: string | null;
+  effect_config: Json | null;
   status: string;
   started_at: string;
   ends_at: string | null;
@@ -39,7 +48,49 @@ export type Trigger = {
   campaigns: { title: string; slug: string } | null;
 };
 
-type Tab = "campaigns" | "triggers" | "events";
+export type PartnerBusiness = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  logo_url: string | null;
+  website_url: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  lat: number | null;
+  lng: number | null;
+  google_maps_url: string | null;
+  social_links: BusinessSocialLinks | null;
+  status: string;
+  created_at: string;
+};
+
+export type PartnerOffer = {
+  id: string;
+  business_id: string;
+  title: string;
+  description: string | null;
+  redemption_mode: "spend" | "threshold";
+  points_cost: number | null;
+  points_threshold: number | null;
+  max_redemptions_per_user: number | null;
+  status: string;
+  starts_at: string;
+  ends_at: string | null;
+  created_at: string;
+};
+
+export type PartnerOfferCode = {
+  id: string;
+  offer_id: string;
+  status: string;
+};
+
+type Tab = "campaigns" | "triggers" | "events" | "partners";
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -63,6 +114,8 @@ function StatusBadge({ status }: { status: string }) {
     draft: "bg-zinc-800 text-zinc-400 border-zinc-700",
     paused: "bg-yellow-900/60 text-yellow-400 border-yellow-800",
     completed: "bg-blue-900/60 text-blue-400 border-blue-800",
+    pending: "bg-amber-900/60 text-amber-400 border-amber-800",
+    inactive: "bg-zinc-800 text-zinc-500 border-zinc-700",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs border capitalize ${colors[status] ?? colors.draft}`}>
@@ -109,6 +162,7 @@ const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = 
   notification:   { desc: "Meant to broadcast a message to campaign participants when a trigger fires. The event record is created but no message is dispatched anywhere yet.", implemented: false },
   seasonal_reset: { desc: "Signals a campaign-wide or weighted score reset. The event record is created but no reset logic is implemented yet.", implemented: false },
   decay_start:    { desc: "Marks the start of a score decay period. The event record is created but no decay logic is implemented yet.", implemented: false },
+  timed_event:    { desc: "Admin-created timed bonus event over one or more areas (effect_config is always {\"type\": \"score_multiplier\", \"multiplier\": N}). Never auto-triggered — created manually here or from the campaign page. Fully implemented.", implemented: true },
 };
 
 const inputCls = "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -521,13 +575,125 @@ const EVENT_ICON: Record<string, string> = {
   notification: "🔔",
   seasonal_reset: "🔄",
   decay_start: "📉",
+  timed_event: "✨",
 };
 
-function EventsTab({ events, setEvents }: {
+function EventsTab({ campaigns, events, setEvents }: {
+  campaigns: Campaign[];
   events: ActiveEvent[];
   setEvents: (e: ActiveEvent[]) => void;
 }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [eventType, setEventType] = useState("boss_spawn");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [selectedAreas, setSelectedAreas] = useState<SelectedArea[]>([]);
+  const [geoUnitIdInput, setGeoUnitIdInput] = useState("");
+  const [timedUnitType, setTimedUnitType] = useState("");
+  const [multiplier, setMultiplier] = useState(2);
+  const [durationHours, setDurationHours] = useState<string>("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editMultiplier, setEditMultiplier] = useState("");
+  const [editEndsAt, setEditEndsAt] = useState("");
+  const [editIndefinite, setEditIndefinite] = useState(false);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+  const editImageInputRef = useRef<HTMLInputElement>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const getMultiplier = (config: Json | null): number | null => {
+    if (config && typeof config === "object" && !Array.isArray(config) && "multiplier" in config) {
+      const m = (config as { multiplier?: unknown }).multiplier;
+      return typeof m === "number" ? m : null;
+    }
+    return null;
+  };
+
+  const startEdit = (event: ActiveEvent) => {
+    setShowCreate(false);
+    setEditingId(event.id);
+    setEditTitle(event.title);
+    setEditDescription(event.description ?? "");
+    const m = getMultiplier(event.effect_config);
+    setEditMultiplier(m !== null ? String(m) : "");
+    setEditEndsAt(event.ends_at ? new Date(event.ends_at).toISOString().slice(0, 16) : "");
+    setEditIndefinite(!event.ends_at);
+    setEditImageFile(null);
+    setEditImagePreview(null);
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditImageFile(null);
+    setEditImagePreview(null);
+    setEditError(null);
+  };
+
+  const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditImageFile(file);
+    setEditImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent, event: ActiveEvent) => {
+    e.preventDefault();
+    if (!editTitle.trim()) return;
+    setEditLoading(true);
+    setEditError(null);
+    try {
+      const hasMultiplier = getMultiplier(event.effect_config) !== null;
+      const updated = await updateEvent({
+        eventId: event.id,
+        title: editTitle,
+        description: editDescription,
+        imageFile: editImageFile,
+        multiplier: hasMultiplier ? (Number(editMultiplier) || 1) : null,
+        endsAt: editIndefinite || !editEndsAt ? null : new Date(editEndsAt).toISOString(),
+      });
+      setEvents(events.map(ev => ev.id === event.id ? { ...ev, ...updated, campaigns: ev.campaigns } : ev));
+      cancelEdit();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update event");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const uploadEventImage = async (file: File): Promise<string> => {
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+    const res = await fetch(
+      `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}&kind=events`
+    );
+    if (!res.ok) throw new Error("Failed to get upload URL");
+    const { upload_url, public_url } = await res.json();
+    const uploadRes = await fetch(upload_url, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type },
+    });
+    if (!uploadRes.ok) throw new Error("Image upload failed");
+    return public_url;
+  };
 
   const updateStatus = async (eventId: string, status: "active" | "paused" | "cancelled") => {
     setPendingId(eventId);
@@ -540,14 +706,232 @@ function EventsTab({ events, setEvents }: {
     setPendingId(null);
   };
 
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!campaignId || !title.trim()) return;
+    setCreateLoading(true);
+    setCreateError(null);
+
+    const supabase = createClient();
+
+    let imageUrl: string | null = null;
+    try {
+      if (imageFile) imageUrl = await uploadEventImage(imageFile);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Image upload failed");
+      setCreateLoading(false);
+      return;
+    }
+
+    const effectConfig = eventType === "boss_spawn"
+      ? { type: "score_multiplier", multiplier }
+      : EFFECT_TEMPLATES[eventType];
+
+    const endsAt = durationHours.trim()
+      ? new Date(Date.now() + Number(durationHours) * 3600_000).toISOString()
+      : null;
+
+    const { data, error: insertErr } = await supabase
+      .schema("public")
+      .from("campaign_events")
+      .insert({
+        campaign_id: campaignId,
+        geo_unit_id: selectedAreas[0]?.geoUnitId ?? null,
+        event_type: eventType,
+        title: title.trim(),
+        description: description.trim() || null,
+        image_url: imageUrl,
+        effect_config: effectConfig,
+        status: "active",
+        ends_at: endsAt,
+      })
+      .select("id, event_type, title, description, image_url, effect_config, status, started_at, ends_at, campaign_id")
+      .single();
+
+    if (insertErr) {
+      setCreateError(insertErr.message);
+      setCreateLoading(false);
+      return;
+    }
+
+    if (selectedAreas.length > 0) {
+      const { error: linkErr } = await supabase
+        .schema("public")
+        .from("campaign_event_geo_units")
+        .insert(selectedAreas.map(a => ({ event_id: data.id, geo_unit_id: a.geoUnitId })));
+      if (linkErr) {
+        setCreateError(`Event created, but failed to link areas: ${linkErr.message}`);
+      }
+    }
+
+    const campaign = campaigns.find(c => c.id === campaignId);
+    const newEvent: ActiveEvent = {
+      ...(data as Omit<ActiveEvent, "campaigns">),
+      campaigns: campaign ? { title: campaign.title, slug: campaign.slug } : null,
+    };
+    setEvents([newEvent, ...events]);
+    setTitle(""); setDescription(""); setSelectedAreas([]); setGeoUnitIdInput(""); setMultiplier(2); setDurationHours("");
+    setImageFile(null); setImagePreview(null);
+    setShowCreate(false);
+    setCreateLoading(false);
+  };
+
   const activeCount = events.filter(e => e.status === "active").length;
   const pausedCount = events.filter(e => e.status === "paused").length;
 
   return (
     <div className="space-y-4">
-      <span className="text-sm text-zinc-500">
-        {activeCount} active{pausedCount > 0 ? `, ${pausedCount} paused` : ""}
-      </span>
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-zinc-500">
+          {activeCount} active{pausedCount > 0 ? `, ${pausedCount} paused` : ""}
+        </span>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+        >
+          {showCreate ? "Cancel" : "+ New Event"}
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
+          <p className="text-sm font-semibold text-zinc-300">Create Event</p>
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-500">Event type</label>
+            <select className={inputCls} value={eventType} onChange={e => setEventType(e.target.value)}>
+              <option value="boss_spawn">boss_spawn</option>
+              <option value="cascade_unlock">cascade_unlock</option>
+              <option value="notification">notification</option>
+              <option value="seasonal_reset">seasonal_reset</option>
+              <option value="decay_start">decay_start</option>
+              <option value="timed_event">timed_event</option>
+            </select>
+            {EVENT_TYPE_INFO[eventType] && !EVENT_TYPE_INFO[eventType].implemented && (
+              <p className="text-amber-400 text-xs mt-1">⚠ Stub — effect not yet implemented, event will be created but has no gameplay effect.</p>
+            )}
+          </div>
+
+          {eventType === "timed_event" ? (
+            (() => {
+              const unitTypes = campaigns.find(c => c.id === campaignId)?.geo_unit ?? [];
+              const effectiveUnitType = unitTypes.length > 1 ? (timedUnitType || unitTypes[0]) : (unitTypes[0] ?? null);
+              return (
+                <>
+                  {unitTypes.length > 1 && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Geo unit type</label>
+                      <select className={inputCls} value={effectiveUnitType ?? ""} onChange={e => setTimedUnitType(e.target.value)}>
+                        {unitTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <TimedEventForm
+                    campaignId={campaignId}
+                    campaigns={campaigns}
+                    onCampaignChange={setCampaignId}
+                    areaPicker={{ mode: "embedded", unitType: effectiveUnitType }}
+                    onCreated={(event) => {
+                      const campaign = campaigns.find(c => c.id === event.campaign_id);
+                      const newEvent: ActiveEvent = {
+                        ...event,
+                        campaigns: campaign ? { title: campaign.title, slug: campaign.slug } : null,
+                      };
+                      setEvents([newEvent, ...events]);
+                      setShowCreate(false);
+                    }}
+                    onCancel={() => setShowCreate(false)}
+                  />
+                </>
+              );
+            })()
+          ) : (
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-zinc-500">Campaign</label>
+                  <select className={inputCls} value={campaignId} onChange={e => setCampaignId(e.target.value)} required>
+                    {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-zinc-500">Title</label>
+                  <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Weekend Cleanup Blitz" />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-zinc-500">Description</label>
+                  <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
+                </div>
+                {eventType === "boss_spawn" && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500">Score multiplier</label>
+                    <input type="number" min={1} step={0.1} className={inputCls} value={multiplier} onChange={e => setMultiplier(Number(e.target.value))} />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-500">Duration (hours)</label>
+                  <input type="number" min={0} className={inputCls} value={durationHours} onChange={e => setDurationHours(e.target.value)} placeholder="Blank = indefinite" />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-zinc-500">Geo unit ID</label>
+                  <input
+                    className={inputCls}
+                    value={geoUnitIdInput}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setGeoUnitIdInput(value);
+                      setSelectedAreas(value.trim() ? [{ geoUnitId: value.trim(), displayName: value.trim(), unitType: "" }] : []);
+                    }}
+                    placeholder="Optional — e.g. a zip code"
+                  />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-zinc-500">Event image</label>
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+                    >
+                      {imagePreview ? (
+                        <img src={imagePreview} alt="Event" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="flex items-center justify-center w-full h-full text-2xl">
+                          {EVENT_ICON[eventType] ?? "⚡"}
+                        </span>
+                      )}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </div>
+                    </button>
+                    <div className="text-xs text-zinc-500 space-y-0.5">
+                      <p>JPG, PNG or WebP</p>
+                      <p>Max 5 MB</p>
+                    </div>
+                  </div>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleImageChange}
+                  />
+                </div>
+              </div>
+              {createError && <p className="text-red-400 text-xs">{createError}</p>}
+              <button
+                type="submit"
+                disabled={createLoading || !title.trim() || !campaignId}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+              >
+                {createLoading ? "Creating…" : "Create"}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
 
       {events.length === 0 ? (
         <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
@@ -556,7 +940,8 @@ function EventsTab({ events, setEvents }: {
       ) : (
         <div className="space-y-2">
           {events.map(e => (
-            <div key={e.id} className={`border rounded-xl px-5 py-4 flex items-start justify-between gap-4 ${e.status === "paused" ? "border-yellow-900/60 bg-yellow-950/10" : "border-zinc-800"}`}>
+            <div key={e.id} className={`border rounded-xl px-5 py-4 ${e.status === "paused" ? "border-yellow-900/60 bg-yellow-950/10" : "border-zinc-800"}`}>
+            <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0">
                 <span className="text-xl shrink-0 mt-0.5">{EVENT_ICON[e.event_type] ?? "⚡"}</span>
                 <div className="min-w-0">
@@ -585,6 +970,12 @@ function EventsTab({ events, setEvents }: {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => (editingId === e.id ? cancelEdit() : startEdit(e))}
+                  className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
+                >
+                  {editingId === e.id ? "Close" : "Edit"}
+                </button>
                 {e.status === "active" && (
                   <button
                     onClick={() => updateStatus(e.id, "paused")}
@@ -612,6 +1003,99 @@ function EventsTab({ events, setEvents }: {
                 </button>
               </div>
             </div>
+
+            {editingId === e.id && (() => {
+              const hasMultiplier = getMultiplier(e.effect_config) !== null;
+              return (
+                <form onSubmit={ev => handleEditSubmit(ev, e)} className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-xs text-zinc-500">Title</label>
+                      <input className={inputCls} value={editTitle} onChange={ev => setEditTitle(ev.target.value)} required />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-xs text-zinc-500">Description</label>
+                      <textarea className={`${inputCls} resize-none`} rows={2} value={editDescription} onChange={ev => setEditDescription(ev.target.value)} placeholder="Optional" />
+                    </div>
+                    {hasMultiplier && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Score multiplier</label>
+                        <input type="number" min={1} step={0.1} className={inputCls} value={editMultiplier} onChange={ev => setEditMultiplier(ev.target.value)} />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Ends at</label>
+                      <input
+                        type="datetime-local"
+                        className={inputCls}
+                        value={editEndsAt}
+                        disabled={editIndefinite}
+                        onChange={ev => setEditEndsAt(ev.target.value)}
+                      />
+                      <label className="flex items-center gap-1.5 text-xs text-zinc-500 mt-1">
+                        <input type="checkbox" checked={editIndefinite} onChange={ev => setEditIndefinite(ev.target.checked)} />
+                        Indefinite
+                      </label>
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-xs text-zinc-500">Event image</label>
+                      <div className="flex items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={() => editImageInputRef.current?.click()}
+                          className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+                        >
+                          {editImagePreview ? (
+                            <img src={editImagePreview} alt="Event" className="w-full h-full object-cover" />
+                          ) : e.image_url ? (
+                            <img src={e.image_url} alt="Event" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="flex items-center justify-center w-full h-full text-2xl">
+                              {EVENT_ICON[e.event_type] ?? "⚡"}
+                            </span>
+                          )}
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          </div>
+                        </button>
+                        <div className="text-xs text-zinc-500 space-y-0.5">
+                          <p>JPG, PNG or WebP</p>
+                          <p>Max 5 MB</p>
+                        </div>
+                      </div>
+                      <input
+                        ref={editImageInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={handleEditImageChange}
+                      />
+                    </div>
+                  </div>
+                  {editError && <p className="text-red-400 text-xs">{editError}</p>}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={editLoading || !editTitle.trim()}
+                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+                    >
+                      {editLoading ? "Saving…" : "Save changes"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
+            </div>
           ))}
         </div>
       )}
@@ -619,17 +1103,545 @@ function EventsTab({ events, setEvents }: {
   );
 }
 
+// ─── Partners Tab ─────────────────────────────────────────────────────────────
+
+function OfferRow({ business, offer, codes, setCodes }: {
+  business: PartnerBusiness;
+  offer: PartnerOffer;
+  codes: PartnerOfferCode[];
+  setCodes: (c: PartnerOfferCode[]) => void;
+}) {
+  const [addingCodes, setAddingCodes] = useState(false);
+  const [codesText, setCodesText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const offerCodes = codes.filter(c => c.offer_id === offer.id);
+  const available = offerCodes.filter(c => c.status === "available").length;
+
+  const handleAddCodes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const lines = [...new Set(codesText.split("\n").map(l => l.trim()).filter(Boolean))];
+    if (lines.length === 0) return;
+    setLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { data, error: insertErr } = await supabase
+      .schema("public")
+      .from("partner_offer_codes")
+      .insert(lines.map(code => ({ offer_id: offer.id, code, status: "available" })))
+      .select("id, offer_id, status");
+
+    if (insertErr) {
+      setError(insertErr.code === "23505" ? "One or more codes already exist for this offer." : insertErr.message);
+      setLoading(false);
+      return;
+    }
+
+    setCodes([...codes, ...(data as PartnerOfferCode[])]);
+    setCodesText("");
+    setAddingCodes(false);
+    setLoading(false);
+  };
+
+  return (
+    <div className="border border-zinc-800 rounded-lg px-4 py-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-zinc-200">{offer.title}</p>
+          {offer.description && <p className="text-xs text-zinc-500 mt-0.5">{offer.description}</p>}
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs">
+            <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">{offer.redemption_mode}</span>
+            {offer.redemption_mode === "spend"
+              ? <span className="text-zinc-500">{offer.points_cost} pts</span>
+              : <span className="text-zinc-500">{offer.points_threshold}+ pts to unlock</span>}
+            <StatusBadge status={offer.status} />
+            <span className="text-zinc-600">{available}/{offerCodes.length} codes available</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setAddingCodes(!addingCodes)}
+          className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 rounded-lg transition-colors shrink-0"
+        >
+          {addingCodes ? "Cancel" : "+ Codes"}
+        </button>
+      </div>
+      {addingCodes && (
+        <form onSubmit={handleAddCodes} className="mt-3 space-y-2">
+          <textarea
+            className={`${inputCls} resize-none font-mono text-xs`}
+            rows={4}
+            value={codesText}
+            onChange={e => setCodesText(e.target.value)}
+            placeholder={`One code per line, e.g.\nSAVE20-A1B2\nSAVE20-C3D4`}
+          />
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading || !codesText.trim()}
+            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-xs rounded-lg font-medium transition-colors"
+          >
+            {loading ? "Adding…" : `Add codes to ${business.name}`}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+export type BusinessCampaignLink = { business_id: string; campaign_id: string };
+
+function BusinessCard({
+  business,
+  offers,
+  setOffers,
+  codes,
+  setCodes,
+  campaigns,
+  businesses,
+  setBusinesses,
+  businessCampaignLinks,
+  setBusinessCampaignLinks,
+}: {
+  business: PartnerBusiness;
+  offers: PartnerOffer[];
+  setOffers: (o: PartnerOffer[]) => void;
+  codes: PartnerOfferCode[];
+  setCodes: (c: PartnerOfferCode[]) => void;
+  campaigns: Campaign[];
+  businesses: PartnerBusiness[];
+  setBusinesses: (b: PartnerBusiness[]) => void;
+  businessCampaignLinks: BusinessCampaignLink[];
+  setBusinessCampaignLinks: (l: BusinessCampaignLink[]) => void;
+}) {
+  const isPending = business.status === "pending";
+  const [expanded, setExpanded] = useState(isPending);
+  const [editing, setEditing] = useState(isPending);
+  const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [redemptionMode, setRedemptionMode] = useState<"spend" | "threshold">("spend");
+  const [pointsCost, setPointsCost] = useState(100);
+  const [pointsThreshold, setPointsThreshold] = useState(500);
+  const [maxPerUser, setMaxPerUser] = useState<string>("1");
+  const [endsAt, setEndsAt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const businessOffers = offers.filter(o => o.business_id === business.id);
+
+  const handleCreateOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { data, error: insertErr } = await supabase
+      .schema("public")
+      .from("partner_offers")
+      .insert({
+        business_id: business.id,
+        title: title.trim(),
+        description: description.trim() || null,
+        redemption_mode: redemptionMode,
+        points_cost: redemptionMode === "spend" ? pointsCost : null,
+        points_threshold: redemptionMode === "threshold" ? pointsThreshold : null,
+        max_redemptions_per_user: maxPerUser.trim() ? Number(maxPerUser) : null,
+        status: "active",
+        ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+      })
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, status, starts_at, ends_at, created_at")
+      .single();
+
+    if (insertErr) {
+      setError(insertErr.message);
+      setLoading(false);
+      return;
+    }
+
+    setOffers([...offers, data as PartnerOffer]);
+    setTitle(""); setDescription(""); setRedemptionMode("spend"); setPointsCost(100); setPointsThreshold(500); setMaxPerUser("1"); setEndsAt("");
+    setShowCreateOffer(false);
+    setLoading(false);
+  };
+
+  const businessCampaignIds = businessCampaignLinks.filter(l => l.business_id === business.id).map(l => l.campaign_id);
+
+  const handleEditSubmit = async (payload: BusinessFormPayload): Promise<string | null> => {
+    const supabase = createClient();
+    const { campaignIds, ...rest } = payload;
+    const { data, error: updateErr } = await supabase
+      .schema("public")
+      .from("partner_businesses")
+      .update({ ...rest, status: isPending ? "active" : business.status })
+      .eq("id", business.id)
+      .select(
+        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+      )
+      .single();
+
+    if (updateErr) return updateErr.code === "23505" ? "Slug already taken." : updateErr.message;
+
+    const updated = data as PartnerBusiness;
+    setBusinesses(businesses.map(b => (b.id === updated.id ? updated : b)));
+
+    const currentLinked = new Set(businessCampaignIds);
+    const nextLinked = new Set(campaignIds);
+    const toAdd = campaignIds.filter(id => !currentLinked.has(id));
+    const toRemove = [...currentLinked].filter(id => !nextLinked.has(id));
+
+    if (toAdd.length > 0) {
+      const { error: linkErr } = await supabase
+        .schema("public")
+        .from("campaign_partner_businesses")
+        .insert(toAdd.map(campaign_id => ({ business_id: business.id, campaign_id })));
+      if (linkErr) return `Business updated, but failed to link some campaigns: ${linkErr.message}`;
+    }
+    if (toRemove.length > 0) {
+      const { error: unlinkErr } = await supabase
+        .schema("public")
+        .from("campaign_partner_businesses")
+        .delete()
+        .eq("business_id", business.id)
+        .in("campaign_id", toRemove);
+      if (unlinkErr) return `Business updated, but failed to unlink some campaigns: ${unlinkErr.message}`;
+    }
+
+    setBusinessCampaignLinks([
+      ...businessCampaignLinks.filter(l => l.business_id !== business.id),
+      ...campaignIds.map(campaign_id => ({ business_id: business.id, campaign_id })),
+    ]);
+    setEditing(false);
+    return null;
+  };
+
+  const handleReject = async () => {
+    if (!confirm(`Reject and delete "${business.name}"? This can't be undone.`)) return;
+    setRejecting(true);
+    const supabase = createClient();
+    const { error: deleteErr } = await supabase
+      .schema("public")
+      .from("partner_businesses")
+      .delete()
+      .eq("id", business.id);
+    setRejecting(false);
+    if (deleteErr) {
+      alert(deleteErr.message);
+      return;
+    }
+    setBusinesses(businesses.filter(b => b.id !== business.id));
+    setBusinessCampaignLinks(businessCampaignLinks.filter(l => l.business_id !== business.id));
+  };
+
+  return (
+    <div className={`border rounded-xl overflow-hidden ${isPending ? "border-amber-800/60" : "border-zinc-800"}`}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-zinc-900/30 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-zinc-500 text-xs">{expanded ? "▾" : "▸"}</span>
+          {business.logo_url ? (
+            <img src={business.logo_url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+          ) : (
+            <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-xs font-black text-zinc-400 shrink-0">
+              {business.name[0]?.toUpperCase()}
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-zinc-200">{business.name}</p>
+            <p className="text-xs text-zinc-600">{businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isPending && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); handleReject(); }}
+              className="text-xs text-red-500 hover:text-red-400 transition-colors px-2 py-1"
+            >
+              {rejecting ? "Rejecting…" : "Reject"}
+            </span>
+          )}
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1"
+          >
+            {editing ? "Cancel edit" : "Edit"}
+          </span>
+          <StatusBadge status={business.status} />
+        </div>
+      </button>
+      {expanded && (
+        <div className="border-t border-zinc-800 px-5 py-4 space-y-3 bg-zinc-950/40">
+          {isPending && (
+            <p className="text-xs text-amber-400">
+              Submitted by the business for review. Assign campaigns below and save to approve and publish it.
+            </p>
+          )}
+          {editing && (
+            <BusinessForm
+              initial={business}
+              initialCampaignIds={businessCampaignIds}
+              campaigns={campaigns}
+              onSubmit={handleEditSubmit}
+              onCancel={() => setEditing(false)}
+              submitLabel={isPending ? "Approve & publish" : "Save changes"}
+            />
+          )}
+          {businessOffers.map(o => (
+            <OfferRow key={o.id} business={business} offer={o} codes={codes} setCodes={setCodes} />
+          ))}
+          {businessOffers.length === 0 && !showCreateOffer && (
+            <p className="text-xs text-zinc-600">No offers yet.</p>
+          )}
+          <button
+            onClick={() => setShowCreateOffer(!showCreateOffer)}
+            className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+          >
+            {showCreateOffer ? "Cancel" : "+ New Offer"}
+          </button>
+          {showCreateOffer && (
+            <form onSubmit={handleCreateOffer} className="border border-zinc-700 rounded-xl p-4 bg-zinc-900/40 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-zinc-500">Title</label>
+                  <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. 20% off any order" />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-zinc-500">Description</label>
+                  <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-500">Redemption mode</label>
+                  <select className={inputCls} value={redemptionMode} onChange={e => setRedemptionMode(e.target.value as "spend" | "threshold")}>
+                    <option value="spend">spend (deducts points)</option>
+                    <option value="threshold">threshold (unlocks at balance)</option>
+                  </select>
+                </div>
+                {redemptionMode === "spend" ? (
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500">Points cost</label>
+                    <input type="number" min={0} className={inputCls} value={pointsCost} onChange={e => setPointsCost(Number(e.target.value))} />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500">Points threshold</label>
+                    <input type="number" min={0} className={inputCls} value={pointsThreshold} onChange={e => setPointsThreshold(Number(e.target.value))} />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-500">Max redemptions / user</label>
+                  <input type="number" min={1} className={inputCls} value={maxPerUser} onChange={e => setMaxPerUser(e.target.value)} placeholder="Blank = unlimited" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-500">Ends</label>
+                  <input type="date" className={inputCls} value={endsAt} onChange={e => setEndsAt(e.target.value)} />
+                </div>
+              </div>
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading || !title.trim()}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+              >
+                {loading ? "Creating…" : "Create offer"}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PartnersTab({
+  businesses,
+  setBusinesses,
+  offers,
+  setOffers,
+  codes,
+  setCodes,
+  campaigns,
+  businessCampaignLinks,
+  setBusinessCampaignLinks,
+}: {
+  businesses: PartnerBusiness[];
+  setBusinesses: (b: PartnerBusiness[]) => void;
+  offers: PartnerOffer[];
+  setOffers: (o: PartnerOffer[]) => void;
+  codes: PartnerOfferCode[];
+  setCodes: (c: PartnerOfferCode[]) => void;
+  campaigns: Campaign[];
+  businessCampaignLinks: BusinessCampaignLink[];
+  setBusinessCampaignLinks: (l: BusinessCampaignLink[]) => void;
+}) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const pendingBusinesses = businesses.filter(b => b.status === "pending");
+  const publishedBusinesses = businesses.filter(b => b.status !== "pending");
+
+  const handleCreateSubmit = async (payload: BusinessFormPayload): Promise<string | null> => {
+    const supabase = createClient();
+    const { campaignIds, ...rest } = payload;
+    const { data, error: insertErr } = await supabase
+      .schema("public")
+      .from("partner_businesses")
+      .insert({ ...rest, status: "active" })
+      .select(
+        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+      )
+      .single();
+
+    if (insertErr) return insertErr.code === "23505" ? "Slug already taken." : insertErr.message;
+
+    const newBusiness = data as PartnerBusiness;
+    setBusinesses([newBusiness, ...businesses]);
+
+    if (campaignIds.length > 0) {
+      const { error: linkErr } = await supabase
+        .schema("public")
+        .from("campaign_partner_businesses")
+        .insert(campaignIds.map(campaign_id => ({ business_id: newBusiness.id, campaign_id })));
+      if (linkErr) {
+        setShowCreate(false);
+        return `Business created, but failed to link campaigns: ${linkErr.message}`;
+      }
+      setBusinessCampaignLinks([
+        ...businessCampaignLinks,
+        ...campaignIds.map(campaign_id => ({ business_id: newBusiness.id, campaign_id })),
+      ]);
+    }
+    setShowCreate(false);
+    return null;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-zinc-500">{businesses.length} partner{businesses.length !== 1 ? "s" : ""}</span>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/partners/apply"
+            target="_blank"
+            className="px-3 py-1.5 text-xs border border-zinc-700 hover:border-zinc-500 text-zinc-300 rounded-lg font-medium transition-colors"
+          >
+            Open apply form ↗
+          </Link>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/partners/apply`);
+              setLinkCopied(true);
+              setTimeout(() => setLinkCopied(false), 1500);
+            }}
+            className="px-3 py-1.5 text-xs border border-zinc-700 hover:border-zinc-500 text-zinc-300 rounded-lg font-medium transition-colors"
+          >
+            {linkCopied ? "Copied!" : "Copy link"}
+          </button>
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+          >
+            {showCreate ? "Cancel" : "+ New Partner"}
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-zinc-500">
+        Share <span className="text-zinc-400">/partners/apply</span> with a business to let them submit their own listing for review.
+      </p>
+
+      {showCreate && (
+        <BusinessForm
+          initialCampaignIds={[]}
+          campaigns={campaigns}
+          onSubmit={handleCreateSubmit}
+          onCancel={() => setShowCreate(false)}
+          submitLabel="Create"
+        />
+      )}
+
+      {pendingBusinesses.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+            Pending review ({pendingBusinesses.length})
+          </p>
+          {pendingBusinesses.map(b => (
+            <BusinessCard
+              key={b.id}
+              business={b}
+              offers={offers}
+              setOffers={setOffers}
+              codes={codes}
+              setCodes={setCodes}
+              campaigns={campaigns}
+              businesses={businesses}
+              setBusinesses={setBusinesses}
+              businessCampaignLinks={businessCampaignLinks}
+              setBusinessCampaignLinks={setBusinessCampaignLinks}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {businesses.length === 0 && (
+          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
+            No partner businesses.
+          </div>
+        )}
+        {publishedBusinesses.map(b => (
+          <BusinessCard
+            key={b.id}
+            business={b}
+            offers={offers}
+            setOffers={setOffers}
+            codes={codes}
+            setCodes={setCodes}
+            campaigns={campaigns}
+            businesses={businesses}
+            setBusinesses={setBusinesses}
+            businessCampaignLinks={businessCampaignLinks}
+            setBusinessCampaignLinks={setBusinessCampaignLinks}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 
-export default function AdminPanel({ initialCampaigns, initialEvents, initialTriggers }: {
+export default function AdminPanel({
+  initialCampaigns,
+  initialEvents,
+  initialTriggers,
+  initialBusinesses,
+  initialOffers,
+  initialCodes,
+  initialBusinessCampaignLinks,
+}: {
   initialCampaigns: Campaign[];
   initialEvents: ActiveEvent[];
   initialTriggers: Trigger[];
+  initialBusinesses: PartnerBusiness[];
+  initialOffers: PartnerOffer[];
+  initialCodes: PartnerOfferCode[];
+  initialBusinessCampaignLinks: BusinessCampaignLink[];
 }) {
   const [tab, setTab] = useState<Tab>("campaigns");
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [events, setEvents] = useState(initialEvents);
   const [triggers, setTriggers] = useState(initialTriggers);
+  const [businesses, setBusinesses] = useState(initialBusinesses);
+  const [offers, setOffers] = useState(initialOffers);
+  const [codes, setCodes] = useState(initialCodes);
+  const [businessCampaignLinks, setBusinessCampaignLinks] = useState(initialBusinessCampaignLinks);
   const [seedingDemo, setSeedingDemo] = useState(false);
   const [seedDemoResult, setSeedDemoResult] = useState<string | null>(null);
 
@@ -678,7 +1690,7 @@ export default function AdminPanel({ initialCampaigns, initialEvents, initialTri
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
-        {(["campaigns", "triggers", "events"] as Tab[]).map(t => (
+        {(["campaigns", "triggers", "events", "partners"] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -700,7 +1712,20 @@ export default function AdminPanel({ initialCampaigns, initialEvents, initialTri
 
       {tab === "campaigns" && <CampaignsTab campaigns={campaigns} setCampaigns={setCampaigns} />}
       {tab === "triggers" && <TriggersTab campaigns={campaigns} triggers={triggers} setTriggers={setTriggers} />}
-      {tab === "events" && <EventsTab events={events} setEvents={setEvents} />}
+      {tab === "events" && <EventsTab campaigns={campaigns} events={events} setEvents={setEvents} />}
+      {tab === "partners" && (
+        <PartnersTab
+          businesses={businesses}
+          setBusinesses={setBusinesses}
+          offers={offers}
+          setOffers={setOffers}
+          codes={codes}
+          setCodes={setCodes}
+          campaigns={campaigns}
+          businessCampaignLinks={businessCampaignLinks}
+          setBusinessCampaignLinks={setBusinessCampaignLinks}
+        />
+      )}
     </main>
   );
 }
