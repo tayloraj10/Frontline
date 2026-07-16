@@ -367,6 +367,11 @@ async def wipe_geo_unit_data(unit_type: str, unit_id: str, db: AsyncSession = De
     counts["cleanups"] = result.rowcount
 
     result = await db.execute(
+        text("DELETE FROM campaign_event_geo_units WHERE geo_unit_id = :id"), {"id": geo_unit_id}
+    )
+    counts["campaign_event_geo_units"] = result.rowcount
+
+    result = await db.execute(
         text("DELETE FROM campaign_events WHERE geo_unit_id = :id"), {"id": geo_unit_id}
     )
     counts["campaign_events"] = result.rowcount
