@@ -767,6 +767,7 @@ Tables that drive live map updates:
 - [x] Contributions attributed to group when user is a member
 - [x] Group leaderboard per campaign
 - [x] Individual leaderboard per campaign
+- [x] Persistent per-user points total — normalized per-type scoring map (cleanup/photo pass through bag-weighted value, solarpunk flattened to 1/2, road-to-independence + brainrot excluded, trash reports worth 1), synced via DB triggers on contributions + problem_reports — + global leaderboard page
 - [x] Activity feed (recent contributions, events, claims — paginated)
 - [x] User profile page with contribution history and impact stats
 - [x] Basic push/in-app notifications for boss events and milestones

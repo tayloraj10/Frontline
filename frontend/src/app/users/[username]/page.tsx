@@ -141,8 +141,9 @@ export default async function UserProfilePage({ params }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-3 mb-6">
         {[
+          { label: "Points", value: Math.round(profile.points ?? 0).toLocaleString() },
           { label: "Contributions", value: (contribCount ?? 0).toLocaleString() },
           { label: "Tracts claimed", value: totalTractsCount.toLocaleString() },
           { label: "Groups", value: (membersData?.length ?? 0).toLocaleString() },

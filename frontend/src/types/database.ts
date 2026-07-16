@@ -31,10 +31,12 @@ export interface Database {
           avatar_url: string | null;
           bio: string | null;
           total_contributions: number;
+          points: number;
           created_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "total_contributions" | "created_at"> & {
+        Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "total_contributions" | "points" | "created_at"> & {
           total_contributions?: number;
+          points?: number;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;

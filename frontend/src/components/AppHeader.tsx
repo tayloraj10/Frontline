@@ -24,6 +24,7 @@ export default async function AppHeader() {
 
   const navLinks = [
     { href: "/campaigns", label: "Campaigns" },
+    { href: "/leaderboard", label: "Leaderboard" },
     ...(user ? [{ href: "/groups", label: "Groups" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
   ];
@@ -51,6 +52,12 @@ export default async function AppHeader() {
               className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
             >
               Campaigns
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+            >
+              Leaderboard
             </Link>
             {user && (
               <Link
