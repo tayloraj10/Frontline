@@ -721,7 +721,7 @@ class DemoDataSeeder(Seeder):
                 "etype": "boss_spawn",
                 "title": "Boss Event: Downtown Chicago Hotspot",
                 "desc": "A surge of illegal dumping near the Loop. Responders needed — every bag counts double.",
-                "effect": json.dumps({"multiplier": 2.0, "duration_hours": 72}),
+                "effect": json.dumps({"type": "score_multiplier", "multiplier": 2.0, "duration_hours": 72}),
                 "ends_at": _ts(-7, 12),
             },
             {
@@ -731,7 +731,7 @@ class DemoDataSeeder(Seeder):
                 "etype": "boss_spawn",
                 "title": "Boss Event: Bayou City Cleanup",
                 "desc": "Heavy rains pushed debris into Buffalo Bayou. Emergency cleanup needed now.",
-                "effect": json.dumps({"multiplier": 1.5, "duration_hours": 48}),
+                "effect": json.dumps({"type": "score_multiplier", "multiplier": 1.5, "duration_hours": 48}),
                 "ends_at": _ts(-5, 18),
             },
             {
@@ -751,7 +751,7 @@ class DemoDataSeeder(Seeder):
                 "etype": "boss_spawn",
                 "title": "Battle Zone: St. Louis Gateway",
                 "desc": "Midwest Sweepers and Gulf Coast Crew are deadlocked at 20 bags each. Every bag is a tiebreaker.",
-                "effect": json.dumps({"multiplier": 1.5, "duration_hours": 48}),
+                "effect": json.dumps({"type": "score_multiplier", "multiplier": 1.5, "duration_hours": 48}),
                 "ends_at": _ts(-3, 18),
             },
         ]
@@ -782,8 +782,11 @@ class DemoDataSeeder(Seeder):
                          event_type, effect_config, is_active)
                     VALUES
                         (:id, :cid, 'Trash Hotspot Trigger', 'report_count',
-                         '{"threshold": 5}'::jsonb, 'boss_spawn', '{}'::jsonb, TRUE)
-                    ON CONFLICT (id) DO NOTHING
+                         '{"threshold": 3}'::jsonb, 'boss_spawn',
+                         '{"type": "score_multiplier", "multiplier": 2.0}'::jsonb, TRUE)
+                    ON CONFLICT (id) DO UPDATE SET
+                        condition_config = EXCLUDED.condition_config,
+                        effect_config = EXCLUDED.effect_config
                 """),
                 {"id": _uid("trigger_trash_report_count"), "cid": TRASH_WAR_ID},
             )

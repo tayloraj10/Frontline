@@ -11,12 +11,72 @@ import type { Database } from "@/types/database";
 import type { ClaimLabel } from "./CampaignMapWrapper";
 import type { ProblemReports, ProblemReportMapData } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { Feature, Point } from "geojson";
+import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
-const DB_SCHEMA = process.env.NEXT_PUBLIC_DB_SCHEMA || "public";
+const CONTINENTAL_US_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-125, 24.5],
+  [-66.9, 49.5],
+];
+const UK_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-8.65, 49.85],
+  [1.87, 60.9],
+];
+const WORLD_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-170, -58],
+  [179, 80],
+];
+
+// Mirrors HOTSPOT_PROXIMITY_METERS_UK/US in backend/app/api/routes/contributions.py — the max
+// distance a cleanup submission may be from a reported hotspot to claim it as resolved.
+const REPORT_CLAIM_RADIUS_METERS_UK = 100;
+const REPORT_CLAIM_RADIUS_METERS_US = 91.44; // 300 ft
+const EARTH_RADIUS_METERS = 6371000;
+
+// Approximates a real-world-meter circle as a GeoJSON polygon so it scales correctly
+// with zoom (a DOM marker, by contrast, stays a fixed pixel size regardless of zoom).
+function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 48): [number, number][] {
+  const latRad = (lat * Math.PI) / 180;
+  const coords: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI;
+    const dx = radiusMeters * Math.cos(angle);
+    const dy = radiusMeters * Math.sin(angle);
+    const dLat = (dy / EARTH_RADIUS_METERS) * (180 / Math.PI);
+    const dLng = (dx / (EARTH_RADIUS_METERS * Math.cos(latRad))) * (180 / Math.PI);
+    coords.push([lng + dLng, lat + dLat]);
+  }
+  return coords;
+}
+
+// Event markers shrink at low zoom so they don't dominate the viewport, and reach full
+// size once zoomed in. Campaigns are bounds-fit (not a fixed initial zoom), so this curve
+// is generic rather than tuned to any one campaign's natural zoom level.
+const EVENT_MARKER_SCALE_MAX_ZOOM = 12;
+const EVENT_MARKER_SCALE_MIN_ZOOM = 5;
+const EVENT_MARKER_SCALE_MIN = 0.45;
+
+function getEventMarkerScale(zoom: number): number {
+  if (zoom >= EVENT_MARKER_SCALE_MAX_ZOOM) return 1;
+  if (zoom <= EVENT_MARKER_SCALE_MIN_ZOOM) return EVENT_MARKER_SCALE_MIN;
+  const t =
+    (zoom - EVENT_MARKER_SCALE_MIN_ZOOM) / (EVENT_MARKER_SCALE_MAX_ZOOM - EVENT_MARKER_SCALE_MIN_ZOOM);
+  return EVENT_MARKER_SCALE_MIN + t * (1 - EVENT_MARKER_SCALE_MIN);
+}
+
+// Zero-cost, no-permission-prompt signal for a UK vs. US default view. Only consulted
+// for campaigns whose geo_unit already covers uk_postcode_district (e.g. Trash War).
+function isLikelyUK(): boolean {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return /^Europe\/(London|Belfast|Jersey|Guernsey|Isle_of_Man)$/.test(tz);
+  } catch {
+    return false;
+  }
+}
 
 interface ContributionPoint {
   id: string;
@@ -70,6 +130,18 @@ function hexEntryToFeature(entry: HexBloomEntry): GeoJSON.Feature<GeoJSON.Polygo
   };
 }
 
+export type MapBusiness = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  logo_url: string | null;
+  website_url: string | null;
+  google_maps_url: string | null;
+  lat: number;
+  lng: number;
+};
+
 interface Props {
   campaign: Campaign;
   claims: TerritoryClaim[];
@@ -82,12 +154,23 @@ interface Props {
   pinPickerLabel?: string;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
+  areaPickerActive?: boolean;
+  areaPickerUnitType?: string | null;
+  onAreaPickerChange?: (areas: SelectedArea[]) => void;
+  onAreaPickerConfirm?: () => void;
+  onAreaPickerCancel?: () => void;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
+  newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
+  eventGeoUnitIds?: Record<string, string[]>;
+  partnerBusinesses?: MapBusiness[];
   onMobileStatsClick?: () => void;
+  onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
+  onUserLocationError?: (code: number) => void;
+  onGeolocateTrigger?: (trigger: () => boolean) => void;
 }
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
@@ -251,6 +334,22 @@ function applyClaimsAsFeatureState(
         claim_is_group: label?.isGroup ?? false,
       },
     );
+  }
+}
+
+function applyEventAreaHighlights(
+  map: maplibregl.Map,
+  events: CampaignEvent[],
+  eventGeoUnitIds: Record<string, string[]>,
+): void {
+  for (const event of events) {
+    const ids = eventGeoUnitIds[event.id] ?? (event.geo_unit_id ? [event.geo_unit_id] : []);
+    for (const id of ids) {
+      map.setFeatureState(
+        { source: "territory", sourceLayer: "territories", id },
+        { event_highlight: true },
+      );
+    }
   }
 }
 
@@ -825,12 +924,23 @@ export default function CampaignMap({
   pinPickerLabel,
   onPinPlaced,
   onPinCancelled,
+  areaPickerActive = false,
+  areaPickerUnitType = null,
+  onAreaPickerChange,
+  onAreaPickerConfirm,
+  onAreaPickerCancel,
   newContribution,
+  newReport,
   userLocation,
   activeStyle = "outdoor",
   problemReports,
   eventCentroids,
+  eventGeoUnitIds,
+  partnerBusinesses,
   onMobileStatsClick,
+  onUserLocationChange,
+  onUserLocationError,
+  onGeolocateTrigger,
 }: Props) {
   const isCollage = campaignType === "collage";
   const isChoropleth = campaignType === "choropleth";
@@ -849,6 +959,8 @@ export default function CampaignMap({
   const [hexPhotoVersion, setHexPhotoVersion] = useState(0);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [selectedBusiness, setSelectedBusiness] = useState<MapBusiness | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CampaignEvent | null>(null);
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
@@ -859,32 +971,50 @@ export default function CampaignMap({
   const claimLabelsRef = useRef(claimLabels);
   const problemReportsRef = useRef(problemReports);
   const eventCentroidsRef = useRef(eventCentroids ?? {});
+  const eventGeoUnitIdsRef = useRef(eventGeoUnitIds ?? {});
   const contributionFeaturesRef = useRef<Feature<Point>[]>([]);
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const eventTweensRef = useRef<gsap.core.Tween[]>([]);
-  const reportMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const eventMarkerScaleElsRef = useRef<HTMLDivElement[]>([]);
+  const eventMarkerZoomListenerRef = useRef(false);
+  const partnerBusinessesRef = useRef(partnerBusinesses ?? []);
+  const businessMarkersRef = useRef<maplibregl.Marker[]>([]);
   const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const userLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const onUserLocationChangeRef = useRef(onUserLocationChange);
+  const onUserLocationErrorRef = useRef(onUserLocationError);
   const pinPickerActiveRef = useRef(pinPickerActive);
   const pinPickerConstrainedRef = useRef(pinPickerConstrained);
+  const areaPickerActiveRef = useRef(areaPickerActive);
+  const areaPickerUnitTypeRef = useRef(areaPickerUnitType);
+  const onAreaPickerChangeRef = useRef(onAreaPickerChange);
+  const pickedAreasRef = useRef<Map<string, SelectedArea>>(new Map());
+  const [areaPickerCount, setAreaPickerCount] = useState(0);
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapReadyRef = useRef(false);
   const choroplethListenerRef = useRef(false);
+  const eventHighlightListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
   const hexDataRef = useRef<HexBloomEntry[]>([]);
-  const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null);
-  const geoPermissionStatusRef = useRef<PermissionStatus | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
   useEffect(() => { claimLabelsRef.current = claimLabels; }, [claimLabels]);
-  useEffect(() => { problemReportsRef.current = problemReports; }, [problemReports]);
   useEffect(() => { eventCentroidsRef.current = eventCentroids ?? {}; }, [eventCentroids]);
+  useEffect(() => { eventGeoUnitIdsRef.current = eventGeoUnitIds ?? {}; }, [eventGeoUnitIds]);
+  useEffect(() => { partnerBusinessesRef.current = partnerBusinesses ?? []; }, [partnerBusinesses]);
   useEffect(() => { setSelectedZipRef.current = setSelectedZip; }, [setSelectedZip]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
+  useEffect(() => { areaPickerActiveRef.current = areaPickerActive; }, [areaPickerActive]);
+  useEffect(() => { areaPickerUnitTypeRef.current = areaPickerUnitType; }, [areaPickerUnitType]);
+  useEffect(() => { onAreaPickerChangeRef.current = onAreaPickerChange; }, [onAreaPickerChange]);
+  useEffect(() => { onUserLocationChangeRef.current = onUserLocationChange; }, [onUserLocationChange]);
+  useEffect(() => { onUserLocationErrorRef.current = onUserLocationError; }, [onUserLocationError]);
 
   const updateEventMarkers = useCallback((events: CampaignEvent[]) => {
     if (!map.current) return;
@@ -893,21 +1023,27 @@ export default function CampaignMap({
     eventTweensRef.current = [];
     eventMarkersRef.current.forEach((m) => m.remove());
     eventMarkersRef.current = [];
+    eventMarkerScaleElsRef.current = [];
 
     for (const event of events) {
-      if (!event.geo_unit_id) continue;
+      const areaIds = eventGeoUnitIdsRef.current[event.id] ?? (event.geo_unit_id ? [event.geo_unit_id] : []);
+      if (areaIds.length === 0) continue;
+      const primaryId = areaIds[0];
 
-      // Prefer server-supplied centroid; fall back to computing from viewport features.
+      // Prefer averaging server-supplied centroids across all selected areas; fall back to
+      // computing from viewport features for the primary area if none have a centroid yet.
       let lat: number;
       let lng: number;
-      const centroid = eventCentroidsRef.current[event.geo_unit_id];
-      if (centroid) {
-        lat = centroid.lat;
-        lng = centroid.lng;
+      const centroids = areaIds
+        .map((id) => eventCentroidsRef.current[id])
+        .filter((c): c is { lat: number; lng: number } => !!c);
+      if (centroids.length > 0) {
+        lat = centroids.reduce((s, c) => s + c.lat, 0) / centroids.length;
+        lng = centroids.reduce((s, c) => s + c.lng, 0) / centroids.length;
       } else {
         const features = map.current.querySourceFeatures("territory", {
           sourceLayer: "territories",
-          filter: ["==", ["id"], event.geo_unit_id],
+          filter: ["==", ["id"], primaryId],
         });
         if (!features.length) continue;
         const geom = features[0].geometry;
@@ -918,29 +1054,88 @@ export default function CampaignMap({
       }
 
       const isHotspot = event.event_type === "boss_spawn";
+      const isTimedEvent = event.event_type === "timed_event";
+      const badgeEmoji = isTimedEvent ? "✨" : (isHotspot ? "🔥" : "⚡");
+      const imageUrl = event.image_url;
 
-      // MapLibre sets `transform` on the provided element for geo-positioning.
-      // Animating `el` directly with GSAP would overwrite that transform and break placement.
-      // Instead, `el` is a transparent hit-area; GSAP animates the inner `innerEl`.
+      // MapLibre sets `transform` on the provided element for geo-positioning, and GSAP
+      // animates `innerEl`'s transform directly. Zoom-based visual scaling is a third,
+      // independent transform concern, so it gets its own wrapper (`scaleWrapper`) to
+      // avoid clobbering either of the other two.
       const el = document.createElement("div");
-      el.style.cssText = isHotspot
-        ? "width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer"
-        : "width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer";
+      const size = imageUrl ? 40 : (isHotspot || isTimedEvent ? 32 : 24);
+      el.style.cssText = `width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10`;
+
+      const scaleWrapper = document.createElement("div");
+      scaleWrapper.style.cssText =
+        `width:${size}px;height:${size}px;position:relative;transform-origin:center;` +
+        `transform:scale(${getEventMarkerScale(map.current.getZoom())});transition:transform 0.15s ease-out`;
+      el.appendChild(scaleWrapper);
 
       const innerEl = document.createElement("div");
-      innerEl.style.cssText = isHotspot
-        ? "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.92);border:1.5px solid #ef4444;font-size:17px;box-shadow:0 0 8px rgba(239,68,68,0.3),0 2px 6px rgba(0,0,0,0.6);transform-origin:center"
-        : "display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(120,27,27,0.88);border:1px solid #f87171;font-size:12px;box-shadow:0 0 5px rgba(239,68,68,0.2),0 2px 4px rgba(0,0,0,0.5);transform-origin:center";
-      innerEl.textContent = isHotspot ? "🔥" : "⚡";
+      if (imageUrl) {
+        innerEl.style.cssText =
+          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2px solid ${isTimedEvent ? "#f59e0b" : "#ef4444"};` +
+          `box-shadow:0 0 8px rgba(${isTimedEvent ? "245,158,11" : "239,68,68"},0.35),0 2px 6px rgba(0,0,0,0.6);transform-origin:center`;
+        const img = document.createElement("img");
+        img.src = imageUrl;
+        img.style.cssText = "width:100%;height:100%;object-fit:cover";
+        innerEl.appendChild(img);
+
+        const badge = document.createElement("div");
+        badge.style.cssText =
+          `position:absolute;bottom:-2px;right:-2px;width:18px;height:18px;border-radius:50%;` +
+          `background:${isTimedEvent ? "rgba(120,53,15,0.95)" : "rgba(127,29,29,0.95)"};border:1px solid ${isTimedEvent ? "#f59e0b" : "#ef4444"};display:flex;align-items:center;` +
+          "justify-content:center;font-size:11px;pointer-events:none";
+        badge.textContent = badgeEmoji;
+        scaleWrapper.appendChild(innerEl);
+        scaleWrapper.appendChild(badge);
+      } else if (isTimedEvent) {
+        innerEl.style.cssText =
+          "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(120,53,15,0.92);border:1.5px solid #f59e0b;font-size:17px;box-shadow:0 0 8px rgba(245,158,11,0.35),0 2px 6px rgba(0,0,0,0.6);transform-origin:center";
+        innerEl.textContent = badgeEmoji;
+      } else {
+        innerEl.style.cssText = isHotspot
+          ? "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.92);border:1.5px solid #ef4444;font-size:17px;box-shadow:0 0 8px rgba(239,68,68,0.3),0 2px 6px rgba(0,0,0,0.6);transform-origin:center"
+          : "display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(120,27,27,0.88);border:1px solid #f87171;font-size:12px;box-shadow:0 0 5px rgba(239,68,68,0.2),0 2px 4px rgba(0,0,0,0.5);transform-origin:center";
+        innerEl.textContent = badgeEmoji;
+      }
       innerEl.title = event.title;
-      el.appendChild(innerEl);
+      if (!imageUrl) scaleWrapper.appendChild(innerEl);
+      eventMarkerScaleElsRef.current.push(scaleWrapper);
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([lng, lat])
         .addTo(map.current!);
 
       el.onclick = () => {
-        map.current?.flyTo({ center: [lng, lat], zoom: 13, duration: 800 });
+        setSelectedEvent(event);
+        if (!map.current) return;
+        if (areaIds.length <= 1) {
+          map.current.flyTo({ center: [lng, lat], zoom: 13, duration: 800 });
+          return;
+        }
+        const bounds = new maplibregl.LngLatBounds();
+        let found = false;
+        for (const id of areaIds) {
+          const features = map.current.querySourceFeatures("territory", {
+            sourceLayer: "territories",
+            filter: ["==", ["id"], id],
+          });
+          for (const f of features) {
+            const geom = f.geometry;
+            if (geom.type === "Polygon") {
+              for (const c of geom.coordinates[0]) { bounds.extend(c as [number, number]); found = true; }
+            } else if (geom.type === "MultiPolygon") {
+              for (const poly of geom.coordinates) for (const c of poly[0]) { bounds.extend(c as [number, number]); found = true; }
+            }
+          }
+        }
+        if (found) {
+          map.current.fitBounds(bounds, { padding: 60, duration: 800, maxZoom: 14 });
+        } else {
+          map.current.flyTo({ center: [lng, lat], zoom: 13, duration: 800 });
+        }
       };
 
       eventMarkersRef.current.push(marker);
@@ -951,24 +1146,85 @@ export default function CampaignMap({
     }
   }, []);
 
+  const updateBusinessMarkers = useCallback((businesses: MapBusiness[]) => {
+    if (!map.current) return;
+
+    businessMarkersRef.current.forEach((m) => m.remove());
+    businessMarkersRef.current = [];
+
+    for (const business of businesses) {
+      const el = document.createElement("div");
+      const size = 20;
+      el.style.cssText =
+        `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
+        "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+        "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
+
+      if (business.logo_url) {
+        const img = document.createElement("img");
+        img.src = business.logo_url;
+        img.style.cssText = "width:100%;height:100%;object-fit:cover";
+        el.appendChild(img);
+      } else {
+        el.textContent = "🏪";
+        el.style.fontSize = "10px";
+      }
+      el.title = business.name;
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([business.lng, business.lat])
+        .addTo(map.current!);
+
+      el.onclick = () => setSelectedBusiness(business);
+
+      businessMarkersRef.current.push(marker);
+    }
+  }, []);
+
   const updateReportMarkers = useCallback((reports: ProblemReportMapData[]) => {
     if (!map.current) return;
 
-    reportMarkersRef.current.forEach((m) => m.remove());
-    reportMarkersRef.current = [];
+    const pointsSource = map.current.getSource("report-points") as maplibregl.GeoJSONSource | undefined;
+    if (pointsSource) {
+      pointsSource.setData({
+        type: "FeatureCollection",
+        features: reports.map((report) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [report.longitude, report.latitude] },
+          properties: { severity: report.severity, reported_at: report.reported_at },
+        })),
+      });
+    }
 
-    for (const report of reports) {
-      const el = document.createElement("div");
-      el.style.cssText = "width:10px;height:10px;border-radius:50%;background:#f97316;border:1.5px solid #ea580c;opacity:0.9;pointer-events:none;flex-shrink:0";
-      el.title = `${report.severity} report`;
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([report.longitude, report.latitude])
-        .addTo(map.current!);
-
-      reportMarkersRef.current.push(marker);
+    const radiusSource = map.current.getSource("report-radius") as maplibregl.GeoJSONSource | undefined;
+    if (radiusSource) {
+      radiusSource.setData({
+        type: "FeatureCollection",
+        features: reports.map((report) => ({
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              circlePolygon(
+                report.latitude,
+                report.longitude,
+                report.unit_type === "uk_postcode_district" ? REPORT_CLAIM_RADIUS_METERS_UK : REPORT_CLAIM_RADIUS_METERS_US,
+              ),
+            ],
+          },
+          properties: { severity: report.severity },
+        })),
+      });
     }
   }, []);
+
+  // Re-render report markers whenever the parent's problemReports prop changes (e.g. a
+  // hotspot resolved via cleanup submission) — the Supabase Realtime subscription below
+  // only fires on INSERT, so UPDATEs (resolutions) need this to repaint without a reload.
+  useEffect(() => {
+    problemReportsRef.current = problemReports;
+    updateReportMarkers(problemReports?.reports ?? []);
+  }, [problemReports, updateReportMarkers]);
 
   const refreshHexBloom = useCallback(() => {
     const m = map.current;
@@ -1224,13 +1480,16 @@ export default function CampaignMap({
       "source-layer": "territories",
       paint: {
         "fill-color": ["coalesce", ["feature-state", "color"], "#a1a1aa"],
+        // Unclaimed territories (no feature-state set) get more obvious/darker as you
+        // zoom in, so they don't wash out the basemap at wide zoom levels. "zoom" must
+        // be the direct input to a top-level "interpolate" expression, so the hover/
+        // feature-state math is pushed into the per-stop output instead of wrapping it —
+        // claimed territories set an explicit "opacity" feature-state that's identical
+        // at both stops, so they interpolate to a constant and stay zoom-independent.
         "fill-opacity": [
-          "min",
-          ["+",
-            ["coalesce", ["feature-state", "opacity"], 0.22],
-            ["coalesce", ["feature-state", "pulse_extra"], 0],
-          ],
-          0.95,
+          "interpolate", ["linear"], ["zoom"],
+          9, ["min", ["+", ["coalesce", ["feature-state", "opacity"], 0.14], ["coalesce", ["feature-state", "pulse_extra"], 0]], 0.95],
+          15, ["min", ["+", ["coalesce", ["feature-state", "opacity"], 0.4], ["coalesce", ["feature-state", "pulse_extra"], 0]], 0.95],
         ],
       },
     });
@@ -1247,13 +1506,39 @@ export default function CampaignMap({
           "#ea580c",
           ["coalesce", ["feature-state", "border_color"], "#a1a1aa"],
         ],
+        // "zoom" must be the direct input to a top-level "interpolate" expression, so the
+        // hover/feature-state "case" logic is pushed into the per-stop output instead of
+        // wrapping it — the hovered branch is identical at both stops, so it interpolates
+        // to a constant and hover highlighting stays full-strength at every zoom level.
         "line-width": [
-          "case",
-          ["boolean", ["feature-state", "hover"], false],
-          ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
-          ["coalesce", ["feature-state", "border_width"], 2.0],
+          "interpolate", ["linear"], ["zoom"],
+          9, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
+            ["*", ["coalesce", ["feature-state", "border_width"], 2.0], 0.5],
+          ],
+          15, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
+            ["coalesce", ["feature-state", "border_width"], 2.0],
+          ],
         ],
-        "line-opacity": ["coalesce", ["feature-state", "border_opacity"], 0.85],
+        // Fade non-hovered borders out at far-out zoom levels, where dozens of
+        // overlapping borders make the basemap hard to read; sharpen back up
+        // as the user zooms into individual zip codes.
+        "line-opacity": [
+          "interpolate", ["linear"], ["zoom"],
+          9, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["coalesce", ["feature-state", "border_opacity"], 0.85],
+            ["*", ["coalesce", ["feature-state", "border_opacity"], 0.85], 0.35],
+          ],
+          15, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["coalesce", ["feature-state", "border_opacity"], 0.85],
+            ["coalesce", ["feature-state", "border_opacity"], 0.85],
+          ],
+        ],
       },
     });
 
@@ -1268,6 +1553,57 @@ export default function CampaignMap({
           "case",
           ["boolean", ["feature-state", "hover"], false],
           0.52,
+          0,
+        ],
+      },
+    });
+
+    m.addLayer({
+      id: "territory-event-highlight",
+      type: "line",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "line-color": "#facc15",
+        "line-width": 3,
+        "line-opacity": [
+          "case",
+          ["boolean", ["feature-state", "event_highlight"], false],
+          0.95,
+          0,
+        ],
+        "line-dasharray": [2, 1.5],
+      },
+    });
+
+    m.addLayer({
+      id: "territory-picker-fill",
+      type: "fill",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "fill-color": "#f59e0b",
+        "fill-opacity": [
+          "case",
+          ["boolean", ["feature-state", "picker_selected"], false],
+          0.55,
+          0,
+        ],
+      },
+    });
+
+    m.addLayer({
+      id: "territory-picker-highlight",
+      type: "line",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": 3,
+        "line-opacity": [
+          "case",
+          ["boolean", ["feature-state", "picker_selected"], false],
+          0.95,
           0,
         ],
       },
@@ -1345,14 +1681,79 @@ export default function CampaignMap({
     } else {
       applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
     }
+    applyEventAreaHighlights(m, activeEventsRef.current, eventGeoUnitIdsRef.current);
+    // Re-apply when user pans/zooms new tiles into view; registered once, survives style swaps
+    if (!eventHighlightListenerRef.current) {
+      eventHighlightListenerRef.current = true;
+      m.on("moveend", () =>
+        m.once("idle", () =>
+          applyEventAreaHighlights(m, activeEventsRef.current, eventGeoUnitIdsRef.current),
+        ),
+      );
+    }
+    if (!eventMarkerZoomListenerRef.current) {
+      eventMarkerZoomListenerRef.current = true;
+      m.on("zoom", () => {
+        const scale = getEventMarkerScale(m.getZoom());
+        eventMarkerScaleElsRef.current.forEach((wrapperEl) => {
+          wrapperEl.style.transform = `scale(${scale})`;
+        });
+      });
+    }
+    m.addSource("report-radius", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "report-radius-fill",
+      type: "fill",
+      source: "report-radius",
+      paint: {
+        "fill-color": "#f97316",
+        "fill-opacity": 0.08,
+      },
+    });
+    m.addLayer({
+      id: "report-radius-line",
+      type: "line",
+      source: "report-radius",
+      paint: {
+        "line-color": "#ea580c",
+        "line-width": 1.5,
+        "line-opacity": 0.65,
+      },
+    });
+
+    m.addSource("report-points", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "report-dots",
+      type: "circle",
+      source: "report-points",
+      paint: {
+        "circle-radius": 5,
+        "circle-color": "#f97316",
+        "circle-opacity": 0.9,
+        "circle-stroke-width": 1.5,
+        "circle-stroke-color": "#ea580c",
+      },
+    });
+
     updateEventMarkers(activeEventsRef.current);
+    updateBusinessMarkers(partnerBusinessesRef.current);
     updateReportMarkers(problemReportsRef.current?.reports ?? []);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
     if (!map.current || !mapReadyRef.current) return;
-    map.current.once("style.load", () => { setupCustomLayers(); });
+    setTilesLoading(true);
+    map.current.once("style.load", () => {
+      setupCustomLayers();
+      map.current?.once("idle", () => setTilesLoading(false));
+    });
     map.current.setStyle(styleUrl(activeStyle));
   }, [activeStyle, setupCustomLayers]);
 
@@ -1372,53 +1773,89 @@ export default function CampaignMap({
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
     void tileUrl; // consumed inside setupCustomLayers
 
+    const initialBounds: maplibregl.LngLatBoundsLike = (isHeatmap || isHexBloom)
+      ? WORLD_BOUNDS
+      : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) && isLikelyUK()
+        ? UK_BOUNDS
+        : CONTINENTAL_US_BOUNDS;
+
+    // Matches the "sm" Tailwind breakpoint used for the rest of the mobile-specific
+    // chrome in this component (see the `sm:hidden` overlays below).
+    const isMobileViewport = window.innerWidth < 640;
+    // Extra bottom padding on mobile keeps the fitted bounds clear of the floating
+    // stats/event chip and zoom-control overlays anchored near the bottom of the
+    // screen there (see the `absolute bottom-*` overlays below).
+    const initialFitPadding = isMobileViewport
+      ? { top: 20, bottom: 90, left: 20, right: 20 }
+      : { top: 20, bottom: 20, left: 20, right: 20 };
+
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: styleUrl("outdoor"),
-      center: (isHeatmap || isHexBloom)
-        ? [0, 20]
-        : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) ? [-40, 45] : [-98.5795, 39.8283],
-      zoom: (isHeatmap || isHexBloom)
-        ? 2
-        : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) ? 2 : 4,
+      bounds: initialBounds,
+      fitBoundsOptions: { padding: initialFitPadding },
       attributionControl: false,
+    });
+
+    // The initial `bounds` fit above runs synchronously against whatever size the
+    // container reports at construction time. On mobile that's occasionally a stale/
+    // pre-layout size (address-bar chrome, font-driven reflow, etc.), which locks in
+    // the wrong zoom — the later ResizeObserver-driven `.resize()` call below just
+    // re-renders at that same wrong zoom rather than recomputing it. Re-fitting once
+    // the style/tiles have actually loaded guarantees the fit runs against the real,
+    // settled container size.
+    map.current.once("load", () => {
+      map.current?.fitBounds(initialBounds, { padding: initialFitPadding, animate: false });
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
     if (navigator.geolocation) {
-      const addGeolocateControl = () => {
-        if (!map.current) return;
-        const control = new maplibregl.GeolocateControl({
-          positionOptions: { enableHighAccuracy: true },
-          trackUserLocation: true,
-        });
-        geolocateControlRef.current = control;
-        map.current.addControl(control, "top-right");
-        return control;
-      };
-      addGeolocateControl();
-
-      // GeolocateControl permanently disables its button after a PERMISSION_DENIED
-      // error and never re-checks. If the user grants location access afterward
-      // (e.g. via browser site settings) without a full page reload, the button
-      // stays dead. Watch the Permissions API for a live grant and rebuild the
-      // control so it works immediately instead of requiring a refresh.
-      navigator.permissions
-        ?.query({ name: "geolocation" as PermissionName })
-        .then((status) => {
-          geoPermissionStatusRef.current = status;
-          status.onchange = () => {
-            if (status.state === "granted" && map.current) {
-              const old = geolocateControlRef.current;
-              if (old) map.current.removeControl(old);
-              const fresh = addGeolocateControl();
-              fresh?.trigger();
-            }
-          };
-        })
-        .catch(() => {
-          // Permissions API not supported for geolocation (e.g. Safari) — no-op.
-        });
+      // The map's GeolocateControl is the single geolocation source for the whole app —
+      // it owns the one continuous watchPosition() (trackUserLocation: true) and every
+      // other consumer (cleanup/report submission, the custom location marker below)
+      // reads off its 'geolocate'/'error' events instead of making their own competing
+      // getCurrentPosition()/watchPosition() calls. showUserLocation is off because we
+      // draw our own pulsing marker from the userLocation prop rather than the control's
+      // built-in dot.
+      const control = new maplibregl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserLocation: false,
+      });
+      geolocateControlRef.current = control;
+      // trigger() toggles: calling it while already tracking (or sitting in an
+      // error state) turns tracking OFF instead of refreshing. hasFixRef tracks
+      // whether we're currently receiving live fixes so the exposed
+      // requestLocation() (called from ContributionPanel) only calls trigger()
+      // when it's actually safe to do so (control is OFF), matching what a real
+      // button click would do instead of silently disabling tracking. When a fix
+      // is already active we re-emit the last known position instead of just
+      // returning true — callers can have their own copy of the coords cleared
+      // out from under them (e.g. the pin picker resets userLocation to hide the
+      // GPS marker while a manual pin is shown), and the underlying watchPosition
+      // may not produce another update for a long time on a stationary device, so
+      // silently no-op'ing here left them waiting for a fix that already exists.
+      const hasFixRef = { current: false };
+      const lastPositionRef = { current: null as { latitude: number; longitude: number } | null };
+      control.on("geolocate", (e) => {
+        hasFixRef.current = true;
+        const pos = e as GeolocationPosition;
+        lastPositionRef.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        onUserLocationChangeRef.current?.(lastPositionRef.current);
+      });
+      control.on("error", (e) => {
+        hasFixRef.current = false;
+        const err = e as GeolocationPositionError;
+        onUserLocationErrorRef.current?.(err.code);
+      });
+      map.current.addControl(control, "top-right");
+      onGeolocateTrigger?.(() => {
+        if (hasFixRef.current) {
+          if (lastPositionRef.current) onUserLocationChangeRef.current?.(lastPositionRef.current);
+          return true;
+        }
+        return control.trigger();
+      });
     }
     map.current.addControl(
       new FitExtentControl(() => dataBoundsRef.current),
@@ -1432,8 +1869,10 @@ export default function CampaignMap({
     const ro = new ResizeObserver(() => map.current?.resize());
     ro.observe(mapContainer.current);
 
-    map.current.on("dataloading", () => setTilesLoading(true));
-    map.current.on("idle", () => setTilesLoading(false));
+    // Watch "idle" only once per load/style-swap rather than for the map's whole
+    // lifetime — the report-radius pulse animation repaints continuously, which
+    // would otherwise keep the map perpetually "busy" and the spinner stuck on.
+    map.current.once("idle", () => setTilesLoading(false));
 
     map.current.on("load", async () => {
       if (!map.current) return;
@@ -1459,6 +1898,30 @@ export default function CampaignMap({
           (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
       });
       map.current.on("mouseleave", "contribution-dots", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "";
+        hoverDiv.style.display = "none";
+      });
+
+      map.current.on("mouseenter", "report-dots", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "pointer";
+      });
+      map.current.on("mousemove", "report-dots", (e) => {
+        if (pinPickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as { severity?: string; reported_at?: string };
+        const date = props.reported_at
+          ? new Date(props.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
+        const severityLabel = props.severity ? props.severity.charAt(0).toUpperCase() + props.severity.slice(1) : "Unknown";
+        hoverDiv.style.display = "block";
+        hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
+        hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
+        hoverDiv.innerHTML =
+          `<div style="font-weight:700;font-size:13px;color:#f4f4f5">🗑️ Trash report</div>` +
+          `<div style="color:#f97316;font-size:11px;margin-top:4px">${severityLabel} severity</div>` +
+          (date ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">Reported ${date}</div>` : "") +
+          `<div style="color:#71717a;font-size:10px;margin-top:4px">Clean up within the shaded radius to resolve it</div>`;
+      });
+      map.current.on("mouseleave", "report-dots", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
@@ -1532,9 +1995,32 @@ export default function CampaignMap({
       });
 
       map.current.on("click", "territory-fill", (e) => {
-        if (!e.features?.[0] || pinPickerActiveRef.current) return;
-        const props = e.features[0].properties as { display_name?: string; geo_unit_id?: string; unit_type?: string };
-        const geoUnitId = String(e.features[0].id ?? props.geo_unit_id ?? "");
+        if (!e.features?.[0]) return;
+        const feature = e.features[0];
+        const props = feature.properties as { display_name?: string; geo_unit_id?: string; unit_type?: string };
+        const geoUnitId = String(feature.id ?? props.geo_unit_id ?? "");
+
+        if (areaPickerActiveRef.current) {
+          if (!map.current) return;
+          if (areaPickerUnitTypeRef.current && props.unit_type !== areaPickerUnitTypeRef.current) return;
+          const featureState = { source: "territory", sourceLayer: "territories", id: geoUnitId };
+          if (pickedAreasRef.current.has(geoUnitId)) {
+            pickedAreasRef.current.delete(geoUnitId);
+            map.current.setFeatureState(featureState, { picker_selected: false });
+          } else {
+            pickedAreasRef.current.set(geoUnitId, {
+              geoUnitId,
+              displayName: props.display_name ?? geoUnitId,
+              unitType: props.unit_type ?? "",
+            });
+            map.current.setFeatureState(featureState, { picker_selected: true });
+          }
+          setAreaPickerCount(pickedAreasRef.current.size);
+          onAreaPickerChangeRef.current?.(Array.from(pickedAreasRef.current.values()));
+          return;
+        }
+
+        if (pinPickerActiveRef.current) return;
         const displayName = props.display_name ?? geoUnitId;
         const unitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
         setSelectedZip({ geoUnitId, displayName, unitLabel });
@@ -1542,7 +2028,7 @@ export default function CampaignMap({
 
       // Hex bloom hover + click — shared handler for both dormant and active layers
       const showHexTooltip = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        if (!e.features?.[0] || pinPickerActiveRef.current) return;
+        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
         const props = e.features[0].properties as {
           bloom_stage?: number; bloom_score?: number; seed_source?: string | null;
         };
@@ -1563,7 +2049,7 @@ export default function CampaignMap({
         hoverDiv.style.display = "none";
       };
       const handleHexClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        if (!e.features?.[0] || pinPickerActiveRef.current) return;
+        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
         const props = e.features[0].properties as {
           geo_unit_id: string; h3_index: string; bloom_score: number; bloom_stage: number; seed_source: string | null;
         };
@@ -1587,10 +2073,6 @@ export default function CampaignMap({
     });
 
     return () => {
-      if (geoPermissionStatusRef.current) {
-        geoPermissionStatusRef.current.onchange = null;
-        geoPermissionStatusRef.current = null;
-      }
       if (hoverDivRef.current) {
         document.body.removeChild(hoverDivRef.current);
         hoverDivRef.current = null;
@@ -1600,7 +2082,7 @@ export default function CampaignMap({
       eventTweensRef.current.forEach((t) => t.kill());
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
-      reportMarkersRef.current.forEach((m) => m.remove());
+      businessMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
       map.current?.remove();
@@ -1614,6 +2096,13 @@ export default function CampaignMap({
       applyClaimsAsFeatureState(map.current, claims, claimLabelsRef.current, isChoropleth);
     }
   }, [claims]);
+
+  // Sync event-area highlight via feature-state when active events or their areas change
+  useEffect(() => {
+    if (map.current?.isStyleLoaded()) {
+      applyEventAreaHighlights(map.current, activeEvents, eventGeoUnitIds ?? {});
+    }
+  }, [activeEvents, eventGeoUnitIds]);
 
   // Pin picker: add/remove draggable marker with ZIP boundary constraint
   useEffect(() => {
@@ -1683,8 +2172,25 @@ export default function CampaignMap({
     };
   }, [pinPickerActive, pinPickerInitialCoords, campaign.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Area picker: clear picked areas + their feature-state when picking mode turns off
+  useEffect(() => {
+    if (areaPickerActive) return;
+    if (map.current && pickedAreasRef.current.size > 0) {
+      pickedAreasRef.current.forEach((_, id) => {
+        map.current!.setFeatureState(
+          { source: "territory", sourceLayer: "territories", id },
+          { picker_selected: false },
+        );
+      });
+    }
+    pickedAreasRef.current = new Map();
+    setAreaPickerCount(0);
+  }, [areaPickerActive]);
+
   // User location marker — auto-dropped when GPS is captured in the contribution panel
   useEffect(() => {
+    userLocationRef.current = userLocation ?? null;
+
     userLocationMarkerRef.current?.remove();
     userLocationMarkerRef.current = null;
 
@@ -1708,7 +2214,7 @@ export default function CampaignMap({
 
   // Append freshly-submitted contribution to the live map
   useEffect(() => {
-    if (!newContribution || !map.current?.isStyleLoaded()) return;
+    if (!newContribution || !map.current) return;
 
     if (isCollage) {
       const marker = addPhotoMarker(
@@ -1769,6 +2275,32 @@ export default function CampaignMap({
     source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
   }, [newContribution, isCollage, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Append freshly-submitted problem report to the live map immediately, without waiting on Realtime
+  useEffect(() => {
+    if (!newReport || !map.current) return;
+
+    const report: ProblemReportMapData = {
+      id: newReport.id,
+      geo_unit_id: null,
+      severity: newReport.severity,
+      reported_at: new Date().toISOString(),
+      photo_url: newReport.photoUrl ?? null,
+      latitude: newReport.lat,
+      longitude: newReport.lng,
+      unit_type: null,
+    };
+
+    const nextReports = [...(problemReportsRef.current?.reports ?? []), report];
+    const nextData: ProblemReports = {
+      reports: nextReports,
+      counts_by_geo_unit: problemReportsRef.current?.counts_by_geo_unit ?? {},
+      threshold: problemReportsRef.current?.threshold ?? null,
+    };
+    problemReportsRef.current = nextData;
+    setLiveReports(nextData);
+    updateReportMarkers(nextReports);
+  }, [newReport, updateReportMarkers]);
+
   // Supabase Realtime
   useEffect(() => {
     const supabase = createClient();
@@ -1779,7 +2311,7 @@ export default function CampaignMap({
       .channel(`problem_reports:${campaign.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: DB_SCHEMA, table: "problem_reports", filter: `campaign_id=eq.${campaign.id}` },
+        { event: "INSERT", schema: "public", table: "problem_reports", filter: `campaign_id=eq.${campaign.id}` },
         async () => {
           const res = await fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`).catch(() => null);
           if (!res?.ok) return;
@@ -1797,7 +2329,7 @@ export default function CampaignMap({
         "postgres_changes",
         {
           event: "*",
-          schema: DB_SCHEMA,
+          schema: "public",
           table: "territory_claims",
           filter: `campaign_id=eq.${campaign.id}`,
         },
@@ -1891,7 +2423,7 @@ export default function CampaignMap({
     <div className="relative flex flex-col flex-1 min-h-[500px]">
       <div ref={mapContainer} className="flex-1 w-full" />
 
-      {selectedZip && !pinPickerActive && (
+      {selectedZip && !pinPickerActive && !areaPickerActive && (
         isChoropleth ? (
           <StatePanel
             geoUnitId={selectedZip.geoUnitId}
@@ -1915,8 +2447,31 @@ export default function CampaignMap({
         )
       )}
 
-      {selectedHex && !pinPickerActive && (
+      {selectedHex && !pinPickerActive && !areaPickerActive && (
         <HexPanel entry={selectedHex} campaignId={campaign.id} onClose={() => setSelectedHex(null)} onPhotoSelect={setSelectedPhoto} refreshKey={hexPhotoVersion} />
+      )}
+
+      {areaPickerActive && (
+        <>
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200">
+            Click areas on the map to include them in this event.
+          </div>
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+            <button
+              onClick={onAreaPickerConfirm}
+              disabled={areaPickerCount === 0}
+              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-lg transition-colors"
+            >
+              Confirm ({areaPickerCount})
+            </button>
+            <button
+              onClick={onAreaPickerCancel}
+              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
       )}
 
       {pinPickerActive && (
@@ -1946,7 +2501,7 @@ export default function CampaignMap({
         </>
       )}
 
-      {!pinPickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
+      {!pinPickerActive && !areaPickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
         <div className="absolute top-4 left-4 z-10 max-w-[calc(100vw-2rem)] sm:max-w-xs flex flex-col gap-2">
           {activeEvents.length > 0 && (
             <div className="flex items-center gap-1.5 sm:hidden">
@@ -1969,7 +2524,8 @@ export default function CampaignMap({
           {activeEvents.length > 0 && (
             <div className={`${eventsExpanded ? "flex" : "hidden"} sm:flex flex-col gap-2 max-h-64 overflow-y-auto pr-0.5`}>
               {activeEvents.map((event) => {
-                const centroid = eventCentroidsRef.current[event.geo_unit_id ?? ""];
+                const primaryId = eventGeoUnitIdsRef.current[event.id]?.[0] ?? event.geo_unit_id ?? "";
+                const centroid = eventCentroidsRef.current[primaryId];
                 return (
                   <div
                     key={event.id}
@@ -2040,7 +2596,7 @@ export default function CampaignMap({
         </div>
       )}
 
-      {!pinPickerActive && !isCollage && (
+      {!pinPickerActive && !areaPickerActive && !isCollage && (
         <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1.5 text-xs">
           {isChoropleth ? (
             <>
@@ -2128,6 +2684,130 @@ export default function CampaignMap({
           </div>
         </div>
       )}
+
+      {selectedBusiness && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setSelectedBusiness(null)}
+        >
+          <div
+            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setSelectedBusiness(null)}
+              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+            >
+              ×
+            </button>
+            <div className="flex items-center gap-3 mb-3">
+              {selectedBusiness.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selectedBusiness.logo_url}
+                  alt={selectedBusiness.name}
+                  className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center text-xl">
+                  🏪
+                </div>
+              )}
+              <h3 className="text-lg font-semibold text-white">{selectedBusiness.name}</h3>
+            </div>
+            {selectedBusiness.description && (
+              <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.description}</p>
+            )}
+            <div className="flex flex-col gap-1.5 text-sm">
+              {selectedBusiness.website_url && (
+                <a
+                  href={selectedBusiness.website_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline"
+                >
+                  Visit website
+                </a>
+              )}
+              {selectedBusiness.google_maps_url && (
+                <a
+                  href={selectedBusiness.google_maps_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline"
+                >
+                  Open in Google Maps
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedEvent && (() => {
+        const isTimedEvent = selectedEvent.event_type === "timed_event";
+        const isHotspot = selectedEvent.event_type === "boss_spawn";
+        const badgeEmoji = isTimedEvent ? "✨" : (isHotspot ? "🔥" : "⚡");
+        const areaCount = eventGeoUnitIds?.[selectedEvent.id]?.length ?? (selectedEvent.geo_unit_id ? 1 : 0);
+        const config = selectedEvent.effect_config;
+        const multiplier =
+          config && typeof config === "object" && !Array.isArray(config) && "multiplier" in config
+            ? (config as { multiplier?: number }).multiplier
+            : undefined;
+        const cardBorderCls = isTimedEvent ? "border-amber-700/50" : "border-red-700/50";
+        const badgeImgBorderCls = isTimedEvent ? "border-amber-700/50" : "border-red-700/50";
+        const badgeBgCls = isTimedEvent ? "bg-amber-950/60 border-amber-700/50" : "bg-red-950/60 border-red-700/50";
+        const infoTextCls = isTimedEvent ? "text-amber-300" : "text-red-300";
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setSelectedEvent(null)}
+          >
+            <div
+              className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setSelectedEvent(null)}
+                className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              >
+                ×
+              </button>
+              <div className="flex items-center gap-3 mb-3">
+                {selectedEvent.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedEvent.image_url}
+                    alt={selectedEvent.title}
+                    className={`w-12 h-12 rounded-full object-cover border ${badgeImgBorderCls}`}
+                  />
+                ) : (
+                  <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-xl ${badgeBgCls}`}>
+                    {badgeEmoji}
+                  </div>
+                )}
+                <h3 className="text-lg font-semibold text-white">{selectedEvent.title}</h3>
+              </div>
+              {selectedEvent.description && (
+                <p className="text-sm text-zinc-300 mb-3">{selectedEvent.description}</p>
+              )}
+              <div className={`flex flex-col gap-1.5 text-sm ${infoTextCls}`}>
+                {typeof multiplier === "number" && (
+                  <p>{badgeEmoji} {multiplier}× score multiplier</p>
+                )}
+                <p>
+                  {selectedEvent.ends_at
+                    ? `Ends ${new Date(selectedEvent.ends_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                    : "No end date"}
+                </p>
+                {areaCount > 0 && (
+                  <p>Applies to {areaCount} area{areaCount > 1 ? "s" : ""}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

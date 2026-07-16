@@ -22,7 +22,7 @@ def _r2_client():
     )
 
 
-UPLOAD_KINDS = {"contributions", "groups", "profiles"}
+UPLOAD_KINDS = {"contributions", "groups", "profiles", "events", "partners"}
 
 
 @router.get("/presign")

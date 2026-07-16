@@ -54,6 +54,11 @@ async def _get_or_create_h3_geo_unit(db: AsyncSession, lat: float, lng: float, r
 
 TRASH_WAR_SOLARPUNK_CREDIT = 8
 
+# Max distance a cleanup submission may be from a reported hotspot to claim it as resolved.
+# UK postcode-district reports use a round metric value; everything else uses a round imperial value.
+HOTSPOT_PROXIMITY_METERS_UK = 100.0
+HOTSPOT_PROXIMITY_METERS_US = 91.44  # 300 ft
+
 
 class ContributionRequest(BaseModel):
     campaign_id: UUID
@@ -62,11 +67,67 @@ class ContributionRequest(BaseModel):
     contribution_type: str
     value: float | None = None
     photo_url: str | None = None
+    photo_urls: list[str] | None = None
     latitude: float | None = None
     longitude: float | None = None
     notes: str | None = None
     small_bags: int | None = None
     large_bags: int | None = None
+    pounds: float | None = None
+    resolve_report_id: UUID | None = None
+
+
+@router.get("/nearby-hotspot")
+async def get_nearby_hotspot(
+    campaign_id: UUID,
+    lat: float,
+    lng: float,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Find the closest open problem report within cleanup-claim range of the given point, if any.
+    Used to offer the user a choice to claim it as resolved when logging a cleanup nearby.
+    """
+    result = await db.execute(
+        text("""
+            SELECT
+                pr.id::text,
+                pr.severity,
+                pr.reported_at,
+                ST_Distance(pr.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_m,
+                gu.unit_type
+            FROM problem_reports pr
+            LEFT JOIN geo_units gu ON gu.id = pr.geo_unit_id
+            WHERE pr.campaign_id = :campaign_id
+              AND pr.status = 'open'
+              AND ST_DWithin(
+                  pr.location,
+                  ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                  CASE WHEN gu.unit_type = 'uk_postcode_district' THEN CAST(:threshold_uk AS double precision) ELSE CAST(:threshold_us AS double precision) END
+              )
+            ORDER BY distance_m ASC
+            LIMIT 1
+        """),
+        {
+            "campaign_id": str(campaign_id),
+            "lat": lat,
+            "lng": lng,
+            "threshold_uk": HOTSPOT_PROXIMITY_METERS_UK,
+            "threshold_us": HOTSPOT_PROXIMITY_METERS_US,
+        },
+    )
+    row = result.fetchone()
+    if not row:
+        return {"nearby_report": None}
+    return {
+        "nearby_report": {
+            "id": row[0],
+            "severity": row[1],
+            "reported_at": row[2].isoformat() if row[2] else None,
+            "distance_m": round(float(row[3])),
+            "unit_type": row[4],
+        }
+    }
 
 
 @router.post("/submit")
@@ -149,19 +210,22 @@ async def submit_contribution(
             multiplier = float((multiplier_row[0] or {}).get("multiplier", 1))
             effective_value = effective_value * multiplier
 
+    primary_photo_url = payload.photo_url or (payload.photo_urls[0] if payload.photo_urls else None)
+    cleanup_image_urls = payload.photo_urls if payload.photo_urls else ([payload.photo_url] if payload.photo_url else [])
+
     cleanup_id = None
     if payload.contribution_type == "cleanup":
         cleanup_result = await db.execute(
             text("""
                 INSERT INTO cleanups
                     (campaign_id, geo_unit_id, location, status, image_urls,
-                     metrics_small_bags, metrics_large_bags, submitted_by_user_id, attended_user_ids)
+                     metrics_small_bags, metrics_large_bags, metrics_pounds, submitted_by_user_id, attended_user_ids)
                 VALUES
                     (:campaign_id, :geo_unit_id,
                      CASE WHEN CAST(:lon AS double precision) IS NOT NULL AND CAST(:lat AS double precision) IS NOT NULL
                           THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
                           ELSE NULL END,
-                     'completed', :image_urls, :metrics_small_bags, :metrics_large_bags, :user_id, ARRAY[:user_id]::uuid[])
+                     'completed', :image_urls, :metrics_small_bags, :metrics_large_bags, :metrics_pounds, :user_id, ARRAY[:user_id]::uuid[])
                 RETURNING id
             """),
             {
@@ -169,13 +233,73 @@ async def submit_contribution(
                 "geo_unit_id": geo_unit_id,
                 "lon": payload.longitude,
                 "lat": payload.latitude,
-                "image_urls": [payload.photo_url] if payload.photo_url else [],
+                "image_urls": cleanup_image_urls,
                 "metrics_small_bags": payload.small_bags if payload.small_bags is not None else payload.value,
                 "metrics_large_bags": payload.large_bags,
+                "metrics_pounds": payload.pounds,
                 "user_id": str(payload.user_id),
             },
         )
         cleanup_id = str(cleanup_result.scalar())
+
+    # Hotspot claiming is opt-in: the user must explicitly choose to resolve a specific
+    # report (surfaced via GET /nearby-hotspot), and we re-verify proximity server-side
+    # rather than trusting the client's distance calculation.
+    hotspot_cleared = False
+    if payload.contribution_type == "cleanup" and payload.resolve_report_id and has_location:
+        resolved_report = await db.execute(
+            text("""
+                UPDATE problem_reports
+                SET status = 'addressed',
+                    resolved_by_cleanup_id = :cleanup_id,
+                    resolved_by_user_id = :user_id,
+                    resolved_at = NOW()
+                WHERE id = :report_id
+                  AND campaign_id = :campaign_id
+                  AND status = 'open'
+                  AND ST_DWithin(
+                      location,
+                      ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                      CASE WHEN (SELECT unit_type FROM geo_units WHERE id = problem_reports.geo_unit_id) = 'uk_postcode_district'
+                           THEN CAST(:threshold_uk AS double precision) ELSE CAST(:threshold_us AS double precision) END
+                  )
+                RETURNING geo_unit_id
+            """),
+            {
+                "cleanup_id": cleanup_id,
+                "user_id": str(payload.user_id),
+                "report_id": str(payload.resolve_report_id),
+                "campaign_id": str(payload.campaign_id),
+                "lon": payload.longitude,
+                "lat": payload.latitude,
+                "threshold_uk": HOTSPOT_PROXIMITY_METERS_UK,
+                "threshold_us": HOTSPOT_PROXIMITY_METERS_US,
+            },
+        )
+        resolved_row = resolved_report.fetchone()
+
+        if resolved_row:
+            hotspot_cleared = True
+            report_geo_unit_id = resolved_row[0]
+
+            # If that was the last open report in the geo unit, the boss spawn it fed is defeated too.
+            remaining_open = await db.execute(
+                text("SELECT 1 FROM problem_reports WHERE geo_unit_id = :geo_unit_id AND status = 'open' LIMIT 1"),
+                {"geo_unit_id": report_geo_unit_id},
+            )
+            if not remaining_open.fetchone():
+                await db.execute(
+                    text("""
+                        UPDATE campaign_events
+                        SET status = 'resolved',
+                            resolved_at = NOW()
+                        WHERE campaign_id = :campaign_id
+                          AND geo_unit_id = :geo_unit_id
+                          AND event_type = 'boss_spawn'
+                          AND status = 'active'
+                    """),
+                    {"campaign_id": str(payload.campaign_id), "geo_unit_id": report_geo_unit_id},
+                )
 
     if has_location:
         await db.execute(
@@ -196,7 +320,7 @@ async def submit_contribution(
                 "geo_unit_id": geo_unit_id,
                 "contribution_type": payload.contribution_type,
                 "value": effective_value,
-                "photo_url": payload.photo_url,
+                "photo_url": primary_photo_url,
                 "lon": payload.longitude,
                 "lat": payload.latitude,
                 "location_verified": location_verified,
@@ -220,7 +344,7 @@ async def submit_contribution(
                 "group_id": str(payload.group_id) if payload.group_id else None,
                 "contribution_type": payload.contribution_type,
                 "value": effective_value,
-                "photo_url": payload.photo_url,
+                "photo_url": primary_photo_url,
                 "notes": payload.notes,
                 "cleanup_id": cleanup_id,
             },
@@ -323,14 +447,15 @@ async def submit_contribution(
 
     await db.commit()
 
-    background_tasks.add_task(_evaluate_triggers, payload.campaign_id, db)
+    background_tasks.add_task(_evaluate_triggers, payload.campaign_id)
     if solarpunk_credit_id:
-        background_tasks.add_task(_evaluate_triggers, solarpunk_credit_id, db)
+        background_tasks.add_task(_evaluate_triggers, solarpunk_credit_id)
 
     return {
         "geo_unit_id": geo_unit_id,
         "location_verified": location_verified,
         "claimed_territory": geo_unit_id is not None,
+        "hotspot_cleared": hotspot_cleared,
     }
 
 

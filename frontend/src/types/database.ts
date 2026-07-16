@@ -31,10 +31,12 @@ export interface Database {
           avatar_url: string | null;
           bio: string | null;
           total_contributions: number;
+          points: number;
           created_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "total_contributions" | "created_at"> & {
+        Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "total_contributions" | "points" | "created_at"> & {
           total_contributions?: number;
+          points?: number;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
@@ -204,6 +206,7 @@ export interface Database {
           started_at: string;
           ends_at: string | null;
           resolved_at: string | null;
+          image_url: string | null;
         };
         Insert: Omit<Database["public"]["Tables"]["campaign_events"]["Row"], "id" | "status" | "started_at"> & {
           id?: string;
@@ -211,6 +214,19 @@ export interface Database {
           started_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["campaign_events"]["Insert"]>;
+      };
+      campaign_event_geo_units: {
+        Row: {
+          id: string;
+          event_id: string;
+          geo_unit_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["campaign_event_geo_units"]["Row"], "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["campaign_event_geo_units"]["Insert"]>;
       };
       user_notifications: {
         Row: {
