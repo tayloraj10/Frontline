@@ -16,8 +16,6 @@ type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
-const DB_SCHEMA = process.env.NEXT_PUBLIC_DB_SCHEMA || "public";
-
 const CONTINENTAL_US_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-125, 24.5],
   [-66.9, 49.5],
@@ -2020,7 +2018,7 @@ export default function CampaignMap({
       .channel(`problem_reports:${campaign.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: DB_SCHEMA, table: "problem_reports", filter: `campaign_id=eq.${campaign.id}` },
+        { event: "INSERT", schema: "public", table: "problem_reports", filter: `campaign_id=eq.${campaign.id}` },
         async () => {
           const res = await fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`).catch(() => null);
           if (!res?.ok) return;
@@ -2038,7 +2036,7 @@ export default function CampaignMap({
         "postgres_changes",
         {
           event: "*",
-          schema: DB_SCHEMA,
+          schema: "public",
           table: "territory_claims",
           filter: `campaign_id=eq.${campaign.id}`,
         },

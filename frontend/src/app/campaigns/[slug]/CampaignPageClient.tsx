@@ -7,8 +7,6 @@ import ContributionPanel from "@/components/contributions/ContributionPanel";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 
-const DB_SCHEMA = process.env.NEXT_PUBLIC_DB_SCHEMA || "public";
-
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
@@ -62,7 +60,7 @@ export function CampaignStatBar({
       .channel(`stat-bar:${campaignId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: DB_SCHEMA, table: "contributions", filter: `campaign_id=eq.${campaignId}` },
+        { event: "INSERT", schema: "public", table: "contributions", filter: `campaign_id=eq.${campaignId}` },
         (payload) => {
           const contribution = payload.new as Contribution;
           setTotalBags((prev) => prev + (contribution?.value ?? 0));
@@ -71,7 +69,7 @@ export function CampaignStatBar({
       )
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: DB_SCHEMA, table: "territory_claims", filter: `campaign_id=eq.${campaignId}` },
+        { event: "INSERT", schema: "public", table: "territory_claims", filter: `campaign_id=eq.${campaignId}` },
         () => {
           setTractsCount((prev) => prev + 1);
         },
