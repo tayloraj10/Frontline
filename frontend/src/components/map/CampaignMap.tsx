@@ -11,6 +11,7 @@ import type { Database } from "@/types/database";
 import type { ClaimLabel } from "./CampaignMapWrapper";
 import type { ProblemReports, ProblemReportMapData } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { Feature, Point } from "geojson";
+import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -49,6 +50,21 @@ function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 4
     coords.push([lng + dLng, lat + dLat]);
   }
   return coords;
+}
+
+// Event markers shrink at low zoom so they don't dominate the viewport, and reach full
+// size once zoomed in. Campaigns are bounds-fit (not a fixed initial zoom), so this curve
+// is generic rather than tuned to any one campaign's natural zoom level.
+const EVENT_MARKER_SCALE_MAX_ZOOM = 12;
+const EVENT_MARKER_SCALE_MIN_ZOOM = 5;
+const EVENT_MARKER_SCALE_MIN = 0.45;
+
+function getEventMarkerScale(zoom: number): number {
+  if (zoom >= EVENT_MARKER_SCALE_MAX_ZOOM) return 1;
+  if (zoom <= EVENT_MARKER_SCALE_MIN_ZOOM) return EVENT_MARKER_SCALE_MIN;
+  const t =
+    (zoom - EVENT_MARKER_SCALE_MIN_ZOOM) / (EVENT_MARKER_SCALE_MAX_ZOOM - EVENT_MARKER_SCALE_MIN_ZOOM);
+  return EVENT_MARKER_SCALE_MIN + t * (1 - EVENT_MARKER_SCALE_MIN);
 }
 
 // Zero-cost, no-permission-prompt signal for a UK vs. US default view. Only consulted
@@ -114,6 +130,18 @@ function hexEntryToFeature(entry: HexBloomEntry): GeoJSON.Feature<GeoJSON.Polygo
   };
 }
 
+export type MapBusiness = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  logo_url: string | null;
+  website_url: string | null;
+  google_maps_url: string | null;
+  lat: number;
+  lng: number;
+};
+
 interface Props {
   campaign: Campaign;
   claims: TerritoryClaim[];
@@ -126,12 +154,19 @@ interface Props {
   pinPickerLabel?: string;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
+  areaPickerActive?: boolean;
+  areaPickerUnitType?: string | null;
+  onAreaPickerChange?: (areas: SelectedArea[]) => void;
+  onAreaPickerConfirm?: () => void;
+  onAreaPickerCancel?: () => void;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
+  eventGeoUnitIds?: Record<string, string[]>;
+  partnerBusinesses?: MapBusiness[];
   onMobileStatsClick?: () => void;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
@@ -299,6 +334,22 @@ function applyClaimsAsFeatureState(
         claim_is_group: label?.isGroup ?? false,
       },
     );
+  }
+}
+
+function applyEventAreaHighlights(
+  map: maplibregl.Map,
+  events: CampaignEvent[],
+  eventGeoUnitIds: Record<string, string[]>,
+): void {
+  for (const event of events) {
+    const ids = eventGeoUnitIds[event.id] ?? (event.geo_unit_id ? [event.geo_unit_id] : []);
+    for (const id of ids) {
+      map.setFeatureState(
+        { source: "territory", sourceLayer: "territories", id },
+        { event_highlight: true },
+      );
+    }
   }
 }
 
@@ -873,12 +924,19 @@ export default function CampaignMap({
   pinPickerLabel,
   onPinPlaced,
   onPinCancelled,
+  areaPickerActive = false,
+  areaPickerUnitType = null,
+  onAreaPickerChange,
+  onAreaPickerConfirm,
+  onAreaPickerCancel,
   newContribution,
   newReport,
   userLocation,
   activeStyle = "outdoor",
   problemReports,
   eventCentroids,
+  eventGeoUnitIds,
+  partnerBusinesses,
   onMobileStatsClick,
   onUserLocationChange,
   onUserLocationError,
@@ -901,6 +959,8 @@ export default function CampaignMap({
   const [hexPhotoVersion, setHexPhotoVersion] = useState(0);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [selectedBusiness, setSelectedBusiness] = useState<MapBusiness | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CampaignEvent | null>(null);
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
@@ -911,9 +971,14 @@ export default function CampaignMap({
   const claimLabelsRef = useRef(claimLabels);
   const problemReportsRef = useRef(problemReports);
   const eventCentroidsRef = useRef(eventCentroids ?? {});
+  const eventGeoUnitIdsRef = useRef(eventGeoUnitIds ?? {});
   const contributionFeaturesRef = useRef<Feature<Point>[]>([]);
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const eventTweensRef = useRef<gsap.core.Tween[]>([]);
+  const eventMarkerScaleElsRef = useRef<HTMLDivElement[]>([]);
+  const eventMarkerZoomListenerRef = useRef(false);
+  const partnerBusinessesRef = useRef(partnerBusinesses ?? []);
+  const businessMarkersRef = useRef<maplibregl.Marker[]>([]);
   const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -924,9 +989,15 @@ export default function CampaignMap({
   const onUserLocationErrorRef = useRef(onUserLocationError);
   const pinPickerActiveRef = useRef(pinPickerActive);
   const pinPickerConstrainedRef = useRef(pinPickerConstrained);
+  const areaPickerActiveRef = useRef(areaPickerActive);
+  const areaPickerUnitTypeRef = useRef(areaPickerUnitType);
+  const onAreaPickerChangeRef = useRef(onAreaPickerChange);
+  const pickedAreasRef = useRef<Map<string, SelectedArea>>(new Map());
+  const [areaPickerCount, setAreaPickerCount] = useState(0);
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapReadyRef = useRef(false);
   const choroplethListenerRef = useRef(false);
+  const eventHighlightListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
   const hexDataRef = useRef<HexBloomEntry[]>([]);
 
@@ -934,9 +1005,14 @@ export default function CampaignMap({
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
   useEffect(() => { claimLabelsRef.current = claimLabels; }, [claimLabels]);
   useEffect(() => { eventCentroidsRef.current = eventCentroids ?? {}; }, [eventCentroids]);
+  useEffect(() => { eventGeoUnitIdsRef.current = eventGeoUnitIds ?? {}; }, [eventGeoUnitIds]);
+  useEffect(() => { partnerBusinessesRef.current = partnerBusinesses ?? []; }, [partnerBusinesses]);
   useEffect(() => { setSelectedZipRef.current = setSelectedZip; }, [setSelectedZip]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
+  useEffect(() => { areaPickerActiveRef.current = areaPickerActive; }, [areaPickerActive]);
+  useEffect(() => { areaPickerUnitTypeRef.current = areaPickerUnitType; }, [areaPickerUnitType]);
+  useEffect(() => { onAreaPickerChangeRef.current = onAreaPickerChange; }, [onAreaPickerChange]);
   useEffect(() => { onUserLocationChangeRef.current = onUserLocationChange; }, [onUserLocationChange]);
   useEffect(() => { onUserLocationErrorRef.current = onUserLocationError; }, [onUserLocationError]);
 
@@ -947,21 +1023,27 @@ export default function CampaignMap({
     eventTweensRef.current = [];
     eventMarkersRef.current.forEach((m) => m.remove());
     eventMarkersRef.current = [];
+    eventMarkerScaleElsRef.current = [];
 
     for (const event of events) {
-      if (!event.geo_unit_id) continue;
+      const areaIds = eventGeoUnitIdsRef.current[event.id] ?? (event.geo_unit_id ? [event.geo_unit_id] : []);
+      if (areaIds.length === 0) continue;
+      const primaryId = areaIds[0];
 
-      // Prefer server-supplied centroid; fall back to computing from viewport features.
+      // Prefer averaging server-supplied centroids across all selected areas; fall back to
+      // computing from viewport features for the primary area if none have a centroid yet.
       let lat: number;
       let lng: number;
-      const centroid = eventCentroidsRef.current[event.geo_unit_id];
-      if (centroid) {
-        lat = centroid.lat;
-        lng = centroid.lng;
+      const centroids = areaIds
+        .map((id) => eventCentroidsRef.current[id])
+        .filter((c): c is { lat: number; lng: number } => !!c);
+      if (centroids.length > 0) {
+        lat = centroids.reduce((s, c) => s + c.lat, 0) / centroids.length;
+        lng = centroids.reduce((s, c) => s + c.lng, 0) / centroids.length;
       } else {
         const features = map.current.querySourceFeatures("territory", {
           sourceLayer: "territories",
-          filter: ["==", ["id"], event.geo_unit_id],
+          filter: ["==", ["id"], primaryId],
         });
         if (!features.length) continue;
         const geom = features[0].geometry;
@@ -972,29 +1054,88 @@ export default function CampaignMap({
       }
 
       const isHotspot = event.event_type === "boss_spawn";
+      const isTimedEvent = event.event_type === "timed_event";
+      const badgeEmoji = isTimedEvent ? "✨" : (isHotspot ? "🔥" : "⚡");
+      const imageUrl = event.image_url;
 
-      // MapLibre sets `transform` on the provided element for geo-positioning.
-      // Animating `el` directly with GSAP would overwrite that transform and break placement.
-      // Instead, `el` is a transparent hit-area; GSAP animates the inner `innerEl`.
+      // MapLibre sets `transform` on the provided element for geo-positioning, and GSAP
+      // animates `innerEl`'s transform directly. Zoom-based visual scaling is a third,
+      // independent transform concern, so it gets its own wrapper (`scaleWrapper`) to
+      // avoid clobbering either of the other two.
       const el = document.createElement("div");
-      el.style.cssText = isHotspot
-        ? "width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer"
-        : "width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer";
+      const size = imageUrl ? 40 : (isHotspot || isTimedEvent ? 32 : 24);
+      el.style.cssText = `width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10`;
+
+      const scaleWrapper = document.createElement("div");
+      scaleWrapper.style.cssText =
+        `width:${size}px;height:${size}px;position:relative;transform-origin:center;` +
+        `transform:scale(${getEventMarkerScale(map.current.getZoom())});transition:transform 0.15s ease-out`;
+      el.appendChild(scaleWrapper);
 
       const innerEl = document.createElement("div");
-      innerEl.style.cssText = isHotspot
-        ? "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.92);border:1.5px solid #ef4444;font-size:17px;box-shadow:0 0 8px rgba(239,68,68,0.3),0 2px 6px rgba(0,0,0,0.6);transform-origin:center"
-        : "display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(120,27,27,0.88);border:1px solid #f87171;font-size:12px;box-shadow:0 0 5px rgba(239,68,68,0.2),0 2px 4px rgba(0,0,0,0.5);transform-origin:center";
-      innerEl.textContent = isHotspot ? "🔥" : "⚡";
+      if (imageUrl) {
+        innerEl.style.cssText =
+          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2px solid ${isTimedEvent ? "#f59e0b" : "#ef4444"};` +
+          `box-shadow:0 0 8px rgba(${isTimedEvent ? "245,158,11" : "239,68,68"},0.35),0 2px 6px rgba(0,0,0,0.6);transform-origin:center`;
+        const img = document.createElement("img");
+        img.src = imageUrl;
+        img.style.cssText = "width:100%;height:100%;object-fit:cover";
+        innerEl.appendChild(img);
+
+        const badge = document.createElement("div");
+        badge.style.cssText =
+          `position:absolute;bottom:-2px;right:-2px;width:18px;height:18px;border-radius:50%;` +
+          `background:${isTimedEvent ? "rgba(120,53,15,0.95)" : "rgba(127,29,29,0.95)"};border:1px solid ${isTimedEvent ? "#f59e0b" : "#ef4444"};display:flex;align-items:center;` +
+          "justify-content:center;font-size:11px;pointer-events:none";
+        badge.textContent = badgeEmoji;
+        scaleWrapper.appendChild(innerEl);
+        scaleWrapper.appendChild(badge);
+      } else if (isTimedEvent) {
+        innerEl.style.cssText =
+          "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(120,53,15,0.92);border:1.5px solid #f59e0b;font-size:17px;box-shadow:0 0 8px rgba(245,158,11,0.35),0 2px 6px rgba(0,0,0,0.6);transform-origin:center";
+        innerEl.textContent = badgeEmoji;
+      } else {
+        innerEl.style.cssText = isHotspot
+          ? "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(127,29,29,0.92);border:1.5px solid #ef4444;font-size:17px;box-shadow:0 0 8px rgba(239,68,68,0.3),0 2px 6px rgba(0,0,0,0.6);transform-origin:center"
+          : "display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(120,27,27,0.88);border:1px solid #f87171;font-size:12px;box-shadow:0 0 5px rgba(239,68,68,0.2),0 2px 4px rgba(0,0,0,0.5);transform-origin:center";
+        innerEl.textContent = badgeEmoji;
+      }
       innerEl.title = event.title;
-      el.appendChild(innerEl);
+      if (!imageUrl) scaleWrapper.appendChild(innerEl);
+      eventMarkerScaleElsRef.current.push(scaleWrapper);
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([lng, lat])
         .addTo(map.current!);
 
       el.onclick = () => {
-        map.current?.flyTo({ center: [lng, lat], zoom: 13, duration: 800 });
+        setSelectedEvent(event);
+        if (!map.current) return;
+        if (areaIds.length <= 1) {
+          map.current.flyTo({ center: [lng, lat], zoom: 13, duration: 800 });
+          return;
+        }
+        const bounds = new maplibregl.LngLatBounds();
+        let found = false;
+        for (const id of areaIds) {
+          const features = map.current.querySourceFeatures("territory", {
+            sourceLayer: "territories",
+            filter: ["==", ["id"], id],
+          });
+          for (const f of features) {
+            const geom = f.geometry;
+            if (geom.type === "Polygon") {
+              for (const c of geom.coordinates[0]) { bounds.extend(c as [number, number]); found = true; }
+            } else if (geom.type === "MultiPolygon") {
+              for (const poly of geom.coordinates) for (const c of poly[0]) { bounds.extend(c as [number, number]); found = true; }
+            }
+          }
+        }
+        if (found) {
+          map.current.fitBounds(bounds, { padding: 60, duration: 800, maxZoom: 14 });
+        } else {
+          map.current.flyTo({ center: [lng, lat], zoom: 13, duration: 800 });
+        }
       };
 
       eventMarkersRef.current.push(marker);
@@ -1002,6 +1143,41 @@ export default function CampaignMap({
       const entranceTween = gsap.from(innerEl, { scale: 0, duration: 0.4, ease: "back.out(1.4)" });
       const pulseTween = gsap.to(innerEl, { scale: 1.08, duration: 1.6, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.4 });
       eventTweensRef.current.push(entranceTween, pulseTween);
+    }
+  }, []);
+
+  const updateBusinessMarkers = useCallback((businesses: MapBusiness[]) => {
+    if (!map.current) return;
+
+    businessMarkersRef.current.forEach((m) => m.remove());
+    businessMarkersRef.current = [];
+
+    for (const business of businesses) {
+      const el = document.createElement("div");
+      const size = 20;
+      el.style.cssText =
+        `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
+        "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+        "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
+
+      if (business.logo_url) {
+        const img = document.createElement("img");
+        img.src = business.logo_url;
+        img.style.cssText = "width:100%;height:100%;object-fit:cover";
+        el.appendChild(img);
+      } else {
+        el.textContent = "🏪";
+        el.style.fontSize = "10px";
+      }
+      el.title = business.name;
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([business.lng, business.lat])
+        .addTo(map.current!);
+
+      el.onclick = () => setSelectedBusiness(business);
+
+      businessMarkersRef.current.push(marker);
     }
   }, []);
 
@@ -1382,6 +1558,57 @@ export default function CampaignMap({
       },
     });
 
+    m.addLayer({
+      id: "territory-event-highlight",
+      type: "line",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "line-color": "#facc15",
+        "line-width": 3,
+        "line-opacity": [
+          "case",
+          ["boolean", ["feature-state", "event_highlight"], false],
+          0.95,
+          0,
+        ],
+        "line-dasharray": [2, 1.5],
+      },
+    });
+
+    m.addLayer({
+      id: "territory-picker-fill",
+      type: "fill",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "fill-color": "#f59e0b",
+        "fill-opacity": [
+          "case",
+          ["boolean", ["feature-state", "picker_selected"], false],
+          0.55,
+          0,
+        ],
+      },
+    });
+
+    m.addLayer({
+      id: "territory-picker-highlight",
+      type: "line",
+      source: "territory",
+      "source-layer": "territories",
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": 3,
+        "line-opacity": [
+          "case",
+          ["boolean", ["feature-state", "picker_selected"], false],
+          0.95,
+          0,
+        ],
+      },
+    });
+
     const addDotLayer = () => m.addLayer({
       id: "contribution-dots",
       type: "circle",
@@ -1454,6 +1681,25 @@ export default function CampaignMap({
     } else {
       applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
     }
+    applyEventAreaHighlights(m, activeEventsRef.current, eventGeoUnitIdsRef.current);
+    // Re-apply when user pans/zooms new tiles into view; registered once, survives style swaps
+    if (!eventHighlightListenerRef.current) {
+      eventHighlightListenerRef.current = true;
+      m.on("moveend", () =>
+        m.once("idle", () =>
+          applyEventAreaHighlights(m, activeEventsRef.current, eventGeoUnitIdsRef.current),
+        ),
+      );
+    }
+    if (!eventMarkerZoomListenerRef.current) {
+      eventMarkerZoomListenerRef.current = true;
+      m.on("zoom", () => {
+        const scale = getEventMarkerScale(m.getZoom());
+        eventMarkerScaleElsRef.current.forEach((wrapperEl) => {
+          wrapperEl.style.transform = `scale(${scale})`;
+        });
+      });
+    }
     m.addSource("report-radius", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -1496,8 +1742,9 @@ export default function CampaignMap({
     });
 
     updateEventMarkers(activeEventsRef.current);
+    updateBusinessMarkers(partnerBusinessesRef.current);
     updateReportMarkers(problemReportsRef.current?.reports ?? []);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -1748,9 +1995,32 @@ export default function CampaignMap({
       });
 
       map.current.on("click", "territory-fill", (e) => {
-        if (!e.features?.[0] || pinPickerActiveRef.current) return;
-        const props = e.features[0].properties as { display_name?: string; geo_unit_id?: string; unit_type?: string };
-        const geoUnitId = String(e.features[0].id ?? props.geo_unit_id ?? "");
+        if (!e.features?.[0]) return;
+        const feature = e.features[0];
+        const props = feature.properties as { display_name?: string; geo_unit_id?: string; unit_type?: string };
+        const geoUnitId = String(feature.id ?? props.geo_unit_id ?? "");
+
+        if (areaPickerActiveRef.current) {
+          if (!map.current) return;
+          if (areaPickerUnitTypeRef.current && props.unit_type !== areaPickerUnitTypeRef.current) return;
+          const featureState = { source: "territory", sourceLayer: "territories", id: geoUnitId };
+          if (pickedAreasRef.current.has(geoUnitId)) {
+            pickedAreasRef.current.delete(geoUnitId);
+            map.current.setFeatureState(featureState, { picker_selected: false });
+          } else {
+            pickedAreasRef.current.set(geoUnitId, {
+              geoUnitId,
+              displayName: props.display_name ?? geoUnitId,
+              unitType: props.unit_type ?? "",
+            });
+            map.current.setFeatureState(featureState, { picker_selected: true });
+          }
+          setAreaPickerCount(pickedAreasRef.current.size);
+          onAreaPickerChangeRef.current?.(Array.from(pickedAreasRef.current.values()));
+          return;
+        }
+
+        if (pinPickerActiveRef.current) return;
         const displayName = props.display_name ?? geoUnitId;
         const unitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
         setSelectedZip({ geoUnitId, displayName, unitLabel });
@@ -1758,7 +2028,7 @@ export default function CampaignMap({
 
       // Hex bloom hover + click — shared handler for both dormant and active layers
       const showHexTooltip = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        if (!e.features?.[0] || pinPickerActiveRef.current) return;
+        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
         const props = e.features[0].properties as {
           bloom_stage?: number; bloom_score?: number; seed_source?: string | null;
         };
@@ -1779,7 +2049,7 @@ export default function CampaignMap({
         hoverDiv.style.display = "none";
       };
       const handleHexClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        if (!e.features?.[0] || pinPickerActiveRef.current) return;
+        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
         const props = e.features[0].properties as {
           geo_unit_id: string; h3_index: string; bloom_score: number; bloom_stage: number; seed_source: string | null;
         };
@@ -1812,6 +2082,7 @@ export default function CampaignMap({
       eventTweensRef.current.forEach((t) => t.kill());
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
+      businessMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
       map.current?.remove();
@@ -1825,6 +2096,13 @@ export default function CampaignMap({
       applyClaimsAsFeatureState(map.current, claims, claimLabelsRef.current, isChoropleth);
     }
   }, [claims]);
+
+  // Sync event-area highlight via feature-state when active events or their areas change
+  useEffect(() => {
+    if (map.current?.isStyleLoaded()) {
+      applyEventAreaHighlights(map.current, activeEvents, eventGeoUnitIds ?? {});
+    }
+  }, [activeEvents, eventGeoUnitIds]);
 
   // Pin picker: add/remove draggable marker with ZIP boundary constraint
   useEffect(() => {
@@ -1893,6 +2171,21 @@ export default function CampaignMap({
       if (outOfZoneTimerRef.current) clearTimeout(outOfZoneTimerRef.current);
     };
   }, [pinPickerActive, pinPickerInitialCoords, campaign.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Area picker: clear picked areas + their feature-state when picking mode turns off
+  useEffect(() => {
+    if (areaPickerActive) return;
+    if (map.current && pickedAreasRef.current.size > 0) {
+      pickedAreasRef.current.forEach((_, id) => {
+        map.current!.setFeatureState(
+          { source: "territory", sourceLayer: "territories", id },
+          { picker_selected: false },
+        );
+      });
+    }
+    pickedAreasRef.current = new Map();
+    setAreaPickerCount(0);
+  }, [areaPickerActive]);
 
   // User location marker — auto-dropped when GPS is captured in the contribution panel
   useEffect(() => {
@@ -2130,7 +2423,7 @@ export default function CampaignMap({
     <div className="relative flex flex-col flex-1 min-h-[500px]">
       <div ref={mapContainer} className="flex-1 w-full" />
 
-      {selectedZip && !pinPickerActive && (
+      {selectedZip && !pinPickerActive && !areaPickerActive && (
         isChoropleth ? (
           <StatePanel
             geoUnitId={selectedZip.geoUnitId}
@@ -2154,8 +2447,31 @@ export default function CampaignMap({
         )
       )}
 
-      {selectedHex && !pinPickerActive && (
+      {selectedHex && !pinPickerActive && !areaPickerActive && (
         <HexPanel entry={selectedHex} campaignId={campaign.id} onClose={() => setSelectedHex(null)} onPhotoSelect={setSelectedPhoto} refreshKey={hexPhotoVersion} />
+      )}
+
+      {areaPickerActive && (
+        <>
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200">
+            Click areas on the map to include them in this event.
+          </div>
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+            <button
+              onClick={onAreaPickerConfirm}
+              disabled={areaPickerCount === 0}
+              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-lg transition-colors"
+            >
+              Confirm ({areaPickerCount})
+            </button>
+            <button
+              onClick={onAreaPickerCancel}
+              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
       )}
 
       {pinPickerActive && (
@@ -2185,7 +2501,7 @@ export default function CampaignMap({
         </>
       )}
 
-      {!pinPickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
+      {!pinPickerActive && !areaPickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
         <div className="absolute top-4 left-4 z-10 max-w-[calc(100vw-2rem)] sm:max-w-xs flex flex-col gap-2">
           {activeEvents.length > 0 && (
             <div className="flex items-center gap-1.5 sm:hidden">
@@ -2208,7 +2524,8 @@ export default function CampaignMap({
           {activeEvents.length > 0 && (
             <div className={`${eventsExpanded ? "flex" : "hidden"} sm:flex flex-col gap-2 max-h-64 overflow-y-auto pr-0.5`}>
               {activeEvents.map((event) => {
-                const centroid = eventCentroidsRef.current[event.geo_unit_id ?? ""];
+                const primaryId = eventGeoUnitIdsRef.current[event.id]?.[0] ?? event.geo_unit_id ?? "";
+                const centroid = eventCentroidsRef.current[primaryId];
                 return (
                   <div
                     key={event.id}
@@ -2279,7 +2596,7 @@ export default function CampaignMap({
         </div>
       )}
 
-      {!pinPickerActive && !isCollage && (
+      {!pinPickerActive && !areaPickerActive && !isCollage && (
         <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1.5 text-xs">
           {isChoropleth ? (
             <>
@@ -2367,6 +2684,130 @@ export default function CampaignMap({
           </div>
         </div>
       )}
+
+      {selectedBusiness && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setSelectedBusiness(null)}
+        >
+          <div
+            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setSelectedBusiness(null)}
+              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+            >
+              ×
+            </button>
+            <div className="flex items-center gap-3 mb-3">
+              {selectedBusiness.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selectedBusiness.logo_url}
+                  alt={selectedBusiness.name}
+                  className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center text-xl">
+                  🏪
+                </div>
+              )}
+              <h3 className="text-lg font-semibold text-white">{selectedBusiness.name}</h3>
+            </div>
+            {selectedBusiness.description && (
+              <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.description}</p>
+            )}
+            <div className="flex flex-col gap-1.5 text-sm">
+              {selectedBusiness.website_url && (
+                <a
+                  href={selectedBusiness.website_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline"
+                >
+                  Visit website
+                </a>
+              )}
+              {selectedBusiness.google_maps_url && (
+                <a
+                  href={selectedBusiness.google_maps_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline"
+                >
+                  Open in Google Maps
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedEvent && (() => {
+        const isTimedEvent = selectedEvent.event_type === "timed_event";
+        const isHotspot = selectedEvent.event_type === "boss_spawn";
+        const badgeEmoji = isTimedEvent ? "✨" : (isHotspot ? "🔥" : "⚡");
+        const areaCount = eventGeoUnitIds?.[selectedEvent.id]?.length ?? (selectedEvent.geo_unit_id ? 1 : 0);
+        const config = selectedEvent.effect_config;
+        const multiplier =
+          config && typeof config === "object" && !Array.isArray(config) && "multiplier" in config
+            ? (config as { multiplier?: number }).multiplier
+            : undefined;
+        const cardBorderCls = isTimedEvent ? "border-amber-700/50" : "border-red-700/50";
+        const badgeImgBorderCls = isTimedEvent ? "border-amber-700/50" : "border-red-700/50";
+        const badgeBgCls = isTimedEvent ? "bg-amber-950/60 border-amber-700/50" : "bg-red-950/60 border-red-700/50";
+        const infoTextCls = isTimedEvent ? "text-amber-300" : "text-red-300";
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setSelectedEvent(null)}
+          >
+            <div
+              className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setSelectedEvent(null)}
+                className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              >
+                ×
+              </button>
+              <div className="flex items-center gap-3 mb-3">
+                {selectedEvent.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedEvent.image_url}
+                    alt={selectedEvent.title}
+                    className={`w-12 h-12 rounded-full object-cover border ${badgeImgBorderCls}`}
+                  />
+                ) : (
+                  <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-xl ${badgeBgCls}`}>
+                    {badgeEmoji}
+                  </div>
+                )}
+                <h3 className="text-lg font-semibold text-white">{selectedEvent.title}</h3>
+              </div>
+              {selectedEvent.description && (
+                <p className="text-sm text-zinc-300 mb-3">{selectedEvent.description}</p>
+              )}
+              <div className={`flex flex-col gap-1.5 text-sm ${infoTextCls}`}>
+                {typeof multiplier === "number" && (
+                  <p>{badgeEmoji} {multiplier}× score multiplier</p>
+                )}
+                <p>
+                  {selectedEvent.ends_at
+                    ? `Ends ${new Date(selectedEvent.ends_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                    : "No end date"}
+                </p>
+                {areaCount > 0 && (
+                  <p>Applies to {areaCount} area{areaCount > 1 ? "s" : ""}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

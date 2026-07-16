@@ -3,6 +3,8 @@
 import dynamic from "next/dynamic";
 import type { Database } from "@/types/database";
 import type { ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
+import type { MapBusiness } from "./CampaignMap";
+import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -21,12 +23,19 @@ interface Props {
   pinPickerLabel?: string;
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
+  areaPickerActive?: boolean;
+  areaPickerUnitType?: string | null;
+  onAreaPickerChange?: (areas: SelectedArea[]) => void;
+  onAreaPickerConfirm?: () => void;
+  onAreaPickerCancel?: () => void;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: string;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
+  eventGeoUnitIds?: Record<string, string[]>;
+  partnerBusinesses?: MapBusiness[];
   onMobileStatsClick?: () => void;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
