@@ -29,6 +29,14 @@ const WORLD_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-170, -58],
   [179, 80],
 ];
+// Desktop starting extent for Hex Bloom campaigns — tighter than WORLD_BOUNDS since
+// solarpunk's real activity (as opposed to its seeded example hexes scattered
+// worldwide) concentrates in North America and Europe. Mobile keeps the full
+// WORLD_BOUNDS fit since its narrower aspect ratio already zooms in similarly.
+const NORTH_AMERICA_EUROPE_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-130, 15],
+  [40, 72],
+];
 
 // Mirrors HOTSPOT_PROXIMITY_METERS_UK/US in backend/app/api/routes/contributions.py — the max
 // distance a cleanup submission may be from a reported hotspot to claim it as resolved.
@@ -1773,20 +1781,26 @@ export default function CampaignMap({
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
     void tileUrl; // consumed inside setupCustomLayers
 
-    const initialBounds: maplibregl.LngLatBoundsLike = (isHeatmap || isHexBloom)
-      ? WORLD_BOUNDS
-      : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) && isLikelyUK()
-        ? UK_BOUNDS
-        : CONTINENTAL_US_BOUNDS;
-
     // Matches the "sm" Tailwind breakpoint used for the rest of the mobile-specific
     // chrome in this component (see the `sm:hidden` overlays below).
     const isMobileViewport = window.innerWidth < 640;
+
+    const initialBounds: maplibregl.LngLatBoundsLike = isHexBloom
+      ? (isMobileViewport ? WORLD_BOUNDS : NORTH_AMERICA_EUROPE_BOUNDS)
+      : isHeatmap
+        ? WORLD_BOUNDS
+        : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) && isLikelyUK()
+          ? UK_BOUNDS
+          : CONTINENTAL_US_BOUNDS;
     // Extra bottom padding on mobile keeps the fitted bounds clear of the floating
     // stats/event chip and zoom-control overlays anchored near the bottom of the
-    // screen there (see the `absolute bottom-*` overlays below).
+    // screen there (see the `absolute bottom-*` overlays below). Hex Bloom campaigns
+    // also float a "World Bloom" widget (plus timed-event chips) over the map's
+    // top-left corner (see CampaignPageClient's `absolute top-4 left-4` overlay) —
+    // extra top/left padding there keeps the world-wide starting extent (and North
+    // America specifically) from being hidden behind it.
     const initialFitPadding = isMobileViewport
-      ? { top: 20, bottom: 90, left: 20, right: 20 }
+      ? { top: isHexBloom ? 130 : 20, bottom: 90, left: isHexBloom ? 100 : 20, right: 20 }
       : { top: 20, bottom: 20, left: 20, right: 20 };
 
     map.current = new maplibregl.Map({
