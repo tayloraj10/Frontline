@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import CampaignMapWrapper, { type ClaimLabel } from "@/components/map/CampaignMapWrapper";
 import ContributionPanel from "@/components/contributions/ContributionPanel";
@@ -121,6 +121,7 @@ export interface ProblemReportMapData {
   photo_url: string | null;
   latitude: number;
   longitude: number;
+  unit_type: string | null;
 }
 
 export interface ProblemReports {
@@ -174,6 +175,15 @@ interface NewContribution {
   lat: number;
   lng: number;
   value: number;
+  photoUrl?: string;
+  key: number;
+}
+
+interface NewReport {
+  id: string;
+  lat: number;
+  lng: number;
+  severity: string;
   photoUrl?: string;
   key: number;
 }
@@ -445,14 +455,32 @@ export default function CampaignPageClient({
   const [pinPickerLabel, setPinPickerLabel] = useState<string | undefined>(undefined);
   const [placedPinCoords, setPlacedPinCoords] = useState<Coords | null>(null);
   const [newContribution, setNewContribution] = useState<NewContribution | null>(null);
+  const [newReport, setNewReport] = useState<NewReport | null>(null);
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
+  const [locationError, setLocationError] = useState<number | null>(null);
+  // The map's GeolocateControl is the single geolocation source for the page (see
+  // CampaignMap) — this lets ContributionPanel request a fix without making its own
+  // competing geolocation call.
+  const triggerGeolocateRef = useRef<(() => boolean) | null>(null);
   const [activeMapStyle, setActiveMapStyle] = useState("outdoor");
   const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | "stats" | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
+  const [localProblemReports, setLocalProblemReports] = useState<ProblemReports | null | undefined>(problemReports);
 
-  const handleContributionSubmitted = (lat: number | null, lng: number | null, value: number, photoUrl?: string) => {
+  const handleContributionSubmitted = (
+    lat: number | null,
+    lng: number | null,
+    value: number,
+    photoUrl?: string,
+    resolvedReportId?: string,
+  ) => {
     if (lat !== null && lng !== null) {
       setNewContribution({ lat, lng, value, photoUrl, key: Date.now() });
+    }
+    if (resolvedReportId) {
+      setLocalProblemReports((prev) =>
+        prev ? { ...prev, reports: prev.reports.filter((r) => r.id !== resolvedReportId) } : prev,
+      );
     }
     if (userId) {
       setActivityItems((prev) => [
@@ -472,6 +500,10 @@ export default function CampaignPageClient({
     }
   };
 
+  const handleReportSubmitted = (lat: number, lng: number, severity: string, photoUrl?: string) => {
+    setNewReport({ id: `optimistic-${Date.now()}`, lat, lng, severity, photoUrl, key: Date.now() });
+  };
+
   const handleEnterPinPicker = (coords: Coords, constrained = true, label?: string) => {
     setPlacedPinCoords(null);
     setPinPickerInitialCoords(coords);
@@ -483,13 +515,11 @@ export default function CampaignPageClient({
   const handlePinPlaced = (lat: number, lng: number) => {
     setPlacedPinCoords({ latitude: lat, longitude: lng });
     setPinPickerActive(false);
-    setUserLocation(null);
   };
 
   const handlePinCancelled = () => {
     setPlacedPinCoords(null);
     setPinPickerActive(false);
-    setUserLocation(null);
   };
 
   const togglePanel = (panel: "leaderboard" | "activity" | "mine" | "stats") => {
@@ -524,10 +554,17 @@ export default function CampaignPageClient({
         onPinPlaced={handlePinPlaced}
         onPinCancelled={handlePinCancelled}
         newContribution={newContribution}
+        newReport={newReport}
         userLocation={userLocation}
         activeStyle={activeMapStyle}
-        problemReports={problemReports}
+        problemReports={localProblemReports}
         eventCentroids={eventCentroids}
+        onUserLocationChange={(coords) => {
+          setUserLocation(coords);
+          if (coords) setLocationError(null);
+        }}
+        onUserLocationError={setLocationError}
+        onGeolocateTrigger={(trigger) => { triggerGeolocateRef.current = trigger; }}
         onMobileStatsClick={
           statsButtonActive && (showEventsChip || (campaign.geo_unit?.includes("zip") ?? false))
             ? () => togglePanel("leaderboard")
@@ -726,7 +763,10 @@ export default function CampaignPageClient({
         pinPickerActive={pinPickerActive}
         placedPinCoords={placedPinCoords}
         onContributionSubmitted={handleContributionSubmitted}
-        onLocationCaptured={setUserLocation}
+        onReportSubmitted={handleReportSubmitted}
+        userLocation={userLocation}
+        locationError={locationError}
+        requestLocation={() => triggerGeolocateRef.current?.() ?? false}
         activeMapStyle={activeMapStyle}
         onStyleChange={setActiveMapStyle}
       />

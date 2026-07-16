@@ -18,6 +18,52 @@ type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 const DB_SCHEMA = process.env.NEXT_PUBLIC_DB_SCHEMA || "public";
 
+const CONTINENTAL_US_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-125, 24.5],
+  [-66.9, 49.5],
+];
+const UK_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-8.65, 49.85],
+  [1.87, 60.9],
+];
+const WORLD_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-170, -58],
+  [179, 80],
+];
+
+// Mirrors HOTSPOT_PROXIMITY_METERS_UK/US in backend/app/api/routes/contributions.py — the max
+// distance a cleanup submission may be from a reported hotspot to claim it as resolved.
+const REPORT_CLAIM_RADIUS_METERS_UK = 100;
+const REPORT_CLAIM_RADIUS_METERS_US = 91.44; // 300 ft
+const EARTH_RADIUS_METERS = 6371000;
+
+// Approximates a real-world-meter circle as a GeoJSON polygon so it scales correctly
+// with zoom (a DOM marker, by contrast, stays a fixed pixel size regardless of zoom).
+function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 48): [number, number][] {
+  const latRad = (lat * Math.PI) / 180;
+  const coords: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI;
+    const dx = radiusMeters * Math.cos(angle);
+    const dy = radiusMeters * Math.sin(angle);
+    const dLat = (dy / EARTH_RADIUS_METERS) * (180 / Math.PI);
+    const dLng = (dx / (EARTH_RADIUS_METERS * Math.cos(latRad))) * (180 / Math.PI);
+    coords.push([lng + dLng, lat + dLat]);
+  }
+  return coords;
+}
+
+// Zero-cost, no-permission-prompt signal for a UK vs. US default view. Only consulted
+// for campaigns whose geo_unit already covers uk_postcode_district (e.g. Trash War).
+function isLikelyUK(): boolean {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return /^Europe\/(London|Belfast|Jersey|Guernsey|Isle_of_Man)$/.test(tz);
+  } catch {
+    return false;
+  }
+}
+
 interface ContributionPoint {
   id: string;
   user_id: string | null;
@@ -83,11 +129,15 @@ interface Props {
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
+  newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   onMobileStatsClick?: () => void;
+  onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
+  onUserLocationError?: (code: number) => void;
+  onGeolocateTrigger?: (trigger: () => boolean) => void;
 }
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
@@ -826,11 +876,15 @@ export default function CampaignMap({
   onPinPlaced,
   onPinCancelled,
   newContribution,
+  newReport,
   userLocation,
   activeStyle = "outdoor",
   problemReports,
   eventCentroids,
   onMobileStatsClick,
+  onUserLocationChange,
+  onUserLocationError,
+  onGeolocateTrigger,
 }: Props) {
   const isCollage = campaignType === "collage";
   const isChoropleth = campaignType === "choropleth";
@@ -862,11 +916,14 @@ export default function CampaignMap({
   const contributionFeaturesRef = useRef<Feature<Point>[]>([]);
   const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const eventTweensRef = useRef<gsap.core.Tween[]>([]);
-  const reportMarkersRef = useRef<maplibregl.Marker[]>([]);
   const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const userLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const onUserLocationChangeRef = useRef(onUserLocationChange);
+  const onUserLocationErrorRef = useRef(onUserLocationError);
   const pinPickerActiveRef = useRef(pinPickerActive);
   const pinPickerConstrainedRef = useRef(pinPickerConstrained);
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -874,17 +931,16 @@ export default function CampaignMap({
   const choroplethListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
   const hexDataRef = useRef<HexBloomEntry[]>([]);
-  const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null);
-  const geoPermissionStatusRef = useRef<PermissionStatus | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
   useEffect(() => { claimLabelsRef.current = claimLabels; }, [claimLabels]);
-  useEffect(() => { problemReportsRef.current = problemReports; }, [problemReports]);
   useEffect(() => { eventCentroidsRef.current = eventCentroids ?? {}; }, [eventCentroids]);
   useEffect(() => { setSelectedZipRef.current = setSelectedZip; }, [setSelectedZip]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
+  useEffect(() => { onUserLocationChangeRef.current = onUserLocationChange; }, [onUserLocationChange]);
+  useEffect(() => { onUserLocationErrorRef.current = onUserLocationError; }, [onUserLocationError]);
 
   const updateEventMarkers = useCallback((events: CampaignEvent[]) => {
     if (!map.current) return;
@@ -954,21 +1010,47 @@ export default function CampaignMap({
   const updateReportMarkers = useCallback((reports: ProblemReportMapData[]) => {
     if (!map.current) return;
 
-    reportMarkersRef.current.forEach((m) => m.remove());
-    reportMarkersRef.current = [];
+    const pointsSource = map.current.getSource("report-points") as maplibregl.GeoJSONSource | undefined;
+    if (pointsSource) {
+      pointsSource.setData({
+        type: "FeatureCollection",
+        features: reports.map((report) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [report.longitude, report.latitude] },
+          properties: { severity: report.severity, reported_at: report.reported_at },
+        })),
+      });
+    }
 
-    for (const report of reports) {
-      const el = document.createElement("div");
-      el.style.cssText = "width:10px;height:10px;border-radius:50%;background:#f97316;border:1.5px solid #ea580c;opacity:0.9;pointer-events:none;flex-shrink:0";
-      el.title = `${report.severity} report`;
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([report.longitude, report.latitude])
-        .addTo(map.current!);
-
-      reportMarkersRef.current.push(marker);
+    const radiusSource = map.current.getSource("report-radius") as maplibregl.GeoJSONSource | undefined;
+    if (radiusSource) {
+      radiusSource.setData({
+        type: "FeatureCollection",
+        features: reports.map((report) => ({
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              circlePolygon(
+                report.latitude,
+                report.longitude,
+                report.unit_type === "uk_postcode_district" ? REPORT_CLAIM_RADIUS_METERS_UK : REPORT_CLAIM_RADIUS_METERS_US,
+              ),
+            ],
+          },
+          properties: { severity: report.severity },
+        })),
+      });
     }
   }, []);
+
+  // Re-render report markers whenever the parent's problemReports prop changes (e.g. a
+  // hotspot resolved via cleanup submission) — the Supabase Realtime subscription below
+  // only fires on INSERT, so UPDATEs (resolutions) need this to repaint without a reload.
+  useEffect(() => {
+    problemReportsRef.current = problemReports;
+    updateReportMarkers(problemReports?.reports ?? []);
+  }, [problemReports, updateReportMarkers]);
 
   const refreshHexBloom = useCallback(() => {
     const m = map.current;
@@ -1224,13 +1306,16 @@ export default function CampaignMap({
       "source-layer": "territories",
       paint: {
         "fill-color": ["coalesce", ["feature-state", "color"], "#a1a1aa"],
+        // Unclaimed territories (no feature-state set) get more obvious/darker as you
+        // zoom in, so they don't wash out the basemap at wide zoom levels. "zoom" must
+        // be the direct input to a top-level "interpolate" expression, so the hover/
+        // feature-state math is pushed into the per-stop output instead of wrapping it —
+        // claimed territories set an explicit "opacity" feature-state that's identical
+        // at both stops, so they interpolate to a constant and stay zoom-independent.
         "fill-opacity": [
-          "min",
-          ["+",
-            ["coalesce", ["feature-state", "opacity"], 0.22],
-            ["coalesce", ["feature-state", "pulse_extra"], 0],
-          ],
-          0.95,
+          "interpolate", ["linear"], ["zoom"],
+          9, ["min", ["+", ["coalesce", ["feature-state", "opacity"], 0.14], ["coalesce", ["feature-state", "pulse_extra"], 0]], 0.95],
+          15, ["min", ["+", ["coalesce", ["feature-state", "opacity"], 0.4], ["coalesce", ["feature-state", "pulse_extra"], 0]], 0.95],
         ],
       },
     });
@@ -1247,13 +1332,39 @@ export default function CampaignMap({
           "#ea580c",
           ["coalesce", ["feature-state", "border_color"], "#a1a1aa"],
         ],
+        // "zoom" must be the direct input to a top-level "interpolate" expression, so the
+        // hover/feature-state "case" logic is pushed into the per-stop output instead of
+        // wrapping it — the hovered branch is identical at both stops, so it interpolates
+        // to a constant and hover highlighting stays full-strength at every zoom level.
         "line-width": [
-          "case",
-          ["boolean", ["feature-state", "hover"], false],
-          ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
-          ["coalesce", ["feature-state", "border_width"], 2.0],
+          "interpolate", ["linear"], ["zoom"],
+          9, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
+            ["*", ["coalesce", ["feature-state", "border_width"], 2.0], 0.5],
+          ],
+          15, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["+", ["coalesce", ["feature-state", "border_width"], 2.0], 2.5],
+            ["coalesce", ["feature-state", "border_width"], 2.0],
+          ],
         ],
-        "line-opacity": ["coalesce", ["feature-state", "border_opacity"], 0.85],
+        // Fade non-hovered borders out at far-out zoom levels, where dozens of
+        // overlapping borders make the basemap hard to read; sharpen back up
+        // as the user zooms into individual zip codes.
+        "line-opacity": [
+          "interpolate", ["linear"], ["zoom"],
+          9, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["coalesce", ["feature-state", "border_opacity"], 0.85],
+            ["*", ["coalesce", ["feature-state", "border_opacity"], 0.85], 0.35],
+          ],
+          15, ["case",
+            ["boolean", ["feature-state", "hover"], false],
+            ["coalesce", ["feature-state", "border_opacity"], 0.85],
+            ["coalesce", ["feature-state", "border_opacity"], 0.85],
+          ],
+        ],
       },
     });
 
@@ -1345,6 +1456,47 @@ export default function CampaignMap({
     } else {
       applyClaimsAsFeatureState(m, claimsRef.current, claimLabelsRef.current);
     }
+    m.addSource("report-radius", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "report-radius-fill",
+      type: "fill",
+      source: "report-radius",
+      paint: {
+        "fill-color": "#f97316",
+        "fill-opacity": 0.08,
+      },
+    });
+    m.addLayer({
+      id: "report-radius-line",
+      type: "line",
+      source: "report-radius",
+      paint: {
+        "line-color": "#ea580c",
+        "line-width": 1.5,
+        "line-opacity": 0.65,
+      },
+    });
+
+    m.addSource("report-points", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "report-dots",
+      type: "circle",
+      source: "report-points",
+      paint: {
+        "circle-radius": 5,
+        "circle-color": "#f97316",
+        "circle-opacity": 0.9,
+        "circle-stroke-width": 1.5,
+        "circle-stroke-color": "#ea580c",
+      },
+    });
+
     updateEventMarkers(activeEventsRef.current);
     updateReportMarkers(problemReportsRef.current?.reports ?? []);
   }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1352,7 +1504,11 @@ export default function CampaignMap({
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
     if (!map.current || !mapReadyRef.current) return;
-    map.current.once("style.load", () => { setupCustomLayers(); });
+    setTilesLoading(true);
+    map.current.once("style.load", () => {
+      setupCustomLayers();
+      map.current?.once("idle", () => setTilesLoading(false));
+    });
     map.current.setStyle(styleUrl(activeStyle));
   }, [activeStyle, setupCustomLayers]);
 
@@ -1372,53 +1528,68 @@ export default function CampaignMap({
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
     void tileUrl; // consumed inside setupCustomLayers
 
+    const initialBounds: maplibregl.LngLatBoundsLike = (isHeatmap || isHexBloom)
+      ? WORLD_BOUNDS
+      : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) && isLikelyUK()
+        ? UK_BOUNDS
+        : CONTINENTAL_US_BOUNDS;
+
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: styleUrl("outdoor"),
-      center: (isHeatmap || isHexBloom)
-        ? [0, 20]
-        : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) ? [-40, 45] : [-98.5795, 39.8283],
-      zoom: (isHeatmap || isHexBloom)
-        ? 2
-        : (campaign.geo_unit?.includes("uk_postcode_district") ?? false) ? 2 : 4,
+      bounds: initialBounds,
+      fitBoundsOptions: { padding: 20 },
       attributionControl: false,
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
     if (navigator.geolocation) {
-      const addGeolocateControl = () => {
-        if (!map.current) return;
-        const control = new maplibregl.GeolocateControl({
-          positionOptions: { enableHighAccuracy: true },
-          trackUserLocation: true,
-        });
-        geolocateControlRef.current = control;
-        map.current.addControl(control, "top-right");
-        return control;
-      };
-      addGeolocateControl();
-
-      // GeolocateControl permanently disables its button after a PERMISSION_DENIED
-      // error and never re-checks. If the user grants location access afterward
-      // (e.g. via browser site settings) without a full page reload, the button
-      // stays dead. Watch the Permissions API for a live grant and rebuild the
-      // control so it works immediately instead of requiring a refresh.
-      navigator.permissions
-        ?.query({ name: "geolocation" as PermissionName })
-        .then((status) => {
-          geoPermissionStatusRef.current = status;
-          status.onchange = () => {
-            if (status.state === "granted" && map.current) {
-              const old = geolocateControlRef.current;
-              if (old) map.current.removeControl(old);
-              const fresh = addGeolocateControl();
-              fresh?.trigger();
-            }
-          };
-        })
-        .catch(() => {
-          // Permissions API not supported for geolocation (e.g. Safari) — no-op.
-        });
+      // The map's GeolocateControl is the single geolocation source for the whole app —
+      // it owns the one continuous watchPosition() (trackUserLocation: true) and every
+      // other consumer (cleanup/report submission, the custom location marker below)
+      // reads off its 'geolocate'/'error' events instead of making their own competing
+      // getCurrentPosition()/watchPosition() calls. showUserLocation is off because we
+      // draw our own pulsing marker from the userLocation prop rather than the control's
+      // built-in dot.
+      const control = new maplibregl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserLocation: false,
+      });
+      geolocateControlRef.current = control;
+      // trigger() toggles: calling it while already tracking (or sitting in an
+      // error state) turns tracking OFF instead of refreshing. hasFixRef tracks
+      // whether we're currently receiving live fixes so the exposed
+      // requestLocation() (called from ContributionPanel) only calls trigger()
+      // when it's actually safe to do so (control is OFF), matching what a real
+      // button click would do instead of silently disabling tracking. When a fix
+      // is already active we re-emit the last known position instead of just
+      // returning true — callers can have their own copy of the coords cleared
+      // out from under them (e.g. the pin picker resets userLocation to hide the
+      // GPS marker while a manual pin is shown), and the underlying watchPosition
+      // may not produce another update for a long time on a stationary device, so
+      // silently no-op'ing here left them waiting for a fix that already exists.
+      const hasFixRef = { current: false };
+      const lastPositionRef = { current: null as { latitude: number; longitude: number } | null };
+      control.on("geolocate", (e) => {
+        hasFixRef.current = true;
+        const pos = e as GeolocationPosition;
+        lastPositionRef.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        onUserLocationChangeRef.current?.(lastPositionRef.current);
+      });
+      control.on("error", (e) => {
+        hasFixRef.current = false;
+        const err = e as GeolocationPositionError;
+        onUserLocationErrorRef.current?.(err.code);
+      });
+      map.current.addControl(control, "top-right");
+      onGeolocateTrigger?.(() => {
+        if (hasFixRef.current) {
+          if (lastPositionRef.current) onUserLocationChangeRef.current?.(lastPositionRef.current);
+          return true;
+        }
+        return control.trigger();
+      });
     }
     map.current.addControl(
       new FitExtentControl(() => dataBoundsRef.current),
@@ -1432,8 +1603,10 @@ export default function CampaignMap({
     const ro = new ResizeObserver(() => map.current?.resize());
     ro.observe(mapContainer.current);
 
-    map.current.on("dataloading", () => setTilesLoading(true));
-    map.current.on("idle", () => setTilesLoading(false));
+    // Watch "idle" only once per load/style-swap rather than for the map's whole
+    // lifetime — the report-radius pulse animation repaints continuously, which
+    // would otherwise keep the map perpetually "busy" and the spinner stuck on.
+    map.current.once("idle", () => setTilesLoading(false));
 
     map.current.on("load", async () => {
       if (!map.current) return;
@@ -1459,6 +1632,30 @@ export default function CampaignMap({
           (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
       });
       map.current.on("mouseleave", "contribution-dots", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "";
+        hoverDiv.style.display = "none";
+      });
+
+      map.current.on("mouseenter", "report-dots", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "pointer";
+      });
+      map.current.on("mousemove", "report-dots", (e) => {
+        if (pinPickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as { severity?: string; reported_at?: string };
+        const date = props.reported_at
+          ? new Date(props.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
+        const severityLabel = props.severity ? props.severity.charAt(0).toUpperCase() + props.severity.slice(1) : "Unknown";
+        hoverDiv.style.display = "block";
+        hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
+        hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
+        hoverDiv.innerHTML =
+          `<div style="font-weight:700;font-size:13px;color:#f4f4f5">🗑️ Trash report</div>` +
+          `<div style="color:#f97316;font-size:11px;margin-top:4px">${severityLabel} severity</div>` +
+          (date ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">Reported ${date}</div>` : "") +
+          `<div style="color:#71717a;font-size:10px;margin-top:4px">Clean up within the shaded radius to resolve it</div>`;
+      });
+      map.current.on("mouseleave", "report-dots", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
@@ -1587,10 +1784,6 @@ export default function CampaignMap({
     });
 
     return () => {
-      if (geoPermissionStatusRef.current) {
-        geoPermissionStatusRef.current.onchange = null;
-        geoPermissionStatusRef.current = null;
-      }
       if (hoverDivRef.current) {
         document.body.removeChild(hoverDivRef.current);
         hoverDivRef.current = null;
@@ -1600,7 +1793,6 @@ export default function CampaignMap({
       eventTweensRef.current.forEach((t) => t.kill());
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
-      reportMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
       map.current?.remove();
@@ -1685,6 +1877,8 @@ export default function CampaignMap({
 
   // User location marker — auto-dropped when GPS is captured in the contribution panel
   useEffect(() => {
+    userLocationRef.current = userLocation ?? null;
+
     userLocationMarkerRef.current?.remove();
     userLocationMarkerRef.current = null;
 
@@ -1708,7 +1902,7 @@ export default function CampaignMap({
 
   // Append freshly-submitted contribution to the live map
   useEffect(() => {
-    if (!newContribution || !map.current?.isStyleLoaded()) return;
+    if (!newContribution || !map.current) return;
 
     if (isCollage) {
       const marker = addPhotoMarker(
@@ -1768,6 +1962,32 @@ export default function CampaignMap({
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
     source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
   }, [newContribution, isCollage, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Append freshly-submitted problem report to the live map immediately, without waiting on Realtime
+  useEffect(() => {
+    if (!newReport || !map.current) return;
+
+    const report: ProblemReportMapData = {
+      id: newReport.id,
+      geo_unit_id: null,
+      severity: newReport.severity,
+      reported_at: new Date().toISOString(),
+      photo_url: newReport.photoUrl ?? null,
+      latitude: newReport.lat,
+      longitude: newReport.lng,
+      unit_type: null,
+    };
+
+    const nextReports = [...(problemReportsRef.current?.reports ?? []), report];
+    const nextData: ProblemReports = {
+      reports: nextReports,
+      counts_by_geo_unit: problemReportsRef.current?.counts_by_geo_unit ?? {},
+      threshold: problemReportsRef.current?.threshold ?? null,
+    };
+    problemReportsRef.current = nextData;
+    setLiveReports(nextData);
+    updateReportMarkers(nextReports);
+  }, [newReport, updateReportMarkers]);
 
   // Supabase Realtime
   useEffect(() => {

@@ -22,11 +22,15 @@ interface Props {
   onPinPlaced?: (lat: number, lng: number) => void;
   onPinCancelled?: () => void;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
+  newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   activeStyle?: string;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   onMobileStatsClick?: () => void;
+  onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
+  onUserLocationError?: (code: number) => void;
+  onGeolocateTrigger?: (trigger: () => boolean) => void;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {

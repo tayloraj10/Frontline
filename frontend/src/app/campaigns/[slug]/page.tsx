@@ -16,7 +16,7 @@ interface Props {
   params: Promise<{ slug: string }>;
 }
 
-type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number };
+type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number; unit_type: string | null };
 type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null };
 type EventCentroid = { geo_unit_id: string; lat: number; lng: number };
 type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };

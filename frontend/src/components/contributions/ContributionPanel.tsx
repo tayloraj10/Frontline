@@ -210,59 +210,95 @@ interface ContributionPanelProps {
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
-  onLocationCaptured?: (coords: Coords) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string) => void;
+  onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string) => void;
+  userLocation?: Coords | null;
+  locationError?: number | null;
+  requestLocation?: () => boolean;
   activeMapStyle?: string;
   onStyleChange?: (id: string) => void;
 }
 
+const METERS_TO_FEET = 3.28084;
+
+function formatHotspotDistance(distanceM: number, unitType: string | null): string {
+  return unitType === "uk_postcode_district"
+    ? `${Math.round(distanceM)}m`
+    : `${Math.round(distanceM * METERS_TO_FEET)}ft`;
+}
+
 // ─── GPS hook ────────────────────────────────────────────────────────────────
 
-function useGPS() {
-  const [coords, setCoords] = useState<Coords | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [errorCode, setErrorCode] = useState<number | null>(null);
+function useGPS(
+  requestLocation: (() => boolean) | undefined,
+  liveCoords: Coords | null | undefined,
+  liveErrorCode: number | null | undefined,
+) {
+  // The map's GeolocateControl (CampaignMap) is the single geolocation source for the
+  // whole app — it owns the one continuous watchPosition(). Rather than mirroring its
+  // liveCoords/liveErrorCode into local state via effects (which fights React's
+  // set-state-in-effect rule and adds a render of lag), status/coords/errorCode are
+  // derived directly from the live props each render; `loading` and `manualErrorCode`
+  // are the only local state, and both are set exclusively from event handlers
+  // (capture/reset) or the timeout callback, never from an effect body.
+  const [loading, setLoading] = useState(false);
+  const [manualErrorCode, setManualErrorCode] = useState<number | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+  useEffect(() => clearTimer, []);
+
+  const coords = liveCoords ?? null;
+  const errorCode = liveErrorCode ?? manualErrorCode;
+  const status: "idle" | "loading" | "success" | "error" = liveCoords
+    ? "success"
+    : liveErrorCode != null || manualErrorCode !== null
+      ? "error"
+      : loading
+        ? "loading"
+        : "idle";
 
   const capture = () => {
-    if (!navigator.geolocation) {
-      setErrorCode(0);
-      setStatus("error");
+    if (status === "loading" || liveCoords) return;
+    if (typeof navigator !== "undefined" && !navigator.geolocation) {
+      setManualErrorCode(0);
       return;
     }
-    setStatus("loading");
-    setErrorCode(null);
+    setManualErrorCode(null);
+    setLoading(true);
+    clearTimer();
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-        setStatus("success");
-      },
-      (err) => {
-        if (err.code === 3) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-              setStatus("success");
-            },
-            (err2) => {
-              setErrorCode(err2.code);
-              setStatus("error");
-            },
-            { enableHighAccuracy: false, timeout: 8000 },
-          );
-          return;
-        }
-        setErrorCode(err.code);
-        setStatus("error");
-      },
-      { enableHighAccuracy: true, timeout: 12000 },
-    );
+    // requestLocation() can return false transiently — CampaignMap (and its
+    // GeolocateControl) loads via next/dynamic and may not have registered its
+    // trigger yet when this panel mounts. Retry briefly instead of immediately
+    // reporting an error for what's usually just a mount race.
+    const attempt = (retriesLeft: number) => {
+      if (requestLocation?.()) {
+        timeoutRef.current = setTimeout(() => {
+          setLoading(false);
+          setManualErrorCode(3);
+        }, 12000);
+        return;
+      }
+      if (retriesLeft <= 0) {
+        setLoading(false);
+        setManualErrorCode(4);
+        return;
+      }
+      timeoutRef.current = setTimeout(() => attempt(retriesLeft - 1), 250);
+    };
+    attempt(16);
   };
 
   const reset = () => {
-    setCoords(null);
-    setStatus("idle");
-    setErrorCode(null);
+    clearTimer();
+    setLoading(false);
+    setManualErrorCode(null);
   };
 
   return { coords, status, errorCode, capture, reset };
@@ -298,6 +334,7 @@ const GPS_ERROR_MSG: Record<number, string> = {
   1: "Location blocked — allow it in your browser/OS settings",
   2: "Location signal unavailable",
   3: "Location timed out",
+  4: "Map is still loading — try again in a moment",
 };
 
 function GpsIndicator({
@@ -368,7 +405,7 @@ function ContributeModal({
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
   onClose: () => void;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string) => void;
   activeMapStyle?: string;
 }) {
   const pathname = usePathname();
@@ -390,9 +427,10 @@ function ContributeModal({
   const [largeBags, setLargeBags] = useState("0");
   const smallBagsNum = Number(smallBags) || 0;
   const largeBagsNum = Number(largeBags) || 0;
+  const [pounds, setPounds] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("frontline:contrib:group");
@@ -403,15 +441,84 @@ function ContributeModal({
   });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
+  const [hotspotCleared, setHotspotCleared] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nearbyReport, setNearbyReport] = useState<{ id: string; distance_m: number; unit_type: string | null } | null>(null);
+  const [resolveHotspot, setResolveHotspot] = useState(true);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [activeMultiplier, setActiveMultiplier] = useState<{ multiplier: number; title: string } | null>(null);
+  const [appliedMultiplier, setAppliedMultiplier] = useState<{ multiplier: number; title: string } | null>(null);
+  const [valueFlash, setValueFlash] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
 
   const submitCoords = overrideCoords ?? gps.coords;
+  const baseValue = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 0;
+  const finalValue = baseValue * (activeMultiplier?.multiplier ?? 1);
+
+  // Flash the territory-value number whenever a hotspot bonus kicks it up, so the
+  // extra points are legible as an event, not just a bigger static number.
+  const prevFinalValueRef = useRef(finalValue);
+  useEffect(() => {
+    if (activeMultiplier && prevFinalValueRef.current !== finalValue) {
+      setValueFlash(true);
+      const t = setTimeout(() => setValueFlash(false), 400);
+      prevFinalValueRef.current = finalValue;
+      return () => clearTimeout(t);
+    }
+    prevFinalValueRef.current = finalValue;
+  }, [finalValue, activeMultiplier]);
+
+  // Offer to claim a nearby reported hotspot as cleaned up, without assuming it — the
+  // user decides whether this cleanup is for that report or just a separate one.
+  useEffect(() => {
+    if (!isCleanup || !submitCoords) {
+      setNearbyReport(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(
+      `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/nearby-hotspot?campaign_id=${campaignId}&lat=${submitCoords.latitude}&lng=${submitCoords.longitude}`,
+      { signal: controller.signal },
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setNearbyReport(data?.nearby_report ?? null))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [isCleanup, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
+
+  // Check whether the submit location is inside an active boss-spawn hotspot, so the
+  // dialog can show the same score multiplier that /contributions/submit will apply.
+  useEffect(() => {
+    if (!isCleanup || !submitCoords) {
+      setActiveMultiplier(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(
+      `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/events/campaign/${campaignId}/active-multiplier?lat=${submitCoords.latitude}&lng=${submitCoords.longitude}`,
+      { signal: controller.signal },
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setActiveMultiplier(data?.active ? { multiplier: data.multiplier, title: data.title } : null))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [isCleanup, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
+
+  useEffect(() => {
+    setResolveHotspot(true);
+  }, [nearbyReport?.id]);
+
+  useEffect(() => {
+    const urls = photos.map((p) => URL.createObjectURL(p));
+    setPhotoPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [photos]);
 
   const canSubmit = (() => {
     if (submitting) return false;
     if ((isCleanup || isPhoto) && !submitCoords) return false;
     if (isCleanup && smallBagsNum + largeBagsNum <= 0) return false;
-    if (isPhoto && !photo) return false;
+    if (isPhoto && photos.length === 0) return false;
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
     return true;
@@ -421,10 +528,12 @@ function ContributeModal({
     if (!canSubmit || !userId) return;
     setSubmitting(true);
     setError(null);
+    // Capture whether a hotspot bonus was active right now, before the async submit
+    // resolves, so the success screen's celebration matches what was actually scored.
+    setAppliedMultiplier(isCleanup ? activeMultiplier : null);
 
     try {
-      let photoUrl: string | null = null;
-      if (photo) photoUrl = await uploadToR2(photo);
+      const photoUrls = photos.length > 0 ? await Promise.all(photos.map((p) => uploadToR2(p))) : [];
 
       const value = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 1;
       const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
@@ -435,13 +544,16 @@ function ContributeModal({
         group_id: selectedGroupId,
         contribution_type: campaignContributionType,
         value,
-        photo_url: photoUrl,
+        photo_url: photoUrls[0] ?? null,
         notes: computedNotes,
       };
 
       if (isCleanup) {
         body.small_bags = smallBagsNum;
         body.large_bags = largeBagsNum;
+        if (photoUrls.length > 1) body.photo_urls = photoUrls;
+        if (pounds.trim()) body.pounds = Number(pounds);
+        if (nearbyReport && resolveHotspot) body.resolve_report_id = nearbyReport.id;
       }
 
       if (submitCoords) {
@@ -458,14 +570,16 @@ function ContributeModal({
         },
       );
       if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as { claimed_territory: boolean };
+      const data = (await res.json()) as { claimed_territory: boolean; hotspot_cleared?: boolean };
 
       onContributionSubmitted?.(
         submitCoords?.latitude ?? null,
         submitCoords?.longitude ?? null,
         value,
-        photoUrl ?? undefined,
+        photoUrls[0] ?? undefined,
+        data.hotspot_cleared && nearbyReport ? nearbyReport.id : undefined,
       );
+      setHotspotCleared(Boolean(data.hotspot_cleared));
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
     } catch {
       setError("Submission failed. Please try again.");
@@ -473,6 +587,14 @@ function ContributeModal({
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (result === "success" && appliedMultiplier) {
+      const t = setTimeout(() => setCelebrate(true), 50);
+      return () => clearTimeout(t);
+    }
+    setCelebrate(false);
+  }, [result, appliedMultiplier]);
 
   if (result) {
     return (
@@ -486,6 +608,19 @@ function ContributeModal({
           <p className="text-zinc-100 font-semibold text-center">
             {result === "success" ? config.successClaimed : config.successUnclaimed}
           </p>
+          {isCleanup && appliedMultiplier && (
+            <p
+              className={`text-sm text-orange-300 font-semibold text-center transition-all duration-500 ${
+                celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"
+              }`}
+            >
+              <span className="inline-block animate-bounce">🔥</span>{" "}
+              +{appliedMultiplier.multiplier}× hotspot bonus applied!
+            </p>
+          )}
+          {isCleanup && hotspotCleared && (
+            <p className="text-sm text-orange-400 font-semibold text-center">🔥 Hotspot cleared!</p>
+          )}
           {isCleanup && fromSolarpunk && (
             <>
               <p className="text-xs text-lime-400 text-center">+8 Solarpunk bloom points earned 🌱</p>
@@ -506,8 +641,18 @@ function ContributeModal({
   }
 
   return (
-    <ModalShell title={config.title} onClose={onClose}>
+    <ModalShell title={config.title} onClose={onClose} glow={isCleanup && Boolean(activeMultiplier)}>
       <div className="flex flex-col gap-4">
+
+        {isCleanup && activeMultiplier && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
+            <span className="text-base shrink-0">🔥</span>
+            <span>
+              Hotspot active — cleanups here earn a{" "}
+              <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> score multiplier.
+            </span>
+          </div>
+        )}
 
         {/* Account handle — unfollow only (required) */}
         {isUnfollow && (
@@ -554,6 +699,21 @@ function ContributeModal({
 
         {needsLocation && submitCoords && (
           <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+        )}
+
+        {isCleanup && nearbyReport && (
+          <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={resolveHotspot}
+              onChange={(e) => setResolveHotspot(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              🔥 There&apos;s a trash report ~{formatHotspotDistance(nearbyReport.distance_m, nearbyReport.unit_type)} away. Mark it as cleaned up?
+              <span className="block text-orange-400/70 mt-0.5">Uncheck if this is a separate cleanup.</span>
+            </span>
+          </label>
         )}
 
         {/* Cross-credit notice — only shown when arriving via the Solarpunk campaign's link */}
@@ -637,11 +797,34 @@ function ContributeModal({
             </div>
             <p className="mt-2 text-xs text-zinc-500">
               Territory value:{" "}
-              <span className="text-lg font-bold text-emerald-400">
-                {cleanupValue(smallBagsNum, largeBagsNum).toFixed(0)}
+              {activeMultiplier && (
+                <span className="line-through text-zinc-600 mr-1.5">{baseValue.toFixed(0)}</span>
+              )}
+              <span
+                className={`text-lg font-bold inline-block transition-transform duration-300 ${
+                  activeMultiplier ? "text-orange-400" : "text-emerald-400"
+                } ${valueFlash ? "scale-125" : "scale-100"}`}
+              >
+                {finalValue.toFixed(0)}
               </span>
-              <span className="ml-1 text-zinc-600">(kitchen bags count {LARGE_BAG_VALUE}x)</span>
+              {activeMultiplier ? (
+                <span className="ml-1 text-orange-400/80">({activeMultiplier.multiplier}× hotspot multiplier applied)</span>
+              ) : (
+                <span className="ml-1 text-zinc-600">(kitchen bags count {LARGE_BAG_VALUE}x)</span>
+              )}
             </p>
+            <div className="mt-3">
+              <label className="block text-[11px] text-zinc-600 mb-1">Pounds cleaned up (optional)</label>
+              <input
+                type="number"
+                min={0}
+                step="0.1"
+                value={pounds}
+                onChange={(e) => setPounds(e.target.value)}
+                placeholder="e.g. 25"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+              />
+            </div>
           </div>
         )}
 
@@ -672,14 +855,31 @@ function ContributeModal({
         {showPhoto && (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">
-              Photo {isPhoto ? "(required)" : "(optional)"}
+              {isCleanup ? "Photos" : "Photo"} {isPhoto ? "(required)" : "(optional)"}
             </label>
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+              multiple={isCleanup}
+              onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
               className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
             />
+            {photoPreviews.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {photoPreviews.map((url, i) => (
+                  <div key={url} className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center bg-black/70 text-white text-[10px] leading-none rounded-bl"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -748,6 +948,7 @@ function ReportModal({
   onEnterPinPicker,
   onClose,
   activeMapStyle,
+  onReportSubmitted,
 }: {
   campaignId: string;
   userId: string | null;
@@ -756,15 +957,27 @@ function ReportModal({
   onEnterPinPicker: () => void;
   onClose: () => void;
   activeMapStyle?: string;
+  onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string) => void;
 }) {
   const pathname = usePathname();
   const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!photo) {
+      setPhotoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(photo);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
 
   const submitCoords = overrideCoords ?? gps.coords;
 
@@ -791,6 +1004,7 @@ function ReportModal({
         },
       );
       if (!res.ok) throw new Error(await res.text());
+      onReportSubmitted?.(submitCoords.latitude, submitCoords.longitude, severity, photoUrl);
       setDone(true);
     } catch {
       setError("Report failed. Please try again.");
@@ -854,6 +1068,20 @@ function ReportModal({
             onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
             className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
           />
+          {photoPreview && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+                <img src={photoPreview} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPhoto(null)}
+                  className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center bg-black/70 text-white text-[10px] leading-none rounded-bl"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div>
@@ -1424,27 +1652,38 @@ function ModalShell({
   title,
   onClose,
   children,
+  glow,
 }: {
   title?: string;
   onClose: () => void;
   children: React.ReactNode;
+  glow?: boolean;
 }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
-        {title && (
-          <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
-            <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
-            <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">
-              ×
-            </button>
-          </div>
+      <div className="relative w-full max-w-sm">
+        {glow && (
+          <div className="absolute -inset-1 rounded-xl bg-orange-500/50 blur-md animate-pulse pointer-events-none" />
         )}
-        <div className={`overflow-y-auto ${title ? "px-5 pb-5" : "p-5"}`}>
-          {children}
+        <div
+          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] ${
+            glow ? "border-orange-600/70" : "border-zinc-800"
+          }`}
+        >
+          {title && (
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
+              <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
+              <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">
+                ×
+              </button>
+            </div>
+          )}
+          <div className={`overflow-y-auto ${title ? "px-5 pb-5" : "p-5"}`}>
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -1462,66 +1701,60 @@ export default function ContributionPanel({
   pinPickerActive,
   placedPinCoords,
   onContributionSubmitted,
-  onLocationCaptured,
+  onReportSubmitted,
+  userLocation,
+  locationError,
+  requestLocation,
   activeMapStyle,
   onStyleChange,
 }: ContributionPanelProps) {
   const isSolarpunk = campaignContributionType === "solarpunk_action";
 
-  const gps = useGPS();
+  const gps = useGPS(requestLocation, userLocation, locationError);
   const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | "all_actions" | null>(null);
+  const [contributeOverrideCoords, setContributeOverrideCoords] = useState<Coords | null>(null);
+  const [solarpunkPhotoOverrideCoords, setSolarpunkPhotoOverrideCoords] = useState<Coords | null>(null);
   const [reportOverrideCoords, setReportOverrideCoords] = useState<Coords | null>(null);
   const prevPinPickerActiveRef = useRef(false);
-  const prePinPickerModeRef = useRef<"contribute" | "report" | "solarpunk_photo" | null>(null);
 
-  useEffect(() => {
-    gps.capture();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (gps.status === "success" && gps.coords) {
-      onLocationCaptured?.(gps.coords);
-    }
-  }, [gps.status, gps.coords, onLocationCaptured]);
-
+  // The modal stays mounted (just visually hidden) while pinPickerActive is true, so its
+  // local state (photos, bag counts, notes…) survives the pin-drag round trip — it used to
+  // be unmounted via setMode(null) here, which wiped that state on every reposition.
   useEffect(() => {
     if (prevPinPickerActiveRef.current && !pinPickerActive) {
-      const prevMode = prePinPickerModeRef.current ?? "contribute";
-      setMode(prevMode);
-      if (prevMode === "report") {
+      if (mode === "report") {
         setReportOverrideCoords(placedPinCoords);
+      } else if (mode === "contribute") {
+        setContributeOverrideCoords(placedPinCoords);
+      } else if (mode === "solarpunk_photo") {
+        setSolarpunkPhotoOverrideCoords(placedPinCoords);
       }
-      prePinPickerModeRef.current = null;
     }
     prevPinPickerActiveRef.current = pinPickerActive;
-  }, [pinPickerActive, placedPinCoords]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pinPickerActive, placedPinCoords, mode]);
 
   const openContribute = () => {
     setMode("contribute");
-    if (gps.status === "idle") gps.capture();
+    setContributeOverrideCoords(null);
+    gps.capture();
   };
 
   const handleEnterPinPickerForContribute = () => {
-    if (!gps.coords) return;
-    prePinPickerModeRef.current = "contribute";
-    setMode(null);
+    const coords = contributeOverrideCoords ?? gps.coords;
+    if (!coords) return;
     const noun = CONTRIBUTION_LOCATION_NOUN[campaignContributionType] ?? "cleanup";
-    onEnterPinPicker(gps.coords, !isSolarpunk, `Drag the pin to your exact ${noun} location`);
+    onEnterPinPicker(coords, !isSolarpunk, `Drag the pin to your exact ${noun} location`);
   };
 
   const handleEnterPinPickerForSolarpunkPhoto = () => {
-    const coords = placedPinCoords ?? gps.coords;
+    const coords = solarpunkPhotoOverrideCoords ?? gps.coords;
     if (!coords) return;
-    prePinPickerModeRef.current = "solarpunk_photo";
-    setMode(null);
     onEnterPinPicker(coords, false, "Drag the pin to where you spotted it");
   };
 
   const handleEnterPinPickerForReport = () => {
     const coords = reportOverrideCoords ?? gps.coords;
     if (!coords) return;
-    prePinPickerModeRef.current = "report";
-    setMode(null);
     onEnterPinPicker(coords, false, "Drag the pin to the trash location");
   };
 
@@ -1552,7 +1785,7 @@ export default function ContributionPanel({
           </div>
           {isSolarpunk && (
             <button
-              onClick={() => { setMode("solarpunk_photo"); if (gps.status === "idle") gps.capture(); }}
+              onClick={() => { setMode("solarpunk_photo"); setSolarpunkPhotoOverrideCoords(null); gps.capture(); }}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-lime-800/60 rounded-lg text-lime-300 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
             >
               📸 Spot It
@@ -1560,7 +1793,7 @@ export default function ContributionPanel({
           )}
           {showReport && (
             <button
-              onClick={() => { setMode("report"); if (gps.status === "idle") gps.capture(); }}
+              onClick={() => { setMode("report"); setReportOverrideCoords(null); gps.capture(); }}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
             >
               ⚠️ Report Trash
@@ -1585,63 +1818,70 @@ export default function ContributionPanel({
         </div>
       )}
 
-      {mode === "contribute" && !pinPickerActive && (
-        isSolarpunk ? (
-          <SolarpunkActionModal
-            campaignId={campaignId}
-            userId={userId}
-            userGroups={userGroups}
-            gps={gps}
-            overrideCoords={placedPinCoords}
-            onEnterPinPicker={handleEnterPinPickerForContribute}
-            onClose={() => setMode(null)}
-            onContributionSubmitted={onContributionSubmitted}
-            activeMapStyle={activeMapStyle}
-          />
-        ) : (
-          <ContributeModal
-            campaignId={campaignId}
-            campaignContributionType={campaignContributionType}
-            userId={userId}
-            userGroups={userGroups}
-            gps={gps}
-            overrideCoords={placedPinCoords}
-            onEnterPinPicker={handleEnterPinPickerForContribute}
-            onClose={() => setMode(null)}
-            onContributionSubmitted={onContributionSubmitted}
-            activeMapStyle={activeMapStyle}
-          />
-        )
+      {mode === "contribute" && (
+        <div className={pinPickerActive ? "hidden" : undefined}>
+          {isSolarpunk ? (
+            <SolarpunkActionModal
+              campaignId={campaignId}
+              userId={userId}
+              userGroups={userGroups}
+              gps={gps}
+              overrideCoords={contributeOverrideCoords}
+              onEnterPinPicker={handleEnterPinPickerForContribute}
+              onClose={() => { setMode(null); setContributeOverrideCoords(null); }}
+              onContributionSubmitted={onContributionSubmitted}
+              activeMapStyle={activeMapStyle}
+            />
+          ) : (
+            <ContributeModal
+              campaignId={campaignId}
+              campaignContributionType={campaignContributionType}
+              userId={userId}
+              userGroups={userGroups}
+              gps={gps}
+              overrideCoords={contributeOverrideCoords}
+              onEnterPinPicker={handleEnterPinPickerForContribute}
+              onClose={() => { setMode(null); setContributeOverrideCoords(null); }}
+              onContributionSubmitted={onContributionSubmitted}
+              activeMapStyle={activeMapStyle}
+            />
+          )}
+        </div>
       )}
       {mode === "all_actions" && !pinPickerActive && (
         <AllActionsModal
           onClose={() => setMode(null)}
-          onLogAction={() => { setMode("contribute"); if (gps.status === "idle") gps.capture(); }}
+          onLogAction={() => { setMode("contribute"); setContributeOverrideCoords(null); gps.capture(); }}
         />
       )}
-      {mode === "solarpunk_photo" && !pinPickerActive && (
-        <SolarpunkPhotoModal
-          campaignId={campaignId}
-          userId={userId}
-          userGroups={userGroups}
-          gps={gps}
-          overrideCoords={placedPinCoords}
-          onEnterPinPicker={handleEnterPinPickerForSolarpunkPhoto}
-          onClose={() => setMode(null)}
-          onContributionSubmitted={onContributionSubmitted}
-          activeMapStyle={activeMapStyle}
-        />
+      {mode === "solarpunk_photo" && (
+        <div className={pinPickerActive ? "hidden" : undefined}>
+          <SolarpunkPhotoModal
+            campaignId={campaignId}
+            userId={userId}
+            userGroups={userGroups}
+            gps={gps}
+            overrideCoords={solarpunkPhotoOverrideCoords}
+            onEnterPinPicker={handleEnterPinPickerForSolarpunkPhoto}
+            onClose={() => { setMode(null); setSolarpunkPhotoOverrideCoords(null); }}
+            onContributionSubmitted={onContributionSubmitted}
+            activeMapStyle={activeMapStyle}
+          />
+        </div>
       )}
-      {mode === "report" && !pinPickerActive && (
-        <ReportModal
-          campaignId={campaignId}
-          userId={userId}
-          gps={gps}
-          overrideCoords={reportOverrideCoords}
-          onEnterPinPicker={handleEnterPinPickerForReport}
-          onClose={() => { setMode(null); setReportOverrideCoords(null); }}
-          activeMapStyle={activeMapStyle}
-        />
+      {mode === "report" && (
+        <div className={pinPickerActive ? "hidden" : undefined}>
+          <ReportModal
+            campaignId={campaignId}
+            userId={userId}
+            gps={gps}
+            overrideCoords={reportOverrideCoords}
+            onEnterPinPicker={handleEnterPinPickerForReport}
+            onClose={() => { setMode(null); setReportOverrideCoords(null); }}
+            activeMapStyle={activeMapStyle}
+            onReportSubmitted={onReportSubmitted}
+          />
+        </div>
       )}
     </>
   );

@@ -71,12 +71,14 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
     """Return open problem reports with extracted lat/lng, per-geo-unit counts, and the hotspot threshold."""
     rows_result = await db.execute(
         text("""
-            SELECT id, geo_unit_id, severity, reported_at, image_urls,
-                   ST_Y(location::geometry) AS latitude,
-                   ST_X(location::geometry) AS longitude
-            FROM problem_reports
-            WHERE campaign_id = :campaign_id AND status = 'open'
-            ORDER BY reported_at DESC
+            SELECT pr.id, pr.geo_unit_id, pr.severity, pr.reported_at, pr.image_urls,
+                   ST_Y(pr.location::geometry) AS latitude,
+                   ST_X(pr.location::geometry) AS longitude,
+                   gu.unit_type
+            FROM problem_reports pr
+            LEFT JOIN geo_units gu ON gu.id = pr.geo_unit_id
+            WHERE pr.campaign_id = :campaign_id AND pr.status = 'open'
+            ORDER BY pr.reported_at DESC
         """),
         {"campaign_id": str(campaign_id)},
     )
@@ -108,6 +110,7 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
                 "photo_url": row.image_urls[0] if row.image_urls else None,
                 "latitude": row.latitude,
                 "longitude": row.longitude,
+                "unit_type": row.unit_type,
             }
             for row in rows
         ],

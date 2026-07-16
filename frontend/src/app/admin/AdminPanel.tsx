@@ -96,7 +96,7 @@ const CONDITION_TEMPLATES: Record<string, object> = {
 };
 
 const EFFECT_TEMPLATES: Record<string, object> = {
-  boss_spawn: { score_multiplier: 2.0 },
+  boss_spawn: { type: "score_multiplier", multiplier: 2.0 },
   cascade_unlock: { unlocks: "new_zone" },
   notification: { message: "A campaign event has been triggered!" },
   seasonal_reset: { reset_type: "weighted" },
@@ -104,7 +104,7 @@ const EFFECT_TEMPLATES: Record<string, object> = {
 };
 
 const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = {
-  boss_spawn:     { desc: "Spawns a hotspot in a geo unit when problem reports hit a threshold. Contributions in the affected area earn a score multiplier during the event. Trigger logic is live; score multiplier effect is stored but not yet applied by the scoring engine.", implemented: true },
+  boss_spawn:     { desc: "Spawns a hotspot in a geo unit when problem reports hit a threshold. Contributions in the affected area earn a score multiplier during the event (effect_config must be {\"type\": \"score_multiplier\", \"multiplier\": N} for the multiplier to apply). Trigger logic and scoring multiplier are both live.", implemented: true },
   cascade_unlock: { desc: "Intended to unlock new zones or content when a contribution milestone is reached. The event record is created but no unlock handler exists yet.", implemented: false },
   notification:   { desc: "Meant to broadcast a message to campaign participants when a trigger fires. The event record is created but no message is dispatched anywhere yet.", implemented: false },
   seasonal_reset: { desc: "Signals a campaign-wide or weighted score reset. The event record is created but no reset logic is implemented yet.", implemented: false },
