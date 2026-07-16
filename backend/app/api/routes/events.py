@@ -1,13 +1,82 @@
 import json
 from uuid import UUID
 
+import h3
 from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.database import get_db
+from app.db.database import AsyncSessionLocal, get_db
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+
+@router.get("/campaign/{campaign_id}/active-multiplier")
+async def get_active_multiplier(
+    campaign_id: UUID,
+    lat: float,
+    lng: float,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Check whether a score_multiplier event is currently active at the given point.
+    Mirrors the geo_unit resolution in contributions.py's /submit so the frontend can
+    show the same multiplier before the user submits, not just after.
+    """
+    camp_result = await db.execute(
+        text("SELECT geo_unit FROM campaigns WHERE id = :campaign_id"),
+        {"campaign_id": str(campaign_id)},
+    )
+    camp_row = camp_result.fetchone()
+    campaign_geo_unit = camp_row[0] if camp_row else None
+
+    geo_unit_id = None
+    if campaign_geo_unit and "h3_hex" in campaign_geo_unit:
+        h3_index = h3.latlng_to_cell(lat, lng, 3)
+        geo_result = await db.execute(
+            text("SELECT id::text FROM geo_units WHERE unit_type = 'h3_hex' AND unit_id = :h3_index"),
+            {"h3_index": h3_index},
+        )
+        geo_row = geo_result.fetchone()
+        geo_unit_id = geo_row[0] if geo_row else None
+    elif campaign_geo_unit:
+        geo_result = await db.execute(
+            text("""
+                SELECT id FROM geo_units
+                WHERE ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
+                AND unit_type = ANY(:geo_unit)
+                LIMIT 1
+            """),
+            {"lon": lng, "lat": lat, "geo_unit": campaign_geo_unit},
+        )
+        geo_row = geo_result.fetchone()
+        geo_unit_id = str(geo_row[0]) if geo_row else None
+
+    if not geo_unit_id:
+        return {"active": False}
+
+    result = await db.execute(
+        text("""
+            SELECT effect_config, title FROM campaign_events
+            WHERE campaign_id = :campaign_id
+              AND status = 'active'
+              AND geo_unit_id = :geo_unit_id
+              AND (ends_at IS NULL OR ends_at > NOW())
+              AND effect_config->>'type' = 'score_multiplier'
+            LIMIT 1
+        """),
+        {"campaign_id": str(campaign_id), "geo_unit_id": geo_unit_id},
+    )
+    row = result.fetchone()
+    if not row:
+        return {"active": False}
+
+    effect_config = row[0] or {}
+    return {
+        "active": True,
+        "multiplier": float(effect_config.get("multiplier", 1)),
+        "title": row[1],
+    }
 
 
 @router.get("/campaign/{campaign_id}/centroids")
@@ -59,40 +128,42 @@ async def expire_events(db: AsyncSession = Depends(get_db)):
 async def check_event_triggers(
     campaign_id: UUID,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
 ):
     """Evaluate all active triggers for a campaign. Called after contributions are processed."""
-    background_tasks.add_task(_evaluate_triggers, campaign_id, db)
+    background_tasks.add_task(_evaluate_triggers, campaign_id)
     return {"status": "trigger evaluation queued"}
 
 
-async def _evaluate_triggers(campaign_id: UUID, db: AsyncSession):
-    status_row = await db.execute(
-        text("SELECT status FROM campaigns WHERE id = :campaign_id"),
-        {"campaign_id": str(campaign_id)},
-    )
-    campaign = status_row.fetchone()
-    if not campaign or campaign.status != "active":
-        return
+async def _evaluate_triggers(campaign_id: UUID):
+    # Runs as a BackgroundTasks job, i.e. after the request's own DB session has
+    # already been closed — must open its own session rather than reuse one.
+    async with AsyncSessionLocal() as db:
+        status_row = await db.execute(
+            text("SELECT status FROM campaigns WHERE id = :campaign_id"),
+            {"campaign_id": str(campaign_id)},
+        )
+        campaign = status_row.fetchone()
+        if not campaign or campaign.status != "active":
+            return
 
-    triggers = await db.execute(
-        text("""
-            SELECT id, condition_type, condition_config, event_type, effect_config, cooldown_hours
-            FROM event_triggers
-            WHERE campaign_id = :campaign_id AND is_active = TRUE
-        """),
-        {"campaign_id": str(campaign_id)},
-    )
+        triggers = await db.execute(
+            text("""
+                SELECT id, condition_type, condition_config, event_type, effect_config, cooldown_hours
+                FROM event_triggers
+                WHERE campaign_id = :campaign_id AND is_active = TRUE
+            """),
+            {"campaign_id": str(campaign_id)},
+        )
 
-    for trigger in triggers.fetchall():
-        if trigger.condition_type == "report_count":
-            await _check_report_count_trigger(campaign_id, trigger, db)
-        elif trigger.condition_type == "threshold_reached":
-            await _check_threshold_trigger(campaign_id, trigger, db)
-        elif trigger.condition_type == "time_elapsed":
-            await _check_time_elapsed_trigger(campaign_id, trigger, db)
+        for trigger in triggers.fetchall():
+            if trigger.condition_type == "report_count":
+                await _check_report_count_trigger(campaign_id, trigger, db)
+            elif trigger.condition_type == "threshold_reached":
+                await _check_threshold_trigger(campaign_id, trigger, db)
+            elif trigger.condition_type == "time_elapsed":
+                await _check_time_elapsed_trigger(campaign_id, trigger, db)
 
-    await db.commit()
+        await db.commit()
 
 
 async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession):
@@ -203,7 +274,7 @@ async def _check_time_elapsed_trigger(campaign_id: UUID, trigger, db: AsyncSessi
             "event_type": trigger.event_type,
             "title": config.get("title", f"Time milestone — {int(elapsed_hours)}h in!"),
             "description": config.get("description", "A time-based campaign event has been triggered."),
-            "effect_config": trigger.effect_config,
+            "effect_config": json.dumps(trigger.effect_config) if isinstance(trigger.effect_config, dict) else trigger.effect_config,
             "duration_hours": duration_hours,
         },
     )
@@ -262,7 +333,7 @@ async def _check_report_count_trigger(campaign_id: UUID, trigger, db: AsyncSessi
                 "event_type": trigger.event_type,
                 "title": config.get("title", "Boss Event — Surge Needed!"),
                 "description": config.get("description", "Reports have reached critical mass. Respond now!"),
-                "effect_config": trigger.effect_config,
+                "effect_config": json.dumps(trigger.effect_config) if isinstance(trigger.effect_config, dict) else trigger.effect_config,
                 "duration_hours": duration_hours,
             },
         )
