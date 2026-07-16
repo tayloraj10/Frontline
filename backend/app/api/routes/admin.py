@@ -268,7 +268,7 @@ async def wipe_seed_data(db: AsyncSession = Depends(get_db)):
     counts["cleanups"] = result.rowcount
 
     result = await db.execute(
-        text("DELETE FROM problem_reports WHERE reported_by = ANY(:ids)"),
+        text("DELETE FROM problem_reports WHERE submitted_by_user_id = ANY(:ids)"),
         {"ids": profile_ids},
     )
     counts["problem_reports"] = result.rowcount
@@ -331,3 +331,46 @@ async def wipe_seed_data(db: AsyncSession = Depends(get_db)):
         "auth_users_deleted": auth_deleted,
         "auth_errors": auth_errors[:20],
     }
+
+
+@router.post("/wipe-geo-unit")
+async def wipe_geo_unit_data(unit_type: str, unit_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Delete all problem_reports, contributions, cleanups, and campaign_events tied to a
+    single geo_unit (e.g. unit_type='zip', unit_id='10034') so it can be re-tested from a
+    clean slate. Leaves campaigns, geo_units, event_triggers, and every other geo_unit alone.
+    """
+    geo_row = await db.execute(
+        text("SELECT id FROM geo_units WHERE unit_type = :unit_type AND unit_id = :unit_id"),
+        {"unit_type": unit_type, "unit_id": unit_id},
+    )
+    geo_unit = geo_row.fetchone()
+    if not geo_unit:
+        raise HTTPException(404, f"No geo_unit found for unit_type={unit_type}, unit_id={unit_id}")
+    geo_unit_id = str(geo_unit.id)
+
+    counts: dict[str, int] = {}
+
+    result = await db.execute(
+        text("DELETE FROM contributions WHERE geo_unit_id = :id"), {"id": geo_unit_id}
+    )
+    counts["contributions"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM problem_reports WHERE geo_unit_id = :id"), {"id": geo_unit_id}
+    )
+    counts["problem_reports"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM cleanups WHERE geo_unit_id = :id"), {"id": geo_unit_id}
+    )
+    counts["cleanups"] = result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM campaign_events WHERE geo_unit_id = :id"), {"id": geo_unit_id}
+    )
+    counts["campaign_events"] = result.rowcount
+
+    await db.commit()
+
+    return {"geo_unit_id": geo_unit_id, "unit_type": unit_type, "unit_id": unit_id, "wiped": counts}
