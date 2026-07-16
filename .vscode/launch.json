@@ -18,13 +18,20 @@
       "request": "launch",
       "command": "npm run dev",
       "cwd": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "Supabase: Start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npx supabase start",
+      "cwd": "${workspaceFolder}"
     }
   ],
   "compounds": [
     {
       "name": "Full Stack",
-      "configurations": ["Backend: FastAPI", "Frontend: Next.js"],
-      "stopAll": true
+      "configurations": ["Supabase: Start", "Backend: FastAPI", "Frontend: Next.js"],
+      "stopAll": false
     }
   ]
 }
