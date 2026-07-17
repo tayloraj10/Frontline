@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { SelectedArea } from "./EventAreaMapPicker";
@@ -8,6 +8,7 @@ import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
 import AddressAutocomplete from "./AddressAutocomplete";
 import TimedEventForm from "@/components/events/TimedEventForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
+import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
 import { updateEvent } from "@/lib/events";
 import type { Json } from "@/types/database";
 
@@ -78,16 +79,16 @@ export type PartnerOffer = {
   points_cost: number | null;
   points_threshold: number | null;
   max_redemptions_per_user: number | null;
+  max_total_redemptions: number | null;
+  code: string | null;
   status: string;
   starts_at: string;
   ends_at: string | null;
   created_at: string;
 };
 
-export type PartnerOfferCode = {
-  id: string;
+export type OfferRedemption = {
   offer_id: string;
-  status: string;
 };
 
 type Tab = "campaigns" | "triggers" | "events" | "partners" | "leaderboard";
@@ -1105,45 +1106,59 @@ function EventsTab({ campaigns, events, setEvents }: {
 
 // ─── Partners Tab ─────────────────────────────────────────────────────────────
 
-function OfferRow({ business, offer, codes, setCodes }: {
-  business: PartnerBusiness;
+export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
   offer: PartnerOffer;
-  codes: PartnerOfferCode[];
-  setCodes: (c: PartnerOfferCode[]) => void;
+  redemptionCount: number;
+  onUpdated: (o: PartnerOffer) => void;
+  onCancelled: (id: string) => void;
 }) {
-  const [addingCodes, setAddingCodes] = useState(false);
-  const [codesText, setCodesText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
-  const offerCodes = codes.filter(c => c.offer_id === offer.id);
-  const available = offerCodes.filter(c => c.status === "available").length;
-
-  const handleAddCodes = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const lines = [...new Set(codesText.split("\n").map(l => l.trim()).filter(Boolean))];
-    if (lines.length === 0) return;
-    setLoading(true);
-    setError(null);
-
+  const handleEditOffer = async (payload: OfferFormPayload): Promise<string | null> => {
     const supabase = createClient();
-    const { data, error: insertErr } = await supabase
+    const { data, error: updateErr } = await supabase
       .schema("public")
-      .from("partner_offer_codes")
-      .insert(lines.map(code => ({ offer_id: offer.id, code, status: "available" })))
-      .select("id, offer_id, status");
+      .from("partner_offers")
+      .update(payload)
+      .eq("id", offer.id)
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
+      .single();
 
-    if (insertErr) {
-      setError(insertErr.code === "23505" ? "One or more codes already exist for this offer." : insertErr.message);
-      setLoading(false);
+    if (updateErr) return updateErr.message;
+
+    onUpdated(data as PartnerOffer);
+    setEditing(false);
+    return null;
+  };
+
+  const handleCancelOffer = async () => {
+    if (!confirm(`Cancel "${offer.title}"? It will stop showing to users.`)) return;
+    setCancelling(true);
+    const supabase = createClient();
+    const { error: updateErr } = await supabase
+      .schema("public")
+      .from("partner_offers")
+      .update({ status: "cancelled" })
+      .eq("id", offer.id);
+    setCancelling(false);
+    if (updateErr) {
+      alert(updateErr.message);
       return;
     }
-
-    setCodes([...codes, ...(data as PartnerOfferCode[])]);
-    setCodesText("");
-    setAddingCodes(false);
-    setLoading(false);
+    onCancelled(offer.id);
   };
+
+  if (editing) {
+    return (
+      <OfferForm
+        initial={offer}
+        onSubmit={handleEditOffer}
+        onCancel={() => setEditing(false)}
+        submitLabel="Save changes"
+      />
+    );
+  }
 
   return (
     <div className="border border-zinc-800 rounded-lg px-4 py-3">
@@ -1157,47 +1172,161 @@ function OfferRow({ business, offer, codes, setCodes }: {
               ? <span className="text-zinc-500">{offer.points_cost} pts</span>
               : <span className="text-zinc-500">{offer.points_threshold}+ pts to unlock</span>}
             <StatusBadge status={offer.status} />
-            <span className="text-zinc-600">{available}/{offerCodes.length} codes available</span>
+            <span className="text-zinc-600">{redemptionCount}/{offer.max_total_redemptions ?? "∞"} redeemed</span>
+            {offer.code && <span className="text-zinc-600 font-mono">code: {offer.code}</span>}
           </div>
         </div>
-        <button
-          onClick={() => setAddingCodes(!addingCodes)}
-          className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 rounded-lg transition-colors shrink-0"
-        >
-          {addingCodes ? "Cancel" : "+ Codes"}
-        </button>
+        {offer.status !== "cancelled" && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setEditing(true)}
+              className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 rounded-lg transition-colors"
+            >
+              Edit
+            </button>
+            <button
+              onClick={handleCancelOffer}
+              disabled={cancelling}
+              className="px-2.5 py-1 text-xs border border-red-900/60 text-red-500 hover:text-red-400 hover:border-red-800 rounded-lg transition-colors disabled:opacity-40"
+            >
+              {cancelling ? "Cancelling…" : "Cancel offer"}
+            </button>
+          </div>
+        )}
       </div>
-      {addingCodes && (
-        <form onSubmit={handleAddCodes} className="mt-3 space-y-2">
-          <textarea
-            className={`${inputCls} resize-none font-mono text-xs`}
-            rows={4}
-            value={codesText}
-            onChange={e => setCodesText(e.target.value)}
-            placeholder={`One code per line, e.g.\nSAVE20-A1B2\nSAVE20-C3D4`}
-          />
-          {error && <p className="text-red-400 text-xs">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading || !codesText.trim()}
-            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-xs rounded-lg font-medium transition-colors"
-          >
-            {loading ? "Adding…" : `Add codes to ${business.name}`}
-          </button>
-        </form>
-      )}
     </div>
   );
 }
 
 export type BusinessCampaignLink = { business_id: string; campaign_id: string };
 
+type BusinessAdmin = { id: string; user_id: string; username: string | null; email: string };
+type UserSearchResult = { id: string; username: string | null; email: string };
+
+function BusinessAdminsManager({ businessId }: { businessId: string }) {
+  const [admins, setAdmins] = useState<BusinessAdmin[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+
+  const loadAdmins = async () => {
+    const res = await fetch(`${fastApiUrl}/api/partners/businesses/${businessId}/admins`);
+    if (res.ok) setAdmins(await res.json());
+  };
+
+  useEffect(() => {
+    loadAdmins();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId]);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    const timeout = setTimeout(async () => {
+      const res = await fetch(`${fastApiUrl}/api/admin/users/search?q=${encodeURIComponent(query.trim())}`);
+      setSearching(false);
+      if (res.ok) setResults(await res.json());
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const handleAdd = async (user: UserSearchResult) => {
+    setLoading(true);
+    setError(null);
+    const res = await fetch(`${fastApiUrl}/api/partners/businesses/${businessId}/admins`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: user.id }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.detail ?? "Failed to add admin");
+      return;
+    }
+    setQuery("");
+    setResults([]);
+    await loadAdmins();
+  };
+
+  const handleRemove = async (adminId: string) => {
+    if (!confirm("Remove this person's access to manage this business?")) return;
+    const res = await fetch(`${fastApiUrl}/api/partners/businesses/${businessId}/admins/${adminId}`, {
+      method: "DELETE",
+    });
+    if (res.ok) setAdmins((prev) => (prev ?? []).filter((a) => a.id !== adminId));
+  };
+
+  return (
+    <div className="space-y-2 border-t border-zinc-800 pt-3">
+      <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Business admins</p>
+      <p className="text-xs text-zinc-600">
+        Users granted access here can log in and manage this business's info and offers from{" "}
+        <span className="font-mono">/partners/dashboard</span>.
+      </p>
+      {admins === null ? (
+        <p className="text-xs text-zinc-600">Loading…</p>
+      ) : admins.length === 0 ? (
+        <p className="text-xs text-zinc-600">No business admins yet.</p>
+      ) : (
+        <ul className="space-y-1">
+          {admins.map((a) => (
+            <li key={a.id} className="flex items-center justify-between text-xs bg-zinc-900/60 rounded-lg px-3 py-1.5">
+              <span className="text-zinc-300">{a.username ?? a.email} <span className="text-zinc-600">({a.email})</span></span>
+              <button onClick={() => handleRemove(a.id)} className="text-red-500 hover:text-red-400 transition-colors">
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by username or email…"
+          disabled={loading}
+          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-zinc-500 disabled:opacity-40"
+        />
+        {query.trim().length >= 2 && (
+          <div className="mt-1 w-full max-h-40 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg">
+            {searching ? (
+              <p className="text-xs text-zinc-600 px-3 py-2">Searching…</p>
+            ) : results.length === 0 ? (
+              <p className="text-xs text-zinc-600 px-3 py-2">No matching accounts.</p>
+            ) : (
+              results.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => handleAdd(u)}
+                  disabled={loading}
+                  className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-40"
+                >
+                  {u.username ?? u.email} <span className="text-zinc-600">({u.email})</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+    </div>
+  );
+}
+
 function BusinessCard({
   business,
   offers,
   setOffers,
-  codes,
-  setCodes,
+  redemptionCounts,
   campaigns,
   businesses,
   setBusinesses,
@@ -1207,8 +1336,7 @@ function BusinessCard({
   business: PartnerBusiness;
   offers: PartnerOffer[];
   setOffers: (o: PartnerOffer[]) => void;
-  codes: PartnerOfferCode[];
-  setCodes: (c: PartnerOfferCode[]) => void;
+  redemptionCounts: Record<string, number>;
   campaigns: Campaign[];
   businesses: PartnerBusiness[];
   setBusinesses: (b: PartnerBusiness[]) => void;
@@ -1220,52 +1348,23 @@ function BusinessCard({
   const [editing, setEditing] = useState(isPending);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [rejecting, setRejecting] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [redemptionMode, setRedemptionMode] = useState<"spend" | "threshold">("spend");
-  const [pointsCost, setPointsCost] = useState(100);
-  const [pointsThreshold, setPointsThreshold] = useState(500);
-  const [maxPerUser, setMaxPerUser] = useState<string>("1");
-  const [endsAt, setEndsAt] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const businessOffers = offers.filter(o => o.business_id === business.id);
 
-  const handleCreateOffer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setLoading(true);
-    setError(null);
-
+  const handleCreateOffer = async (payload: OfferFormPayload): Promise<string | null> => {
     const supabase = createClient();
     const { data, error: insertErr } = await supabase
       .schema("public")
       .from("partner_offers")
-      .insert({
-        business_id: business.id,
-        title: title.trim(),
-        description: description.trim() || null,
-        redemption_mode: redemptionMode,
-        points_cost: redemptionMode === "spend" ? pointsCost : null,
-        points_threshold: redemptionMode === "threshold" ? pointsThreshold : null,
-        max_redemptions_per_user: maxPerUser.trim() ? Number(maxPerUser) : null,
-        status: "active",
-        ends_at: endsAt ? new Date(endsAt).toISOString() : null,
-      })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, status, starts_at, ends_at, created_at")
+      .insert({ ...payload, business_id: business.id, status: "active" })
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
       .single();
 
-    if (insertErr) {
-      setError(insertErr.message);
-      setLoading(false);
-      return;
-    }
+    if (insertErr) return insertErr.message;
 
     setOffers([...offers, data as PartnerOffer]);
-    setTitle(""); setDescription(""); setRedemptionMode("spend"); setPointsCost(100); setPointsThreshold(500); setMaxPerUser("1"); setEndsAt("");
     setShowCreateOffer(false);
-    setLoading(false);
+    return null;
   };
 
   const businessCampaignIds = businessCampaignLinks.filter(l => l.business_id === business.id).map(l => l.campaign_id);
@@ -1396,7 +1495,13 @@ function BusinessCard({
             />
           )}
           {businessOffers.map(o => (
-            <OfferRow key={o.id} business={business} offer={o} codes={codes} setCodes={setCodes} />
+            <OfferRow
+              key={o.id}
+              offer={o}
+              redemptionCount={redemptionCounts[o.id] ?? 0}
+              onUpdated={(updated) => setOffers(offers.map(existing => existing.id === updated.id ? updated : existing))}
+              onCancelled={(id) => setOffers(offers.map(existing => existing.id === id ? { ...existing, status: "cancelled" } : existing))}
+            />
           ))}
           {businessOffers.length === 0 && !showCreateOffer && (
             <p className="text-xs text-zinc-600">No offers yet.</p>
@@ -1408,53 +1513,9 @@ function BusinessCard({
             {showCreateOffer ? "Cancel" : "+ New Offer"}
           </button>
           {showCreateOffer && (
-            <form onSubmit={handleCreateOffer} className="border border-zinc-700 rounded-xl p-4 bg-zinc-900/40 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2 space-y-1">
-                  <label className="text-xs text-zinc-500">Title</label>
-                  <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. 20% off any order" />
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <label className="text-xs text-zinc-500">Description</label>
-                  <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-500">Redemption mode</label>
-                  <select className={inputCls} value={redemptionMode} onChange={e => setRedemptionMode(e.target.value as "spend" | "threshold")}>
-                    <option value="spend">spend (deducts points)</option>
-                    <option value="threshold">threshold (unlocks at balance)</option>
-                  </select>
-                </div>
-                {redemptionMode === "spend" ? (
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-500">Points cost</label>
-                    <input type="number" min={0} className={inputCls} value={pointsCost} onChange={e => setPointsCost(Number(e.target.value))} />
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-500">Points threshold</label>
-                    <input type="number" min={0} className={inputCls} value={pointsThreshold} onChange={e => setPointsThreshold(Number(e.target.value))} />
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-500">Max redemptions / user</label>
-                  <input type="number" min={1} className={inputCls} value={maxPerUser} onChange={e => setMaxPerUser(e.target.value)} placeholder="Blank = unlimited" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-500">Ends</label>
-                  <input type="date" className={inputCls} value={endsAt} onChange={e => setEndsAt(e.target.value)} />
-                </div>
-              </div>
-              {error && <p className="text-red-400 text-xs">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading || !title.trim()}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
-              >
-                {loading ? "Creating…" : "Create offer"}
-              </button>
-            </form>
+            <OfferForm onSubmit={handleCreateOffer} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
           )}
+          {!isPending && <BusinessAdminsManager businessId={business.id} />}
         </div>
       )}
     </div>
@@ -1466,8 +1527,7 @@ function PartnersTab({
   setBusinesses,
   offers,
   setOffers,
-  codes,
-  setCodes,
+  redemptionCounts,
   campaigns,
   businessCampaignLinks,
   setBusinessCampaignLinks,
@@ -1476,8 +1536,7 @@ function PartnersTab({
   setBusinesses: (b: PartnerBusiness[]) => void;
   offers: PartnerOffer[];
   setOffers: (o: PartnerOffer[]) => void;
-  codes: PartnerOfferCode[];
-  setCodes: (c: PartnerOfferCode[]) => void;
+  redemptionCounts: Record<string, number>;
   campaigns: Campaign[];
   businessCampaignLinks: BusinessCampaignLink[];
   setBusinessCampaignLinks: (l: BusinessCampaignLink[]) => void;
@@ -1577,8 +1636,7 @@ function PartnersTab({
               business={b}
               offers={offers}
               setOffers={setOffers}
-              codes={codes}
-              setCodes={setCodes}
+              redemptionCounts={redemptionCounts}
               campaigns={campaigns}
               businesses={businesses}
               setBusinesses={setBusinesses}
@@ -1601,8 +1659,7 @@ function PartnersTab({
             business={b}
             offers={offers}
             setOffers={setOffers}
-            codes={codes}
-            setCodes={setCodes}
+            redemptionCounts={redemptionCounts}
             campaigns={campaigns}
             businesses={businesses}
             setBusinesses={setBusinesses}
@@ -1782,7 +1839,7 @@ export default function AdminPanel({
   initialTriggers,
   initialBusinesses,
   initialOffers,
-  initialCodes,
+  initialOfferRedemptions,
   initialBusinessCampaignLinks,
 }: {
   initialCampaigns: Campaign[];
@@ -1790,7 +1847,7 @@ export default function AdminPanel({
   initialTriggers: Trigger[];
   initialBusinesses: PartnerBusiness[];
   initialOffers: PartnerOffer[];
-  initialCodes: PartnerOfferCode[];
+  initialOfferRedemptions: OfferRedemption[];
   initialBusinessCampaignLinks: BusinessCampaignLink[];
 }) {
   const [tab, setTab] = useState<Tab>("campaigns");
@@ -1799,7 +1856,10 @@ export default function AdminPanel({
   const [triggers, setTriggers] = useState(initialTriggers);
   const [businesses, setBusinesses] = useState(initialBusinesses);
   const [offers, setOffers] = useState(initialOffers);
-  const [codes, setCodes] = useState(initialCodes);
+  const redemptionCounts = initialOfferRedemptions.reduce<Record<string, number>>((acc, r) => {
+    acc[r.offer_id] = (acc[r.offer_id] ?? 0) + 1;
+    return acc;
+  }, {});
   const [businessCampaignLinks, setBusinessCampaignLinks] = useState(initialBusinessCampaignLinks);
   const [seedingDemo, setSeedingDemo] = useState(false);
   const [seedDemoResult, setSeedDemoResult] = useState<string | null>(null);
@@ -1878,8 +1938,7 @@ export default function AdminPanel({
           setBusinesses={setBusinesses}
           offers={offers}
           setOffers={setOffers}
-          codes={codes}
-          setCodes={setCodes}
+          redemptionCounts={redemptionCounts}
           campaigns={campaigns}
           businessCampaignLinks={businessCampaignLinks}
           setBusinessCampaignLinks={setBusinessCampaignLinks}

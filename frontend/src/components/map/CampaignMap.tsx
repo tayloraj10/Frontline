@@ -148,6 +148,7 @@ export type MapBusiness = {
   google_maps_url: string | null;
   lat: number;
   lng: number;
+  activeOfferTitle?: string | null;
 };
 
 interface Props {
@@ -1161,12 +1162,16 @@ export default function CampaignMap({
     businessMarkersRef.current = [];
 
     for (const business of businesses) {
+      const hasOffer = !!business.activeOfferTitle;
       const el = document.createElement("div");
-      const size = 20;
-      el.style.cssText =
-        `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
-        "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
-        "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
+      const size = hasOffer ? 24 : 20;
+      el.style.cssText = hasOffer
+        ? `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
+          "border:2px solid #fbbf24;box-shadow:0 0 8px rgba(251,191,36,0.7),0 1px 4px rgba(0,0,0,0.6);" +
+          "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9)"
+        : `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
+          "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+          "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
 
       if (business.logo_url) {
         const img = document.createElement("img");
@@ -1174,10 +1179,10 @@ export default function CampaignMap({
         img.style.cssText = "width:100%;height:100%;object-fit:cover";
         el.appendChild(img);
       } else {
-        el.textContent = "🏪";
-        el.style.fontSize = "10px";
+        el.textContent = hasOffer ? "🎁" : "🏪";
+        el.style.fontSize = hasOffer ? "12px" : "10px";
       }
-      el.title = business.name;
+      el.title = hasOffer ? `${business.name} — ${business.activeOfferTitle}` : business.name;
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([business.lng, business.lat])
@@ -2732,6 +2737,14 @@ export default function CampaignMap({
             {selectedBusiness.description && (
               <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.description}</p>
             )}
+            {selectedBusiness.activeOfferTitle && (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50 flex items-center gap-2">
+                <span className="text-base leading-none">🎁</span>
+                <p className="text-sm text-amber-200">
+                  <span className="font-semibold">Active offer:</span> {selectedBusiness.activeOfferTitle}
+                </p>
+              </div>
+            )}
             <div className="flex flex-col gap-1.5 text-sm">
               {selectedBusiness.website_url && (
                 <a
@@ -2754,6 +2767,15 @@ export default function CampaignMap({
                 </a>
               )}
             </div>
+            <Link
+              href={`/partners/${selectedBusiness.slug}`}
+              className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-sm font-semibold shadow-sm transition-colors"
+            >
+              View offer & redeem
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
           </div>
         </div>
       )}

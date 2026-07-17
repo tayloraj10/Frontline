@@ -32,11 +32,13 @@ export interface Database {
           bio: string | null;
           total_contributions: number;
           points: number;
+          spendable_points: number;
           created_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "total_contributions" | "points" | "created_at"> & {
+        Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "total_contributions" | "points" | "spendable_points" | "created_at"> & {
           total_contributions?: number;
           points?: number;
+          spendable_points?: number;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;

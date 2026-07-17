@@ -96,20 +96,40 @@ const getCampaignPageData = unstable_cache(
         "partner_businesses(id, name, slug, description, logo_url, website_url, google_maps_url, lat, lng, status)"
       )
       .eq("campaign_id", campaign.id);
-    const partnerBusinesses: MapBusiness[] = (businessLinkRows ?? [])
+    const linkedBusinesses = (businessLinkRows ?? [])
       .map((row) => row.partner_businesses as unknown as PartnerBusinessRow | null)
-      .filter((b): b is PartnerBusinessRow => !!b && b.status === "active" && b.lat !== null && b.lng !== null)
-      .map((b) => ({
-        id: b.id,
-        name: b.name,
-        slug: b.slug,
-        description: b.description,
-        logo_url: b.logo_url,
-        website_url: b.website_url,
-        google_maps_url: b.google_maps_url,
-        lat: b.lat as number,
-        lng: b.lng as number,
-      }));
+      .filter((b): b is PartnerBusinessRow => !!b && b.status === "active" && b.lat !== null && b.lng !== null);
+
+    const businessIds = linkedBusinesses.map((b) => b.id);
+    const { data: activeOfferRows } = businessIds.length > 0
+      ? await supabase
+          .from("partner_offers")
+          .select("business_id, title, starts_at, ends_at")
+          .in("business_id", businessIds)
+          .eq("status", "active")
+      : { data: [] as { business_id: string; title: string; starts_at: string; ends_at: string | null }[] };
+    const nowIso = new Date().toISOString();
+    const activeOfferTitleByBusiness = new Map<string, string>();
+    for (const row of activeOfferRows ?? []) {
+      if (row.starts_at > nowIso) continue;
+      if (row.ends_at && row.ends_at <= nowIso) continue;
+      if (!activeOfferTitleByBusiness.has(row.business_id)) {
+        activeOfferTitleByBusiness.set(row.business_id, row.title);
+      }
+    }
+
+    const partnerBusinesses: MapBusiness[] = linkedBusinesses.map((b) => ({
+      id: b.id,
+      name: b.name,
+      slug: b.slug,
+      description: b.description,
+      logo_url: b.logo_url,
+      website_url: b.website_url,
+      google_maps_url: b.google_maps_url,
+      lat: b.lat as number,
+      lng: b.lng as number,
+      activeOfferTitle: activeOfferTitleByBusiness.get(b.id) ?? null,
+    }));
 
     const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number } = lbRes?.ok
       ? await lbRes.json()

@@ -12,20 +12,36 @@ export default async function AppHeader() {
   } = await supabase.auth.getUser();
 
   let isAdmin = false;
+  let isBusinessAdmin = false;
+  let points = 0;
+  let spendablePoints = 0;
   if (user) {
-    const { data: profile } = await supabase
-      .schema("public")
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .single();
+    const [{ data: profile }, { data: businessAdminRows }] = await Promise.all([
+      supabase
+        .schema("public")
+        .from("profiles")
+        .select("is_admin, points, spendable_points")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .schema("public")
+        .from("partner_business_admins")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1),
+    ]);
     isAdmin = profile?.is_admin ?? false;
+    points = profile?.points ?? 0;
+    spendablePoints = profile?.spendable_points ?? 0;
+    isBusinessAdmin = (businessAdminRows?.length ?? 0) > 0;
   }
 
   const navLinks = [
     { href: "/campaigns", label: "Campaigns" },
     { href: "/leaderboard", label: "Leaderboard" },
+    { href: "/partners", label: "Partners" },
     ...(user ? [{ href: "/groups", label: "Groups" }] : []),
+    ...(isBusinessAdmin ? [{ href: "/partners/dashboard", label: "Manage Business" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
   ];
 
@@ -59,12 +75,26 @@ export default async function AppHeader() {
             >
               Leaderboard
             </Link>
+            <Link
+              href="/partners"
+              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+            >
+              Partners
+            </Link>
             {user && (
               <Link
                 href="/groups"
                 className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
               >
                 Groups
+              </Link>
+            )}
+            {isBusinessAdmin && (
+              <Link
+                href="/partners/dashboard"
+                className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+              >
+                Manage Business
               </Link>
             )}
             {isAdmin && (
@@ -80,7 +110,7 @@ export default async function AppHeader() {
         <div className="flex items-center gap-2">
           <SupportButton />
           {user && <NotificationBellWrapper userId={user.id} />}
-          <UserNav user={user} />
+          <UserNav user={user} points={points} spendablePoints={spendablePoints} />
         </div>
       </div>
     </header>
