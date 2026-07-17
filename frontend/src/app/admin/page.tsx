@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "./AdminPanel";
-import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, PartnerOfferCode, BusinessCampaignLink } from "./AdminPanel";
+import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink } from "./AdminPanel";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -24,7 +24,7 @@ export default async function AdminPage() {
     { data: triggers },
     { data: businesses },
     { data: offers },
-    { data: codes },
+    { data: redemptions },
   ] = await Promise.all([
     supabase
       .schema("public")
@@ -51,12 +51,12 @@ export default async function AdminPage() {
     supabase
       .schema("public")
       .from("partner_offers")
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, status, starts_at, ends_at, created_at")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
       .order("created_at", { ascending: false }),
     supabase
       .schema("public")
-      .from("partner_offer_codes")
-      .select("id, offer_id, status"),
+      .from("partner_redemptions")
+      .select("offer_id"),
   ]);
 
   const { data: businessCampaignLinks } = await supabase
@@ -81,7 +81,7 @@ export default async function AdminPage() {
       initialTriggers={(triggers ?? []) as unknown as Trigger[]}
       initialBusinesses={(businesses ?? []) as PartnerBusiness[]}
       initialOffers={(offers ?? []) as PartnerOffer[]}
-      initialCodes={(codes ?? []) as PartnerOfferCode[]}
+      initialOfferRedemptions={(redemptions ?? []) as OfferRedemption[]}
       initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
     />
   );
