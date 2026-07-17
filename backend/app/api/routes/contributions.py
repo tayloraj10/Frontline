@@ -2,7 +2,7 @@ from uuid import UUID
 
 import h3
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,11 @@ from app.db.database import get_db
 router = APIRouter(prefix="/contributions", tags=["contributions"])
 
 BLOOM_THRESHOLDS = [0, 50, 200, 600, 1500]
+
+# Server-side source of truth for cleanup scoring — the client's `value` field is
+# ignored for cleanup contributions so a direct API call can't spoof points.
+SMALL_BAG_VALUE = 1
+LARGE_BAG_VALUE = 3
 
 
 def _bloom_stage(score: float) -> int:
@@ -75,6 +80,13 @@ class ContributionRequest(BaseModel):
     large_bags: int | None = None
     pounds: float | None = None
     resolve_report_id: UUID | None = None
+
+    @field_validator("small_bags", "large_bags")
+    @classmethod
+    def _non_negative(cls, v: int | None) -> int | None:
+        if v is not None and v < 0:
+            raise ValueError("must be non-negative")
+        return v
 
 
 @router.get("/nearby-hotspot")
@@ -191,7 +203,15 @@ async def submit_contribution(
                 location_verified = bool(prox.scalar())
 
     # Apply active score_multiplier events (campaign-wide or geo-unit-scoped)
-    effective_value = payload.value or 1
+    if payload.contribution_type == "cleanup":
+        # Recompute from bag counts server-side — never trust the client's `value`
+        # for cleanups, since that's the field a real-money prize could be won on.
+        effective_value = (
+            (payload.small_bags or 0) * SMALL_BAG_VALUE
+            + (payload.large_bags or 0) * LARGE_BAG_VALUE
+        )
+    else:
+        effective_value = payload.value or 1
     if geo_unit_id:
         multiplier_result = await db.execute(
             text("""
@@ -234,7 +254,7 @@ async def submit_contribution(
                 "lon": payload.longitude,
                 "lat": payload.latitude,
                 "image_urls": cleanup_image_urls,
-                "metrics_small_bags": payload.small_bags if payload.small_bags is not None else payload.value,
+                "metrics_small_bags": payload.small_bags,
                 "metrics_large_bags": payload.large_bags,
                 "metrics_pounds": payload.pounds,
                 "user_id": str(payload.user_id),
