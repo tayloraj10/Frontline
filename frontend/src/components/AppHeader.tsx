@@ -4,6 +4,7 @@ import UserNav from "./UserNav";
 import NotificationBellWrapper from "./NotificationBellWrapper";
 import SupportButton from "./SupportButton";
 import MobileNavToggle from "./MobileNavToggle";
+import { version as appVersion } from "../../package.json";
 
 export default async function AppHeader() {
   const supabase = await createClient();
@@ -59,7 +60,7 @@ export default async function AppHeader() {
               FRONTLINE
             </span>
             <span className="text-[10px] font-semibold text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 tracking-wider shrink-0">
-              {process.env.NEXT_PUBLIC_APP_VERSION ?? "beta"}
+              {appVersion}
             </span>
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
