@@ -378,4 +378,98 @@ async def wipe_geo_unit_data(unit_type: str, unit_id: str, db: AsyncSession = De
 
     await db.commit()
 
+
+@router.get("/users/search")
+async def search_users(q: str, db: AsyncSession = Depends(get_db)):
+    """
+    Looks up real accounts by username or email, for admin flows that need to grant
+    something to a specific user (e.g. partner business-admin access) without relying on
+    someone typing an exact email correctly. Joins through auth.users since email isn't
+    exposed via RLS/PostgREST from the public schema.
+    """
+    query = q.strip()
+    if len(query) < 2:
+        return []
+
+    rows = (
+        await db.execute(
+            text("""
+                SELECT p.id, p.username, u.email
+                FROM profiles p
+                JOIN auth.users u ON u.id = p.id
+                WHERE p.username ILIKE :pattern OR u.email ILIKE :pattern
+                ORDER BY p.username
+                LIMIT 10
+            """),
+            {"pattern": f"%{query}%"},
+        )
+    ).fetchall()
+
+    return [{"id": str(r.id), "username": r.username, "email": r.email} for r in rows]
+
+
+@router.post("/users/{user_id}/recompute-points")
+async def recompute_user_points(user_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Recomputes profiles.points and spendable_points for one user from scratch, in case a
+    bug or manual DB edit leaves either column out of sync with its source of truth
+    (contributions, problem_reports, partner_redemptions). Reuses the same
+    contribution_points() SQL function the earn-side triggers use (024_user_points.sql),
+    so this always matches what the triggers would have produced.
+    """
+    profile_row = (
+        await db.execute(text("SELECT id FROM profiles WHERE id = :id"), {"id": user_id})
+    ).fetchone()
+    if not profile_row:
+        raise HTTPException(404, "User not found")
+
+    before = (
+        await db.execute(
+            text("SELECT points, spendable_points FROM profiles WHERE id = :id"),
+            {"id": user_id},
+        )
+    ).fetchone()
+
+    contribution_total = (
+        await db.execute(
+            text("""
+                SELECT COALESCE(SUM(contribution_points(contribution_type, value)), 0) AS total
+                FROM contributions
+                WHERE user_id = :id
+            """),
+            {"id": user_id},
+        )
+    ).scalar()
+
+    report_total = (
+        await db.execute(
+            text("SELECT COUNT(*) FROM problem_reports WHERE submitted_by_user_id = :id"),
+            {"id": user_id},
+        )
+    ).scalar()
+
+    redeemed_total = (
+        await db.execute(
+            text("""
+                SELECT COALESCE(SUM(points_spent), 0) FROM partner_redemptions WHERE user_id = :id
+            """),
+            {"id": user_id},
+        )
+    ).scalar()
+
+    lifetime_points = contribution_total + report_total
+    spendable_points = lifetime_points - redeemed_total
+
+    await db.execute(
+        text("UPDATE profiles SET points = :points, spendable_points = :spendable WHERE id = :id"),
+        {"points": lifetime_points, "spendable": spendable_points, "id": user_id},
+    )
+    await db.commit()
+
+    return {
+        "user_id": user_id,
+        "before": {"points": float(before.points), "spendable_points": float(before.spendable_points)},
+        "after": {"points": float(lifetime_points), "spendable_points": float(spendable_points)},
+    }
+
     return {"geo_unit_id": geo_unit_id, "unit_type": unit_type, "unit_id": unit_id, "wiped": counts}
