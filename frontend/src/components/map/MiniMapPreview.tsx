@@ -14,10 +14,14 @@ export default function MiniMapPreview({
   lat,
   lng,
   styleId = "outdoor",
+  interactive = false,
+  heightClassName = "h-[100px]",
 }: {
   lat: number;
   lng: number;
   styleId?: string;
+  interactive?: boolean;
+  heightClassName?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -31,10 +35,11 @@ export default function MiniMapPreview({
       style: styleUrl(styleId),
       center: [lng, lat],
       zoom: 15,
-      interactive: false,
+      interactive,
       attributionControl: false,
     });
     mapRef.current = m;
+    if (interactive) m.addControl(new maplibregl.NavigationControl(), "top-right");
     const marker = new maplibregl.Marker({ color: "#22c55e" })
       .setLngLat([lng, lat])
       .addTo(m);
@@ -61,7 +66,7 @@ export default function MiniMapPreview({
   return (
     <div
       ref={containerRef}
-      className="w-full h-[100px] rounded-lg overflow-hidden border border-zinc-700/50"
+      className={`w-full ${heightClassName} rounded-lg overflow-hidden border border-zinc-700/50`}
     />
   );
 }
