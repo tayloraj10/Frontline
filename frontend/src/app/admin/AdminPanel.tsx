@@ -90,7 +90,7 @@ export type PartnerOfferCode = {
   status: string;
 };
 
-type Tab = "campaigns" | "triggers" | "events" | "partners";
+type Tab = "campaigns" | "triggers" | "events" | "partners" | "leaderboard";
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -1617,6 +1617,165 @@ function PartnersTab({
 
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 
+// ─── Leaderboard Tab ──────────────────────────────────────────────────────────
+
+type LeaderboardEntry = {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  total_value: number;
+  contribution_count: number;
+  small_bags: number;
+  large_bags: number;
+  pounds: number;
+  photo_count: number;
+};
+
+function mostRecentMonday(from: Date): Date {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const day = d.getDay(); // 0 = Sunday, 1 = Monday, ...
+  const diff = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+function toDateInputValue(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
+  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const thisMonday = mostRecentMonday(new Date());
+  const nextMonday = new Date(thisMonday);
+  nextMonday.setDate(nextMonday.getDate() + 7);
+  const [startDate, setStartDate] = useState(toDateInputValue(thisMonday));
+  const [endDate, setEndDate] = useState(toDateInputValue(nextMonday));
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const setThisWeek = () => {
+    const monday = mostRecentMonday(new Date());
+    const nextMon = new Date(monday);
+    nextMon.setDate(nextMon.getDate() + 7);
+    setStartDate(toDateInputValue(monday));
+    setEndDate(toDateInputValue(nextMon));
+  };
+
+  const fetchLeaderboard = async () => {
+    if (!campaignId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.set("start", new Date(startDate).toISOString());
+      if (endDate) params.set("end", new Date(endDate).toISOString());
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/campaigns/${campaignId}/leaderboard/range?${params.toString()}`,
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to load leaderboard");
+      setEntries(data.users ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load leaderboard");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1">Campaign</label>
+          <select
+            value={campaignId}
+            onChange={(e) => setCampaignId(e.target.value)}
+            className={inputCls}
+          >
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1">Start</label>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1">End</label>
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
+        </div>
+        <button
+          onClick={setThisWeek}
+          className="px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 rounded-lg transition-colors"
+        >
+          This week (Mon–Mon)
+        </button>
+        <button
+          onClick={fetchLeaderboard}
+          disabled={!campaignId || loading}
+          className="px-4 py-2 text-sm font-semibold bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
+        >
+          {loading ? "Loading…" : "Run"}
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      {entries.length > 0 && (
+        <div className="overflow-x-auto border border-zinc-800 rounded-xl">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                <th className="px-3 py-2">#</th>
+                <th className="px-3 py-2">User</th>
+                <th className="px-3 py-2 text-right">Value</th>
+                <th className="px-3 py-2 text-right">Small bags</th>
+                <th className="px-3 py-2 text-right">Large bags</th>
+                <th className="px-3 py-2 text-right">Submissions</th>
+                <th className="px-3 py-2 text-right">Photos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry, i) => (
+                <tr key={entry.user_id} className="border-b border-zinc-800/60 hover:bg-zinc-900/40">
+                  <td className="px-3 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
+                  <td className="px-3 py-2">
+                    <Link
+                      href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
+                      className="text-emerald-400 hover:underline"
+                    >
+                      {entry.display_name || entry.username || entry.user_id}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-zinc-100">{entry.total_value}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.small_bags}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.large_bags}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.contribution_count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    <span className={entry.photo_count === 0 ? "text-red-400 font-semibold" : "text-zinc-400"}>
+                      {entry.photo_count}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && entries.length === 0 && !error && (
+        <p className="text-sm text-zinc-500">Pick a campaign and date range, then click Run.</p>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPanel({
   initialCampaigns,
   initialEvents,
@@ -1690,7 +1849,7 @@ export default function AdminPanel({
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
-        {(["campaigns", "triggers", "events", "partners"] as Tab[]).map(t => (
+        {(["campaigns", "triggers", "events", "partners", "leaderboard"] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -1726,6 +1885,7 @@ export default function AdminPanel({
           setBusinessCampaignLinks={setBusinessCampaignLinks}
         />
       )}
+      {tab === "leaderboard" && <LeaderboardTab campaigns={campaigns} />}
     </main>
   );
 }
