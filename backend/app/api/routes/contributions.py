@@ -12,11 +12,6 @@ router = APIRouter(prefix="/contributions", tags=["contributions"])
 
 BLOOM_THRESHOLDS = [0, 50, 200, 600, 1500]
 
-# Server-side source of truth for cleanup scoring — the client's `value` field is
-# ignored for cleanup contributions so a direct API call can't spoof points.
-SMALL_BAG_VALUE = 1
-LARGE_BAG_VALUE = 3
-
 
 def _bloom_stage(score: float) -> int:
     stage = 0
@@ -80,6 +75,7 @@ class ContributionRequest(BaseModel):
     large_bags: int | None = None
     pounds: float | None = None
     resolve_report_id: UUID | None = None
+    cleanup_event_id: UUID | None = None
 
     @field_validator("small_bags", "large_bags")
     @classmethod
@@ -154,6 +150,7 @@ async def submit_contribution(
     point-in-polygon. Called directly from the frontend.
     """
     from app.api.routes.events import _evaluate_triggers
+    from app.services.contribution_scoring import record_contribution
 
     has_location = payload.latitude is not None and payload.longitude is not None
     geo_unit_id = None
@@ -170,6 +167,17 @@ async def submit_contribution(
     if camp_row[1] != "active":
         raise HTTPException(status_code=403, detail="Campaign is not accepting contributions")
     campaign_geo_unit = camp_row[0]
+
+    if payload.cleanup_event_id:
+        event_result = await db.execute(
+            text("""
+                SELECT 1 FROM cleanups
+                WHERE id = :id AND campaign_id = :campaign_id AND is_group_event = true
+            """),
+            {"id": str(payload.cleanup_event_id), "campaign_id": str(payload.campaign_id)},
+        )
+        if not event_result.fetchone():
+            raise HTTPException(status_code=404, detail="Cleanup event not found")
 
     if has_location:
         if campaign_geo_unit and "h3_hex" in campaign_geo_unit:
@@ -201,34 +209,6 @@ async def submit_contribution(
                     {"lon": payload.longitude, "lat": payload.latitude, "geo_unit_id": geo_unit_id},
                 )
                 location_verified = bool(prox.scalar())
-
-    # Apply active score_multiplier events (campaign-wide or geo-unit-scoped)
-    if payload.contribution_type == "cleanup":
-        # Recompute from bag counts server-side — never trust the client's `value`
-        # for cleanups, since that's the field a real-money prize could be won on.
-        effective_value = (
-            (payload.small_bags or 0) * SMALL_BAG_VALUE
-            + (payload.large_bags or 0) * LARGE_BAG_VALUE
-        )
-    else:
-        effective_value = payload.value or 1
-    if geo_unit_id:
-        multiplier_result = await db.execute(
-            text("""
-                SELECT effect_config FROM campaign_events
-                WHERE campaign_id = :campaign_id
-                  AND status = 'active'
-                  AND (geo_unit_id IS NULL OR geo_unit_id = :geo_unit_id)
-                  AND (ends_at IS NULL OR ends_at > NOW())
-                  AND effect_config->>'type' = 'score_multiplier'
-                LIMIT 1
-            """),
-            {"campaign_id": str(payload.campaign_id), "geo_unit_id": geo_unit_id},
-        )
-        multiplier_row = multiplier_result.fetchone()
-        if multiplier_row:
-            multiplier = float((multiplier_row[0] or {}).get("multiplier", 1))
-            effective_value = effective_value * multiplier
 
     primary_photo_url = payload.photo_url or (payload.photo_urls[0] if payload.photo_urls else None)
     cleanup_image_urls = payload.photo_urls if payload.photo_urls else ([payload.photo_url] if payload.photo_url else [])
@@ -321,97 +301,41 @@ async def submit_contribution(
                     {"campaign_id": str(payload.campaign_id), "geo_unit_id": report_geo_unit_id},
                 )
 
-    if has_location:
-        await db.execute(
-            text("""
-                INSERT INTO contributions
-                    (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
-                     value, photo_url, location, location_verified, notes, cleanup_id)
-                VALUES
-                    (:campaign_id, :user_id, :group_id, :geo_unit_id, :contribution_type,
-                     :value, :photo_url,
-                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
-                     :location_verified, :notes, :cleanup_id)
-            """),
-            {
-                "campaign_id": str(payload.campaign_id),
-                "user_id": str(payload.user_id),
-                "group_id": str(payload.group_id) if payload.group_id else None,
-                "geo_unit_id": geo_unit_id,
-                "contribution_type": payload.contribution_type,
-                "value": effective_value,
-                "photo_url": primary_photo_url,
-                "lon": payload.longitude,
-                "lat": payload.latitude,
-                "location_verified": location_verified,
-                "notes": payload.notes,
-                "cleanup_id": cleanup_id,
-            },
-        )
-    else:
-        await db.execute(
-            text("""
-                INSERT INTO contributions
-                    (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
-                     value, photo_url, location_verified, notes, cleanup_id)
-                VALUES
-                    (:campaign_id, :user_id, :group_id, NULL, :contribution_type,
-                     :value, :photo_url, FALSE, :notes, :cleanup_id)
-            """),
-            {
-                "campaign_id": str(payload.campaign_id),
-                "user_id": str(payload.user_id),
-                "group_id": str(payload.group_id) if payload.group_id else None,
-                "contribution_type": payload.contribution_type,
-                "value": effective_value,
-                "photo_url": primary_photo_url,
-                "notes": payload.notes,
-                "cleanup_id": cleanup_id,
-            },
-        )
+    recorded = await record_contribution(
+        db,
+        user_id=payload.user_id,
+        campaign_id=payload.campaign_id,
+        group_id=payload.group_id,
+        geo_unit_id=geo_unit_id,
+        cleanup_id=cleanup_id,
+        contribution_type=payload.contribution_type,
+        value=payload.value,
+        small_bags=payload.small_bags,
+        large_bags=payload.large_bags,
+        photo_url=primary_photo_url,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        notes=payload.notes,
+        location_verified=location_verified,
+        apply_multiplier=payload.cleanup_event_id is None,
+    )
 
-    if geo_unit_id:
+    if payload.cleanup_event_id:
+        # Self-log attendance: an RSVP row is "attended" once it has a linked
+        # contribution, regardless of whether the user RSVP'd or checked in first.
         await db.execute(
             text("""
-                INSERT INTO territory_claims
-                    (campaign_id, geo_unit_id, claimed_by_user, claimed_by_group, total_value, last_contribution_at)
-                VALUES
-                    (:campaign_id, :geo_unit_id, :user_id, :group_id, :value, NOW())
-                ON CONFLICT (campaign_id, geo_unit_id) DO UPDATE SET
-                    total_value = territory_claims.total_value + EXCLUDED.total_value,
-                    last_contribution_at = NOW(),
-                    decay_starts_at = NULL,
+                INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at, contribution_id)
+                VALUES (:cleanup_id, :user_id, 'going', NOW(), :contribution_id)
+                ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
+                    checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, EXCLUDED.checked_in_at),
+                    contribution_id = EXCLUDED.contribution_id,
                     updated_at = NOW()
             """),
             {
-                "campaign_id": str(payload.campaign_id),
-                "geo_unit_id": geo_unit_id,
+                "cleanup_id": str(payload.cleanup_event_id),
                 "user_id": str(payload.user_id),
-                "group_id": str(payload.group_id) if payload.group_id else None,
-                "value": effective_value,
-            },
-        )
-        await db.execute(
-            text("""
-                WITH top_group AS (
-                    SELECT group_id FROM contributions
-                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
-                      AND group_id IS NOT NULL
-                    GROUP BY group_id ORDER BY SUM(value) DESC LIMIT 1
-                ),
-                top_user AS (
-                    SELECT user_id FROM contributions
-                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
-                    GROUP BY user_id ORDER BY SUM(value) DESC LIMIT 1
-                )
-                UPDATE territory_claims SET
-                    claimed_by_group = (SELECT group_id FROM top_group),
-                    claimed_by_user  = (SELECT user_id  FROM top_user)
-                WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
-            """),
-            {
-                "campaign_id": str(payload.campaign_id),
-                "geo_unit_id": geo_unit_id,
+                "contribution_id": recorded.contribution_id,
             },
         )
 
@@ -425,44 +349,20 @@ async def submit_contribution(
             solarpunk_credit_id = solarpunk_row[0]
             solarpunk_geo_unit_id = await _get_or_create_h3_geo_unit(db, payload.latitude, payload.longitude)
 
-            await db.execute(
-                text("""
-                    INSERT INTO contributions
-                        (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
-                         value, location, location_verified, notes)
-                    VALUES
-                        (:campaign_id, :user_id, :group_id, :geo_unit_id, 'solarpunk_action',
-                         :value, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, TRUE, 'trash_war_cleanup_credit')
-                """),
-                {
-                    "campaign_id": str(solarpunk_credit_id),
-                    "user_id": str(payload.user_id),
-                    "group_id": str(payload.group_id) if payload.group_id else None,
-                    "geo_unit_id": solarpunk_geo_unit_id,
-                    "value": TRASH_WAR_SOLARPUNK_CREDIT,
-                    "lon": payload.longitude,
-                    "lat": payload.latitude,
-                },
-            )
-            await db.execute(
-                text("""
-                    INSERT INTO territory_claims
-                        (campaign_id, geo_unit_id, claimed_by_user, claimed_by_group, total_value, last_contribution_at)
-                    VALUES
-                        (:campaign_id, :geo_unit_id, :user_id, :group_id, :value, NOW())
-                    ON CONFLICT (campaign_id, geo_unit_id) DO UPDATE SET
-                        total_value = territory_claims.total_value + EXCLUDED.total_value,
-                        last_contribution_at = NOW(),
-                        decay_starts_at = NULL,
-                        updated_at = NOW()
-                """),
-                {
-                    "campaign_id": str(solarpunk_credit_id),
-                    "geo_unit_id": solarpunk_geo_unit_id,
-                    "user_id": str(payload.user_id),
-                    "group_id": str(payload.group_id) if payload.group_id else None,
-                    "value": TRASH_WAR_SOLARPUNK_CREDIT,
-                },
+            await record_contribution(
+                db,
+                user_id=payload.user_id,
+                campaign_id=solarpunk_credit_id,
+                group_id=payload.group_id,
+                geo_unit_id=solarpunk_geo_unit_id,
+                cleanup_id=None,
+                contribution_type="solarpunk_action",
+                value=TRASH_WAR_SOLARPUNK_CREDIT,
+                latitude=payload.latitude,
+                longitude=payload.longitude,
+                notes="trash_war_cleanup_credit",
+                location_verified=True,
+                apply_multiplier=False,
             )
 
     await db.commit()

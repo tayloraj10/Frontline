@@ -36,6 +36,7 @@ export default function TimedEventForm({
     areaPicker.mode === "external" ? areaPicker.areas : []
   );
   const [multiplier, setMultiplier] = useState("1");
+  const [startTime, setStartTime] = useState("");
   const [durationDays, setDurationDays] = useState("");
   const [durationHours, setDurationHours] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("");
@@ -73,6 +74,7 @@ export default function TimedEventForm({
         areas: selectedAreas,
         multiplier: Number(multiplier) || 1,
         durationMinutes: totalDurationMinutes,
+        startedAt: startTime ? new Date(startTime).toISOString() : null,
       });
       onCreated(event);
     } catch (err) {
@@ -104,6 +106,11 @@ export default function TimedEventForm({
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">Score multiplier</label>
           <input type="number" min={1} step={0.1} className={inputCls} value={multiplier} onChange={e => setMultiplier(e.target.value)} />
+        </div>
+        <div className="col-span-2 space-y-1">
+          <label className="text-xs text-zinc-500">Starts (optional)</label>
+          <input type="datetime-local" className={inputCls} value={startTime} onChange={e => setStartTime(e.target.value)} />
+          <p className="text-[10px] text-zinc-600">Tap outside the calendar to confirm your selection. Leave blank to start immediately.</p>
         </div>
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">Duration</label>

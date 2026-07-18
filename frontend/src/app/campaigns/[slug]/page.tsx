@@ -7,7 +7,7 @@ import CampaignPageClient, { CampaignStatBar } from "./CampaignPageClient";
 import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
-import type { MapBusiness } from "@/components/map/CampaignMap";
+import type { MapBusiness, MapCleanupEvent } from "@/components/map/CampaignMap";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -56,7 +56,7 @@ const getCampaignPageData = unstable_cache(
       eventCentroidsRes,
     ] = await Promise.all([
       supabase.from("territory_claims").select("*").eq("campaign_id", campaign.id),
-      supabase.from("campaign_events").select("*").eq("campaign_id", campaign.id).eq("status", "active"),
+      supabase.from("campaign_events").select("*").eq("campaign_id", campaign.id).eq("status", "active").lte("started_at", new Date().toISOString()),
       supabase.from("contributions").select("*", { count: "exact", head: true }).eq("campaign_id", campaign.id),
       fetch(`${fastapiUrl}/api/campaigns/${campaign.id}/leaderboard`, { cache: "no-store" }).catch(() => null),
       supabase
@@ -165,10 +165,16 @@ export default async function CampaignPage({ params }: Props) {
   if (!pageData) notFound();
   const { campaign, claims, events, contribCount, actContribs, problemReports, eventCentroids, eventGeoUnitIds, partnerBusinesses, lbRaw } = pageData;
 
+  // Fetched uncached (unlike the rest of this page's data, which is batched behind a
+  // 20s unstable_cache) so a just-created event shows up immediately instead of waiting
+  // out the cache window — mirrors how groups/[slug]/page.tsx fetches its events list.
+  const cleanupEventsRes = await fetch(`${fastapiUrl}/api/cleanup-events/campaign/${campaign.id}`, { cache: "no-store" }).catch(() => null);
+  const cleanupEvents: MapCleanupEvent[] = cleanupEventsRes?.ok ? await cleanupEventsRes.json() : [];
+
   const [{ data: membershipData }, { data: adminProfile }] = await Promise.all([
     user
-      ? supabase.from("group_members").select("group_id").eq("user_id", user.id)
-      : Promise.resolve({ data: [] as { group_id: string }[] }),
+      ? supabase.from("group_members").select("group_id, role").eq("user_id", user.id)
+      : Promise.resolve({ data: [] as { group_id: string; role: string }[] }),
     user
       ? supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single()
       : Promise.resolve({ data: null as { is_admin: boolean } | null }),
@@ -190,6 +196,7 @@ export default async function CampaignPage({ params }: Props) {
 
   // Collect all IDs to resolve
   const userGroupIds = (membershipData ?? []).map((m) => m.group_id);
+  const adminGroupIds = new Set((membershipData ?? []).filter((m) => m.role === "admin").map((m) => m.group_id));
   const claimedUserIds = [...new Set(claims.filter((c) => c.claimed_by_user).map((c) => c.claimed_by_user!))];
   const claimedGroupIds = [...new Set(claims.filter((c) => c.claimed_by_group).map((c) => c.claimed_by_group!))];
   const lbUserIds = lbRaw.users.map((u) => u.entity_id);
@@ -230,7 +237,7 @@ export default async function CampaignPage({ params }: Props) {
   const userGroups = userGroupIds
     .map((id) => groupsById.get(id))
     .filter((g): g is { id: string; name: string; slug: string; image_url: string | null } => !!g)
-    .map((g) => ({ id: g.id, name: g.name, image_url: g.image_url }));
+    .map((g) => ({ id: g.id, name: g.name, image_url: g.image_url, isAdmin: adminGroupIds.has(g.id) }));
 
   // Enriched leaderboard
   const leaderboard = {
@@ -357,6 +364,7 @@ export default async function CampaignPage({ params }: Props) {
           eventCentroids={eventCentroids}
           eventGeoUnitIds={eventGeoUnitIds}
           partnerBusinesses={partnerBusinesses}
+          cleanupEvents={cleanupEvents}
         />
       </div>
     </div>

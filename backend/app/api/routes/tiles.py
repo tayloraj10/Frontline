@@ -14,6 +14,10 @@ router = APIRouter(prefix="/tiles", tags=["tiles"])
 _tile_cache: dict[tuple, bytes] = {}
 _TILE_CACHE_MAX = 2000
 
+# Adjacency rarely changes (only on a re-seed), so cache the whole map in-process
+# rather than per-request. None means "not yet computed"; reset on backend restart.
+_nyc_adjacency_cache: dict[str, list[str]] | None = None
+
 _SIMPLIFY_TOLERANCE = {
     range(0, 6): 0.05,
     range(6, 9): 0.005,
@@ -28,6 +32,9 @@ _SIMPLIFY_TOLERANCE = {
 # unit_type written by its seeder.
 _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE: dict[GeoUnitType, dict] = {
     GeoUnitType.UK_POSTCODE_DISTRICT: {
+        range(0, 9): 0.0001,
+    },
+    GeoUnitType.NYC_NEIGHBORHOOD: {
         range(0, 9): 0.0001,
     },
 }
@@ -96,6 +103,105 @@ async def get_h3_bloom_tile(
         content=tile_bytes,
         media_type="application/x-protobuf",
         headers={"Cache-Control": "public, max-age=30", "Access-Control-Allow-Origin": "*"},
+    )
+
+
+@router.get("/nyc-neighborhoods/adjacency")
+async def get_nyc_neighborhoods_adjacency(db: AsyncSession = Depends(get_db)):
+    global _nyc_adjacency_cache
+    if _nyc_adjacency_cache is not None:
+        return _nyc_adjacency_cache
+
+    # Seed every neighborhood as a key first (empty list default) so units with no
+    # detected touching neighbor still get a dict entry — otherwise the client-side
+    # graph coloring never assigns them a color and they render with the fallback
+    # (gray) fill instead of a palette color.
+    all_units = await db.execute(
+        text("SELECT unit_id FROM geo_units WHERE unit_type = 'nyc_neighborhood'")
+    )
+    adjacency: dict[str, list[str]] = {row.unit_id: [] for row in all_units}
+
+    result = await db.execute(
+        text("""
+            SELECT a.unit_id AS unit_id, b.unit_id AS adjacent_unit_id
+            FROM geo_unit_adjacency ga
+            JOIN geo_units a ON a.id = ga.geo_unit_id
+            JOIN geo_units b ON b.id = ga.adjacent_geo_unit_id
+            WHERE a.unit_type = 'nyc_neighborhood'
+        """)
+    )
+    for row in result:
+        adjacency.setdefault(row.unit_id, []).append(row.adjacent_unit_id)
+
+    _nyc_adjacency_cache = adjacency
+    return _nyc_adjacency_cache
+
+
+# Registered ahead of the generic /{campaign_id}/{z}/{x}/{y}.mvt route below: both
+# have the same four-segment shape, and a literal "nyc-neighborhoods" prefix would
+# otherwise be swallowed by that route first and fail UUID validation on campaign_id.
+@router.get("/nyc-neighborhoods/{z}/{x}/{y}.mvt")
+async def get_nyc_neighborhoods_tile(
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    cache_key = ("nyc_neighborhoods", z, x, y)
+    if cache_key in _tile_cache:
+        return Response(
+            content=_tile_cache[cache_key],
+            media_type="application/x-protobuf",
+            headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+        )
+
+    tolerance = _tolerance(z, _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE.get(GeoUnitType.NYC_NEIGHBORHOOD))
+    geom_expr = (
+        f"ST_SimplifyPreserveTopology(g.geometry, {tolerance})" if tolerance > 0 else "g.geometry"
+    )
+
+    result = await db.execute(
+        text(f"""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y) AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    g.id::text AS geo_unit_id,
+                    g.unit_id AS unit_id,
+                    COALESCE(g.display_name, g.unit_id) AS display_name,
+                    ST_AsMVTGeom(
+                        ST_Transform({geom_expr}, 3857),
+                        bounds.geom_3857,
+                        4096, 8, true
+                    ) AS geom
+                FROM geo_units g
+                CROSS JOIN bounds
+                WHERE g.unit_type = 'nyc_neighborhood'
+                  AND g.geometry && bounds.geom_4326
+                  AND ST_Intersects(g.geometry, bounds.geom_4326)
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'nyc_neighborhoods', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y},
+    )
+
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        evict = list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]
+        for k in evict:
+            _tile_cache.pop(k, None)
+    _tile_cache[cache_key] = tile_bytes
+
+    return Response(
+        content=tile_bytes,
+        media_type="application/x-protobuf",
+        headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
     )
 
 

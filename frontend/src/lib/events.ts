@@ -39,6 +39,7 @@ export async function createTimedEvent({
   areas,
   multiplier,
   durationMinutes,
+  startedAt,
 }: {
   campaignId: string;
   title: string;
@@ -47,14 +48,17 @@ export async function createTimedEvent({
   areas: SelectedArea[];
   multiplier: number;
   durationMinutes: number;
+  /** ISO timestamp; omit/null to start immediately (DB defaults to now()). */
+  startedAt?: string | null;
 }): Promise<CreatedEvent> {
   const supabase = createClient();
 
   let imageUrl: string | null = null;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
 
+  const startMs = startedAt ? new Date(startedAt).getTime() : Date.now();
   const endsAt = durationMinutes > 0
-    ? new Date(Date.now() + durationMinutes * 60_000).toISOString()
+    ? new Date(startMs + durationMinutes * 60_000).toISOString()
     : null;
 
   const { data, error: insertErr } = await supabase
@@ -69,6 +73,7 @@ export async function createTimedEvent({
       image_url: imageUrl,
       effect_config: { type: "score_multiplier", multiplier },
       status: "active",
+      ...(startedAt ? { started_at: startedAt } : {}),
       ends_at: endsAt,
     })
     .select("id, event_type, title, description, image_url, effect_config, status, started_at, ends_at, campaign_id")

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import CampaignMapWrapper, { type ClaimLabel } from "@/components/map/CampaignMapWrapper";
-import type { MapBusiness } from "@/components/map/CampaignMap";
+import type { MapBusiness, MapCleanupEvent } from "@/components/map/CampaignMap";
 import ContributionPanel from "@/components/contributions/ContributionPanel";
 import CreateTimedEventButton from "@/components/events/CreateTimedEventButton";
+import AdminDialog from "@/components/map/AdminDialog";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
@@ -136,6 +137,34 @@ interface Coords {
   longitude: number;
 }
 
+// Mirrors CLEANUP_EVENT_PROXIMITY_METERS/CLEANUP_EVENT_GRACE_MINUTES_BEFORE/_AFTER in
+// backend/app/api/routes/cleanup_events.py — the client-side geofence prompt uses the
+// same thresholds as the server-side check-in validation so the prompt and the actual
+// check-in window agree.
+const CLEANUP_EVENT_PROXIMITY_METERS = 150.0;
+const CLEANUP_EVENT_GRACE_MINUTES_BEFORE = 30;
+const CLEANUP_EVENT_GRACE_MINUTES_AFTER = 120;
+const EARTH_RADIUS_METERS = 6371000;
+
+function distanceMeters(a: Coords, b: { lat: number; lng: number }): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.latitude);
+  const dLng = toRad(b.lng - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(h));
+}
+
+function isWithinCleanupEventWindow(event: MapCleanupEvent, now: Date): boolean {
+  if (!event.scheduled_start) return false;
+  const start = new Date(event.scheduled_start);
+  const windowStart = new Date(start.getTime() - CLEANUP_EVENT_GRACE_MINUTES_BEFORE * 60000);
+  const endBase = event.scheduled_end ? new Date(event.scheduled_end) : start;
+  const windowEnd = new Date(endBase.getTime() + CLEANUP_EVENT_GRACE_MINUTES_AFTER * 60000);
+  return now >= windowStart && now <= windowEnd;
+}
+
 export interface LeaderboardEntry {
   entity_id: string;
   name: string;
@@ -173,6 +202,7 @@ interface Props {
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
+  cleanupEvents?: MapCleanupEvent[];
 }
 
 interface NewContribution {
@@ -454,6 +484,7 @@ export default function CampaignPageClient({
   eventCentroids,
   eventGeoUnitIds,
   partnerBusinesses,
+  cleanupEvents,
 }: Props) {
   const [hexEventsExpanded, setHexEventsExpanded] = useState(false);
   const [pinPickerActive, setPinPickerActive] = useState(false);
@@ -470,14 +501,48 @@ export default function CampaignPageClient({
   // competing geolocation call.
   const triggerGeolocateRef = useRef<(() => boolean) | null>(null);
   const [activeMapStyle, setActiveMapStyle] = useState("outdoor");
+  const [nycNeighborhoodsVisible, setNycNeighborhoodsVisible] = useState(false);
   const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | "stats" | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
   const [localProblemReports, setLocalProblemReports] = useState<ProblemReports | null | undefined>(problemReports);
   const [areaPickerActive, setAreaPickerActive] = useState(false);
   const [pickedAreas, setPickedAreas] = useState<SelectedArea[]>([]);
   const [showTimedEventModal, setShowTimedEventModal] = useState(false);
+  const [timedEventFormKey, setTimedEventFormKey] = useState(0);
   const [activeEventsList, setActiveEventsList] = useState<CampaignEvent[]>(activeEvents);
   const [localEventGeoUnitIds, setLocalEventGeoUnitIds] = useState<Record<string, string[]>>(eventGeoUnitIds ?? {});
+
+  // Geofence auto-prompt: surfaces a banner when the user's live GPS position is near a
+  // group-hosted cleanup event during its scheduled window (+ grace), so attendees don't
+  // have to remember to open the contribute modal manually. Dismissing a given event's
+  // banner suppresses it for the rest of the session (userLocation keeps updating on every
+  // GeolocateControl fix, so without this it would just reappear on the next tick).
+  const [dismissedCleanupEventIds, setDismissedCleanupEventIds] = useState<Set<string>>(new Set());
+  const [pendingCleanupEventId, setPendingCleanupEventId] = useState<string | null>(null);
+
+  const nearbyCleanupEvent = useMemo(() => {
+    if (!userLocation || !cleanupEvents || cleanupEvents.length === 0) return null;
+    const now = new Date();
+    return (
+      cleanupEvents.find(
+        (event) =>
+          !dismissedCleanupEventIds.has(event.id) &&
+          isWithinCleanupEventWindow(event, now) &&
+          distanceMeters(userLocation, event) <= CLEANUP_EVENT_PROXIMITY_METERS,
+      ) ?? null
+    );
+  }, [userLocation, cleanupEvents, dismissedCleanupEventIds]);
+
+  // NYC neighborhoods mosaic overlay: too confusing layered over the zip choropleth for
+  // a general audience, so there's no visible toggle for it in the normal UI. Kept
+  // reachable for admins via the admin dialog (gear button) instead.
+  const nycNeighborhoodsAvailable = !!isAdmin && campaign.slug === "trash-war";
+  const [showAdminDialog, setShowAdminDialog] = useState(false);
+  // "Hide until next page refresh" (triggered from inside AdminDialog) — mirrors
+  // CreateTimedEventButton's own dismiss pattern. Lets an admin clear the gear
+  // button out of screenshots/recordings without needing to remember anything;
+  // it comes back on the next page load.
+  const [adminControlsHidden, setAdminControlsHidden] = useState(false);
 
   const handleContributionSubmitted = (
     lat: number | null,
@@ -545,7 +610,10 @@ export default function CampaignPageClient({
 
   const handleTimedEventModalOpenChange = (open: boolean) => {
     setShowTimedEventModal(open);
-    if (!open) setPickedAreas([]);
+    if (!open) {
+      setPickedAreas([]);
+      setTimedEventFormKey((k) => k + 1);
+    }
   };
 
   const handleAreaPickerConfirm = () => {
@@ -593,10 +661,12 @@ export default function CampaignPageClient({
         newReport={newReport}
         userLocation={userLocation}
         activeStyle={activeMapStyle}
+        nycNeighborhoodsVisible={nycNeighborhoodsVisible}
         problemReports={localProblemReports}
         eventCentroids={eventCentroids}
         eventGeoUnitIds={localEventGeoUnitIds}
         partnerBusinesses={partnerBusinesses}
+        cleanupEvents={cleanupEvents}
         onUserLocationChange={(coords) => {
           setUserLocation(coords);
           if (coords) setLocationError(null);
@@ -729,13 +799,40 @@ export default function CampaignPageClient({
       )}
 
       {isAdmin && !pinPickerActive && (
-        <div className="absolute z-20 top-4 right-4 sm:top-11 sm:right-[3.25rem]">
+        <>
+          {!adminControlsHidden && (
+            <button
+              onClick={() => setShowAdminDialog(true)}
+              title="Admin controls"
+              className="absolute z-20 top-4 right-4 sm:top-11 sm:right-[3.25rem] w-8 h-8 flex items-center justify-center text-base rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            >
+              ⚙️
+            </button>
+          )}
+          <AdminDialog
+            open={showAdminDialog}
+            onOpenChange={setShowAdminDialog}
+            onOpenTimedEvent={() => {
+              setShowAdminDialog(false);
+              setShowTimedEventModal(true);
+            }}
+            showNycToggle={nycNeighborhoodsAvailable}
+            nycNeighborhoodsVisible={nycNeighborhoodsVisible}
+            onNycNeighborhoodsVisibleChange={setNycNeighborhoodsVisible}
+            onHideControls={() => {
+              setAdminControlsHidden(true);
+              setShowAdminDialog(false);
+            }}
+          />
           <CreateTimedEventButton
             campaignId={campaign.id}
+            formKey={timedEventFormKey}
             open={showTimedEventModal}
             onOpenChange={handleTimedEventModalOpenChange}
             areaPicker={{ mode: "external", areas: pickedAreas, onRequestPick: handleRequestAreaPick }}
+            hideTrigger
             onCreated={(event) => {
+              if (event.started_at && new Date(event.started_at).getTime() > Date.now()) return;
               setActiveEventsList((prev) => [
                 {
                   id: event.id,
@@ -760,9 +857,8 @@ export default function CampaignPageClient({
               }));
               setPickedAreas([]);
             }}
-            hideTrigger={areaPickerActive}
           />
-        </div>
+        </>
       )}
 
       {isHexBloom && !pinPickerActive && !areaPickerActive && (
@@ -829,6 +925,31 @@ export default function CampaignPageClient({
         </div>
       )}
 
+      {nearbyCleanupEvent && !pinPickerActive && !areaPickerActive && (
+        <div className="absolute top-4 inset-x-4 sm:top-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm px-4 py-3 rounded-xl bg-sky-950/95 border border-sky-700/50 backdrop-blur-sm shadow-lg flex items-center gap-3">
+          <div className="w-10 h-10 shrink-0 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-lg">
+            🧹
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sky-300 text-xs font-semibold truncate">{nearbyCleanupEvent.title}</p>
+            <p className="text-sky-500 text-xs">You&apos;re at this cleanup — log your contribution</p>
+          </div>
+          <button
+            onClick={() => setDismissedCleanupEventIds((prev) => new Set(prev).add(nearbyCleanupEvent.id))}
+            className="shrink-0 text-sky-500 hover:text-sky-300 text-sm px-1"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+          <button
+            onClick={() => setPendingCleanupEventId(nearbyCleanupEvent.id)}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-sky-950 text-xs font-semibold shadow-sm transition-colors"
+          >
+            Log here
+          </button>
+        </div>
+      )}
+
       <ContributionPanel
         campaignId={campaign.id}
         campaignContributionType={campaign.contribution_type}
@@ -844,6 +965,9 @@ export default function CampaignPageClient({
         requestLocation={() => triggerGeolocateRef.current?.() ?? false}
         activeMapStyle={activeMapStyle}
         onStyleChange={setActiveMapStyle}
+        pendingCleanupEventId={pendingCleanupEventId}
+        onPendingCleanupEventConsumed={() => setPendingCleanupEventId(null)}
+        nearbyCleanupEvent={nearbyCleanupEvent}
       />
     </>
   );
