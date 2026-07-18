@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { SelectedArea } from "./EventAreaMapPicker";
@@ -107,6 +107,23 @@ function timeAgo(dateStr: string) {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+const CAMPAIGN_STATUS_ORDER: Record<string, number> = {
+  active: 0,
+  paused: 1,
+  pending: 2,
+  draft: 3,
+  completed: 4,
+  inactive: 5,
+};
+
+function sortCampaignsByStatus(campaigns: Campaign[]) {
+  return [...campaigns].sort((a, b) => {
+    const orderDiff = (CAMPAIGN_STATUS_ORDER[a.status] ?? 99) - (CAMPAIGN_STATUS_ORDER[b.status] ?? 99);
+    if (orderDiff !== 0) return orderDiff;
+    return a.title.localeCompare(b.title);
+  });
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -1852,6 +1869,7 @@ export default function AdminPanel({
 }) {
   const [tab, setTab] = useState<Tab>("campaigns");
   const [campaigns, setCampaigns] = useState(initialCampaigns);
+  const sortedCampaigns = useMemo(() => sortCampaignsByStatus(campaigns), [campaigns]);
   const [events, setEvents] = useState(initialEvents);
   const [triggers, setTriggers] = useState(initialTriggers);
   const [businesses, setBusinesses] = useState(initialBusinesses);
@@ -1929,9 +1947,9 @@ export default function AdminPanel({
         ))}
       </div>
 
-      {tab === "campaigns" && <CampaignsTab campaigns={campaigns} setCampaigns={setCampaigns} />}
-      {tab === "triggers" && <TriggersTab campaigns={campaigns} triggers={triggers} setTriggers={setTriggers} />}
-      {tab === "events" && <EventsTab campaigns={campaigns} events={events} setEvents={setEvents} />}
+      {tab === "campaigns" && <CampaignsTab campaigns={sortedCampaigns} setCampaigns={setCampaigns} />}
+      {tab === "triggers" && <TriggersTab campaigns={sortedCampaigns} triggers={triggers} setTriggers={setTriggers} />}
+      {tab === "events" && <EventsTab campaigns={sortedCampaigns} events={events} setEvents={setEvents} />}
       {tab === "partners" && (
         <PartnersTab
           businesses={businesses}
@@ -1939,12 +1957,12 @@ export default function AdminPanel({
           offers={offers}
           setOffers={setOffers}
           redemptionCounts={redemptionCounts}
-          campaigns={campaigns}
+          campaigns={sortedCampaigns}
           businessCampaignLinks={businessCampaignLinks}
           setBusinessCampaignLinks={setBusinessCampaignLinks}
         />
       )}
-      {tab === "leaderboard" && <LeaderboardTab campaigns={campaigns} />}
+      {tab === "leaderboard" && <LeaderboardTab campaigns={sortedCampaigns} />}
     </main>
   );
 }
