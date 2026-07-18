@@ -40,6 +40,7 @@ interface Props {
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
   onGeolocateTrigger?: (trigger: () => boolean) => void;
+  nycNeighborhoodsVisible?: boolean;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {

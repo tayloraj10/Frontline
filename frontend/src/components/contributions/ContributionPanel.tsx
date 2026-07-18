@@ -1800,19 +1800,21 @@ export default function ContributionPanel({
             </button>
           )}
           {onStyleChange && (
-            <div className="self-start flex gap-0.5 p-1 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg">
-              {MAP_STYLES.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => onStyleChange(s.id)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${activeMapStyle === s.id
-                      ? "bg-zinc-600 text-zinc-100"
-                      : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
-                    }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+            <div className="self-start flex flex-wrap gap-2">
+              <div className="flex gap-0.5 p-1 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg">
+                {MAP_STYLES.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => onStyleChange(s.id)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${activeMapStyle === s.id
+                        ? "bg-zinc-600 text-zinc-100"
+                        : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                      }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

@@ -121,6 +121,50 @@ const BLOOM_STAGE_LABELS = [
 const BLOOM_STAGE_COLORS = ["#3d4a5c", "#2a3d50", "#1f3a18", "#2d5c24", "#3d7a2e", "#5ca84a"];
 const BLOOM_THRESHOLDS = [null, 0, 50, 200, 600, 1500];
 
+// Fixed, visually distinct palette for the NYC neighborhoods overlay. Sized well above the
+// observed max adjacency degree (~6) both so greedy coloring never runs out of options and
+// so the mosaic reads as varied rather than repetitive across ~200 neighborhoods.
+const NYC_NEIGHBORHOOD_PALETTE = [
+  "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e",
+  "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
+  "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#78716c",
+];
+
+// Greedy graph coloring: visits neighborhoods in a randomized order (so the resulting
+// palette pattern varies per page load) and assigns each a color picked at random from
+// every index not already used by an already-colored neighbor. Picking randomly among
+// valid options (rather than always the lowest-indexed one) is what actually spreads
+// usage across the full palette — a "lowest available" strategy is a color-minimizing
+// algorithm by design and will converge on using only ~chromatic-number colors no
+// matter how large the palette is. No two adjacent neighborhoods share a color as long
+// as paletteSize > the graph's max node degree.
+function computeGraphColoring(
+  adjacency: Record<string, string[]>,
+  paletteSize: number,
+): Record<string, number> {
+  const nodes = Object.keys(adjacency);
+  for (let i = nodes.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [nodes[i], nodes[j]] = [nodes[j], nodes[i]];
+  }
+
+  const colors: Record<string, number> = {};
+  for (const node of nodes) {
+    const usedByNeighbors = new Set(
+      (adjacency[node] ?? []).map((n) => colors[n]).filter((c) => c !== undefined),
+    );
+    const available: number[] = [];
+    for (let c = 0; c < paletteSize; c++) {
+      if (!usedByNeighbors.has(c)) available.push(c);
+    }
+    colors[node] =
+      available.length > 0
+        ? available[Math.floor(Math.random() * available.length)]
+        : Math.floor(Math.random() * paletteSize); // degree >= paletteSize: extremely unlikely clash
+  }
+  return colors;
+}
+
 function hexEntryToFeature(entry: HexBloomEntry): GeoJSON.Feature<GeoJSON.Polygon> {
   const boundary = cellToBoundary(entry.h3_index);
   const coords = boundary.map(([lat, lng]) => [lng, lat] as [number, number]);
@@ -180,6 +224,7 @@ interface Props {
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
   onGeolocateTrigger?: (trigger: () => boolean) => void;
+  nycNeighborhoodsVisible?: boolean;
 }
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
@@ -950,6 +995,7 @@ export default function CampaignMap({
   onUserLocationChange,
   onUserLocationError,
   onGeolocateTrigger,
+  nycNeighborhoodsVisible = false,
 }: Props) {
   const isCollage = campaignType === "collage";
   const isChoropleth = campaignType === "choropleth";
@@ -1009,6 +1055,9 @@ export default function CampaignMap({
   const eventHighlightListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
   const hexDataRef = useRef<HexBloomEntry[]>([]);
+  const nycNeighborhoodsVisibleRef = useRef(false);
+  const nycAdjacencyRef = useRef<Record<string, string[]> | null>(null);
+  const nycColorAssignmentRef = useRef<Record<string, number> | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
@@ -1017,6 +1066,7 @@ export default function CampaignMap({
   useEffect(() => { eventGeoUnitIdsRef.current = eventGeoUnitIds ?? {}; }, [eventGeoUnitIds]);
   useEffect(() => { partnerBusinessesRef.current = partnerBusinesses ?? []; }, [partnerBusinesses]);
   useEffect(() => { setSelectedZipRef.current = setSelectedZip; }, [setSelectedZip]);
+  useEffect(() => { nycNeighborhoodsVisibleRef.current = nycNeighborhoodsVisible; }, [nycNeighborhoodsVisible]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
   useEffect(() => { areaPickerActiveRef.current = areaPickerActive; }, [areaPickerActive]);
@@ -1256,6 +1306,74 @@ export default function CampaignMap({
   const setupCustomLayers = useCallback(async () => {
     const m = map.current;
     if (!m) return;
+
+    // NYC neighborhoods overlay: campaign-type-independent (set up before any of the
+    // isCollage/isHeatmap/isHexBloom early returns below), but only offered on the Trash
+    // War campaign for now — skip the adjacency fetch/source entirely elsewhere so it's
+    // a complete no-op on every other campaign. Starts hidden; toggled via LayerToggle.
+    // Non-critical — swallow failures so the rest of the map still loads.
+    if (campaign.slug === "trash-war") try {
+      if (!nycAdjacencyRef.current) {
+        const adjRes = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/nyc-neighborhoods/adjacency`,
+        );
+        if (adjRes.ok) {
+          nycAdjacencyRef.current = await adjRes.json();
+        }
+      }
+      if (nycAdjacencyRef.current && !nycColorAssignmentRef.current) {
+        nycColorAssignmentRef.current = computeGraphColoring(
+          nycAdjacencyRef.current,
+          NYC_NEIGHBORHOOD_PALETTE.length,
+        );
+      }
+
+      const fillColorExpr: unknown[] = ["match", ["get", "unit_id"]];
+      if (nycColorAssignmentRef.current) {
+        for (const [unitId, colorIdx] of Object.entries(nycColorAssignmentRef.current)) {
+          fillColorExpr.push(unitId, NYC_NEIGHBORHOOD_PALETTE[colorIdx % NYC_NEIGHBORHOOD_PALETTE.length]);
+        }
+      }
+      fillColorExpr.push("#a1a1aa");
+
+      m.addSource("nyc-neighborhoods", {
+        type: "vector",
+        tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/nyc-neighborhoods/{z}/{x}/{y}.mvt`],
+        minzoom: 0,
+        maxzoom: 14,
+        promoteId: "unit_id",
+      });
+
+      m.addLayer({
+        id: "nyc-neighborhoods-fill",
+        type: "fill",
+        source: "nyc-neighborhoods",
+        "source-layer": "nyc_neighborhoods",
+        layout: { visibility: nycNeighborhoodsVisibleRef.current ? "visible" : "none" },
+        paint: {
+          "fill-color": fillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "fill-opacity": 0.16,
+        },
+      });
+
+      m.addLayer({
+        id: "nyc-neighborhoods-border",
+        type: "line",
+        source: "nyc-neighborhoods",
+        "source-layer": "nyc_neighborhoods",
+        layout: { visibility: nycNeighborhoodsVisibleRef.current ? "visible" : "none" },
+        paint: {
+          // Same match expression as the fill so each neighborhood's outline reads as its
+          // own color (mosaic look) rather than a flat grid line competing with the zip
+          // choropleth fill underneath.
+          "line-color": fillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "line-width": 1.5,
+          "line-opacity": 0.9,
+        },
+      });
+    } catch {
+      // NYC neighborhoods overlay is non-critical — map still works without it
+    }
 
     if (isCollage) {
       // Collage campaigns: no territory tiles — render photo markers instead
@@ -1770,6 +1888,19 @@ export default function CampaignMap({
     map.current.setStyle(styleUrl(activeStyle));
   }, [activeStyle, setupCustomLayers]);
 
+  // NYC neighborhoods overlay toggle
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !mapReadyRef.current) return;
+    const visibility = nycNeighborhoodsVisible ? "visible" : "none";
+    if (m.getLayer("nyc-neighborhoods-fill")) {
+      m.setLayoutProperty("nyc-neighborhoods-fill", "visibility", visibility);
+    }
+    if (m.getLayer("nyc-neighborhoods-border")) {
+      m.setLayoutProperty("nyc-neighborhoods-border", "visibility", visibility);
+    }
+  }, [nycNeighborhoodsVisible]);
+
   // Map initialization
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -2089,6 +2220,38 @@ export default function CampaignMap({
         map.current.on("mouseleave", layerId, hideHexTooltip);
         map.current.on("click", layerId, handleHexClick);
       }
+
+      // NYC neighborhoods hover tooltip — shows the neighborhood's display name. Layer
+      // only renders when the admin has toggled the overlay on, so this is a no-op
+      // (invisible layers return no features) the rest of the time.
+      const showNycNeighborhoodTooltip = (
+        e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] },
+      ) => {
+        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+        const props = e.features[0].properties as { display_name?: string };
+        hoverDiv.style.display = "block";
+        hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
+        hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
+        hoverDiv.innerHTML =
+          `<div style="font-weight:700;font-size:12px;color:#f4f4f5">${props.display_name ?? "—"}</div>`;
+      };
+      const hideNycNeighborhoodTooltip = () => {
+        if (map.current) map.current.getCanvas().style.cursor = "";
+        hoverDiv.style.display = "none";
+      };
+      map.current.on("mouseenter", "nyc-neighborhoods-fill", () => {
+        if (map.current) map.current.getCanvas().style.cursor = "pointer";
+      });
+      map.current.on("mousemove", "nyc-neighborhoods-fill", showNycNeighborhoodTooltip);
+      map.current.on("mouseleave", "nyc-neighborhoods-fill", hideNycNeighborhoodTooltip);
+      // Touch devices fire neither mousemove nor mouseleave — show the tooltip on tap
+      // and auto-hide it shortly after since there's no hover-out equivalent.
+      let nycTapHideTimer: ReturnType<typeof setTimeout> | undefined;
+      map.current.on("click", "nyc-neighborhoods-fill", (e) => {
+        showNycNeighborhoodTooltip(e);
+        clearTimeout(nycTapHideTimer);
+        nycTapHideTimer = setTimeout(hideNycNeighborhoodTooltip, 2000);
+      });
     });
 
     return () => {

@@ -2,6 +2,7 @@ from enum import Enum
 
 from .campaigns import CampaignSeeder
 from .demo_data import DemoDataSeeder
+from .nyc_neighborhoods import NycNeighborhoodSeeder
 from .states import StatesSeeder
 from .uk_postcode_districts import UkPostcodeDistrictSeeder
 from .zip_codes import ZipCodeSeeder
@@ -24,10 +25,12 @@ class GeoUnitType(str, Enum):
     STATE = "state"
     ZIP = "zip"
     UK_POSTCODE_DISTRICT = "uk_postcode_district"
+    NYC_NEIGHBORHOOD = "nyc_neighborhood"
 
 
 GEO_UNIT_SEEDERS: dict[GeoUnitType, type] = {
     GeoUnitType.STATE: StatesSeeder,
     GeoUnitType.ZIP: ZipCodeSeeder,
     GeoUnitType.UK_POSTCODE_DISTRICT: UkPostcodeDistrictSeeder,
+    GeoUnitType.NYC_NEIGHBORHOOD: NycNeighborhoodSeeder,
 }

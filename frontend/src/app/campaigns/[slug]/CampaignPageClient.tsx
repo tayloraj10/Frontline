@@ -6,6 +6,7 @@ import CampaignMapWrapper, { type ClaimLabel } from "@/components/map/CampaignMa
 import type { MapBusiness } from "@/components/map/CampaignMap";
 import ContributionPanel from "@/components/contributions/ContributionPanel";
 import CreateTimedEventButton from "@/components/events/CreateTimedEventButton";
+import AdminDialog from "@/components/map/AdminDialog";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
@@ -470,6 +471,7 @@ export default function CampaignPageClient({
   // competing geolocation call.
   const triggerGeolocateRef = useRef<(() => boolean) | null>(null);
   const [activeMapStyle, setActiveMapStyle] = useState("outdoor");
+  const [nycNeighborhoodsVisible, setNycNeighborhoodsVisible] = useState(false);
   const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | "stats" | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
   const [localProblemReports, setLocalProblemReports] = useState<ProblemReports | null | undefined>(problemReports);
@@ -478,6 +480,17 @@ export default function CampaignPageClient({
   const [showTimedEventModal, setShowTimedEventModal] = useState(false);
   const [activeEventsList, setActiveEventsList] = useState<CampaignEvent[]>(activeEvents);
   const [localEventGeoUnitIds, setLocalEventGeoUnitIds] = useState<Record<string, string[]>>(eventGeoUnitIds ?? {});
+
+  // NYC neighborhoods mosaic overlay: too confusing layered over the zip choropleth for
+  // a general audience, so there's no visible toggle for it in the normal UI. Kept
+  // reachable for admins via the admin dialog (gear button) instead.
+  const nycNeighborhoodsAvailable = !!isAdmin && campaign.slug === "trash-war";
+  const [showAdminDialog, setShowAdminDialog] = useState(false);
+  // "Hide until next page refresh" (triggered from inside AdminDialog) — mirrors
+  // CreateTimedEventButton's own dismiss pattern. Lets an admin clear the gear
+  // button out of screenshots/recordings without needing to remember anything;
+  // it comes back on the next page load.
+  const [adminControlsHidden, setAdminControlsHidden] = useState(false);
 
   const handleContributionSubmitted = (
     lat: number | null,
@@ -593,6 +606,7 @@ export default function CampaignPageClient({
         newReport={newReport}
         userLocation={userLocation}
         activeStyle={activeMapStyle}
+        nycNeighborhoodsVisible={nycNeighborhoodsVisible}
         problemReports={localProblemReports}
         eventCentroids={eventCentroids}
         eventGeoUnitIds={localEventGeoUnitIds}
@@ -729,12 +743,37 @@ export default function CampaignPageClient({
       )}
 
       {isAdmin && !pinPickerActive && (
-        <div className="absolute z-20 top-4 right-4 sm:top-11 sm:right-[3.25rem]">
+        <>
+          {!adminControlsHidden && (
+            <button
+              onClick={() => setShowAdminDialog(true)}
+              title="Admin controls"
+              className="absolute z-20 top-4 right-4 sm:top-11 sm:right-[3.25rem] w-8 h-8 flex items-center justify-center text-base rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            >
+              ⚙️
+            </button>
+          )}
+          <AdminDialog
+            open={showAdminDialog}
+            onOpenChange={setShowAdminDialog}
+            onOpenTimedEvent={() => {
+              setShowAdminDialog(false);
+              setShowTimedEventModal(true);
+            }}
+            showNycToggle={nycNeighborhoodsAvailable}
+            nycNeighborhoodsVisible={nycNeighborhoodsVisible}
+            onNycNeighborhoodsVisibleChange={setNycNeighborhoodsVisible}
+            onHideControls={() => {
+              setAdminControlsHidden(true);
+              setShowAdminDialog(false);
+            }}
+          />
           <CreateTimedEventButton
             campaignId={campaign.id}
             open={showTimedEventModal}
             onOpenChange={handleTimedEventModalOpenChange}
             areaPicker={{ mode: "external", areas: pickedAreas, onRequestPick: handleRequestAreaPick }}
+            hideTrigger
             onCreated={(event) => {
               setActiveEventsList((prev) => [
                 {
@@ -760,9 +799,8 @@ export default function CampaignPageClient({
               }));
               setPickedAreas([]);
             }}
-            hideTrigger={areaPickerActive}
           />
-        </div>
+        </>
       )}
 
       {isHexBloom && !pinPickerActive && !areaPickerActive && (
