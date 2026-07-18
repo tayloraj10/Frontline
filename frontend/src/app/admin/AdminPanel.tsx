@@ -1870,6 +1870,7 @@ export default function AdminPanel({
   const [tab, setTab] = useState<Tab>("campaigns");
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const sortedCampaigns = useMemo(() => sortCampaignsByStatus(campaigns), [campaigns]);
+  const activeCampaigns = useMemo(() => sortedCampaigns.filter(c => c.status === "active"), [sortedCampaigns]);
   const [events, setEvents] = useState(initialEvents);
   const [triggers, setTriggers] = useState(initialTriggers);
   const [businesses, setBusinesses] = useState(initialBusinesses);
@@ -1948,8 +1949,8 @@ export default function AdminPanel({
       </div>
 
       {tab === "campaigns" && <CampaignsTab campaigns={sortedCampaigns} setCampaigns={setCampaigns} />}
-      {tab === "triggers" && <TriggersTab campaigns={sortedCampaigns} triggers={triggers} setTriggers={setTriggers} />}
-      {tab === "events" && <EventsTab campaigns={sortedCampaigns} events={events} setEvents={setEvents} />}
+      {tab === "triggers" && <TriggersTab campaigns={activeCampaigns} triggers={triggers} setTriggers={setTriggers} />}
+      {tab === "events" && <EventsTab campaigns={activeCampaigns} events={events} setEvents={setEvents} />}
       {tab === "partners" && (
         <PartnersTab
           businesses={businesses}
@@ -1957,12 +1958,12 @@ export default function AdminPanel({
           offers={offers}
           setOffers={setOffers}
           redemptionCounts={redemptionCounts}
-          campaigns={sortedCampaigns}
+          campaigns={activeCampaigns}
           businessCampaignLinks={businessCampaignLinks}
           setBusinessCampaignLinks={setBusinessCampaignLinks}
         />
       )}
-      {tab === "leaderboard" && <LeaderboardTab campaigns={sortedCampaigns} />}
+      {tab === "leaderboard" && <LeaderboardTab campaigns={activeCampaigns} />}
     </main>
   );
 }
