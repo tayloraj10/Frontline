@@ -60,6 +60,7 @@ async def get_active_multiplier(
             SELECT effect_config, title FROM campaign_events ce
             WHERE campaign_id = :campaign_id
               AND status = 'active'
+              AND (started_at IS NULL OR started_at <= NOW())
               AND (ends_at IS NULL OR ends_at > NOW())
               AND effect_config->>'type' = 'score_multiplier'
               AND (
@@ -69,6 +70,7 @@ async def get_active_multiplier(
                   WHERE cegu.event_id = ce.id AND cegu.geo_unit_id = :geo_unit_id
                 )
               )
+            ORDER BY (effect_config->>'multiplier')::float DESC
             LIMIT 1
         """),
         {"campaign_id": str(campaign_id), "geo_unit_id": geo_unit_id},
@@ -100,6 +102,7 @@ async def get_event_geo_centroids(campaign_id: UUID, db: AsyncSession = Depends(
             JOIN geo_units gu ON gu.id = ce.geo_unit_id
             WHERE ce.campaign_id = :campaign_id
               AND ce.status = 'active'
+              AND (ce.started_at IS NULL OR ce.started_at <= NOW())
               AND ce.geo_unit_id IS NOT NULL
 
             UNION
@@ -112,6 +115,7 @@ async def get_event_geo_centroids(campaign_id: UUID, db: AsyncSession = Depends(
             JOIN geo_units gu ON gu.id = cegu.geo_unit_id
             WHERE ce.campaign_id = :campaign_id
               AND ce.status = 'active'
+              AND (ce.started_at IS NULL OR ce.started_at <= NOW())
         """),
         {"campaign_id": str(campaign_id)},
     )
