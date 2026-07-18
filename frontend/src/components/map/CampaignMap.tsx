@@ -44,6 +44,10 @@ const REPORT_CLAIM_RADIUS_METERS_UK = 100;
 const REPORT_CLAIM_RADIUS_METERS_US = 91.44; // 300 ft
 const EARTH_RADIUS_METERS = 6371000;
 
+// Mirrors CLEANUP_EVENT_PROXIMITY_METERS in backend/app/api/routes/cleanup_events.py — the
+// check-in radius shown as a circle around each group cleanup event, same for every event.
+const CLEANUP_EVENT_RADIUS_METERS = 150;
+
 // Approximates a real-world-meter circle as a GeoJSON polygon so it scales correctly
 // with zoom (a DOM marker, by contrast, stays a fixed pixel size regardless of zoom).
 function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 48): [number, number][] {
@@ -195,6 +199,25 @@ export type MapBusiness = {
   activeOfferTitle?: string | null;
 };
 
+export type MapCleanupEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  status: string;
+  image_url: string | null;
+  lat: number;
+  lng: number;
+  group_id: string;
+  group_name: string;
+  group_slug: string;
+  group_logo_url: string | null;
+  is_past?: boolean;
+  total_small_bags?: number;
+  total_large_bags?: number;
+};
+
 interface Props {
   campaign: Campaign;
   claims: TerritoryClaim[];
@@ -220,6 +243,7 @@ interface Props {
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
+  cleanupEvents?: MapCleanupEvent[];
   onMobileStatsClick?: () => void;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
@@ -964,6 +988,48 @@ class FitExtentControl implements maplibregl.IControl {
   }
 }
 
+// ─── Zoom-to-my-location control ──────────────────────────────────────────────
+// A dedicated single-purpose button, separate from GeolocateControl's own button:
+// that one toggles tracking on/off on click, so clicking it while tracking is
+// already active turns location OFF instead of recentering. This control only
+// ever flies the camera to the last known fix (or requests one if we don't have
+// it yet) and never disables tracking.
+
+class ZoomToLocationControl implements maplibregl.IControl {
+  private _map: maplibregl.Map | null = null;
+  private _container: HTMLDivElement | null = null;
+  private readonly _onClick: () => void;
+
+  constructor(onClick: () => void) {
+    this._onClick = onClick;
+  }
+
+  onAdd(map: maplibregl.Map): HTMLElement {
+    this._map = map;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = "Zoom to my location";
+    btn.style.cssText =
+      "width:29px;height:29px;display:flex;align-items:center;justify-content:center;" +
+      "background:none;border:none;cursor:pointer;padding:0;color:#333";
+    btn.innerHTML =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">` +
+      `<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>` +
+      `</svg>`;
+    btn.onclick = () => this._onClick();
+    const container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    container.appendChild(btn);
+    this._container = container;
+    return container;
+  }
+
+  onRemove(): void {
+    this._container?.parentNode?.removeChild(this._container);
+    this._map = null;
+  }
+}
+
 // ─── Main map component ───────────────────────────────────────────────────────
 
 export default function CampaignMap({
@@ -991,6 +1057,7 @@ export default function CampaignMap({
   eventCentroids,
   eventGeoUnitIds,
   partnerBusinesses,
+  cleanupEvents,
   onMobileStatsClick,
   onUserLocationChange,
   onUserLocationError,
@@ -1015,6 +1082,7 @@ export default function CampaignMap({
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [selectedBusiness, setSelectedBusiness] = useState<MapBusiness | null>(null);
+  const [selectedCleanupEvent, setSelectedCleanupEvent] = useState<MapCleanupEvent | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CampaignEvent | null>(null);
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
@@ -1034,6 +1102,8 @@ export default function CampaignMap({
   const eventMarkerZoomListenerRef = useRef(false);
   const partnerBusinessesRef = useRef(partnerBusinesses ?? []);
   const businessMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const cleanupEventsRef = useRef(cleanupEvents ?? []);
+  const cleanupEventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -1065,6 +1135,7 @@ export default function CampaignMap({
   useEffect(() => { eventCentroidsRef.current = eventCentroids ?? {}; }, [eventCentroids]);
   useEffect(() => { eventGeoUnitIdsRef.current = eventGeoUnitIds ?? {}; }, [eventGeoUnitIds]);
   useEffect(() => { partnerBusinessesRef.current = partnerBusinesses ?? []; }, [partnerBusinesses]);
+  useEffect(() => { cleanupEventsRef.current = cleanupEvents ?? []; }, [cleanupEvents]);
   useEffect(() => { setSelectedZipRef.current = setSelectedZip; }, [setSelectedZip]);
   useEffect(() => { nycNeighborhoodsVisibleRef.current = nycNeighborhoodsVisible; }, [nycNeighborhoodsVisible]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
@@ -1243,6 +1314,67 @@ export default function CampaignMap({
       businessMarkersRef.current.push(marker);
     }
   }, []);
+
+  const updateCleanupEventMarkers = useCallback((events: MapCleanupEvent[]) => {
+    if (!map.current) return;
+
+    cleanupEventMarkersRef.current.forEach((m) => m.remove());
+    cleanupEventMarkersRef.current = [];
+
+    for (const event of events) {
+      const el = document.createElement("div");
+      const size = 24;
+      el.style.cssText = event.is_past
+        ? `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
+          "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);" +
+          "display:flex;align-items:center;justify-content:center;background:rgba(63,63,70,0.9)"
+        : `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
+          "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);" +
+          "display:flex;align-items:center;justify-content:center;background:rgba(12,74,110,0.9)";
+
+      if (event.group_logo_url) {
+        const img = document.createElement("img");
+        img.src = event.group_logo_url;
+        img.style.cssText = "width:100%;height:100%;object-fit:cover";
+        el.appendChild(img);
+      } else {
+        el.textContent = "🧹";
+        el.style.fontSize = "12px";
+      }
+      el.title = event.is_past ? `${event.title} — ${event.group_name} (ended)` : `${event.title} — ${event.group_name}`;
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([event.lng, event.lat])
+        .addTo(map.current!);
+
+      el.onclick = () => setSelectedCleanupEvent(event);
+
+      cleanupEventMarkersRef.current.push(marker);
+    }
+
+    const radiusSource = map.current.getSource("cleanup-event-radius") as maplibregl.GeoJSONSource | undefined;
+    if (radiusSource) {
+      radiusSource.setData({
+        type: "FeatureCollection",
+        features: events.map((event) => ({
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [circlePolygon(event.lat, event.lng, CLEANUP_EVENT_RADIUS_METERS)],
+          },
+          properties: {},
+        })),
+      });
+    }
+  }, []);
+
+  // Re-render cleanup event markers whenever the parent's cleanupEvents prop changes
+  // (e.g. router.refresh() after hosting a new event) — the initial draw only happens
+  // once on map/style load, so without this a newly created event never appears until
+  // a full page reload.
+  useEffect(() => {
+    updateCleanupEventMarkers(cleanupEvents ?? []);
+  }, [cleanupEvents, updateCleanupEventMarkers]);
 
   const updateReportMarkers = useCallback((reports: ProblemReportMapData[]) => {
     if (!map.current) return;
@@ -1855,6 +1987,30 @@ export default function CampaignMap({
       },
     });
 
+    m.addSource("cleanup-event-radius", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "cleanup-event-radius-fill",
+      type: "fill",
+      source: "cleanup-event-radius",
+      paint: {
+        "fill-color": "#38bdf8",
+        "fill-opacity": 0.08,
+      },
+    });
+    m.addLayer({
+      id: "cleanup-event-radius-line",
+      type: "line",
+      source: "cleanup-event-radius",
+      paint: {
+        "line-color": "#38bdf8",
+        "line-width": 1.5,
+        "line-opacity": 0.65,
+      },
+    });
+
     m.addSource("report-points", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -1874,8 +2030,9 @@ export default function CampaignMap({
 
     updateEventMarkers(activeEventsRef.current);
     updateBusinessMarkers(partnerBusinessesRef.current);
+    updateCleanupEventMarkers(cleanupEventsRef.current);
     updateReportMarkers(problemReportsRef.current?.reports ?? []);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -1999,6 +2156,20 @@ export default function CampaignMap({
         onUserLocationErrorRef.current?.(err.code);
       });
       map.current.addControl(control, "top-right");
+      map.current.addControl(
+        new ZoomToLocationControl(() => {
+          if (userLocationRef.current && map.current) {
+            map.current.flyTo({
+              center: [userLocationRef.current.longitude, userLocationRef.current.latitude],
+              zoom: 15,
+              duration: 800,
+            });
+          } else if (!hasFixRef.current) {
+            control.trigger();
+          }
+        }),
+        "top-right",
+      );
       onGeolocateTrigger?.(() => {
         if (hasFixRef.current) {
           if (lastPositionRef.current) onUserLocationChangeRef.current?.(lastPositionRef.current);
@@ -2265,6 +2436,7 @@ export default function CampaignMap({
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
       businessMarkersRef.current.forEach((m) => m.remove());
+      cleanupEventMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
       map.current?.remove();
@@ -2779,36 +2951,36 @@ export default function CampaignMap({
       )}
 
       {!pinPickerActive && !areaPickerActive && !isCollage && (
-        <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1.5 text-xs">
+        <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1 sm:gap-1.5 text-xs">
           {isChoropleth ? (
             <>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
                 <span className="text-zinc-300">Democrat lean</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-red-600/80" />
                 <span className="text-zinc-300">Republican lean</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-zinc-500/80" />
                 <span className="text-zinc-300">Neutralized</span>
               </div>
             </>
           ) : isHeatmap ? (
             <>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-2 rounded-sm" style={{ background: "linear-gradient(to right, rgba(255,200,0,0.5), rgba(255,80,0,0.8), rgba(150,0,30,1))" }} />
                 <span className="text-zinc-300">Unfollow density</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="text-zinc-500">Low → High</span>
               </div>
             </>
           ) : isHexBloom ? (
             <>
               {BLOOM_STAGE_LABELS.slice(1).map((label, i) => (
-                <div key={i + 1} className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <div key={i + 1} className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                   <span className="w-3 h-3 rounded-sm" style={{ background: BLOOM_STAGE_COLORS[i + 1] }} />
                   <span className="text-zinc-300">S{i + 1} {label}</span>
                 </div>
@@ -2816,27 +2988,27 @@ export default function CampaignMap({
             </>
           ) : (
             <>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
                 <span className="text-zinc-300">Cleanup logged</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
                 <span className="text-zinc-300">Group territory</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
                 <span className="text-zinc-300">Individual territory</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
                 <span className="text-zinc-300">Unclaimed</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
                 <span className="text-zinc-300">Open report</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="text-sm leading-none">🔥</span>
                 <span className="text-zinc-300">Hotspot</span>
               </div>
@@ -2935,6 +3107,101 @@ export default function CampaignMap({
               className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-sm font-semibold shadow-sm transition-colors"
             >
               View offer & redeem
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {selectedCleanupEvent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setSelectedCleanupEvent(null)}
+        >
+          <div
+            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setSelectedCleanupEvent(null)}
+              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+            >
+              ×
+            </button>
+            <div className="flex items-center gap-3 mb-3">
+              {selectedCleanupEvent.group_logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selectedCleanupEvent.group_logo_url}
+                  alt={selectedCleanupEvent.group_name}
+                  className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-xl">
+                  🧹
+                </div>
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-white">{selectedCleanupEvent.title}</h3>
+                  <span
+                    title="This feature should work but is still being tested."
+                    className="text-[10px] text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 shrink-0 cursor-help"
+                  >
+                    Beta
+                  </span>
+                </div>
+                <Link
+                  href={`/groups/${selectedCleanupEvent.group_slug}`}
+                  className="text-xs text-sky-400 hover:text-sky-300"
+                >
+                  {selectedCleanupEvent.group_name}
+                </Link>
+              </div>
+            </div>
+            {selectedCleanupEvent.is_past && (
+              <p className="text-sm text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                <span>🕓</span> This event has ended — check-in is closed.
+              </p>
+            )}
+            {selectedCleanupEvent.scheduled_start && (
+              <p className="text-sm text-zinc-300 mb-1.5">
+                {new Date(selectedCleanupEvent.scheduled_start).toLocaleString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+                {selectedCleanupEvent.scheduled_end &&
+                  ` – ${new Date(selectedCleanupEvent.scheduled_end).toLocaleString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}`}
+              </p>
+            )}
+            {selectedCleanupEvent.description && (
+              <p className="text-sm text-zinc-300 mb-3">{selectedCleanupEvent.description}</p>
+            )}
+            {!!(
+              (selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)
+            ) && (
+              <p className="text-sm text-emerald-400 mb-3 flex items-center gap-1.5">
+                <span>🗑️</span>
+                {(selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)} bags logged so far
+              </p>
+            )}
+            <Link
+              href={`/cleanup-events/${selectedCleanupEvent.id}`}
+              className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${
+                selectedCleanupEvent.is_past
+                  ? "bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
+                  : "bg-sky-500 hover:bg-sky-400 text-sky-950"
+              }`}
+            >
+              {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>

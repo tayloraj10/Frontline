@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import type { Database } from "@/types/database";
 import type { ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
-import type { MapBusiness } from "./CampaignMap";
+import type { MapBusiness, MapCleanupEvent } from "./CampaignMap";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -36,6 +36,7 @@ interface Props {
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
+  cleanupEvents?: MapCleanupEvent[];
   onMobileStatsClick?: () => void;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;

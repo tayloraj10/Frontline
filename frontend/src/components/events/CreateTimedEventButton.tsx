@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import TimedEventForm, { type TimedEventAreaPicker } from "./TimedEventForm";
 import type { CreatedEvent } from "@/lib/events";
 
@@ -12,6 +12,7 @@ export default function CreateTimedEventButton({
   onCreated,
   className,
   hideTrigger,
+  formKey,
 }: {
   campaignId: string;
   areaPicker: TimedEventAreaPicker;
@@ -20,8 +21,16 @@ export default function CreateTimedEventButton({
   onCreated?: (event: CreatedEvent) => void;
   className?: string;
   hideTrigger?: boolean;
+  /** Bump this to force the form to reset (e.g. after a full close/cancel). Area-pick
+   * round trips should NOT bump this, so in-progress form data survives them. */
+  formKey?: number | string;
 }) {
   const [dismissed, setDismissed] = useState(false);
+  const [everOpened, setEverOpened] = useState(false);
+
+  useEffect(() => {
+    if (open) setEverOpened(true);
+  }, [open]);
 
   return (
     <>
@@ -46,9 +55,9 @@ export default function CreateTimedEventButton({
         </div>
       )}
 
-      {open && (
+      {everOpened && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          className={`fixed inset-0 z-50 items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${open ? "flex" : "hidden"}`}
           onClick={(e) => { if (e.target === e.currentTarget) onOpenChange(false); }}
         >
           <div className="relative max-w-lg w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-4 shadow-2xl max-h-[85vh] overflow-y-auto">
@@ -61,6 +70,7 @@ export default function CreateTimedEventButton({
             </button>
             <h3 className="text-lg font-semibold text-white mb-3">✨ New Timed Event</h3>
             <TimedEventForm
+              key={formKey}
               campaignId={campaignId}
               areaPicker={areaPicker}
               onCreated={(event) => {

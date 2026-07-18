@@ -19,10 +19,12 @@ export default function BusinessLocationMapPicker({
   lat,
   lng,
   onChange,
+  locationNoun = "business",
 }: {
   lat: number | null;
   lng: number | null;
   onChange: (lat: number, lng: number) => void;
+  locationNoun?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -46,6 +48,16 @@ export default function BusinessLocationMapPicker({
     });
     mapRef.current = m;
     m.addControl(new maplibregl.NavigationControl(), "top-right");
+    if (navigator.geolocation) {
+      m.addControl(
+        new maplibregl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          trackUserLocation: false,
+          showUserLocation: true,
+        }),
+        "top-right"
+      );
+    }
 
     const marker = new maplibregl.Marker({ color: "#f59e0b", draggable: true });
     if (lat !== null && lng !== null) {
@@ -92,7 +104,7 @@ export default function BusinessLocationMapPicker({
         className="w-full h-[220px] rounded-lg overflow-hidden border border-zinc-700/50"
       />
       <p className="text-xs text-zinc-400 mt-1">
-        Click or drag the pin to set the business location.{" "}
+        Click or drag the pin to set the {locationNoun} location.{" "}
         {lat !== null && lng !== null ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "No location set."}
       </p>
     </div>

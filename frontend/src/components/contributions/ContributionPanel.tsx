@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createCleanupEvent } from "@/lib/cleanupEvents";
+import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -206,7 +208,7 @@ interface ContributionPanelProps {
   campaignId: string;
   campaignContributionType: string;
   userId: string | null;
-  userGroups?: { id: string; name: string; image_url?: string | null }[];
+  userGroups?: { id: string; name: string; image_url?: string | null; isAdmin?: boolean }[];
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
@@ -217,6 +219,9 @@ interface ContributionPanelProps {
   requestLocation?: () => boolean;
   activeMapStyle?: string;
   onStyleChange?: (id: string) => void;
+  pendingCleanupEventId?: string | null;
+  onPendingCleanupEventConsumed?: () => void;
+  nearbyCleanupEvent?: { id: string; title: string } | null;
 }
 
 const METERS_TO_FEET = 3.28084;
@@ -396,6 +401,7 @@ function ContributeModal({
   onClose,
   onContributionSubmitted,
   activeMapStyle,
+  nearbyEvent,
 }: {
   campaignId: string;
   campaignContributionType: string;
@@ -407,6 +413,7 @@ function ContributeModal({
   onClose: () => void;
   onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string) => void;
   activeMapStyle?: string;
+  nearbyEvent?: { id: string; title: string } | null;
 }) {
   const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
@@ -450,23 +457,36 @@ function ContributeModal({
   const [appliedMultiplier, setAppliedMultiplier] = useState<{ multiplier: number; title: string } | null>(null);
   const [valueFlash, setValueFlash] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
+  // Mirrors the nearbyReport claim checkbox below, but for proximity-detected events: the
+  // user is opted in by default (matches how being physically at an event implies intent
+  // to contribute to it) and can uncheck to log a separate, unrelated cleanup instead.
+  const [useNearbyEvent, setUseNearbyEvent] = useState(true);
+  useEffect(() => setUseNearbyEvent(true), [nearbyEvent?.id]);
+
+  // A proximity-detected nearby event the user has opted into via the checkbox below.
+  const effectiveEventId = useNearbyEvent ? nearbyEvent?.id ?? null : null;
+  const isEventMode = isCleanup && Boolean(effectiveEventId);
+
+  // Scoring never applies a hotspot bonus to an event-linked contribution — only the
+  // display banner below uses raw activeMultiplier so it can still show it informationally.
+  const effectiveMultiplier = effectiveEventId ? null : activeMultiplier;
 
   const submitCoords = overrideCoords ?? gps.coords;
   const baseValue = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 0;
-  const finalValue = baseValue * (activeMultiplier?.multiplier ?? 1);
+  const finalValue = baseValue * (effectiveMultiplier?.multiplier ?? 1);
 
   // Flash the territory-value number whenever a hotspot bonus kicks it up, so the
   // extra points are legible as an event, not just a bigger static number.
   const prevFinalValueRef = useRef(finalValue);
   useEffect(() => {
-    if (activeMultiplier && prevFinalValueRef.current !== finalValue) {
+    if (effectiveMultiplier && prevFinalValueRef.current !== finalValue) {
       setValueFlash(true);
       const t = setTimeout(() => setValueFlash(false), 400);
       prevFinalValueRef.current = finalValue;
       return () => clearTimeout(t);
     }
     prevFinalValueRef.current = finalValue;
-  }, [finalValue, activeMultiplier]);
+  }, [finalValue, effectiveMultiplier]);
 
   // Offer to claim a nearby reported hotspot as cleaned up, without assuming it — the
   // user decides whether this cleanup is for that report or just a separate one.
@@ -482,12 +502,16 @@ function ContributeModal({
     )
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => setNearbyReport(data?.nearby_report ?? null))
-      .catch(() => {});
+      .catch(() => { });
     return () => controller.abort();
   }, [isCleanup, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
 
   // Check whether the submit location is inside an active boss-spawn hotspot, so the
   // dialog can show the same score multiplier that /contributions/submit will apply.
+  // Fetched regardless of event linkage so a hotspot can still be surfaced informationally
+  // alongside an event banner; scoring itself still zeroes this out via effectiveMultiplier
+  // below (group cleanup events never carry a bonus multiplier, mirroring
+  // apply_multiplier=cleanup_event_id is None server-side).
   useEffect(() => {
     if (!isCleanup || !submitCoords) {
       setActiveMultiplier(null);
@@ -500,7 +524,7 @@ function ContributeModal({
     )
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => setActiveMultiplier(data?.active ? { multiplier: data.multiplier, title: data.title } : null))
-      .catch(() => {});
+      .catch(() => { });
     return () => controller.abort();
   }, [isCleanup, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
 
@@ -530,7 +554,7 @@ function ContributeModal({
     setError(null);
     // Capture whether a hotspot bonus was active right now, before the async submit
     // resolves, so the success screen's celebration matches what was actually scored.
-    setAppliedMultiplier(isCleanup ? activeMultiplier : null);
+    setAppliedMultiplier(isCleanup ? effectiveMultiplier : null);
 
     try {
       const photoUrls = photos.length > 0 ? await Promise.all(photos.map((p) => uploadToR2(p))) : [];
@@ -560,6 +584,8 @@ function ContributeModal({
         body.latitude = submitCoords.latitude;
         body.longitude = submitCoords.longitude;
       }
+
+      if (effectiveEventId) body.cleanup_event_id = effectiveEventId;
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/submit`,
@@ -610,9 +636,8 @@ function ContributeModal({
           </p>
           {isCleanup && appliedMultiplier && (
             <p
-              className={`text-sm text-orange-300 font-semibold text-center transition-all duration-500 ${
-                celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"
-              }`}
+              className={`text-sm text-orange-300 font-semibold text-center transition-all duration-500 ${celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"
+                }`}
             >
               <span className="inline-block animate-bounce">🔥</span>{" "}
               +{appliedMultiplier.multiplier}× hotspot bonus applied!
@@ -620,6 +645,9 @@ function ContributeModal({
           )}
           {isCleanup && hotspotCleared && (
             <p className="text-sm text-orange-400 font-semibold text-center">🔥 Hotspot cleared!</p>
+          )}
+          {isCleanup && isEventMode && (
+            <p className="text-sm text-sky-400 font-semibold text-center">📅 Counted toward the event</p>
           )}
           {isCleanup && fromSolarpunk && (
             <>
@@ -641,17 +669,46 @@ function ContributeModal({
   }
 
   return (
-    <ModalShell title={config.title} onClose={onClose} glow={isCleanup && Boolean(activeMultiplier)}>
+    <ModalShell
+      title={config.title}
+      onClose={onClose}
+      glow={isEventMode ? "blue" : isCleanup && Boolean(activeMultiplier) ? "orange" : false}
+    >
       <div className="flex flex-col gap-4">
 
-        {isCleanup && activeMultiplier && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
-            <span className="text-base shrink-0">🔥</span>
+        {isCleanup && nearbyEvent && (
+          <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useNearbyEvent}
+              onChange={(e) => setUseNearbyEvent(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
             <span>
-              Hotspot active — cleanups here earn a{" "}
-              <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> score multiplier.
+              📍 You&apos;re in range of the event{" "}
+              <span className="font-semibold text-sky-200">{nearbyEvent.title}</span>. Count this toward it?
+              <span className="block text-sky-400/70 mt-0.5">No bonus multiplier applies to event cleanups. Uncheck to log separately.</span>
             </span>
-          </div>
+          </label>
+        )}
+
+        {isCleanup && activeMultiplier && (
+          effectiveEventId ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
+              <span className="text-base shrink-0">🔥</span>
+              <span>
+                A <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> hotspot is also active here, but event cleanups don&apos;t earn a bonus multiplier.
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
+              <span className="text-base shrink-0">🔥</span>
+              <span>
+                Hotspot active — cleanups here earn a{" "}
+                <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> score multiplier.
+              </span>
+            </div>
+          )
         )}
 
         {/* Account handle — unfollow only (required) */}
@@ -739,8 +796,8 @@ function ContributeModal({
                 type="button"
                 onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null
-                    ? "bg-zinc-700 border-zinc-500 text-zinc-100"
-                    : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                  ? "bg-zinc-700 border-zinc-500 text-zinc-100"
+                  : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
                   }`}
               >
                 Individual
@@ -751,8 +808,8 @@ function ContributeModal({
                   type="button"
                   onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id
-                      ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
-                      : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                    ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                    : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
                     }`}
                 >
                   {g.image_url ? (
@@ -797,18 +854,17 @@ function ContributeModal({
             </div>
             <p className="mt-2 text-xs text-zinc-500">
               Territory value:{" "}
-              {activeMultiplier && (
+              {effectiveMultiplier && (
                 <span className="line-through text-zinc-600 mr-1.5">{baseValue.toFixed(0)}</span>
               )}
               <span
-                className={`text-lg font-bold inline-block transition-transform duration-300 ${
-                  activeMultiplier ? "text-orange-400" : "text-emerald-400"
-                } ${valueFlash ? "scale-125" : "scale-100"}`}
+                className={`text-lg font-bold inline-block transition-transform duration-300 ${effectiveMultiplier ? "text-orange-400" : "text-emerald-400"
+                  } ${valueFlash ? "scale-125" : "scale-100"}`}
               >
                 {finalValue.toFixed(0)}
               </span>
-              {activeMultiplier ? (
-                <span className="ml-1 text-orange-400/80">({activeMultiplier.multiplier}× hotspot multiplier applied)</span>
+              {effectiveMultiplier ? (
+                <span className="ml-1 text-orange-400/80">({effectiveMultiplier.multiplier}× hotspot multiplier applied)</span>
               ) : (
                 <span className="ml-1 text-zinc-600">(kitchen bags count {LARGE_BAG_VALUE}x)</span>
               )}
@@ -839,8 +895,8 @@ function ContributeModal({
                   type="button"
                   onClick={() => setSelectedAction(a.key)}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${selectedAction === a.key
-                      ? "bg-blue-900/60 border-blue-500 text-blue-200"
-                      : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
+                    ? "bg-blue-900/60 border-blue-500 text-blue-200"
+                    : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
                     }`}
                 >
                   <span className="text-base shrink-0">{a.icon}</span>
@@ -1092,12 +1148,12 @@ function ReportModal({
                 key={s}
                 onClick={() => setSeverity(s)}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize ${severity === s
-                    ? s === "high"
-                      ? "bg-red-900/60 border-red-600 text-red-300"
-                      : s === "medium"
-                        ? "bg-yellow-900/60 border-yellow-600 text-yellow-300"
-                        : "bg-zinc-700 border-zinc-500 text-zinc-200"
-                    : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                  ? s === "high"
+                    ? "bg-red-900/60 border-red-600 text-red-300"
+                    : s === "medium"
+                      ? "bg-yellow-900/60 border-yellow-600 text-yellow-300"
+                      : "bg-zinc-700 border-zinc-500 text-zinc-200"
+                  : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
                   }`}
               >
                 {s}
@@ -1131,6 +1187,289 @@ function ReportModal({
               Sign in to report
             </Link>
           )}
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Host cleanup event modal ─────────────────────────────────────────────────
+
+function HostEventModal({
+  campaignId,
+  userId,
+  adminGroups,
+  gps,
+  overrideCoords,
+  onEnterPinPicker,
+  onClose,
+  activeMapStyle,
+}: {
+  campaignId: string;
+  userId: string;
+  adminGroups: { id: string; name: string }[];
+  gps: ReturnType<typeof useGPS>;
+  overrideCoords: Coords | null;
+  onEnterPinPicker: (coords: Coords) => void;
+  onClose: () => void;
+  activeMapStyle?: string;
+}) {
+  const router = useRouter();
+  const [groupId, setGroupId] = useState(adminGroups[0]?.id ?? "");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [scheduledStart, setScheduledStart] = useState("");
+  const [scheduledEnd, setScheduledEnd] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ id: string; join_code: string } | null>(null);
+  const [addressValue, setAddressValue] = useState("");
+  const [addressCoords, setAddressCoords] = useState<Coords | null>(null);
+  const [maxAttendees, setMaxAttendees] = useState("");
+  const [externalLink, setExternalLink] = useState("");
+
+  useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(imageFile);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  const submitCoords = overrideCoords ?? addressCoords ?? gps.coords;
+  const canSubmit = !!groupId && !!title.trim() && !!scheduledStart && !!submitCoords;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !submitCoords) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await createCleanupEvent({
+        campaignId,
+        groupId,
+        organizerUserId: userId,
+        title,
+        description,
+        imageFile,
+        scheduledStart: new Date(scheduledStart).toISOString(),
+        scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
+        latitude: submitCoords.latitude,
+        longitude: submitCoords.longitude,
+        maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
+        externalLink: externalLink.trim() || null,
+      });
+      setCreated(result);
+      router.refresh();
+    } catch {
+      setError("Couldn't create the event. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (created) {
+    return (
+      <ModalShell onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-4">
+          <span className="text-4xl">📅</span>
+          <p className="text-zinc-100 font-semibold text-center">Event created!</p>
+          <p className="text-zinc-500 text-xs text-center">
+            Join code <span className="font-mono text-zinc-300">{created.join_code}</span> — share it so attendees can check in without GPS.
+          </p>
+          <div className="flex gap-2 w-full mt-1">
+            <Link
+              href={`/cleanup-events/${created.id}`}
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-300 text-sm text-center hover:bg-zinc-800 transition-colors"
+            >
+              View event
+            </Link>
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-sky-950 text-sm font-semibold transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  return (
+    <ModalShell title="Host Cleanup Event" badge="Beta" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        {adminGroups.length > 1 && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Hosting group</label>
+            <select
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+            >
+              {adminGroups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Title</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Saturday shoreline cleanup"
+            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Starts</label>
+          <input
+            type="datetime-local"
+            value={scheduledStart}
+            onChange={(e) => setScheduledStart(e.target.value)}
+            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+          />
+          <p className="mt-1 text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
+        </div>
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Ends (optional)</label>
+          <input
+            type="datetime-local"
+            value={scheduledEnd}
+            onChange={(e) => setScheduledEnd(e.target.value)}
+            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+          />
+          {!scheduledEnd && (
+            <p className="mt-1 text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">RSVP limit (optional)</label>
+          <input
+            type="number"
+            min={1}
+            value={maxAttendees}
+            onChange={(e) => setMaxAttendees(e.target.value.replace(/^0+(?=\d)/, ""))}
+            placeholder="No limit"
+            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Event link (optional)</label>
+          <input
+            type="url"
+            value={externalLink}
+            onChange={(e) => setExternalLink(e.target.value)}
+            placeholder="https://... (site, waiver form, sign-up sheet)"
+            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Event location</label>
+          <AddressAutocomplete
+            value={addressValue}
+            onChange={setAddressValue}
+            onSelect={(s) => {
+              setAddressValue(s.addressLine1);
+              setAddressCoords({ latitude: s.lat, longitude: s.lng });
+            }}
+            placeholder="Search for an address..."
+          />
+          {!overrideCoords && !addressCoords && (
+            <GpsIndicator
+              status={gps.status}
+              coords={gps.coords}
+              errorCode={gps.errorCode}
+              onRetry={gps.capture}
+            />
+          )}
+          {overrideCoords ? (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+            </div>
+          ) : addressCoords ? (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Address set: {addressCoords.latitude.toFixed(5)}, {addressCoords.longitude.toFixed(5)}
+            </div>
+          ) : null}
+          {submitCoords && (
+            <button
+              onClick={() => onEnterPinPicker(submitCoords)}
+              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+            >
+              {overrideCoords ? "Reposition pin on map" : "Fine-tune pin on map"}
+            </button>
+          )}
+        </div>
+
+        {submitCoords && (
+          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} interactive />
+        )}
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Photo (optional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+          />
+          {imagePreview && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+                <img src={imagePreview} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setImageFile(null)}
+                  className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center bg-black/70 text-white text-[10px] leading-none rounded-bl"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {error && <p className="text-red-400 text-xs">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit || submitting}
+            className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed text-sky-950 text-sm font-semibold transition-colors"
+          >
+            {submitting ? "Creating…" : "Create Event"}
+          </button>
         </div>
       </div>
     </ModalShell>
@@ -1276,8 +1615,8 @@ function SolarpunkActionModal({
                 type="button"
                 onClick={() => { setSelectedCategoryIdx(i); setSelectedAction(null); }}
                 className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg border text-xs font-medium transition-colors ${selectedCategoryIdx === i
-                    ? "bg-lime-900/60 border-lime-600 text-lime-300"
-                    : "bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                  ? "bg-lime-900/60 border-lime-600 text-lime-300"
+                  : "bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
                   }`}
               >
                 <span className="text-base">{cat.icon}</span>
@@ -1309,8 +1648,8 @@ function SolarpunkActionModal({
                     type="button"
                     onClick={() => setSelectedAction(a)}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${selectedAction?.key === a.key
-                        ? "bg-lime-900/60 border-lime-600 text-lime-200"
-                        : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                      ? "bg-lime-900/60 border-lime-600 text-lime-200"
+                      : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                       }`}
                   >
                     <span>{a.label}</span>
@@ -1650,14 +1989,16 @@ function AllActionsModal({
 
 function ModalShell({
   title,
+  badge,
   onClose,
   children,
   glow,
 }: {
   title?: string;
+  badge?: string;
   onClose: () => void;
   children: React.ReactNode;
-  glow?: boolean;
+  glow?: "orange" | "blue" | false;
 }) {
   return (
     <div
@@ -1666,16 +2007,28 @@ function ModalShell({
     >
       <div className="relative w-full max-w-sm">
         {glow && (
-          <div className="absolute -inset-1 rounded-xl bg-orange-500/50 blur-md animate-pulse pointer-events-none" />
+          <div
+            className={`absolute -inset-1 rounded-xl blur-md animate-pulse pointer-events-none ${glow === "blue" ? "bg-sky-500/50" : "bg-orange-500/50"
+              }`}
+          />
         )}
         <div
-          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] ${
-            glow ? "border-orange-600/70" : "border-zinc-800"
-          }`}
+          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
+            }`}
         >
           {title && (
             <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
-              <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
+                {badge && (
+                  <span
+                    title="This feature should work but is still being tested."
+                    className="text-[10px] text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 shrink-0 cursor-help"
+                  >
+                    {badge}
+                  </span>
+                )}
+              </div>
               <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">
                 ×
               </button>
@@ -1707,15 +2060,34 @@ export default function ContributionPanel({
   requestLocation,
   activeMapStyle,
   onStyleChange,
+  pendingCleanupEventId,
+  onPendingCleanupEventConsumed,
+  nearbyCleanupEvent,
 }: ContributionPanelProps) {
   const isSolarpunk = campaignContributionType === "solarpunk_action";
 
   const gps = useGPS(requestLocation, userLocation, locationError);
-  const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | "all_actions" | null>(null);
+  const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | "all_actions" | "host_event" | null>(null);
   const [contributeOverrideCoords, setContributeOverrideCoords] = useState<Coords | null>(null);
   const [solarpunkPhotoOverrideCoords, setSolarpunkPhotoOverrideCoords] = useState<Coords | null>(null);
   const [reportOverrideCoords, setReportOverrideCoords] = useState<Coords | null>(null);
+  const [hostEventOverrideCoords, setHostEventOverrideCoords] = useState<Coords | null>(null);
+  const [logHostExpanded, setLogHostExpanded] = useState(false);
   const prevPinPickerActiveRef = useRef(false);
+
+  // Geofence auto-prompt shortcut: the parent tells us the user tapped the banner's "Log
+  // here" action. Jump straight into the contribute modal — since the user is still within
+  // range, nearbyCleanupEvent below drives the same pre-checked "count this toward the
+  // event" banner they'd get from opening Log Cleanup manually, just without the extra tap.
+  // (Not a forced/locked link to the event — the user can still uncheck it in the modal.)
+  useEffect(() => {
+    if (!pendingCleanupEventId) return;
+    setMode("contribute");
+    setContributeOverrideCoords(null);
+    gps.capture();
+    onPendingCleanupEventConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCleanupEventId]);
 
   // The modal stays mounted (just visually hidden) while pinPickerActive is true, so its
   // local state (photos, bag counts, notes…) survives the pin-drag round trip — it used to
@@ -1728,6 +2100,8 @@ export default function ContributionPanel({
         setContributeOverrideCoords(placedPinCoords);
       } else if (mode === "solarpunk_photo") {
         setSolarpunkPhotoOverrideCoords(placedPinCoords);
+      } else if (mode === "host_event") {
+        setHostEventOverrideCoords(placedPinCoords);
       }
     }
     prevPinPickerActiveRef.current = pinPickerActive;
@@ -1758,20 +2132,102 @@ export default function ContributionPanel({
     onEnterPinPicker(coords, false, "Drag the pin to the trash location");
   };
 
+  const handleEnterPinPickerForHostEvent = (coords: Coords) => {
+    onEnterPinPicker(coords, false, "Drag the pin to the event location");
+  };
+
   const showReport = campaignContributionType === "cleanup";
+  const adminGroups = userGroups.filter((g) => g.isAdmin);
+  const showHostEvent = showReport && adminGroups.length > 0;
   const btn = PANEL_BUTTON[campaignContributionType] ?? PANEL_BUTTON.cleanup;
 
   return (
     <>
       {!pinPickerActive && (
         <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 items-start">
-          <div className="flex items-center gap-2">
+          {/* Mobile: condense Log/Host into one FAB that expands sub-options in an arc */}
+          <div className="flex items-center gap-2 sm:hidden">
+            {showHostEvent ? (
+              <div className="flex items-center gap-2">
+                <div className="relative w-14 h-14">
+                  <button
+                    onClick={() => setLogHostExpanded((v) => !v)}
+                    aria-label={logHostExpanded ? "Close menu" : "Log Cleanup or Host Event"}
+                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-2xl backdrop-blur-sm transition-colors shadow-lg"
+                  >
+                    {logHostExpanded ? "✕" : btn.icon}
+                  </button>
+                  {logHostExpanded && (
+                    <>
+                      <button
+                        onClick={() => { openContribute(); setLogHostExpanded(false); }}
+                        title={btn.label}
+                        aria-label={btn.label}
+                        style={{ transform: "translate(10px, -78px)" }}
+                        className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 border border-zinc-700 backdrop-blur-sm transition-transform shadow-lg"
+                      >
+                        <span className="text-base leading-none">{btn.icon}</span>
+                        <span className="text-[8px] leading-none text-zinc-300">Log</span>
+                      </button>
+                      <button
+                        onClick={() => { setMode("host_event"); setHostEventOverrideCoords(null); gps.capture(); setLogHostExpanded(false); }}
+                        title="Host Event (Beta) — this feature should work but is still being tested."
+                        aria-label="Host Event (Beta)"
+                        style={{ transform: "translate(66px, -38px)" }}
+                        className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 border border-sky-800/60 backdrop-blur-sm transition-transform shadow-lg"
+                      >
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-zinc-900" />
+                        <span className="text-base leading-none">📅</span>
+                        <span className="text-[8px] leading-none text-sky-300">Event</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+                <span className="text-zinc-300 text-sm font-medium bg-zinc-900/90 border border-zinc-700 px-2 py-1 rounded-lg backdrop-blur-sm shadow-lg">
+                  Cleanup
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={openContribute}
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+              >
+                {btn.icon} {btn.label}
+              </button>
+            )}
+            {isSolarpunk && (
+              <button
+                onClick={() => setMode("all_actions")}
+                title="View all actions"
+                aria-label="View all Solarpunk actions"
+                className="flex items-center justify-center w-9 h-9 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-bold backdrop-blur-sm transition-colors shadow-lg"
+              >
+                ℹ️
+              </button>
+            )}
+          </div>
+          {/* Desktop: no collision with the legend, so keep them side by side */}
+          <div className="hidden sm:flex items-center gap-2">
             <button
               onClick={openContribute}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
             >
               {btn.icon} {btn.label}
             </button>
+            {showHostEvent && (
+              <button
+                onClick={() => { setMode("host_event"); setHostEventOverrideCoords(null); gps.capture(); }}
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-sky-800/60 rounded-lg text-sky-300 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+              >
+                📅 Host Event
+                <span
+                  title="This feature should work but is still being tested."
+                  className="text-[9px] text-amber-400 border border-amber-700/60 rounded px-1 py-0.5 leading-none cursor-help"
+                >
+                  Beta
+                </span>
+              </button>
+            )}
             {isSolarpunk && (
               <button
                 onClick={() => setMode("all_actions")}
@@ -1807,8 +2263,8 @@ export default function ContributionPanel({
                     key={s.id}
                     onClick={() => onStyleChange(s.id)}
                     className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${activeMapStyle === s.id
-                        ? "bg-zinc-600 text-zinc-100"
-                        : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                      ? "bg-zinc-600 text-zinc-100"
+                      : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
                       }`}
                   >
                     {s.label}
@@ -1846,6 +2302,7 @@ export default function ContributionPanel({
               onClose={() => { setMode(null); setContributeOverrideCoords(null); }}
               onContributionSubmitted={onContributionSubmitted}
               activeMapStyle={activeMapStyle}
+              nearbyEvent={nearbyCleanupEvent ?? null}
             />
           )}
         </div>
@@ -1882,6 +2339,20 @@ export default function ContributionPanel({
             onClose={() => { setMode(null); setReportOverrideCoords(null); }}
             activeMapStyle={activeMapStyle}
             onReportSubmitted={onReportSubmitted}
+          />
+        </div>
+      )}
+      {mode === "host_event" && userId && (
+        <div className={pinPickerActive ? "hidden" : undefined}>
+          <HostEventModal
+            campaignId={campaignId}
+            userId={userId}
+            adminGroups={adminGroups}
+            gps={gps}
+            overrideCoords={hostEventOverrideCoords}
+            onEnterPinPicker={handleEnterPinPickerForHostEvent}
+            onClose={() => { setMode(null); setHostEventOverrideCoords(null); }}
+            activeMapStyle={activeMapStyle}
           />
         </div>
       )}

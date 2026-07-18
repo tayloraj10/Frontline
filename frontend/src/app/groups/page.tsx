@@ -12,13 +12,20 @@ type Group = Database["public"]["Tables"]["groups"]["Row"];
 const getGroupsListData = unstable_cache(
   async () => {
     const supabase = createPublicClient();
-    const [{ data: groupsData }, { data: membersData }] = await Promise.all([
+    const [{ data: groupsData }, { data: membersData }, { data: eventsData }] = await Promise.all([
       supabase.from("groups").select("*").order("created_at", { ascending: false }),
       supabase.from("group_members").select("group_id, user_id"),
+      supabase
+        .from("cleanups")
+        .select("group_id")
+        .eq("is_group_event", true)
+        .neq("status", "cancelled")
+        .gt("scheduled_start", new Date().toISOString()),
     ]);
     return {
       groups: (groupsData ?? []) as Group[],
       members: membersData ?? ([] as { group_id: string; user_id: string }[]),
+      events: eventsData ?? ([] as { group_id: string | null }[]),
     };
   },
   ["groups-list-data"],
@@ -28,7 +35,7 @@ const getGroupsListData = unstable_cache(
 export default async function GroupsPage() {
   const supabase = await createClient();
 
-  const [{ data: { user } }, { groups: groupsData, members: membersData }] = await Promise.all([
+  const [{ data: { user } }, { groups: groupsData, members: membersData, events: eventsData }] = await Promise.all([
     supabase.auth.getUser(),
     getGroupsListData(),
   ]);
@@ -51,6 +58,12 @@ export default async function GroupsPage() {
   for (const m of membersData ?? []) {
     memberCountByGroup.set(m.group_id, (memberCountByGroup.get(m.group_id) ?? 0) + 1);
     if (user && m.user_id === user.id) userGroupIds.add(m.group_id);
+  }
+
+  const upcomingEventCountByGroup = new Map<string, number>();
+  for (const e of eventsData ?? []) {
+    if (!e.group_id) continue;
+    upcomingEventCountByGroup.set(e.group_id, (upcomingEventCountByGroup.get(e.group_id) ?? 0) + 1);
   }
 
   return (
@@ -90,6 +103,7 @@ export default async function GroupsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {groups.map((group) => {
             const count = memberCountByGroup.get(group.id) ?? 0;
+            const eventCount = upcomingEventCountByGroup.get(group.id) ?? 0;
             const isMember = userGroupIds.has(group.id);
 
             return (
@@ -120,7 +134,12 @@ export default async function GroupsPage() {
                           Member
                         </span>
                       )}
-                      <span className="ml-auto text-xs text-zinc-500">
+                      <span className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                        {eventCount > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-sky-700/50 bg-sky-950/30 px-2 py-0.5 text-sky-400">
+                            🗓️ {eventCount} upcoming
+                          </span>
+                        )}
                         {count} member{count !== 1 ? "s" : ""}
                       </span>
                     </div>

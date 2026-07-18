@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
+import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
 import type { Database } from "@/types/database";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
@@ -50,6 +51,15 @@ export default async function GroupProfilePage({ params }: Props) {
 
   const isMember = user ? members.some((m) => m.user_id === user.id) : false;
   const isAdmin = user ? members.some((m) => m.user_id === user.id && m.role === "admin") : false;
+
+  const groupEvents = await listGroupCleanupEvents(group.id, user?.id ?? null).catch(() => []);
+  const upcomingEvents = groupEvents.filter((e) => !e.is_past && e.status !== "cancelled");
+  const pastEvents = groupEvents.filter((e) => e.is_past || e.status === "cancelled");
+
+  const formatEventDate = (start: string | null) =>
+    start
+      ? new Date(start).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      : "Date TBD";
 
   return (
     <main className="max-w-3xl mx-auto px-6 py-10 w-full">
@@ -110,6 +120,14 @@ export default async function GroupProfilePage({ params }: Props) {
         <div className="flex items-center gap-2 shrink-0">
           {isAdmin && (
             <Link
+              href={`/groups/${slug}/events/new`}
+              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
+            >
+              New event
+            </Link>
+          )}
+          {isAdmin && (
+            <Link
               href={`/groups/${slug}/edit`}
               className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
             >
@@ -129,6 +147,116 @@ export default async function GroupProfilePage({ params }: Props) {
           )}
         </div>
       </div>
+
+      <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+        <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
+          <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+            Upcoming Events <span className="text-zinc-500 font-normal">({upcomingEvents.length})</span>
+            <span
+              title="This feature should work but is still being tested."
+              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 cursor-help"
+            >
+              Beta
+            </span>
+          </span>
+        </div>
+        {upcomingEvents.length === 0 ? (
+          <div className="px-5 py-8 text-center text-zinc-600 text-sm">No upcoming events.</div>
+        ) : (
+          <ul className="divide-y divide-zinc-800/60">
+            {upcomingEvents.map((e) => (
+              <li key={e.id}>
+                <Link
+                  href={`/cleanup-events/${e.id}`}
+                  className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-zinc-900/40 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+                      {e.image_url ? (
+                        <img src={e.image_url} alt={e.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-lg">🧹</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm text-zinc-200 truncate">{e.title}</p>
+                      <p className="text-xs text-zinc-500">
+                        {formatEventDate(e.scheduled_start)}
+                        {e.max_attendees ? ` · ${e.going_count}/${e.max_attendees} going` : e.going_count > 0 ? ` · ${e.going_count} going` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {e.is_ongoing && (
+                    <span className="text-xs text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 shrink-0">
+                      Live
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {isAdmin && (
+        <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+          <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
+            <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+              Event History <span className="text-zinc-500 font-normal">({pastEvents.length})</span>
+              <span
+                title="This feature should work but is still being tested."
+                className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 cursor-help"
+              >
+                Beta
+              </span>
+            </span>
+            <span className="text-xs text-zinc-600">Admin only</span>
+          </div>
+          {pastEvents.length === 0 ? (
+            <div className="px-5 py-8 text-center text-zinc-600 text-sm">No past events yet.</div>
+          ) : (
+            <ul className="divide-y divide-zinc-800/60">
+              {pastEvents.map((e) => (
+                <li key={e.id}>
+                  <Link
+                    href={`/cleanup-events/${e.id}`}
+                    className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-zinc-900/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center opacity-70">
+                        {e.image_url ? (
+                          <img src={e.image_url} alt={e.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-lg">🧹</span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm text-zinc-300 truncate">{e.title}</p>
+                        <p className="text-xs text-zinc-500">
+                          {formatEventDate(e.scheduled_start)} · {e.going_count} RSVP&apos;d
+                        </p>
+                      </div>
+                    </div>
+                    {e.status === "cancelled" ? (
+                      <span className="text-xs text-red-400 border border-red-800/60 rounded px-1.5 py-0.5 shrink-0">
+                        Cancelled
+                      </span>
+                    ) : e.is_ongoing ? (
+                      <span className="text-xs text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 shrink-0">
+                        Ongoing
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-500 border border-zinc-700 rounded px-1.5 py-0.5 shrink-0">
+                        Over
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="border border-zinc-800 rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
