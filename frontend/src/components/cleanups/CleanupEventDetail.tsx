@@ -309,6 +309,9 @@ export default function CleanupEventDetail({
         {(event.total_small_bags + event.total_large_bags) > 0 && (
           <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
             🗑️ {event.total_small_bags + event.total_large_bags} bags
+            <span className="text-xs font-normal text-emerald-400/70">
+              ({event.total_small_bags} small, {event.total_large_bags} large)
+            </span>
             {event.total_pounds > 0 && ` · ${event.total_pounds.toLocaleString()} lbs`} logged so far
           </p>
         )}
@@ -452,8 +455,12 @@ export default function CleanupEventDetail({
                   <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
                   <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
                   {(r.small_bags + r.large_bags) > 0 && (
-                    <span className="text-xs text-emerald-400 shrink-0">
+                    <span
+                      className="text-xs text-emerald-400 shrink-0"
+                      title={`${r.small_bags} small bag${r.small_bags === 1 ? "" : "s"} (about a grocery bag size), ${r.large_bags} large bag${r.large_bags === 1 ? "" : "s"} (about a kitchen trash bag size)`}
+                    >
                       🗑️ {r.small_bags + r.large_bags}
+                      <span className="text-emerald-400/70"> ({r.small_bags} small, {r.large_bags} large)</span>
                       {r.pounds > 0 && ` · ${r.pounds.toLocaleString()} lbs`}
                     </span>
                   )}
@@ -574,27 +581,25 @@ function OrganizerLogButton({
         onClick={(e) => e.stopPropagation()}
       >
         <h4 className="text-sm font-semibold text-zinc-100 mb-3">Log contribution for {attendeeName}</h4>
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <div>
-            <label className="block text-[11px] text-zinc-600 mb-1">Plastic grocery bags</label>
-            <input
-              type="number"
-              min={0}
-              value={smallBags}
-              onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-zinc-600 mb-1">Kitchen trash bags</label>
-            <input
-              type="number"
-              min={0}
-              value={largeBags}
-              onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-              className={inputCls}
-            />
-          </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0 mb-3">
+          <label className="text-[11px] text-zinc-600">Small bags</label>
+          <label className="text-[11px] text-zinc-600">Large bags</label>
+          <p className="text-[11px] text-zinc-700 mb-1">(about a grocery bag)</p>
+          <p className="text-[11px] text-zinc-700 mb-1">(about a kitchen trash bag)</p>
+          <input
+            type="number"
+            min={0}
+            value={smallBags}
+            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+            className={inputCls}
+          />
+          <input
+            type="number"
+            min={0}
+            value={largeBags}
+            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+            className={inputCls}
+          />
         </div>
         {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
         <div className="flex items-center gap-2">

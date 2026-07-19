@@ -24,7 +24,7 @@ interface Coords {
   longitude: number;
 }
 
-// A kitchen trash bag (13-gal) holds ~3x the volume of a plastic grocery bag.
+// Large (~kitchen trash bag, 13-gal) holds ~3x the volume of small (~grocery bag).
 const LARGE_BAG_VALUE = 3;
 const SMALL_BAG_VALUE = 1;
 
@@ -1188,27 +1188,25 @@ function ContributeModal({
         {isCleanup && (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] text-zinc-600 mb-1">Plastic grocery bags</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={smallBags}
-                  onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-zinc-600 mb-1">Kitchen trash bags</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={largeBags}
-                  onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
-                />
-              </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0">
+              <label className="text-[11px] text-zinc-600">Small bags</label>
+              <label className="text-[11px] text-zinc-600">Large bags</label>
+              <p className="text-[11px] text-zinc-700 mb-1">(about a grocery bag)</p>
+              <p className="text-[11px] text-zinc-700 mb-1">(about a kitchen trash bag)</p>
+              <input
+                type="number"
+                min={0}
+                value={smallBags}
+                onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+              />
+              <input
+                type="number"
+                min={0}
+                value={largeBags}
+                onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+              />
             </div>
             <p className="mt-2 text-xs text-zinc-500">
               Territory value:{" "}
@@ -1224,11 +1222,13 @@ function ContributeModal({
               {effectiveMultiplier ? (
                 <span className="ml-1 text-orange-400/80">({effectiveMultiplier.multiplier}× hotspot multiplier applied)</span>
               ) : (
-                <span className="ml-1 text-zinc-600">(kitchen bags count {LARGE_BAG_VALUE}x)</span>
+                <span className="ml-1 text-zinc-600">(large bags count {LARGE_BAG_VALUE}x)</span>
               )}
             </p>
             <div className="mt-3">
-              <label className="block text-[11px] text-zinc-600 mb-1">Pounds cleaned up (optional)</label>
+              <label className={`block text-[11px] mb-1 ${isEventMode && !pounds.trim() ? "text-amber-400" : "text-zinc-600"}`}>
+                Pounds cleaned up (optional){isEventMode && !pounds.trim() ? " — helps the event's total!" : ""}
+              </label>
               <input
                 type="number"
                 min={0}
@@ -1236,7 +1236,8 @@ function ContributeModal({
                 value={pounds}
                 onChange={(e) => setPounds(e.target.value)}
                 placeholder="e.g. 25"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+                className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 ${isEventMode && !pounds.trim() ? "border-amber-600/60" : "border-zinc-700"
+                  }`}
               />
             </div>
           </div>
@@ -1268,8 +1269,9 @@ function ContributeModal({
         {/* Photo */}
         {showPhoto && (
           <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">
+            <label className={`block text-xs mb-1.5 ${isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? "text-amber-400" : "text-zinc-500"}`}>
               {isCleanup ? "Photos" : "Photo"} {isPhoto ? "(required)" : "(optional)"}
+              {isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? " — helps the event's gallery!" : ""}
             </label>
             <PhotoCaptureInput
               multiple={isCleanup}
