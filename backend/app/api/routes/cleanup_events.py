@@ -1,3 +1,4 @@
+import json
 import secrets
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -12,6 +13,10 @@ from app.db.database import get_db
 from app.services.contribution_scoring import record_contribution
 
 router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
+
+# Separate router (same file, distinct prefix) for cleanup routes — a polyline
+# alternative to a single point, usable by individuals, groups, and group events.
+routes_router = APIRouter(prefix="/cleanup-routes", tags=["cleanup-routes"])
 
 # How close (and how early/late) a check-in may be relative to the event's own location
 # and schedule. Named alongside contributions.py's HOTSPOT_PROXIMITY_METERS_* constants.
@@ -38,6 +43,7 @@ class CreateCleanupEventRequest(BaseModel):
     image_url: str | None = None
     max_attendees: int | None = None
     external_link: str | None = None
+    route: dict | None = None
 
     @field_validator("max_attendees")
     @classmethod
@@ -53,6 +59,18 @@ class CreateCleanupEventRequest(BaseModel):
             raise ValueError("external_link must start with http:// or https://")
         return v
 
+    @field_validator("route")
+    @classmethod
+    def _valid_linestring(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return v
+        if v.get("type") != "LineString":
+            raise ValueError("route must be a GeoJSON LineString")
+        coords = v.get("coordinates")
+        if not isinstance(coords, list) or len(coords) < 2:
+            raise ValueError("route must have at least 2 coordinates")
+        return v
+
 
 class PatchCleanupEventRequest(BaseModel):
     organizer_user_id: UUID
@@ -66,12 +84,26 @@ class PatchCleanupEventRequest(BaseModel):
     status: str | None = None
     max_attendees: int | None = None
     external_link: str | None = None
+    route: dict | None = None
+    clear_route: bool = False
 
     @field_validator("external_link")
     @classmethod
     def _valid_link(cls, v: str | None) -> str | None:
         if v is not None and not (v.startswith("http://") or v.startswith("https://")):
             raise ValueError("external_link must start with http:// or https://")
+        return v
+
+    @field_validator("route")
+    @classmethod
+    def _valid_linestring(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return v
+        if v.get("type") != "LineString":
+            raise ValueError("route must be a GeoJSON LineString")
+        coords = v.get("coordinates")
+        if not isinstance(coords, list) or len(coords) < 2:
+            raise ValueError("route must have at least 2 coordinates")
         return v
 
 
@@ -305,13 +337,15 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
                    c.scheduled_start, c.scheduled_end, c.status, c.image_urls, c.join_code,
                    c.max_attendees, c.external_link,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
+                   ST_AsGeoJSON(c.route)::json AS route,
+                   ST_AsGeoJSON(ST_Buffer(c.route::geography, :radius))::json AS route_buffer,
                    g.id AS group_id, g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url
             FROM cleanups c
             JOIN groups g ON g.id = c.group_id
             JOIN campaigns cam ON cam.id = c.campaign_id
             WHERE c.id = :id AND c.is_group_event = true
         """),
-        {"id": str(cleanup_id)},
+        {"id": str(cleanup_id), "radius": CLEANUP_EVENT_PROXIMITY_METERS},
     )
     row = result.fetchone()
     if not row:
@@ -333,7 +367,8 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         text("""
             SELECT r.user_id,
                    COALESCE(SUM(cl.metrics_small_bags), 0) AS small_bags,
-                   COALESCE(SUM(cl.metrics_large_bags), 0) AS large_bags
+                   COALESCE(SUM(cl.metrics_large_bags), 0) AS large_bags,
+                   MAX(co.submitted_at) AS contributed_at
             FROM cleanup_rsvps r
             JOIN contributions co ON co.id = r.contribution_id
             JOIN cleanups cl ON cl.id = co.cleanup_id
@@ -343,14 +378,20 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         {"id": str(cleanup_id)},
     )
     bags_by_user = {
-        str(r.user_id): {"small_bags": r.small_bags, "large_bags": r.large_bags}
+        str(r.user_id): {"small_bags": r.small_bags, "large_bags": r.large_bags, "contributed_at": r.contributed_at}
         for r in bags_by_user_result.fetchall()
     }
+
+    # A submission counts as "late" once it lands more than 24h after the event's
+    # window closes — unrestricted (submissions are never blocked), just flagged.
+    late_cutoff = (row.scheduled_end or row.scheduled_start) + timedelta(hours=24) \
+        if (row.scheduled_end or row.scheduled_start) else None
 
     viewer_rsvp = None
     rsvps = []
     for r in rsvp_result.fetchall():
-        user_bags = bags_by_user.get(str(r.user_id), {"small_bags": 0, "large_bags": 0})
+        user_bags = bags_by_user.get(str(r.user_id), {"small_bags": 0, "large_bags": 0, "contributed_at": None})
+        contributed_at = user_bags["contributed_at"]
         entry = {
             "user_id": str(r.user_id),
             "username": r.username,
@@ -359,6 +400,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "checked_in_at": r.checked_in_at.isoformat() if r.checked_in_at else None,
             "small_bags": user_bags["small_bags"],
             "large_bags": user_bags["large_bags"],
+            "is_late": bool(contributed_at and late_cutoff and contributed_at > late_cutoff),
         }
         rsvps.append(entry)
         if viewer_user_id and str(r.user_id) == str(viewer_user_id):
@@ -391,6 +433,8 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "image_url": row.image_urls[0] if row.image_urls else None,
         "lat": row.latitude,
         "lng": row.longitude,
+        "route": row.route,
+        "route_buffer": row.route_buffer,
         "group_id": str(row.group_id),
         "group_name": row.group_name,
         "group_slug": row.group_slug,
@@ -433,12 +477,15 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
         text("""
             INSERT INTO cleanups
                 (campaign_id, geo_unit_id, group_id, is_group_event, join_code,
-                 title, description, location, scheduled_start, scheduled_end,
+                 title, description, location, route, scheduled_start, scheduled_end,
                  status, image_urls, submitted_by_user_id, max_attendees, external_link)
             VALUES
                 (:campaign_id, :geo_unit_id, :group_id, true, :join_code,
                  :title, :description,
                  ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                 CASE WHEN CAST(:route AS text) IS NOT NULL
+                      THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
+                      ELSE NULL END,
                  :scheduled_start, :scheduled_end,
                  'scheduled', :image_urls, :organizer_user_id, :max_attendees, :external_link)
             RETURNING id, join_code
@@ -452,6 +499,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             "description": payload.description,
             "lon": payload.longitude,
             "lat": payload.latitude,
+            "route": json.dumps(payload.route) if payload.route is not None else None,
             "scheduled_start": payload.scheduled_start,
             "scheduled_end": payload.scheduled_end,
             "image_urls": [payload.image_url] if payload.image_url else [],
@@ -493,6 +541,10 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
                 location = CASE WHEN :has_new_location
                                 THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
                                 ELSE location END,
+                route = CASE WHEN CAST(:route AS text) IS NOT NULL
+                              THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
+                              WHEN :clear_route THEN NULL
+                              ELSE route END,
                 updated_at = NOW()
             WHERE id = :id
         """),
@@ -510,6 +562,8 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
             "lat": payload.latitude,
             "max_attendees": payload.max_attendees,
             "external_link": payload.external_link,
+            "route": json.dumps(payload.route) if payload.route is not None else None,
+            "clear_route": payload.clear_route,
         },
     )
     await db.commit()
@@ -666,3 +720,161 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
     await db.commit()
 
     return {"contribution_id": recorded.contribution_id, "value": recorded.value}
+
+
+class IntersectingGeoUnitsRequest(BaseModel):
+    campaign_id: UUID
+    route: dict
+
+    @field_validator("route")
+    @classmethod
+    def _valid_linestring(cls, v: dict) -> dict:
+        if v.get("type") != "LineString":
+            raise ValueError("route must be a GeoJSON LineString")
+        coords = v.get("coordinates")
+        if not isinstance(coords, list) or len(coords) < 2:
+            raise ValueError("route must have at least 2 coordinates")
+        return v
+
+
+@routes_router.post("/intersecting-geo-units")
+async def get_intersecting_geo_units(payload: IntersectingGeoUnitsRequest, db: AsyncSession = Depends(get_db)):
+    """Returns the geo_units (e.g. zips) a drawn route crosses, scoped to the campaign's
+    geo_unit types, for the client to offer as a single-zip crediting choice. Re-run
+    server-side (never trust the client) when the route is actually submitted."""
+    camp_result = await db.execute(
+        text("SELECT geo_unit FROM campaigns WHERE id = :campaign_id"),
+        {"campaign_id": str(payload.campaign_id)},
+    )
+    camp_row = camp_result.fetchone()
+    if not camp_row:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    campaign_geo_unit = camp_row[0] if camp_row[0] else ["zip"]
+
+    result = await db.execute(
+        text("""
+            SELECT
+                gu.id::text, gu.unit_id, gu.display_name,
+                em.multiplier, em.title
+            FROM geo_units gu
+            LEFT JOIN LATERAL (
+                SELECT (ce.effect_config->>'multiplier')::float AS multiplier, ce.title
+                FROM campaign_events ce
+                WHERE ce.campaign_id = :campaign_id
+                  AND ce.status = 'active'
+                  AND (ce.started_at IS NULL OR ce.started_at <= NOW())
+                  AND (ce.ends_at IS NULL OR ce.ends_at > NOW())
+                  AND ce.effect_config->>'type' = 'score_multiplier'
+                  AND (
+                    ce.geo_unit_id = gu.id
+                    OR EXISTS (
+                      SELECT 1 FROM campaign_event_geo_units cegu
+                      WHERE cegu.event_id = ce.id AND cegu.geo_unit_id = gu.id
+                    )
+                  )
+                ORDER BY (ce.effect_config->>'multiplier')::float DESC
+                LIMIT 1
+            ) em ON true
+            WHERE gu.unit_type = ANY(:geo_unit)
+              AND ST_Intersects(gu.geometry, ST_GeomFromGeoJSON(:route))
+            ORDER BY gu.display_name
+        """),
+        {"campaign_id": str(payload.campaign_id), "geo_unit": campaign_geo_unit, "route": json.dumps(payload.route)},
+    )
+    return [
+        {
+            "geo_unit_id": row[0],
+            "unit_id": row[1],
+            "display_name": row[2],
+            "active_multiplier": {"multiplier": row[3], "title": row[4]} if row[3] is not None else None,
+        }
+        for row in result.fetchall()
+    ]
+
+
+@routes_router.get("/campaign/{campaign_id}")
+async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    """All drawn routes (individual, group, or pre-planned group-event) for a campaign's
+    map layer — geometry plus enough group info to badge the marker with a logo, and (for
+    event-linked routes only) a buffered corridor polygon for the check-in zone display."""
+    result = await db.execute(
+        text("""
+            SELECT
+                c.id, ST_AsGeoJSON(c.route)::json AS route,
+                c.group_id, g.name AS group_name, g.image_url AS group_logo_url,
+                CASE WHEN c.is_group_event
+                    THEN ST_AsGeoJSON(ST_Buffer(c.route::geography, :radius))::json
+                    ELSE NULL
+                END AS buffer
+            FROM cleanups c
+            LEFT JOIN groups g ON g.id = c.group_id
+            WHERE c.campaign_id = :campaign_id AND c.route IS NOT NULL
+            ORDER BY c.created_at DESC
+            LIMIT 500
+        """),
+        {"campaign_id": str(campaign_id), "radius": CLEANUP_EVENT_PROXIMITY_METERS},
+    )
+    return [
+        {
+            "id": str(row.id),
+            "route": row.route,
+            "group_id": str(row.group_id) if row.group_id else None,
+            "group_name": row.group_name,
+            "group_logo_url": row.group_logo_url,
+            "buffer": row.buffer,
+        }
+        for row in result.fetchall()
+    ]
+
+
+@routes_router.get("/{cleanup_id}")
+async def get_cleanup_route(cleanup_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Shareable detail view for a single route-based cleanup submission."""
+    result = await db.execute(
+        text("""
+            SELECT
+                c.id, c.campaign_id, c.group_id, c.status, c.image_urls,
+                c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
+                c.created_at, c.submitted_by_user_id,
+                ST_AsGeoJSON(c.route)::json AS route,
+                gu.display_name AS geo_unit_display_name,
+                p.username, p.display_name AS user_display_name, p.avatar_url,
+                cam.title AS campaign_title, cam.slug AS campaign_slug,
+                g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url
+            FROM cleanups c
+            LEFT JOIN geo_units gu ON gu.id = c.geo_unit_id
+            LEFT JOIN profiles p ON p.id = c.submitted_by_user_id
+            LEFT JOIN campaigns cam ON cam.id = c.campaign_id
+            LEFT JOIN groups g ON g.id = c.group_id
+            WHERE c.id = :id AND c.route IS NOT NULL
+        """),
+        {"id": str(cleanup_id)},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cleanup route not found")
+
+    return {
+        "id": str(row.id),
+        "campaign_id": str(row.campaign_id),
+        "campaign_title": row.campaign_title,
+        "campaign_slug": row.campaign_slug,
+        "group_id": str(row.group_id) if row.group_id else None,
+        "group_name": row.group_name,
+        "group_slug": row.group_slug,
+        "group_logo_url": row.group_logo_url,
+        "status": row.status,
+        "image_urls": row.image_urls,
+        "metrics_small_bags": row.metrics_small_bags,
+        "metrics_large_bags": row.metrics_large_bags,
+        "metrics_pounds": float(row.metrics_pounds) if row.metrics_pounds is not None else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "route": row.route,
+        "geo_unit_display_name": row.geo_unit_display_name,
+        "submitted_by": {
+            "user_id": str(row.submitted_by_user_id) if row.submitted_by_user_id else None,
+            "username": row.username,
+            "display_name": row.user_display_name,
+            "avatar_url": row.avatar_url,
+        },
+    }

@@ -5,11 +5,17 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createCleanupEvent } from "@/lib/cleanupEvents";
+import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString } from "@/lib/cleanupRoutes";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
   loading: () => <div className="w-full h-[100px] rounded-lg bg-zinc-800 animate-pulse" />,
+});
+
+const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap"), {
+  ssr: false,
+  loading: () => <div className="w-full h-[140px] rounded-lg bg-zinc-800 animate-pulse" />,
 });
 
 interface Coords {
@@ -212,8 +218,12 @@ interface ContributionPanelProps {
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string) => void;
+  onEnterRoutePicker?: () => void;
+  routePickerActive?: boolean;
+  placedRouteVertices?: [number, number][] | null;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }) => void;
   onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string) => void;
+  onRouteAdded?: (route: { id: string; route: RouteLineString }) => void;
   userLocation?: Coords | null;
   locationError?: number | null;
   requestLocation?: () => boolean;
@@ -398,6 +408,8 @@ function ContributeModal({
   gps,
   overrideCoords,
   onEnterPinPicker,
+  onEnterRoutePicker,
+  routeOverride,
   onClose,
   onContributionSubmitted,
   activeMapStyle,
@@ -410,8 +422,10 @@ function ContributeModal({
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: () => void;
+  onEnterRoutePicker: () => void;
+  routeOverride: RouteLineString | null;
   onClose: () => void;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }) => void;
   activeMapStyle?: string;
   nearbyEvent?: { id: string; title: string } | null;
 }) {
@@ -438,6 +452,28 @@ function ContributeModal({
   const [notes, setNotes] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [contributeMode, setContributeMode] = useState<"point" | "route">("point");
+  const [route, setRoute] = useState<RouteLineString | null>(null);
+  const [intersectingUnits, setIntersectingUnits] = useState<IntersectingGeoUnit[]>([]);
+  const [selectedRouteGeoUnitId, setSelectedRouteGeoUnitId] = useState<string | null>(null);
+  const [loadingIntersecting, setLoadingIntersecting] = useState(false);
+
+  // A freshly finished route arrives via routeOverride (set by the parent once the map's
+  // route-picker reports "Finish route") — look up which zips it crosses so the user can
+  // pick exactly one to credit, mirroring the nearby-hotspot lookup pattern below.
+  useEffect(() => {
+    if (!routeOverride) return;
+    setRoute(routeOverride);
+    setSelectedRouteGeoUnitId(null);
+    setLoadingIntersecting(true);
+    getIntersectingGeoUnits({ campaignId, route: routeOverride })
+      .then((units) => {
+        setIntersectingUnits(units);
+        if (units.length === 1) setSelectedRouteGeoUnitId(units[0].geo_unit_id);
+      })
+      .catch(() => setIntersectingUnits([]))
+      .finally(() => setLoadingIntersecting(false));
+  }, [routeOverride, campaignId]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("frontline:contrib:group");
@@ -467,9 +503,21 @@ function ContributeModal({
   const effectiveEventId = useNearbyEvent ? nearbyEvent?.id ?? null : null;
   const isEventMode = isCleanup && Boolean(effectiveEventId);
 
+  const isRouteMode = isCleanup && contributeMode === "route";
+
+  // Route mode's multiplier comes from whichever zip the user has chosen to credit, using
+  // the per-zip active_multiplier data returned alongside the intersecting-zips lookup —
+  // never from submitCoords, which in route mode reflects a stale GPS/pin location that may
+  // be nowhere near the drawn route.
+  const selectedRouteMultiplier = isRouteMode
+    ? intersectingUnits.find((u) => u.geo_unit_id === selectedRouteGeoUnitId)?.active_multiplier ?? null
+    : null;
+
   // Scoring never applies a hotspot bonus to an event-linked contribution — only the
   // display banner below uses raw activeMultiplier so it can still show it informationally.
-  const effectiveMultiplier = effectiveEventId ? null : activeMultiplier;
+  // Route mode ignores the point-based activeMultiplier entirely (stale GPS/pin location)
+  // in favor of selectedRouteMultiplier, computed above from the chosen zip.
+  const effectiveMultiplier = effectiveEventId ? null : isRouteMode ? selectedRouteMultiplier : activeMultiplier;
 
   const submitCoords = overrideCoords ?? gps.coords;
   const baseValue = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 0;
@@ -490,8 +538,10 @@ function ContributeModal({
 
   // Offer to claim a nearby reported hotspot as cleaned up, without assuming it — the
   // user decides whether this cleanup is for that report or just a separate one.
+  // Point-mode only — route mode has no single GPS/pin location to key this off of, and
+  // is handled instead by the per-zip active_multiplier data on intersectingUnits below.
   useEffect(() => {
-    if (!isCleanup || !submitCoords) {
+    if (!isCleanup || isRouteMode || !submitCoords) {
       setNearbyReport(null);
       return;
     }
@@ -504,16 +554,17 @@ function ContributeModal({
       .then((data) => setNearbyReport(data?.nearby_report ?? null))
       .catch(() => { });
     return () => controller.abort();
-  }, [isCleanup, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
+  }, [isCleanup, isRouteMode, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
 
   // Check whether the submit location is inside an active boss-spawn hotspot, so the
   // dialog can show the same score multiplier that /contributions/submit will apply.
   // Fetched regardless of event linkage so a hotspot can still be surfaced informationally
   // alongside an event banner; scoring itself still zeroes this out via effectiveMultiplier
   // below (group cleanup events never carry a bonus multiplier, mirroring
-  // apply_multiplier=cleanup_event_id is None server-side).
+  // apply_multiplier=cleanup_event_id is None server-side). Point-mode only — see isRouteMode
+  // note above; route mode's multiplier comes from the selected zip's active_multiplier.
   useEffect(() => {
-    if (!isCleanup || !submitCoords) {
+    if (!isCleanup || isRouteMode || !submitCoords) {
       setActiveMultiplier(null);
       return;
     }
@@ -526,7 +577,7 @@ function ContributeModal({
       .then((data) => setActiveMultiplier(data?.active ? { multiplier: data.multiplier, title: data.title } : null))
       .catch(() => { });
     return () => controller.abort();
-  }, [isCleanup, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
+  }, [isCleanup, isRouteMode, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
 
   useEffect(() => {
     setResolveHotspot(true);
@@ -540,7 +591,9 @@ function ContributeModal({
 
   const canSubmit = (() => {
     if (submitting) return false;
-    if ((isCleanup || isPhoto) && !submitCoords) return false;
+    if (isRouteMode) {
+      if (!route || !selectedRouteGeoUnitId) return false;
+    } else if ((isCleanup || isPhoto) && !submitCoords) return false;
     if (isCleanup && smallBagsNum + largeBagsNum <= 0) return false;
     if (isPhoto && photos.length === 0) return false;
     if (isCivicAction && !selectedAction) return false;
@@ -580,7 +633,10 @@ function ContributeModal({
         if (nearbyReport && resolveHotspot) body.resolve_report_id = nearbyReport.id;
       }
 
-      if (submitCoords) {
+      if (isRouteMode && route && selectedRouteGeoUnitId) {
+        body.route = route;
+        body.route_geo_unit_id = selectedRouteGeoUnitId;
+      } else if (submitCoords) {
         body.latitude = submitCoords.latitude;
         body.longitude = submitCoords.longitude;
       }
@@ -596,7 +652,7 @@ function ContributeModal({
         },
       );
       if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as { claimed_territory: boolean; hotspot_cleared?: boolean };
+      const data = (await res.json()) as { claimed_territory: boolean; hotspot_cleared?: boolean; cleanup_id?: string };
 
       onContributionSubmitted?.(
         submitCoords?.latitude ?? null,
@@ -604,6 +660,7 @@ function ContributeModal({
         value,
         photoUrls[0] ?? undefined,
         data.hotspot_cleared && nearbyReport ? nearbyReport.id : undefined,
+        isRouteMode && route && data.cleanup_id ? { id: data.cleanup_id, route } : undefined,
       );
       setHotspotCleared(Boolean(data.hotspot_cleared));
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
@@ -725,8 +782,43 @@ function ContributeModal({
           </div>
         )}
 
+        {/* Point / Route toggle — cleanup only */}
+        {isCleanup && (
+          <div>
+            <p className="text-xs text-zinc-500 mb-1.5">How are you logging this?</p>
+            <div className="flex items-center gap-1 p-1 bg-zinc-800/60 border border-zinc-700 rounded-lg w-fit">
+              <button
+                type="button"
+                onClick={() => setContributeMode("point")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "point"
+                  ? "bg-zinc-600 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-200"
+                  }`}
+              >
+                📍 Point
+              </button>
+              <button
+                type="button"
+                onClick={() => setContributeMode("route")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "route"
+                  ? "bg-zinc-600 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-200"
+                  }`}
+              >
+                🛤️ Route
+                <span
+                  title="This feature should work but is still being tested."
+                  className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
+                >
+                  Beta
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Location section */}
-        {needsLocation && (
+        {needsLocation && !isRouteMode && (
           <div>
             <p className="text-xs text-zinc-500 mb-1.5">
               {isUnfollow ? "Your location (optional — helps build the global heatmap)" : "Your location"}
@@ -754,8 +846,67 @@ function ContributeModal({
           </div>
         )}
 
-        {needsLocation && submitCoords && (
+        {needsLocation && !isRouteMode && submitCoords && (
           <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+        )}
+
+        {isRouteMode && (
+          <div>
+            {!route ? (
+              <button
+                type="button"
+                onClick={onEnterRoutePicker}
+                className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+              >
+                🛤️ Draw route on map
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onEnterRoutePicker}
+                    className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+                  >
+                    Redraw
+                  </button>
+                </div>
+                <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" />
+                {loadingIntersecting ? (
+                  <p className="text-xs text-zinc-500">Finding zips along your route…</p>
+                ) : intersectingUnits.length === 0 ? (
+                  <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within campaign territory.</p>
+                ) : (
+                  <div>
+                    <p className="text-xs text-zinc-500 mb-1.5">Credit which zip?</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {intersectingUnits.map((u) => (
+                        <button
+                          key={u.geo_unit_id}
+                          type="button"
+                          onClick={() => setSelectedRouteGeoUnitId(u.geo_unit_id)}
+                          title={u.active_multiplier ? `${u.active_multiplier.title} · ${u.active_multiplier.multiplier}x` : undefined}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 ${selectedRouteGeoUnitId === u.geo_unit_id
+                            ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                            : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                            }`}
+                        >
+                          {u.display_name}
+                          {u.active_multiplier && (
+                            <span className="text-amber-400">🔥{u.active_multiplier.multiplier}x</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {isCleanup && nearbyReport && (
@@ -1202,8 +1353,11 @@ function HostEventModal({
   gps,
   overrideCoords,
   onEnterPinPicker,
+  onEnterRoutePicker,
+  routeOverride,
   onClose,
   activeMapStyle,
+  onRouteAdded,
 }: {
   campaignId: string;
   userId: string;
@@ -1211,8 +1365,11 @@ function HostEventModal({
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: (coords: Coords) => void;
+  onEnterRoutePicker: () => void;
+  routeOverride: RouteLineString | null;
   onClose: () => void;
   activeMapStyle?: string;
+  onRouteAdded?: (route: { id: string; route: RouteLineString }) => void;
 }) {
   const router = useRouter();
   const [groupId, setGroupId] = useState(adminGroups[0]?.id ?? "");
@@ -1229,6 +1386,17 @@ function HostEventModal({
   const [addressCoords, setAddressCoords] = useState<Coords | null>(null);
   const [maxAttendees, setMaxAttendees] = useState("");
   const [externalLink, setExternalLink] = useState("");
+  const [route, setRoute] = useState<RouteLineString | null>(null);
+
+  // A freshly finished route arrives via routeOverride once the map's route picker reports
+  // "Finish route" — this is a purely decorative/pre-planning route for the event listing
+  // (e.g. for groups to screenshot and post to social media ahead of time), so unlike
+  // ContributeModal's route mode there's no zip-crediting step: the event's location pin
+  // still determines geo_unit_id.
+  useEffect(() => {
+    if (!routeOverride) return;
+    setRoute(routeOverride);
+  }, [routeOverride]);
 
   useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1242,7 +1410,14 @@ function HostEventModal({
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
 
-  const submitCoords = overrideCoords ?? addressCoords ?? gps.coords;
+  // With a route drawn, the location field is hidden (see `{!route && ...}` below) and the
+  // route's own first node is the meeting point — falling back to overrideCoords/addressCoords/
+  // gps.coords here would silently use a stale or unrelated location (e.g. wherever the
+  // organizer's GPS was standing), disconnected from the route they actually drew.
+  const routeStart = route?.coordinates?.[0] ?? null;
+  const submitCoords = routeStart
+    ? { latitude: routeStart[1], longitude: routeStart[0] }
+    : overrideCoords ?? addressCoords ?? gps.coords;
   const canSubmit = !!groupId && !!title.trim() && !!scheduledStart && !!submitCoords;
 
   const handleSubmit = async () => {
@@ -1263,8 +1438,10 @@ function HostEventModal({
         longitude: submitCoords.longitude,
         maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
         externalLink: externalLink.trim() || null,
+        route,
       });
       setCreated(result);
+      if (route) onRouteAdded?.({ id: result.id, route });
       router.refresh();
     } catch {
       setError("Couldn't create the event. Please try again.");
@@ -1386,49 +1563,98 @@ function HostEventModal({
           />
         </div>
 
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Event location</label>
-          <AddressAutocomplete
-            value={addressValue}
-            onChange={setAddressValue}
-            onSelect={(s) => {
-              setAddressValue(s.addressLine1);
-              setAddressCoords({ latitude: s.lat, longitude: s.lng });
-            }}
-            placeholder="Search for an address..."
-          />
-          {!overrideCoords && !addressCoords && (
-            <GpsIndicator
-              status={gps.status}
-              coords={gps.coords}
-              errorCode={gps.errorCode}
-              onRetry={gps.capture}
+        {!route && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Event location</label>
+            <AddressAutocomplete
+              value={addressValue}
+              onChange={setAddressValue}
+              onSelect={(s) => {
+                setAddressValue(s.addressLine1);
+                setAddressCoords({ latitude: s.lat, longitude: s.lng });
+              }}
+              placeholder="Search for an address..."
             />
-          )}
-          {overrideCoords ? (
-            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
-            </div>
-          ) : addressCoords ? (
-            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              Address set: {addressCoords.latitude.toFixed(5)}, {addressCoords.longitude.toFixed(5)}
-            </div>
-          ) : null}
-          {submitCoords && (
-            <button
-              onClick={() => onEnterPinPicker(submitCoords)}
-              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+            {!overrideCoords && !addressCoords && (
+              <GpsIndicator
+                status={gps.status}
+                coords={gps.coords}
+                errorCode={gps.errorCode}
+                onRetry={gps.capture}
+              />
+            )}
+            {overrideCoords ? (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+              </div>
+            ) : addressCoords ? (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                Address set: {addressCoords.latitude.toFixed(5)}, {addressCoords.longitude.toFixed(5)}
+              </div>
+            ) : null}
+            {submitCoords && (
+              <button
+                onClick={() => onEnterPinPicker(submitCoords)}
+                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+              >
+                {overrideCoords ? "Reposition pin on map" : "Fine-tune pin on map"}
+              </button>
+            )}
+            {submitCoords && (
+              <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} interactive />
+            )}
+          </div>
+        )}
+
+        {route && (
+          <button
+            type="button"
+            onClick={() => setRoute(null)}
+            className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+          >
+            Use a single pin instead
+          </button>
+        )}
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
+            Pre-planned route (optional)
+            <span
+              title="This feature should work but is still being tested."
+              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
             >
-              {overrideCoords ? "Reposition pin on map" : "Fine-tune pin on map"}
+              Beta
+            </span>
+          </label>
+          {!route ? (
+            <button
+              type="button"
+              onClick={onEnterRoutePicker}
+              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              🛤️ Draw route on map
             </button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
+                </span>
+                <button
+                  type="button"
+                  onClick={onEnterRoutePicker}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+                >
+                  Redraw
+                </button>
+              </div>
+              <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" />
+            </div>
           )}
         </div>
-
-        {submitCoords && (
-          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} interactive />
-        )}
 
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">Photo (optional)</label>
@@ -2053,8 +2279,12 @@ export default function ContributionPanel({
   onEnterPinPicker,
   pinPickerActive,
   placedPinCoords,
+  onEnterRoutePicker,
+  routePickerActive,
+  placedRouteVertices,
   onContributionSubmitted,
   onReportSubmitted,
+  onRouteAdded,
   userLocation,
   locationError,
   requestLocation,
@@ -2073,7 +2303,10 @@ export default function ContributionPanel({
   const [reportOverrideCoords, setReportOverrideCoords] = useState<Coords | null>(null);
   const [hostEventOverrideCoords, setHostEventOverrideCoords] = useState<Coords | null>(null);
   const [logHostExpanded, setLogHostExpanded] = useState(false);
+  const [contributeRouteOverride, setContributeRouteOverride] = useState<RouteLineString | null>(null);
+  const [hostEventRouteOverride, setHostEventRouteOverride] = useState<RouteLineString | null>(null);
   const prevPinPickerActiveRef = useRef(false);
+  const prevRoutePickerActiveRef = useRef(false);
 
   // Geofence auto-prompt shortcut: the parent tells us the user tapped the banner's "Log
   // here" action. Jump straight into the contribute modal — since the user is still within
@@ -2107,6 +2340,20 @@ export default function ContributionPanel({
     prevPinPickerActiveRef.current = pinPickerActive;
   }, [pinPickerActive, placedPinCoords, mode]);
 
+  // Same transition-capture pattern as the pin picker above, but for a finished route: once
+  // routePickerActive flips true → false, the parent's placedRouteVertices holds the final
+  // polyline, which we wrap into a RouteLineString for ContributeModal to look up zips for.
+  useEffect(() => {
+    if (prevRoutePickerActiveRef.current && !routePickerActive) {
+      if (mode === "contribute" && placedRouteVertices && placedRouteVertices.length >= 2) {
+        setContributeRouteOverride({ type: "LineString", coordinates: placedRouteVertices });
+      } else if (mode === "host_event" && placedRouteVertices && placedRouteVertices.length >= 2) {
+        setHostEventRouteOverride({ type: "LineString", coordinates: placedRouteVertices });
+      }
+    }
+    prevRoutePickerActiveRef.current = !!routePickerActive;
+  }, [routePickerActive, placedRouteVertices, mode]);
+
   const openContribute = () => {
     setMode("contribute");
     setContributeOverrideCoords(null);
@@ -2134,6 +2381,14 @@ export default function ContributionPanel({
 
   const handleEnterPinPickerForHostEvent = (coords: Coords) => {
     onEnterPinPicker(coords, false, "Drag the pin to the event location");
+  };
+
+  const handleEnterRoutePickerForContribute = () => {
+    onEnterRoutePicker?.();
+  };
+
+  const handleEnterRoutePickerForHostEvent = () => {
+    onEnterRoutePicker?.();
   };
 
   const showReport = campaignContributionType === "cleanup";
@@ -2277,7 +2532,7 @@ export default function ContributionPanel({
       )}
 
       {mode === "contribute" && (
-        <div className={pinPickerActive ? "hidden" : undefined}>
+        <div className={pinPickerActive || routePickerActive ? "hidden" : undefined}>
           {isSolarpunk ? (
             <SolarpunkActionModal
               campaignId={campaignId}
@@ -2299,7 +2554,9 @@ export default function ContributionPanel({
               gps={gps}
               overrideCoords={contributeOverrideCoords}
               onEnterPinPicker={handleEnterPinPickerForContribute}
-              onClose={() => { setMode(null); setContributeOverrideCoords(null); }}
+              onEnterRoutePicker={handleEnterRoutePickerForContribute}
+              routeOverride={contributeRouteOverride}
+              onClose={() => { setMode(null); setContributeOverrideCoords(null); setContributeRouteOverride(null); }}
               onContributionSubmitted={onContributionSubmitted}
               activeMapStyle={activeMapStyle}
               nearbyEvent={nearbyCleanupEvent ?? null}
@@ -2343,7 +2600,7 @@ export default function ContributionPanel({
         </div>
       )}
       {mode === "host_event" && userId && (
-        <div className={pinPickerActive ? "hidden" : undefined}>
+        <div className={pinPickerActive || routePickerActive ? "hidden" : undefined}>
           <HostEventModal
             campaignId={campaignId}
             userId={userId}
@@ -2351,8 +2608,11 @@ export default function ContributionPanel({
             gps={gps}
             overrideCoords={hostEventOverrideCoords}
             onEnterPinPicker={handleEnterPinPickerForHostEvent}
-            onClose={() => { setMode(null); setHostEventOverrideCoords(null); }}
+            onEnterRoutePicker={handleEnterRoutePickerForHostEvent}
+            routeOverride={hostEventRouteOverride}
+            onClose={() => { setMode(null); setHostEventOverrideCoords(null); setHostEventRouteOverride(null); }}
             activeMapStyle={activeMapStyle}
+            onRouteAdded={onRouteAdded}
           />
         </div>
       )}

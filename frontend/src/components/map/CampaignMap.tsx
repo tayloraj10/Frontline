@@ -12,6 +12,7 @@ import type { ClaimLabel } from "./CampaignMapWrapper";
 import type { ProblemReports, ProblemReportMapData } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { Feature, Point } from "geojson";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
+import { getCleanupRoute, type CampaignCleanupRoute } from "@/lib/cleanupRoutes";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -48,6 +49,20 @@ const EARTH_RADIUS_METERS = 6371000;
 // check-in radius shown as a circle around each group cleanup event, same for every event.
 const CLEANUP_EVENT_RADIUS_METERS = 150;
 
+const ROUTE_LOOP_CLOSE_METERS = 20;
+
+/** Haversine distance in meters between two [lng, lat] points. */
+function distanceMeters(a: [number, number], b: [number, number]): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLng = toRad(b[0] - a[0]);
+  const lat1 = toRad(a[1]);
+  const lat2 = toRad(b[1]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 // Approximates a real-world-meter circle as a GeoJSON polygon so it scales correctly
 // with zoom (a DOM marker, by contrast, stays a fixed pixel size regardless of zoom).
 function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 48): [number, number][] {
@@ -62,6 +77,40 @@ function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 4
     coords.push([lng + dLng, lat + dLat]);
   }
   return coords;
+}
+
+// Short "at a glance" date/time text for the small pill shown above a cleanup event's
+// marker on the map — same fields as the full detail popup's format, just on one line.
+function formatEventDateTime(iso: string | null): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+// A small always-visible label anchored above a marker's icon, used for the date/time
+// pill on cleanup event markers — a second maplibregl.Marker at the same lnglat rather
+// than a Popup, since it needs to stay open (not hover/click triggered) and reposition
+// with the map like any other marker.
+function createDateTimeLabelMarker(
+  map: maplibregl.Map,
+  lngLat: [number, number],
+  text: string,
+  aboveOffsetPx: number,
+): maplibregl.Marker {
+  const el = document.createElement("div");
+  el.style.cssText =
+    "pointer-events:none;white-space:nowrap;font-size:10px;font-weight:600;color:#e4e4e7;" +
+    "background:rgba(24,24,27,0.85);border:1px solid rgba(255,255,255,0.15);border-radius:4px;" +
+    "padding:1px 6px;box-shadow:0 1px 4px rgba(0,0,0,0.5);";
+  el.textContent = text;
+  return new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -aboveOffsetPx] })
+    .setLngLat(lngLat)
+    .addTo(map);
 }
 
 // Event markers shrink at low zoom so they don't dominate the viewport, and reach full
@@ -235,9 +284,15 @@ interface Props {
   onAreaPickerChange?: (areas: SelectedArea[]) => void;
   onAreaPickerConfirm?: () => void;
   onAreaPickerCancel?: () => void;
+  routePickerActive?: boolean;
+  onRoutePickerChange?: (coordinates: [number, number][]) => void;
+  onRoutePickerFinish?: () => void;
+  onRoutePickerCancel?: () => void;
+  cleanupRoutes?: CampaignCleanupRoute[];
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
+  focusCoords?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
@@ -590,8 +645,8 @@ function TerritoryPanel({
           <div className="flex items-center gap-2 mt-0.5">
             {isClaimed && (
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${isContested
-                  ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
-                  : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
+                ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
+                : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
                 }`}>
                 {isContested ? "Contested" : "Claimed"}
               </span>
@@ -988,47 +1043,6 @@ class FitExtentControl implements maplibregl.IControl {
   }
 }
 
-// ─── Zoom-to-my-location control ──────────────────────────────────────────────
-// A dedicated single-purpose button, separate from GeolocateControl's own button:
-// that one toggles tracking on/off on click, so clicking it while tracking is
-// already active turns location OFF instead of recentering. This control only
-// ever flies the camera to the last known fix (or requests one if we don't have
-// it yet) and never disables tracking.
-
-class ZoomToLocationControl implements maplibregl.IControl {
-  private _map: maplibregl.Map | null = null;
-  private _container: HTMLDivElement | null = null;
-  private readonly _onClick: () => void;
-
-  constructor(onClick: () => void) {
-    this._onClick = onClick;
-  }
-
-  onAdd(map: maplibregl.Map): HTMLElement {
-    this._map = map;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.title = "Zoom to my location";
-    btn.style.cssText =
-      "width:29px;height:29px;display:flex;align-items:center;justify-content:center;" +
-      "background:none;border:none;cursor:pointer;padding:0;color:#333";
-    btn.innerHTML =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">` +
-      `<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>` +
-      `</svg>`;
-    btn.onclick = () => this._onClick();
-    const container = document.createElement("div");
-    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
-    container.appendChild(btn);
-    this._container = container;
-    return container;
-  }
-
-  onRemove(): void {
-    this._container?.parentNode?.removeChild(this._container);
-    this._map = null;
-  }
-}
 
 // ─── Main map component ───────────────────────────────────────────────────────
 
@@ -1049,9 +1063,15 @@ export default function CampaignMap({
   onAreaPickerChange,
   onAreaPickerConfirm,
   onAreaPickerCancel,
+  routePickerActive = false,
+  onRoutePickerChange,
+  onRoutePickerFinish,
+  onRoutePickerCancel,
+  cleanupRoutes,
   newContribution,
   newReport,
   userLocation,
+  focusCoords,
   activeStyle = "outdoor",
   problemReports,
   eventCentroids,
@@ -1104,6 +1124,10 @@ export default function CampaignMap({
   const businessMarkersRef = useRef<maplibregl.Marker[]>([]);
   const cleanupEventsRef = useRef(cleanupEvents ?? []);
   const cleanupEventMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const cleanupEventDateLabelsRef = useRef<maplibregl.Marker[]>([]);
+  const cleanupRouteMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const cleanupRouteDateLabelsRef = useRef<maplibregl.Marker[]>([]);
+  const routePopupRef = useRef<maplibregl.Popup | null>(null);
   const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -1119,6 +1143,12 @@ export default function CampaignMap({
   const onAreaPickerChangeRef = useRef(onAreaPickerChange);
   const pickedAreasRef = useRef<Map<string, SelectedArea>>(new Map());
   const [areaPickerCount, setAreaPickerCount] = useState(0);
+  const routePickerActiveRef = useRef(routePickerActive);
+  const onRoutePickerChangeRef = useRef(onRoutePickerChange);
+  const routeVerticesRef = useRef<[number, number][]>([]);
+  const [routePickerVertexCount, setRoutePickerVertexCount] = useState(0);
+  const [routePickerJustClosedLoop, setRoutePickerJustClosedLoop] = useState(false);
+  const cleanupRoutesRef = useRef(cleanupRoutes ?? []);
   const outOfZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapReadyRef = useRef(false);
   const choroplethListenerRef = useRef(false);
@@ -1139,10 +1169,56 @@ export default function CampaignMap({
   useEffect(() => { setSelectedZipRef.current = setSelectedZip; }, [setSelectedZip]);
   useEffect(() => { nycNeighborhoodsVisibleRef.current = nycNeighborhoodsVisible; }, [nycNeighborhoodsVisible]);
   useEffect(() => { pinPickerActiveRef.current = pinPickerActive; }, [pinPickerActive]);
+  useEffect(() => {
+    routePickerActiveRef.current = routePickerActive;
+    if (!routePickerActive) {
+      routeVerticesRef.current = [];
+      setRoutePickerVertexCount(0);
+      setRoutePickerJustClosedLoop(false);
+      const src = map.current?.getSource("route-picker") as maplibregl.GeoJSONSource | undefined;
+      src?.setData({ type: "FeatureCollection", features: [] });
+    }
+  }, [routePickerActive]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
   useEffect(() => { areaPickerActiveRef.current = areaPickerActive; }, [areaPickerActive]);
   useEffect(() => { areaPickerUnitTypeRef.current = areaPickerUnitType; }, [areaPickerUnitType]);
   useEffect(() => { onAreaPickerChangeRef.current = onAreaPickerChange; }, [onAreaPickerChange]);
+  useEffect(() => { onRoutePickerChangeRef.current = onRoutePickerChange; }, [onRoutePickerChange]);
+
+  const redrawRoutePicker = () => {
+    const src = map.current?.getSource("route-picker") as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    const vertices = routeVerticesRef.current;
+    const features: GeoJSON.Feature[] = vertices.map((coord) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: coord },
+      properties: {},
+    }));
+    if (vertices.length >= 2) {
+      features.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: vertices },
+        properties: {},
+      });
+    }
+    src.setData({ type: "FeatureCollection", features });
+  };
+
+  const handleUndoRouteVertex = () => {
+    routeVerticesRef.current = routeVerticesRef.current.slice(0, -1);
+    setRoutePickerVertexCount(routeVerticesRef.current.length);
+    setRoutePickerJustClosedLoop(false);
+    onRoutePickerChangeRef.current?.(routeVerticesRef.current);
+    redrawRoutePicker();
+  };
+
+  const handleClearRouteVertices = () => {
+    routeVerticesRef.current = [];
+    setRoutePickerVertexCount(0);
+    setRoutePickerJustClosedLoop(false);
+    onRoutePickerChangeRef.current?.(routeVerticesRef.current);
+    redrawRoutePicker();
+  };
   useEffect(() => { onUserLocationChangeRef.current = onUserLocationChange; }, [onUserLocationChange]);
   useEffect(() => { onUserLocationErrorRef.current = onUserLocationError; }, [onUserLocationError]);
 
@@ -1288,11 +1364,11 @@ export default function CampaignMap({
       const size = hasOffer ? 24 : 20;
       el.style.cssText = hasOffer
         ? `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
-          "border:2px solid #fbbf24;box-shadow:0 0 8px rgba(251,191,36,0.7),0 1px 4px rgba(0,0,0,0.6);" +
-          "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9)"
+        "border:2px solid #fbbf24;box-shadow:0 0 8px rgba(251,191,36,0.7),0 1px 4px rgba(0,0,0,0.6);" +
+        "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9)"
         : `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
-          "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
-          "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
+        "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+        "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
 
       if (business.logo_url) {
         const img = document.createElement("img");
@@ -1315,22 +1391,30 @@ export default function CampaignMap({
     }
   }, []);
 
-  const updateCleanupEventMarkers = useCallback((events: MapCleanupEvent[]) => {
+  const updateCleanupEventMarkers = useCallback((events: MapCleanupEvent[], routes: CampaignCleanupRoute[]) => {
     if (!map.current) return;
 
     cleanupEventMarkersRef.current.forEach((m) => m.remove());
     cleanupEventMarkersRef.current = [];
+    cleanupEventDateLabelsRef.current.forEach((m) => m.remove());
+    cleanupEventDateLabelsRef.current = [];
 
-    for (const event of events) {
+    // Events with a route are already rendered by updateCleanupRouteMarkers (at the
+    // route's midpoint) — drawing a second point marker here at the event's own lat/lng
+    // produced two markers (and two radius circles) for what is really one event.
+    const routeEventIds = new Set(routes.map((r) => r.id));
+    const pointOnlyEvents = events.filter((event) => !routeEventIds.has(event.id));
+
+    for (const event of pointOnlyEvents) {
       const el = document.createElement("div");
       const size = 24;
       el.style.cssText = event.is_past
         ? `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
-          "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);" +
-          "display:flex;align-items:center;justify-content:center;background:rgba(63,63,70,0.9)"
+        "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);" +
+        "display:flex;align-items:center;justify-content:center;background:rgba(63,63,70,0.9)"
         : `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
-          "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);" +
-          "display:flex;align-items:center;justify-content:center;background:rgba(12,74,110,0.9)";
+        "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);" +
+        "display:flex;align-items:center;justify-content:center;background:rgba(12,74,110,0.9)";
 
       if (event.group_logo_url) {
         const img = document.createElement("img");
@@ -1350,13 +1434,22 @@ export default function CampaignMap({
       el.onclick = () => setSelectedCleanupEvent(event);
 
       cleanupEventMarkersRef.current.push(marker);
+
+      if (!event.is_past) {
+        const dateText = formatEventDateTime(event.scheduled_start);
+        if (dateText) {
+          cleanupEventDateLabelsRef.current.push(
+            createDateTimeLabelMarker(map.current!, [event.lng, event.lat], dateText, size / 2 + 4),
+          );
+        }
+      }
     }
 
     const radiusSource = map.current.getSource("cleanup-event-radius") as maplibregl.GeoJSONSource | undefined;
     if (radiusSource) {
       radiusSource.setData({
         type: "FeatureCollection",
-        features: events.map((event) => ({
+        features: pointOnlyEvents.map((event) => ({
           type: "Feature",
           geometry: {
             type: "Polygon",
@@ -1373,8 +1466,8 @@ export default function CampaignMap({
   // once on map/style load, so without this a newly created event never appears until
   // a full page reload.
   useEffect(() => {
-    updateCleanupEventMarkers(cleanupEvents ?? []);
-  }, [cleanupEvents, updateCleanupEventMarkers]);
+    updateCleanupEventMarkers(cleanupEvents ?? [], cleanupRoutes ?? []);
+  }, [cleanupEvents, cleanupRoutes, updateCleanupEventMarkers]);
 
   const updateReportMarkers = useCallback((reports: ProblemReportMapData[]) => {
     if (!map.current) return;
@@ -1420,6 +1513,154 @@ export default function CampaignMap({
     problemReportsRef.current = problemReports;
     updateReportMarkers(problemReports?.reports ?? []);
   }, [problemReports, updateReportMarkers]);
+
+  const updateCleanupRoutesLayer = useCallback(
+    (routes: CampaignCleanupRoute[], events: MapCleanupEvent[]) => {
+      if (!map.current) return;
+      const src = map.current.getSource("cleanup-routes") as maplibregl.GeoJSONSource | undefined;
+      const bufferSrc = map.current.getSource("cleanup-routes-buffer") as maplibregl.GeoJSONSource | undefined;
+      if (!src || !bufferSrc) return;
+      const eventIds = new Set(events.map((e) => e.id));
+      src.setData({
+        type: "FeatureCollection",
+        features: routes.map((r) => ({
+          type: "Feature",
+          geometry: r.route,
+          properties: { id: r.id, is_event: eventIds.has(r.id) },
+        })),
+      });
+      // Server-computed geodesic buffer (ST_Buffer) around event-linked routes only,
+      // mirroring the point event's CLEANUP_EVENT_RADIUS_METERS circle — a true offset
+      // corridor rather than a fake line-width-based "zone" that broke on turns/loops.
+      bufferSrc.setData({
+        type: "FeatureCollection",
+        features: routes
+          .filter((r) => r.buffer)
+          .map((r) => ({ type: "Feature", geometry: r.buffer!, properties: { id: r.id } })),
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    cleanupRoutesRef.current = cleanupRoutes ?? [];
+    updateCleanupRoutesLayer(cleanupRoutesRef.current, cleanupEvents ?? []);
+  }, [cleanupRoutes, cleanupEvents, updateCleanupRoutesLayer]);
+
+  // Lightweight popup for an individual/group (non-event) route marker click — a point-based
+  // cleanup gets a hover tooltip, not a full page, so a route gets the equivalent: a small
+  // popup card instead of navigating away to /routes/{id}.
+  const showRouteTooltip = useCallback((routeId: string, at: [number, number]) => {
+    if (!map.current) return;
+    routePopupRef.current?.remove();
+
+    const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: "240px" })
+      .setLngLat(at)
+      .setHTML('<div style="font-size:12px;color:#a1a1aa;padding:2px;">Loading route…</div>')
+      .addTo(map.current);
+    routePopupRef.current = popup;
+
+    getCleanupRoute(routeId)
+      .then((detail) => {
+        if (routePopupRef.current !== popup) return;
+        const bags = (detail.metrics_small_bags ?? 0) + (detail.metrics_large_bags ?? 0);
+        const submitter = detail.submitted_by.display_name ?? detail.submitted_by.username ?? "Someone";
+        const photo = detail.image_urls[0];
+        const html = `
+          <div style="font-family:inherit;min-width:180px;">
+            ${photo ? `<img src="${photo}" style="width:100%;height:96px;object-fit:cover;border-radius:6px;margin-bottom:6px;" />` : ""}
+            <div style="font-size:13px;font-weight:600;color:#e4e4e7;">${submitter}'s cleanup route</div>
+            ${detail.geo_unit_display_name ? `<div style="font-size:11px;color:#71717a;">${detail.geo_unit_display_name}</div>` : ""}
+            ${bags > 0 ? `<div style="font-size:12px;color:#34d399;margin-top:4px;">🗑️ ${bags} bags</div>` : ""}
+            <a href="/routes/${routeId}" style="display:inline-block;margin-top:6px;font-size:11px;color:#38bdf8;text-decoration:underline;">View full route ↗</a>
+          </div>
+        `;
+        popup.setHTML(html);
+      })
+      .catch(() => {
+        if (routePopupRef.current === popup) {
+          popup.setHTML('<div style="font-size:12px;color:#f87171;padding:2px;">Couldn\'t load this route.</div>');
+        }
+      });
+  }, []);
+
+  // Midpoint marker per drawn route — a pre-planned group-event route reuses the
+  // existing event detail modal (its id matches a cleanupEvents entry); an individual/group
+  // route instead shows a lightweight popup (not a full page navigation), matching a
+  // point-based cleanup's hover-tooltip convention.
+  const updateCleanupRouteMarkers = useCallback(
+    (routes: CampaignCleanupRoute[], events: MapCleanupEvent[]) => {
+      if (!map.current) return;
+
+      cleanupRouteMarkersRef.current.forEach((m) => m.remove());
+      cleanupRouteMarkersRef.current = [];
+      cleanupRouteDateLabelsRef.current.forEach((m) => m.remove());
+      cleanupRouteDateLabelsRef.current = [];
+
+      const eventById = new Map(events.map((e) => [e.id, e]));
+
+      for (const r of routes) {
+        const coords = r.route.coordinates;
+        if (!coords || coords.length === 0) continue;
+        const mid = coords[Math.floor(coords.length / 2)];
+        const event = eventById.get(r.id);
+
+        const el = document.createElement("div");
+        const size = 20;
+        el.style.cssText =
+          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
+          "display:flex;align-items:center;justify-content:center;" +
+          (event
+            ? "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);background:rgba(12,74,110,0.9)"
+            : "border:2px solid #f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.6),0 1px 4px rgba(0,0,0,0.6);background:rgba(69,26,3,0.9)");
+
+        const logoUrl = r.group_logo_url ?? event?.group_logo_url ?? null;
+        if (logoUrl) {
+          const img = document.createElement("img");
+          img.src = logoUrl;
+          img.style.cssText = "width:100%;height:100%;object-fit:cover";
+          el.appendChild(img);
+        } else {
+          // Inline SVG "route" pictogram (two waypoints joined by a dashed line) instead of
+          // an emoji glyph — emoji fonts render inconsistently (and often illegibly) at this
+          // marker size across platforms, whereas the SVG is crisp everywhere.
+          el.innerHTML =
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+            '<circle cx="5" cy="6" r="2.5" fill="currentColor"/>' +
+            '<circle cx="19" cy="18" r="2.5" fill="currentColor"/>' +
+            '<path d="M6.5 8 Q12 12 17.5 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="0.5 3.5"/>' +
+            "</svg>";
+          el.style.color = event ? "#7dd3fc" : "#fcd34d";
+        }
+        el.title = event ? `${event.title} — ${event.group_name}` : "View this cleanup route";
+
+        const marker = new maplibregl.Marker({ element: el }).setLngLat(mid).addTo(map.current!);
+        el.onclick = (e) => {
+          e.stopPropagation();
+          if (event) {
+            setSelectedCleanupEvent(event);
+          } else {
+            showRouteTooltip(r.id, mid);
+          }
+        };
+        cleanupRouteMarkersRef.current.push(marker);
+
+        if (event && !event.is_past) {
+          const dateText = formatEventDateTime(event.scheduled_start);
+          if (dateText) {
+            cleanupRouteDateLabelsRef.current.push(
+              createDateTimeLabelMarker(map.current!, mid, dateText, size / 2 + 4),
+            );
+          }
+        }
+      }
+    },
+    [showRouteTooltip],
+  );
+
+  useEffect(() => {
+    updateCleanupRouteMarkers(cleanupRoutesRef.current, cleanupEvents ?? []);
+  }, [cleanupRoutes, cleanupEvents, updateCleanupRouteMarkers]);
 
   const refreshHexBloom = useCallback(() => {
     const m = map.current;
@@ -2028,11 +2269,116 @@ export default function CampaignMap({
       },
     });
 
+    m.addSource("route-picker", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "route-picker-line",
+      type: "line",
+      source: "route-picker",
+      filter: ["==", ["geometry-type"], "LineString"],
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": 4,
+        "line-dasharray": [0.5, 1.5],
+      },
+    });
+    m.addLayer({
+      id: "route-picker-vertices",
+      type: "circle",
+      source: "route-picker",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        "circle-radius": 6,
+        "circle-color": "#f59e0b",
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#451a03",
+      },
+    });
+
+    m.addSource("cleanup-routes", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    // True geodesic buffer polygon (server-computed via ST_Buffer) around event routes'
+    // check-in corridor — same fill/line styling as cleanup-event-radius-fill/-line, giving
+    // route events the equivalent of a point event's proximity circle. Added before the
+    // line/casing layers so the route itself stays legible on top of the buffer.
+    m.addSource("cleanup-routes-buffer", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "cleanup-routes-buffer-fill",
+      type: "fill",
+      source: "cleanup-routes-buffer",
+      paint: { "fill-color": "#38bdf8", "fill-opacity": 0.08 },
+    });
+    m.addLayer({
+      id: "cleanup-routes-buffer-line",
+      type: "line",
+      source: "cleanup-routes-buffer",
+      paint: { "line-color": "#38bdf8", "line-width": 1.5, "line-opacity": 0.65 },
+    });
+    // Solid cyan + white casing (matches the route-picker/detail-page brand color) —
+    // deliberately not pink/magenta/dashed, since several basemap styles already render
+    // dashed magenta trail lines that a dashed pink route layer was getting lost against.
+    m.addLayer({
+      id: "cleanup-routes-casing",
+      type: "line",
+      source: "cleanup-routes",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#ffffff",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 8],
+        "line-opacity": 0.9,
+      },
+    });
+    m.addLayer({
+      id: "cleanup-routes-line",
+      type: "line",
+      source: "cleanup-routes",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        // Group-event (pre-planned) routes render blue, matching the event marker
+        // palette; individual/group ad-hoc routes render amber — a genuinely
+        // different hue (not another blue/cyan shade) so the two categories are
+        // tellable apart at a glance.
+        "line-color": ["case", ["get", "is_event"], "#0284c7", "#f59e0b"],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 5],
+      },
+    });
+    m.addLayer({
+      id: "cleanup-routes-arrows",
+      type: "symbol",
+      source: "cleanup-routes",
+      layout: {
+        "symbol-placement": "line",
+        "symbol-spacing": 60,
+        "text-field": "▶",
+        "text-size": 14,
+        "text-rotation-alignment": "map",
+        "text-pitch-alignment": "map",
+        "text-keep-upright": false,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+      },
+      paint: {
+        "text-color": ["case", ["get", "is_event"], "#0c4a6e", "#78350f"],
+        "text-halo-color": "#ecfeff",
+        "text-halo-width": 1,
+      },
+    });
+
     updateEventMarkers(activeEventsRef.current);
     updateBusinessMarkers(partnerBusinessesRef.current);
-    updateCleanupEventMarkers(cleanupEventsRef.current);
+    updateCleanupEventMarkers(cleanupEventsRef.current, cleanupRoutesRef.current);
     updateReportMarkers(problemReportsRef.current?.reports ?? []);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+    updateCleanupRoutesLayer(cleanupRoutesRef.current, cleanupEventsRef.current);
+    updateCleanupRouteMarkers(cleanupRoutesRef.current, cleanupEventsRef.current);
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers, updateCleanupRoutesLayer, updateCleanupRouteMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -2156,20 +2502,6 @@ export default function CampaignMap({
         onUserLocationErrorRef.current?.(err.code);
       });
       map.current.addControl(control, "top-right");
-      map.current.addControl(
-        new ZoomToLocationControl(() => {
-          if (userLocationRef.current && map.current) {
-            map.current.flyTo({
-              center: [userLocationRef.current.longitude, userLocationRef.current.latitude],
-              zoom: 15,
-              duration: 800,
-            });
-          } else if (!hasFixRef.current) {
-            control.trigger();
-          }
-        }),
-        "top-right",
-      );
       onGeolocateTrigger?.(() => {
         if (hasFixRef.current) {
           if (lastPositionRef.current) onUserLocationChangeRef.current?.(lastPositionRef.current);
@@ -2316,7 +2648,7 @@ export default function CampaignMap({
       });
 
       map.current.on("click", "territory-fill", (e) => {
-        if (!e.features?.[0]) return;
+        if (!e.features?.[0] || routePickerActiveRef.current) return;
         const feature = e.features[0];
         const props = feature.properties as { display_name?: string; geo_unit_id?: string; unit_type?: string };
         const geoUnitId = String(feature.id ?? props.geo_unit_id ?? "");
@@ -2370,7 +2702,7 @@ export default function CampaignMap({
         hoverDiv.style.display = "none";
       };
       const handleHexClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current || routePickerActiveRef.current) return;
         const props = e.features[0].properties as {
           geo_unit_id: string; h3_index: string; bloom_score: number; bloom_stage: number; seed_source: string | null;
         };
@@ -2419,9 +2751,28 @@ export default function CampaignMap({
       // and auto-hide it shortly after since there's no hover-out equivalent.
       let nycTapHideTimer: ReturnType<typeof setTimeout> | undefined;
       map.current.on("click", "nyc-neighborhoods-fill", (e) => {
+        if (routePickerActiveRef.current) return;
         showNycNeighborhoodTooltip(e);
         clearTimeout(nycTapHideTimer);
         nycTapHideTimer = setTimeout(hideNycNeighborhoodTooltip, 2000);
+      });
+
+      // Route picker — click-to-add-vertex. Plain map-level click (not layer-scoped) so it
+      // fires regardless of what's under the cursor while drawing; the layer-specific
+      // handlers above already bail out via routePickerActiveRef so they don't interfere.
+      map.current.on("click", (e) => {
+        if (!routePickerActiveRef.current || !map.current) return;
+        const clicked: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const start = routeVerticesRef.current[0];
+        const shouldSnap =
+          routeVerticesRef.current.length >= 2 && distanceMeters(clicked, start) <= ROUTE_LOOP_CLOSE_METERS;
+        const next = shouldSnap ? start : clicked;
+
+        routeVerticesRef.current = [...routeVerticesRef.current, next];
+        setRoutePickerVertexCount(routeVerticesRef.current.length);
+        setRoutePickerJustClosedLoop(shouldSnap);
+        onRoutePickerChangeRef.current?.(routeVerticesRef.current);
+        redrawRoutePicker();
       });
     });
 
@@ -2437,6 +2788,9 @@ export default function CampaignMap({
       eventMarkersRef.current.forEach((m) => m.remove());
       businessMarkersRef.current.forEach((m) => m.remove());
       cleanupEventMarkersRef.current.forEach((m) => m.remove());
+      cleanupEventDateLabelsRef.current.forEach((m) => m.remove());
+      cleanupRouteMarkersRef.current.forEach((m) => m.remove());
+      cleanupRouteDateLabelsRef.current.forEach((m) => m.remove());
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
       map.current?.remove();
@@ -2457,6 +2811,25 @@ export default function CampaignMap({
       applyEventAreaHighlights(map.current, activeEvents, eventGeoUnitIds ?? {});
     }
   }, [activeEvents, eventGeoUnitIds]);
+
+  // Focus coords: fly to a deep-linked location (e.g. from an event page "log your cleanup" link)
+  useEffect(() => {
+    if (!focusCoords || !map.current) return;
+
+    const flyToFocus = () => {
+      map.current?.flyTo({
+        center: [focusCoords.longitude, focusCoords.latitude],
+        zoom: 15,
+        duration: 700,
+      });
+    };
+
+    if (mapReadyRef.current) {
+      flyToFocus();
+    } else {
+      map.current.once("load", flyToFocus);
+    }
+  }, [focusCoords]);
 
   // Pin picker: add/remove draggable marker with ZIP boundary constraint
   useEffect(() => {
@@ -2777,7 +3150,7 @@ export default function CampaignMap({
     <div className="relative flex flex-col flex-1 min-h-[500px]">
       <div ref={mapContainer} className="flex-1 w-full" />
 
-      {selectedZip && !pinPickerActive && !areaPickerActive && (
+      {selectedZip && !pinPickerActive && !areaPickerActive && !routePickerActive && (
         isChoropleth ? (
           <StatePanel
             geoUnitId={selectedZip.geoUnitId}
@@ -2801,7 +3174,7 @@ export default function CampaignMap({
         )
       )}
 
-      {selectedHex && !pinPickerActive && !areaPickerActive && (
+      {selectedHex && !pinPickerActive && !areaPickerActive && !routePickerActive && (
         <HexPanel entry={selectedHex} campaignId={campaign.id} onClose={() => setSelectedHex(null)} onPhotoSelect={setSelectedPhoto} refreshKey={hexPhotoVersion} />
       )}
 
@@ -2855,7 +3228,54 @@ export default function CampaignMap({
         </>
       )}
 
-      {!pinPickerActive && !areaPickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
+      {routePickerActive && (
+        <>
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200 flex items-center gap-2">
+            <span>
+              {routePickerJustClosedLoop
+                ? "Route closed — click Undo to reopen"
+                : `Click the map to draw your cleanup route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
+            </span>
+            <span
+              title="This feature should work but is still being tested."
+              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
+            >
+              Beta
+            </span>
+          </div>
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+            <button
+              onClick={handleUndoRouteVertex}
+              disabled={routePickerVertexCount === 0}
+              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+            >
+              Undo
+            </button>
+            <button
+              onClick={handleClearRouteVertices}
+              disabled={routePickerVertexCount === 0}
+              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+            >
+              Clear
+            </button>
+            <button
+              onClick={onRoutePickerFinish}
+              disabled={routePickerVertexCount < 2}
+              className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-lg transition-colors"
+            >
+              Finish route
+            </button>
+            <button
+              onClick={onRoutePickerCancel}
+              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+
+      {!pinPickerActive && !areaPickerActive && !routePickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
         <div className="absolute top-4 left-4 z-10 max-w-[calc(100vw-2rem)] sm:max-w-xs flex flex-col gap-2">
           {activeEvents.length > 0 && (
             <div className="flex items-center gap-1.5 sm:hidden">
@@ -2950,7 +3370,7 @@ export default function CampaignMap({
         </div>
       )}
 
-      {!pinPickerActive && !areaPickerActive && !isCollage && (
+      {!pinPickerActive && !areaPickerActive && !routePickerActive && !isCollage && (
         <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1 sm:gap-1.5 text-xs">
           {isChoropleth ? (
             <>
@@ -3188,18 +3608,17 @@ export default function CampaignMap({
             {!!(
               (selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)
             ) && (
-              <p className="text-sm text-emerald-400 mb-3 flex items-center gap-1.5">
-                <span>🗑️</span>
-                {(selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)} bags logged so far
-              </p>
-            )}
+                <p className="text-sm text-emerald-400 mb-3 flex items-center gap-1.5">
+                  <span>🗑️</span>
+                  {(selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)} bags logged so far
+                </p>
+              )}
             <Link
               href={`/cleanup-events/${selectedCleanupEvent.id}`}
-              className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${
-                selectedCleanupEvent.is_past
+              className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${selectedCleanupEvent.is_past
                   ? "bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
                   : "bg-sky-500 hover:bg-sky-400 text-sky-950"
-              }`}
+                }`}
             >
               {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

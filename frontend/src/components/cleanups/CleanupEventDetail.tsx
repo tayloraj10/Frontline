@@ -10,6 +10,7 @@ import {
   updateCleanupEvent,
   type CleanupEventDetailData,
 } from "@/lib/cleanupEvents";
+import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 
 const inputCls =
   "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -208,6 +209,17 @@ export default function CleanupEventDetail({
         </div>
       )}
 
+      {event.route && (
+        <RoutePreviewMap
+          coordinates={event.route.coordinates}
+          bufferCoordinates={event.route_buffer?.coordinates as [number, number][][] | undefined}
+          groupLogoUrl={event.group_logo_url}
+          enlargeable
+          interactive
+          isEvent
+        />
+      )}
+
       <div>
         <div className="flex items-center gap-2 mb-1.5">
           {event.group_logo_url ? (
@@ -215,10 +227,10 @@ export default function CleanupEventDetail({
             <img
               src={event.group_logo_url}
               alt={event.group_name}
-              className="w-6 h-6 rounded-full object-cover border border-zinc-700/50"
+              className="w-9 h-9 rounded-full object-cover border border-zinc-700/50"
             />
           ) : (
-            <span className="w-6 h-6 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-xs">
+            <span className="w-9 h-9 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-sm">
               🧹
             </span>
           )}
@@ -338,21 +350,29 @@ export default function CleanupEventDetail({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {(["going", "maybe", "cancelled"] as const).map((status) => (
-              <button
-                key={status}
-                disabled={rsvpLoading || (status === "going" && blockGoing)}
-                onClick={() => handleRsvp(status)}
-                title={status === "going" && blockGoing ? "This event is full" : undefined}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 ${
-                  viewerStatus === status
-                    ? "bg-sky-500 border-sky-500 text-sky-950"
-                    : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
-                }`}
-              >
-                {status === "going" ? "Going" : status === "maybe" ? "Maybe" : "Can't go"}
-              </button>
-            ))}
+            {(["going", "maybe", "cancelled"] as const).map((status) => {
+              const activeClasses =
+                status === "going"
+                  ? "bg-emerald-500 border-emerald-500 text-emerald-950"
+                  : status === "maybe"
+                  ? "bg-amber-500 border-amber-500 text-amber-950"
+                  : "bg-red-500 border-red-500 text-red-950";
+              return (
+                <button
+                  key={status}
+                  disabled={rsvpLoading || (status === "going" && blockGoing)}
+                  onClick={() => handleRsvp(status)}
+                  title={status === "going" && blockGoing ? "This event is full" : undefined}
+                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                    viewerStatus === status
+                      ? activeClasses
+                      : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
+                  }`}
+                >
+                  {status === "going" ? "Going" : status === "maybe" ? "Maybe" : "Can't go"}
+                </button>
+              );
+            })}
           </div>
 
           {!viewerCheckedIn && (
@@ -391,6 +411,14 @@ export default function CleanupEventDetail({
               )}
             </div>
           )}
+
+          <Link
+            href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-colors"
+          >
+            <span aria-hidden="true">📍</span>
+            Log your cleanup on the map
+          </Link>
         </div>
       )}
 
@@ -423,6 +451,11 @@ export default function CleanupEventDetail({
                   {(r.small_bags + r.large_bags) > 0 && (
                     <span className="text-xs text-emerald-400 shrink-0">
                       🗑️ {r.small_bags + r.large_bags}
+                    </span>
+                  )}
+                  {r.is_late && (
+                    <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-0.5 shrink-0">
+                      Late
                     </span>
                   )}
                 </div>
