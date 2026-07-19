@@ -106,11 +106,11 @@ async def record_contribution(
                     (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
                      value, photo_url, location_verified, notes, cleanup_id, recorded_by_user_id)
                 VALUES
-                    (:campaign_id, :user_id, :group_id, NULL, :contribution_type,
-                     :value, :photo_url, FALSE, :notes, :cleanup_id, :recorded_by_user_id)
+                    (:campaign_id, :user_id, :group_id, :geo_unit_id, :contribution_type,
+                     :value, :photo_url, :location_verified, :notes, :cleanup_id, :recorded_by_user_id)
                 RETURNING id
             """),
-            insert_params,
+            {**insert_params, "location_verified": location_verified},
         )
 
     contribution_id = str(contribution_result.scalar())

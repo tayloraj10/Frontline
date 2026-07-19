@@ -34,5 +34,6 @@ app.include_router(leaderboard.router, prefix="/api")
 app.include_router(geo_units.router, prefix="/api")
 app.include_router(partners.router, prefix="/api")
 app.include_router(cleanup_events.router, prefix="/api")
+app.include_router(cleanup_events.routes_router, prefix="/api")
 if not settings.is_production:
     app.include_router(admin.router, prefix="/api")

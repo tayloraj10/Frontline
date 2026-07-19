@@ -367,9 +367,11 @@ async def wipe_seed_data(db: AsyncSession = Depends(get_db)):
 @router.post("/wipe-geo-unit")
 async def wipe_geo_unit_data(unit_type: str, unit_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Delete all problem_reports, contributions, cleanups, and campaign_events tied to a
+    Delete all problem_reports, contributions, cleanups (including group events and
+    routes, via is_group_event/route), territory_claims, and campaign_events tied to a
     single geo_unit (e.g. unit_type='zip', unit_id='10034') so it can be re-tested from a
-    clean slate. Leaves campaigns, geo_units, event_triggers, and every other geo_unit alone.
+    clean slate. cleanup_rsvps cascade-delete with their cleanup row. Leaves campaigns,
+    geo_units, event_triggers, and every other geo_unit alone.
     """
     geo_row = await db.execute(
         text("SELECT id FROM geo_units WHERE unit_type = :unit_type AND unit_id = :unit_id"),
@@ -398,6 +400,11 @@ async def wipe_geo_unit_data(unit_type: str, unit_id: str, db: AsyncSession = De
     counts["cleanups"] = result.rowcount
 
     result = await db.execute(
+        text("DELETE FROM territory_claims WHERE geo_unit_id = :id"), {"id": geo_unit_id}
+    )
+    counts["territory_claims"] = result.rowcount
+
+    result = await db.execute(
         text("DELETE FROM campaign_event_geo_units WHERE geo_unit_id = :id"), {"id": geo_unit_id}
     )
     counts["campaign_event_geo_units"] = result.rowcount
@@ -408,6 +415,7 @@ async def wipe_geo_unit_data(unit_type: str, unit_id: str, db: AsyncSession = De
     counts["campaign_events"] = result.rowcount
 
     await db.commit()
+    return {"geo_unit_id": geo_unit_id, "deleted": counts}
 
 
 @router.get("/users/search")

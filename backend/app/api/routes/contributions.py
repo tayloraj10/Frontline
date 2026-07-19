@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 import h3
@@ -76,12 +77,26 @@ class ContributionRequest(BaseModel):
     pounds: float | None = None
     resolve_report_id: UUID | None = None
     cleanup_event_id: UUID | None = None
+    route: dict | None = None
+    route_geo_unit_id: UUID | None = None
 
     @field_validator("small_bags", "large_bags")
     @classmethod
     def _non_negative(cls, v: int | None) -> int | None:
         if v is not None and v < 0:
             raise ValueError("must be non-negative")
+        return v
+
+    @field_validator("route")
+    @classmethod
+    def _valid_linestring(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return v
+        if v.get("type") != "LineString":
+            raise ValueError("route must be a GeoJSON LineString")
+        coords = v.get("coordinates")
+        if not isinstance(coords, list) or len(coords) < 2:
+            raise ValueError("route must have at least 2 coordinates")
         return v
 
 
@@ -179,7 +194,26 @@ async def submit_contribution(
         if not event_result.fetchone():
             raise HTTPException(status_code=404, detail="Cleanup event not found")
 
-    if has_location:
+    if payload.route:
+        if not payload.route_geo_unit_id:
+            raise HTTPException(status_code=400, detail="route_geo_unit_id is required when submitting a route")
+
+        intersecting = await db.execute(
+            text("""
+                SELECT id FROM geo_units
+                WHERE unit_type = ANY(:geo_unit)
+                  AND ST_Intersects(geometry, ST_GeomFromGeoJSON(:route))
+            """),
+            {"geo_unit": campaign_geo_unit or ["zip"], "route": json.dumps(payload.route)},
+        )
+        intersecting_ids = {str(row[0]) for row in intersecting.fetchall()}
+        if str(payload.route_geo_unit_id) not in intersecting_ids:
+            raise HTTPException(status_code=400, detail="route_geo_unit_id does not intersect the submitted route")
+
+        geo_unit_id = str(payload.route_geo_unit_id)
+        location_verified = True
+
+    elif has_location:
         if campaign_geo_unit and "h3_hex" in campaign_geo_unit:
             geo_unit_id = await _get_or_create_h3_geo_unit(db, payload.latitude, payload.longitude)
             location_verified = True
@@ -218,12 +252,15 @@ async def submit_contribution(
         cleanup_result = await db.execute(
             text("""
                 INSERT INTO cleanups
-                    (campaign_id, geo_unit_id, location, status, image_urls,
+                    (campaign_id, geo_unit_id, location, route, status, image_urls,
                      metrics_small_bags, metrics_large_bags, metrics_pounds, submitted_by_user_id, attended_user_ids)
                 VALUES
                     (:campaign_id, :geo_unit_id,
                      CASE WHEN CAST(:lon AS double precision) IS NOT NULL AND CAST(:lat AS double precision) IS NOT NULL
                           THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
+                          ELSE NULL END,
+                     CASE WHEN CAST(:route AS text) IS NOT NULL
+                          THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
                           ELSE NULL END,
                      'completed', :image_urls, :metrics_small_bags, :metrics_large_bags, :metrics_pounds, :user_id, ARRAY[:user_id]::uuid[])
                 RETURNING id
@@ -233,6 +270,7 @@ async def submit_contribution(
                 "geo_unit_id": geo_unit_id,
                 "lon": payload.longitude,
                 "lat": payload.latitude,
+                "route": json.dumps(payload.route) if payload.route else None,
                 "image_urls": cleanup_image_urls,
                 "metrics_small_bags": payload.small_bags,
                 "metrics_large_bags": payload.large_bags,
@@ -376,6 +414,7 @@ async def submit_contribution(
         "location_verified": location_verified,
         "claimed_territory": geo_unit_id is not None,
         "hotspot_cleared": hotspot_cleared,
+        "cleanup_id": cleanup_id,
     }
 
 
