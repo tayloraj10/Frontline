@@ -398,6 +398,147 @@ function GpsIndicator({
   return null;
 }
 
+// ─── Camera capture ───────────────────────────────────────────────────────────
+
+function CameraModal({
+  onCapture,
+  onClose,
+}: {
+  onCapture: (file: File) => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(() =>
+    typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia
+      ? "Camera not supported on this browser — use gallery instead."
+      : null,
+  );
+
+  useEffect(() => {
+    if (error) return;
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+        setReady(true);
+      })
+      .catch(() => setError("Camera unavailable — check permissions or use gallery instead."));
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const capture = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        onCapture(new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
+        onClose();
+      },
+      "image/jpeg",
+      0.9,
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-4 p-4">
+      {error ? (
+        <>
+          <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
+          <button onClick={onClose} className="text-zinc-400 text-sm underline">
+            Close
+          </button>
+        </>
+      ) : (
+        <>
+          <video ref={videoRef} playsInline muted className="w-full max-w-md rounded-lg bg-black" />
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={capture}
+              disabled={!ready}
+              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              📸 Capture
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PhotoCaptureInput({
+  multiple,
+  onFilesSelected,
+}: {
+  multiple: boolean;
+  onFilesSelected: (files: File[]) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCamera, setShowCamera] = useState(false);
+
+  return (
+    <>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setShowCamera(true)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+        >
+          📷 Take Photo
+        </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+        >
+          🖼️ Choose from Gallery
+        </button>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple={multiple}
+        onChange={(e) => {
+          onFilesSelected(Array.from(e.target.files ?? []));
+          e.target.value = "";
+        }}
+        className="hidden"
+      />
+      {showCamera && (
+        <CameraModal onCapture={(file) => onFilesSelected([file])} onClose={() => setShowCamera(false)} />
+      )}
+    </>
+  );
+}
+
 // ─── Contribute modal ─────────────────────────────────────────────────────────
 
 function ContributeModal({
@@ -1064,12 +1205,11 @@ function ContributeModal({
             <label className="block text-xs text-zinc-500 mb-1.5">
               {isCleanup ? "Photos" : "Photo"} {isPhoto ? "(required)" : "(optional)"}
             </label>
-            <input
-              type="file"
-              accept="image/*"
+            <PhotoCaptureInput
               multiple={isCleanup}
-              onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
-              className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+              onFilesSelected={(files) =>
+                setPhotos((prev) => (isCleanup ? [...prev, ...files] : files))
+              }
             />
             {photoPreviews.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -1269,12 +1409,7 @@ function ReportModal({
 
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">Photo (required)</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
-          />
+          <PhotoCaptureInput multiple={false} onFilesSelected={(files) => setPhoto(files[0] ?? null)} />
           {photoPreview && (
             <div className="mt-2 flex flex-wrap gap-2">
               <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
