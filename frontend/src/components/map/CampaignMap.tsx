@@ -2633,6 +2633,10 @@ export default function CampaignMap({
       map.current.on("mousemove", "territory-fill", (e) => {
         if (!map.current || !e.features?.[0] || pinPickerActiveRef.current) return;
         map.current.getCanvas().style.cursor = "pointer";
+        // On mobile there's no hover-out equivalent (touch never fires mouseleave), so this
+        // tooltip would stay stuck open and overlap the territory-info panel opened by the
+        // click handler below. Mobile has its own click-to-open info window, so skip it there.
+        if (isMobileViewport) return;
         hoverDiv.style.display = "block";
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;

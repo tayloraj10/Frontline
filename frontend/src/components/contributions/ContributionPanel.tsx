@@ -3132,7 +3132,7 @@ function ModalShell({
           />
         )}
         <div
-          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
+          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[75vh] sm:max-h-[90vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
             }`}
         >
           {title && (
