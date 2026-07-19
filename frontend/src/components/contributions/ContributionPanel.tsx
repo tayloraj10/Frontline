@@ -222,7 +222,7 @@ interface ContributionPanelProps {
   onEnterRoutePicker?: () => void;
   routePickerActive?: boolean;
   placedRouteVertices?: [number, number][] | null;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean) => void;
   onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string) => void;
   onRouteAdded?: (route: { id: string; route: RouteLineString }) => void;
   userLocation?: Coords | null;
@@ -608,7 +608,7 @@ function ContributeModal({
   onEnterRoutePicker: () => void;
   routeOverride: RouteLineString | null;
   onClose: () => void;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean) => void;
   activeMapStyle?: string;
   nearbyEvent?: { id: string; title: string } | null;
   // Set when arriving from the claim-a-report challenge flow: the report is already
@@ -855,6 +855,7 @@ function ContributeModal({
         photoUrls[0] ?? undefined,
         data.hotspot_cleared && nearbyReport ? nearbyReport.id : undefined,
         isRouteMode && route && data.cleanup_id ? { id: data.cleanup_id, route } : undefined,
+        Boolean(effectiveEventId),
       );
       setHotspotCleared(Boolean(data.hotspot_cleared));
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");

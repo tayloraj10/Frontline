@@ -218,6 +218,7 @@ interface NewContribution {
   lng: number;
   value: number;
   photoUrl?: string;
+  isGroupEvent?: boolean;
   key: number;
 }
 
@@ -593,9 +594,10 @@ export default function CampaignPageClient({
     photoUrl?: string,
     resolvedReportId?: string,
     newRoute?: { id: string; route: RouteLineString },
+    isGroupEvent?: boolean,
   ) => {
     if (lat !== null && lng !== null) {
-      setNewContribution({ lat, lng, value, photoUrl, key: Date.now() });
+      setNewContribution({ lat, lng, value, photoUrl, isGroupEvent, key: Date.now() });
     }
     if (newRoute) {
       handleRouteAdded(newRoute);

@@ -387,6 +387,7 @@ async def submit_contribution(
         location_verified=location_verified,
         apply_multiplier=payload.cleanup_event_id is None,
         challenge_multiplier=CLAIM_CHALLENGE_MULTIPLIER if challenge_bonus_applied else 1.0,
+        cleanup_event_id=str(payload.cleanup_event_id) if payload.cleanup_event_id else None,
     )
 
     if payload.cleanup_event_id:
@@ -522,6 +523,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
                 value,
                 photo_url,
                 submitted_at,
+                cleanup_event_id IS NOT NULL AS is_group_event,
                 ST_Y(location::geometry) AS latitude,
                 ST_X(location::geometry) AS longitude
             FROM contributions
@@ -540,6 +542,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
             "value": row.value,
             "photo_url": row.photo_url,
             "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
+            "is_group_event": row.is_group_event,
             "latitude": float(row.latitude),
             "longitude": float(row.longitude),
         }

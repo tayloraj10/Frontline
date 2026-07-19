@@ -11,6 +11,7 @@ import {
   type CleanupEventDetailData,
 } from "@/lib/cleanupEvents";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
+import Lightbox from "@/components/Lightbox";
 
 const inputCls =
   "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -91,6 +92,7 @@ export default function CleanupEventDetail({
   const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
   const [locationStatus, setLocationStatus] = useState<"checking" | "resolved" | "unavailable">("checking");
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const viewerCheckedInInitial = !!initialEvent.viewer_rsvp?.checked_in_at;
 
@@ -306,7 +308,8 @@ export default function CleanupEventDetail({
         )}
         {(event.total_small_bags + event.total_large_bags) > 0 && (
           <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
-            🗑️ {event.total_small_bags + event.total_large_bags} bags logged so far
+            🗑️ {event.total_small_bags + event.total_large_bags} bags
+            {event.total_pounds > 0 && ` · ${event.total_pounds.toLocaleString()} lbs`} logged so far
           </p>
         )}
         {event.description && <p className="mt-3 text-sm text-zinc-300 leading-relaxed">{event.description}</p>}
@@ -451,6 +454,7 @@ export default function CleanupEventDetail({
                   {(r.small_bags + r.large_bags) > 0 && (
                     <span className="text-xs text-emerald-400 shrink-0">
                       🗑️ {r.small_bags + r.large_bags}
+                      {r.pounds > 0 && ` · ${r.pounds.toLocaleString()} lbs`}
                     </span>
                   )}
                   {r.is_late && (
@@ -475,6 +479,37 @@ export default function CleanupEventDetail({
           </ul>
         )}
       </div>
+
+      {event.photos.length > 0 && (
+        <div className="border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+            <span className="text-sm font-semibold text-zinc-300">
+              Photos <span className="text-zinc-500 font-normal">({event.photos.length})</span>
+            </span>
+          </div>
+          <div className="p-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {event.photos.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={`${url}-${i}`}
+                src={url}
+                alt=""
+                onClick={() => setLightboxIndex(i)}
+                className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 transition-colors"
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <Lightbox
+          images={event.photos}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+        />
+      )}
     </div>
   );
 }
