@@ -10,6 +10,7 @@ import AdminDialog from "@/components/map/AdminDialog";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
+import { listCampaignCleanupRoutes, type CampaignCleanupRoute, type RouteLineString } from "@/lib/cleanupRoutes";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -203,6 +204,7 @@ interface Props {
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
+  focusCoords?: { latitude: number; longitude: number } | null;
 }
 
 interface NewContribution {
@@ -485,6 +487,7 @@ export default function CampaignPageClient({
   eventGeoUnitIds,
   partnerBusinesses,
   cleanupEvents,
+  focusCoords,
 }: Props) {
   const [hexEventsExpanded, setHexEventsExpanded] = useState(false);
   const [pinPickerActive, setPinPickerActive] = useState(false);
@@ -507,6 +510,9 @@ export default function CampaignPageClient({
   const [localProblemReports, setLocalProblemReports] = useState<ProblemReports | null | undefined>(problemReports);
   const [areaPickerActive, setAreaPickerActive] = useState(false);
   const [pickedAreas, setPickedAreas] = useState<SelectedArea[]>([]);
+  const [routePickerActive, setRoutePickerActive] = useState(false);
+  const [liveRouteVertices, setLiveRouteVertices] = useState<[number, number][]>([]);
+  const [placedRouteVertices, setPlacedRouteVertices] = useState<[number, number][] | null>(null);
   const [showTimedEventModal, setShowTimedEventModal] = useState(false);
   const [timedEventFormKey, setTimedEventFormKey] = useState(0);
   const [activeEventsList, setActiveEventsList] = useState<CampaignEvent[]>(activeEvents);
@@ -520,18 +526,25 @@ export default function CampaignPageClient({
   const [dismissedCleanupEventIds, setDismissedCleanupEventIds] = useState<Set<string>>(new Set());
   const [pendingCleanupEventId, setPendingCleanupEventId] = useState<string | null>(null);
 
-  const nearbyCleanupEvent = useMemo(() => {
+  // Raw proximity check, independent of banner dismissal — this is what actually feeds the
+  // "count this toward the event?" checkbox inside the log dialog, so dismissing the banner
+  // must not suppress it (the banner and the log-dialog checkbox are separate concerns).
+  const nearbyCleanupEventRaw = useMemo(() => {
     if (!userLocation || !cleanupEvents || cleanupEvents.length === 0) return null;
     const now = new Date();
     return (
       cleanupEvents.find(
         (event) =>
-          !dismissedCleanupEventIds.has(event.id) &&
           isWithinCleanupEventWindow(event, now) &&
           distanceMeters(userLocation, event) <= CLEANUP_EVENT_PROXIMITY_METERS,
       ) ?? null
     );
-  }, [userLocation, cleanupEvents, dismissedCleanupEventIds]);
+  }, [userLocation, cleanupEvents]);
+
+  const nearbyCleanupEvent = useMemo(() => {
+    if (!nearbyCleanupEventRaw || dismissedCleanupEventIds.has(nearbyCleanupEventRaw.id)) return null;
+    return nearbyCleanupEventRaw;
+  }, [nearbyCleanupEventRaw, dismissedCleanupEventIds]);
 
   // NYC neighborhoods mosaic overlay: too confusing layered over the zip choropleth for
   // a general audience, so there's no visible toggle for it in the normal UI. Kept
@@ -544,15 +557,41 @@ export default function CampaignPageClient({
   // it comes back on the next page load.
   const [adminControlsHidden, setAdminControlsHidden] = useState(false);
 
+  const [cleanupRoutesList, setCleanupRoutesList] = useState<CampaignCleanupRoute[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listCampaignCleanupRoutes(campaign.id)
+      .then((routes) => { if (!cancelled) setCleanupRoutesList(routes); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [campaign.id]);
+
+  const handleRouteAdded = (route: { id: string; route: RouteLineString }) => {
+    const full: CampaignCleanupRoute = {
+      id: route.id,
+      route: route.route,
+      group_id: null,
+      group_name: null,
+      group_logo_url: null,
+      buffer: null,
+    };
+    setCleanupRoutesList((prev) => [full, ...prev.filter((r) => r.id !== route.id)]);
+  };
+
   const handleContributionSubmitted = (
     lat: number | null,
     lng: number | null,
     value: number,
     photoUrl?: string,
     resolvedReportId?: string,
+    newRoute?: { id: string; route: RouteLineString },
   ) => {
     if (lat !== null && lng !== null) {
       setNewContribution({ lat, lng, value, photoUrl, key: Date.now() });
+    }
+    if (newRoute) {
+      handleRouteAdded(newRoute);
     }
     if (resolvedReportId) {
       setLocalProblemReports((prev) =>
@@ -599,6 +638,22 @@ export default function CampaignPageClient({
     setPinPickerActive(false);
   };
 
+  const handleEnterRoutePicker = () => {
+    setPlacedRouteVertices(null);
+    setLiveRouteVertices([]);
+    setRoutePickerActive(true);
+  };
+
+  const handleRoutePickerFinish = () => {
+    setPlacedRouteVertices(liveRouteVertices);
+    setRoutePickerActive(false);
+  };
+
+  const handleRoutePickerCancel = () => {
+    setPlacedRouteVertices(null);
+    setRoutePickerActive(false);
+  };
+
   const togglePanel = (panel: "leaderboard" | "activity" | "mine" | "stats") => {
     setOpenPanel((p) => (p === panel ? null : panel));
   };
@@ -628,7 +683,7 @@ export default function CampaignPageClient({
 
   const isHexBloom = campaign.campaign_type === "hex_bloom";
   const showEventsChip = activeEventsList.length > 0 && !isHexBloom;
-  const statsButtonActive = !openPanel && !pinPickerActive && !areaPickerActive;
+  const statsButtonActive = !openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive;
   const bloomTotal = isHexBloom
     ? Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0))
     : 0;
@@ -657,14 +712,20 @@ export default function CampaignPageClient({
         onAreaPickerChange={setPickedAreas}
         onAreaPickerConfirm={handleAreaPickerConfirm}
         onAreaPickerCancel={handleAreaPickerCancel}
+        routePickerActive={routePickerActive}
+        onRoutePickerChange={setLiveRouteVertices}
+        onRoutePickerFinish={handleRoutePickerFinish}
+        onRoutePickerCancel={handleRoutePickerCancel}
         newContribution={newContribution}
         newReport={newReport}
         userLocation={userLocation}
+        focusCoords={focusCoords}
         activeStyle={activeMapStyle}
         nycNeighborhoodsVisible={nycNeighborhoodsVisible}
         problemReports={localProblemReports}
         eventCentroids={eventCentroids}
         eventGeoUnitIds={localEventGeoUnitIds}
+        cleanupRoutes={cleanupRoutesList}
         partnerBusinesses={partnerBusinesses}
         cleanupEvents={cleanupEvents}
         onUserLocationChange={(coords) => {
@@ -681,7 +742,7 @@ export default function CampaignPageClient({
       />
 
       {/* Side panel */}
-      {openPanel && !pinPickerActive && !areaPickerActive && (
+      {openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive && (
         <div className="absolute bottom-0 left-0 right-0 h-[55vh] sm:h-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-t sm:border-t-0 sm:border-l border-zinc-800 flex flex-col z-20 overflow-hidden">
           {/* Header: tab buttons + close */}
           <div className="flex items-center border-b border-zinc-800 shrink-0 px-2 pt-2 pb-0 gap-1">
@@ -958,8 +1019,12 @@ export default function CampaignPageClient({
         onEnterPinPicker={handleEnterPinPicker}
         pinPickerActive={pinPickerActive}
         placedPinCoords={placedPinCoords}
+        onEnterRoutePicker={handleEnterRoutePicker}
+        routePickerActive={routePickerActive}
+        placedRouteVertices={placedRouteVertices}
         onContributionSubmitted={handleContributionSubmitted}
         onReportSubmitted={handleReportSubmitted}
+        onRouteAdded={handleRouteAdded}
         userLocation={userLocation}
         locationError={locationError}
         requestLocation={() => triggerGeolocateRef.current?.() ?? false}
@@ -967,7 +1032,7 @@ export default function CampaignPageClient({
         onStyleChange={setActiveMapStyle}
         pendingCleanupEventId={pendingCleanupEventId}
         onPendingCleanupEventConsumed={() => setPendingCleanupEventId(null)}
-        nearbyCleanupEvent={nearbyCleanupEvent}
+        nearbyCleanupEvent={nearbyCleanupEventRaw}
       />
     </>
   );

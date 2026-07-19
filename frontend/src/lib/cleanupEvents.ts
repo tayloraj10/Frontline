@@ -1,4 +1,5 @@
 import { uploadEventImage } from "@/lib/events";
+import type { RouteLineString } from "@/lib/cleanupRoutes";
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api${path}`, {
@@ -18,6 +19,7 @@ export type CleanupEventRsvp = {
   checked_in_at: string | null;
   small_bags: number;
   large_bags: number;
+  is_late: boolean;
 };
 
 export type CleanupEventDetailData = {
@@ -32,6 +34,8 @@ export type CleanupEventDetailData = {
   image_url: string | null;
   lat: number;
   lng: number;
+  route: RouteLineString | null;
+  route_buffer: GeoJSON.Polygon | null;
   group_id: string;
   group_name: string;
   group_slug: string;
@@ -116,6 +120,7 @@ export async function createCleanupEvent({
   longitude,
   maxAttendees,
   externalLink,
+  route,
 }: {
   campaignId: string;
   groupId: string;
@@ -129,6 +134,7 @@ export async function createCleanupEvent({
   longitude: number;
   maxAttendees?: number | null;
   externalLink?: string | null;
+  route?: RouteLineString | null;
 }): Promise<CreatedCleanupEvent> {
   let imageUrl: string | null = null;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
@@ -146,6 +152,7 @@ export async function createCleanupEvent({
     image_url: imageUrl,
     max_attendees: maxAttendees ?? null,
     external_link: externalLink?.trim() || null,
+    route: route ?? null,
   });
 }
 
@@ -162,6 +169,8 @@ export async function updateCleanupEvent({
   status,
   maxAttendees,
   externalLink,
+  route,
+  clearRoute,
 }: {
   cleanupId: string;
   organizerUserId: string;
@@ -175,6 +184,8 @@ export async function updateCleanupEvent({
   status?: string;
   maxAttendees?: number | null;
   externalLink?: string | null;
+  route?: RouteLineString | null;
+  clearRoute?: boolean;
 }): Promise<{ id: string; updated: boolean }> {
   let imageUrl: string | undefined;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
@@ -191,6 +202,8 @@ export async function updateCleanupEvent({
     status,
     max_attendees: maxAttendees,
     external_link: externalLink,
+    route: route ?? null,
+    clear_route: clearRoute ?? false,
   });
 }
 

@@ -5,6 +5,7 @@ import type { Database } from "@/types/database";
 import type { ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { MapBusiness, MapCleanupEvent } from "./CampaignMap";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
+import type { CampaignCleanupRoute } from "@/lib/cleanupRoutes";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -31,6 +32,7 @@ interface Props {
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
+  focusCoords?: { latitude: number; longitude: number } | null;
   activeStyle?: string;
   problemReports?: ProblemReports | null;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
@@ -42,6 +44,11 @@ interface Props {
   onUserLocationError?: (code: number) => void;
   onGeolocateTrigger?: (trigger: () => boolean) => void;
   nycNeighborhoodsVisible?: boolean;
+  routePickerActive?: boolean;
+  onRoutePickerChange?: (vertices: [number, number][]) => void;
+  onRoutePickerFinish?: () => void;
+  onRoutePickerCancel?: () => void;
+  cleanupRoutes?: CampaignCleanupRoute[];
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {

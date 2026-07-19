@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
+import RoutePicker from "@/components/map/RoutePicker";
+import type { RouteLineString } from "@/lib/cleanupRoutes";
 
 const inputCls = "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
@@ -40,6 +42,7 @@ export default function CreateCleanupEventForm({
     maxAttendees: number | null;
     externalLink: string | null;
     imageUrl: string | null;
+    route: RouteLineString | null;
   };
 }) {
   const router = useRouter();
@@ -58,6 +61,9 @@ export default function CreateCleanupEventForm({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [route, setRoute] = useState<RouteLineString | null>(initialValues?.route ?? null);
+  const [showRoutePicker, setShowRoutePicker] = useState(!!initialValues?.route);
+  const hadInitialRoute = !!initialValues?.route;
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,6 +95,8 @@ export default function CreateCleanupEventForm({
           longitude: lng,
           maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
           externalLink: externalLink.trim() || null,
+          route,
+          clearRoute: hadInitialRoute && !route,
         });
         router.push(`/cleanup-events/${cleanupId}`);
       } else {
@@ -105,6 +113,7 @@ export default function CreateCleanupEventForm({
           longitude: lng,
           maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
           externalLink: externalLink.trim() || null,
+          route,
         });
         router.push(`/groups/${groupSlug}`);
       }
@@ -160,6 +169,30 @@ export default function CreateCleanupEventForm({
             placeholder="Search for an address..."
           />
           <BusinessLocationMapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} locationNoun="event" />
+        </div>
+        <div className="col-span-2 space-y-2">
+          <label className="flex items-center gap-2 text-xs text-zinc-500">
+            <input
+              type="checkbox"
+              checked={showRoutePicker}
+              onChange={(e) => {
+                setShowRoutePicker(e.target.checked);
+                if (!e.target.checked) setRoute(null);
+              }}
+            />
+            Add a cleanup route (optional)
+          </label>
+          {showRoutePicker && lat !== null && lng !== null && (
+            <RoutePicker
+              centerLat={lat}
+              centerLng={lng}
+              initialCoordinates={route?.coordinates ?? null}
+              onChange={(coords) => setRoute(coords ? { type: "LineString", coordinates: coords } : null)}
+            />
+          )}
+          {showRoutePicker && (lat === null || lng === null) && (
+            <p className="text-[11px] text-zinc-600">Set the event location above first, then draw the route.</p>
+          )}
         </div>
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">RSVP limit (optional)</label>

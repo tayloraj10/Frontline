@@ -28,11 +28,18 @@ html, body {
 }
 
 .maplibregl-popup-close-button {
-  color: #71717a !important;
+  color: #a1a1aa !important;
+  top: 4px !important;
+  right: 4px !important;
+  width: 24px !important;
+  height: 24px !important;
+  font-size: 18px !important;
+  line-height: 24px !important;
+  border-radius: 6px !important;
 }
 .maplibregl-popup-close-button:hover {
   color: #f4f4f5 !important;
-  background: transparent !important;
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 
 .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {

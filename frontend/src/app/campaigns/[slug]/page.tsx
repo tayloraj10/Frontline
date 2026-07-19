@@ -15,6 +15,7 @@ type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ lat?: string; lng?: string }>;
 }
 
 type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number; unit_type: string | null };
@@ -152,8 +153,13 @@ const getCampaignPageData = unstable_cache(
   { revalidate: REVALIDATE_SECONDS }
 );
 
-export default async function CampaignPage({ params }: Props) {
+export default async function CampaignPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { lat, lng } = await searchParams;
+  const focusCoords =
+    lat && lng && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lng))
+      ? { latitude: Number(lat), longitude: Number(lng) }
+      : null;
   const supabase = await createClient();
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
@@ -365,6 +371,7 @@ export default async function CampaignPage({ params }: Props) {
           eventGeoUnitIds={eventGeoUnitIds}
           partnerBusinesses={partnerBusinesses}
           cleanupEvents={cleanupEvents}
+          focusCoords={focusCoords}
         />
       </div>
     </div>

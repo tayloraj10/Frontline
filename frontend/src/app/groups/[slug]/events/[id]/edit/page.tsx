@@ -71,6 +71,7 @@ export default async function EditCleanupEventPage({ params }: Props) {
             maxAttendees: event.max_attendees,
             externalLink: event.external_link,
             imageUrl: event.image_url,
+            route: event.route,
           }}
         />
       </div>
