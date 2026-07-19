@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { Database } from "@/types/database";
-import type { ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
+import type { ProblemReportMapData, ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { MapBusiness, MapCleanupEvent } from "./CampaignMap";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import type { CampaignCleanupRoute } from "@/lib/cleanupRoutes";
@@ -35,6 +35,7 @@ interface Props {
   focusCoords?: { latitude: number; longitude: number } | null;
   activeStyle?: string;
   problemReports?: ProblemReports | null;
+  onReportClick?: (report: ProblemReportMapData) => void;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];

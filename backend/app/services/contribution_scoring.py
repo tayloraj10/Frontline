@@ -45,6 +45,7 @@ async def record_contribution(
     location_verified: bool = False,
     recorded_by_user_id: UUID | None = None,
     apply_multiplier: bool = True,
+    challenge_multiplier: float = 1.0,
 ) -> RecordedContribution:
     has_location = latitude is not None and longitude is not None
 
@@ -70,6 +71,10 @@ async def record_contribution(
         if multiplier_row:
             multiplier = float((multiplier_row[0] or {}).get("multiplier", 1))
             effective_value = effective_value * multiplier
+
+    # "Claim-a-report" challenge-mode bonus: applied on top of any active campaign-wide
+    # multiplier, since it rewards the individual claim rather than the geo unit.
+    effective_value = effective_value * challenge_multiplier
 
     insert_params = {
         "campaign_id": str(campaign_id),

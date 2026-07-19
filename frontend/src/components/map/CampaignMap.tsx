@@ -44,6 +44,8 @@ const NORTH_AMERICA_EUROPE_BOUNDS: maplibregl.LngLatBoundsLike = [
 const REPORT_CLAIM_RADIUS_METERS_UK = 100;
 const REPORT_CLAIM_RADIUS_METERS_US = 91.44; // 300 ft
 const EARTH_RADIUS_METERS = 6371000;
+// Mirrors FLAG_AUTO_HIDE_THRESHOLD in backend/app/api/routes/problem_reports.py.
+const FLAG_AUTO_HIDE_THRESHOLD = 3;
 
 // Mirrors CLEANUP_EVENT_PROXIMITY_METERS in backend/app/api/routes/cleanup_events.py — the
 // check-in radius shown as a circle around each group cleanup event, same for every event.
@@ -295,6 +297,7 @@ interface Props {
   focusCoords?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
+  onReportClick?: (report: ProblemReportMapData) => void;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
@@ -1074,6 +1077,7 @@ export default function CampaignMap({
   focusCoords,
   activeStyle = "outdoor",
   problemReports,
+  onReportClick,
   eventCentroids,
   eventGeoUnitIds,
   partnerBusinesses,
@@ -1113,6 +1117,7 @@ export default function CampaignMap({
   const activeEventsRef = useRef(activeEvents);
   const claimLabelsRef = useRef(claimLabels);
   const problemReportsRef = useRef(problemReports);
+  const onReportClickRef = useRef(onReportClick);
   const eventCentroidsRef = useRef(eventCentroids ?? {});
   const eventGeoUnitIdsRef = useRef(eventGeoUnitIds ?? {});
   const contributionFeaturesRef = useRef<Feature<Point>[]>([]);
@@ -1184,6 +1189,7 @@ export default function CampaignMap({
   useEffect(() => { areaPickerUnitTypeRef.current = areaPickerUnitType; }, [areaPickerUnitType]);
   useEffect(() => { onAreaPickerChangeRef.current = onAreaPickerChange; }, [onAreaPickerChange]);
   useEffect(() => { onRoutePickerChangeRef.current = onRoutePickerChange; }, [onRoutePickerChange]);
+  useEffect(() => { onReportClickRef.current = onReportClick; }, [onReportClick]);
 
   const redrawRoutePicker = () => {
     const src = map.current?.getSource("route-picker") as maplibregl.GeoJSONSource | undefined;
@@ -1479,7 +1485,17 @@ export default function CampaignMap({
         features: reports.map((report) => ({
           type: "Feature",
           geometry: { type: "Point", coordinates: [report.longitude, report.latitude] },
-          properties: { severity: report.severity, reported_at: report.reported_at },
+          properties: {
+            id: report.id,
+            severity: report.severity,
+            reported_at: report.reported_at,
+            status: report.status,
+            claimed_by_user_id: report.claimed_by_user_id,
+            claim_before_deadline_at: report.claim_before_deadline_at,
+            claim_after_deadline_at: report.claim_after_deadline_at,
+            flag_count: report.flag_count,
+            unit_type: report.unit_type,
+          },
         })),
       });
     }
@@ -1500,7 +1516,7 @@ export default function CampaignMap({
               ),
             ],
           },
-          properties: { severity: report.severity },
+          properties: { severity: report.severity, status: report.status },
         })),
       });
     }
@@ -2213,7 +2229,7 @@ export default function CampaignMap({
       type: "fill",
       source: "report-radius",
       paint: {
-        "fill-color": "#f97316",
+        "fill-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#a855f7", "#f97316"],
         "fill-opacity": 0.08,
       },
     });
@@ -2222,7 +2238,7 @@ export default function CampaignMap({
       type: "line",
       source: "report-radius",
       paint: {
-        "line-color": "#ea580c",
+        "line-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#9333ea", "#ea580c"],
         "line-width": 1.5,
         "line-opacity": 0.65,
       },
@@ -2262,10 +2278,10 @@ export default function CampaignMap({
       source: "report-points",
       paint: {
         "circle-radius": 5,
-        "circle-color": "#f97316",
+        "circle-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#a855f7", "#f97316"],
         "circle-opacity": 0.9,
         "circle-stroke-width": 1.5,
-        "circle-stroke-color": "#ea580c",
+        "circle-stroke-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#9333ea", "#ea580c"],
       },
     });
 
@@ -2577,6 +2593,39 @@ export default function CampaignMap({
       map.current.on("mouseleave", "report-dots", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
+      });
+      map.current.on("click", "report-dots", (e) => {
+        if (pinPickerActiveRef.current || routePickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as {
+          id?: string;
+          severity?: string;
+          reported_at?: string;
+          status?: string;
+          claimed_by_user_id?: string | null;
+          claim_before_deadline_at?: string | null;
+          claim_after_deadline_at?: string | null;
+          flag_count?: number;
+          unit_type?: string | null;
+        };
+        if (!props.id) return;
+        const geometry = e.features[0].geometry;
+        if (geometry.type !== "Point") return;
+        const [longitude, latitude] = geometry.coordinates as [number, number];
+        onReportClickRef.current?.({
+          id: props.id,
+          geo_unit_id: null,
+          severity: props.severity ?? "low",
+          reported_at: props.reported_at ?? "",
+          photo_url: null,
+          latitude,
+          longitude,
+          unit_type: props.unit_type ?? null,
+          status: props.status ?? "open",
+          claimed_by_user_id: props.claimed_by_user_id ?? null,
+          flag_count: props.flag_count ?? 0,
+          claim_before_deadline_at: props.claim_before_deadline_at ?? null,
+          claim_after_deadline_at: props.claim_after_deadline_at ?? null,
+        });
       });
 
       let lastHoveredId: string | number | null = null;
@@ -3015,6 +3064,11 @@ export default function CampaignMap({
       latitude: newReport.lat,
       longitude: newReport.lng,
       unit_type: null,
+      status: "open",
+      claimed_by_user_id: null,
+      claim_before_deadline_at: null,
+      claim_after_deadline_at: null,
+      flag_count: 0,
     };
 
     const nextReports = [...(problemReportsRef.current?.reports ?? []), report];
@@ -3022,6 +3076,7 @@ export default function CampaignMap({
       reports: nextReports,
       counts_by_geo_unit: problemReportsRef.current?.counts_by_geo_unit ?? {},
       threshold: problemReportsRef.current?.threshold ?? null,
+      flag_auto_hide_threshold: problemReportsRef.current?.flag_auto_hide_threshold ?? FLAG_AUTO_HIDE_THRESHOLD,
     };
     problemReportsRef.current = nextData;
     setLiveReports(nextData);
