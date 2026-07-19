@@ -906,7 +906,7 @@ export default function CampaignPageClient({
             <button
               onClick={() => setShowAdminDialog(true)}
               title="Admin controls"
-              className="absolute z-20 top-4 right-4 sm:top-11 sm:right-[3.25rem] w-8 h-8 flex items-center justify-center text-base rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              className="absolute z-20 top-4 right-[3.25rem] sm:top-11 w-8 h-8 flex items-center justify-center text-base rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
             >
               ⚙️
             </button>
@@ -1028,7 +1028,7 @@ export default function CampaignPageClient({
       )}
 
       {nearbyCleanupEvent && !pinPickerActive && !areaPickerActive && (
-        <div className="absolute top-4 inset-x-4 sm:top-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm px-4 py-3 rounded-xl bg-sky-950/95 border border-sky-700/50 backdrop-blur-sm shadow-lg flex items-center gap-3">
+        <div className="absolute top-4 left-4 right-16 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm px-4 py-3 rounded-xl bg-sky-950/95 border border-sky-700/50 backdrop-blur-sm shadow-lg flex items-center gap-3">
           <div className="w-10 h-10 shrink-0 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-lg">
             🧹
           </div>
