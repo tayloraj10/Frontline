@@ -8,6 +8,7 @@ import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 import type { MapBusiness, MapCleanupEvent } from "@/components/map/CampaignMap";
+import CampaignInstructionsModal from "@/components/CampaignInstructionsModal";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -18,8 +19,22 @@ interface Props {
   searchParams: Promise<{ lat?: string; lng?: string }>;
 }
 
-type ProblemReportMapData = { id: string; geo_unit_id: string | null; severity: string; reported_at: string; photo_url: string | null; latitude: number; longitude: number; unit_type: string | null };
-type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null };
+type ProblemReportMapData = {
+  id: string;
+  geo_unit_id: string | null;
+  severity: string;
+  reported_at: string;
+  photo_url: string | null;
+  latitude: number;
+  longitude: number;
+  unit_type: string | null;
+  status: string;
+  claimed_by_user_id: string | null;
+  claim_before_deadline_at: string | null;
+  claim_after_deadline_at: string | null;
+  flag_count: number;
+};
+type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null; flag_auto_hide_threshold: number };
 type EventCentroid = { geo_unit_id: string; lat: number; lng: number };
 type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
 type PartnerBusinessRow = {
@@ -309,6 +324,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
         </div>
 
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <CampaignInstructionsModal slug={campaign.slug} />
           {events.length > 0 && (
             <span className="px-3 py-1 bg-red-900/40 border border-red-700/60 text-red-300 text-xs font-semibold rounded-full animate-pulse">
               ⚡ {events.length} Event{events.length > 1 ? "s" : ""}

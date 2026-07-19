@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { Database } from "@/types/database";
-import type { ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
+import type { ProblemReportMapData, ProblemReports } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { MapBusiness, MapCleanupEvent } from "./CampaignMap";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import type { CampaignCleanupRoute } from "@/lib/cleanupRoutes";
@@ -29,12 +29,13 @@ interface Props {
   onAreaPickerChange?: (areas: SelectedArea[]) => void;
   onAreaPickerConfirm?: () => void;
   onAreaPickerCancel?: () => void;
-  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
+  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number } | null;
   activeStyle?: string;
   problemReports?: ProblemReports | null;
+  onReportClick?: (report: ProblemReportMapData) => void;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];

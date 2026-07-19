@@ -234,10 +234,9 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
             JOIN groups g ON g.id = c.group_id
             LEFT JOIN LATERAL (
                 SELECT SUM(cl.metrics_small_bags) AS total_small_bags, SUM(cl.metrics_large_bags) AS total_large_bags
-                FROM cleanup_rsvps r
-                JOIN contributions co ON co.id = r.contribution_id
+                FROM contributions co
                 JOIN cleanups cl ON cl.id = co.cleanup_id
-                WHERE r.cleanup_id = c.id
+                WHERE co.cleanup_event_id = c.id
             ) bags ON true
             WHERE c.campaign_id = :campaign_id
               AND c.is_group_event = true
@@ -363,24 +362,37 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         """),
         {"id": str(cleanup_id)},
     )
+    # Aggregated directly off contributions.cleanup_event_id rather than through
+    # cleanup_rsvps.contribution_id — that FK only ever holds the attendee's most recent
+    # submission (each resubmit overwrites it), so going through it silently dropped
+    # every earlier submission's bags/pounds/photos for anyone who logged more than once.
     bags_by_user_result = await db.execute(
         text("""
-            SELECT r.user_id,
+            SELECT co.user_id,
                    COALESCE(SUM(cl.metrics_small_bags), 0) AS small_bags,
                    COALESCE(SUM(cl.metrics_large_bags), 0) AS large_bags,
-                   MAX(co.submitted_at) AS contributed_at
-            FROM cleanup_rsvps r
-            JOIN contributions co ON co.id = r.contribution_id
+                   COALESCE(SUM(cl.metrics_pounds), 0) AS pounds,
+                   MAX(co.submitted_at) AS contributed_at,
+                   array_agg(cl.image_urls) FILTER (WHERE cl.image_urls IS NOT NULL) AS image_url_arrays
+            FROM contributions co
             JOIN cleanups cl ON cl.id = co.cleanup_id
-            WHERE r.cleanup_id = :id
-            GROUP BY r.user_id
+            WHERE co.cleanup_event_id = :id
+            GROUP BY co.user_id
         """),
         {"id": str(cleanup_id)},
     )
-    bags_by_user = {
-        str(r.user_id): {"small_bags": r.small_bags, "large_bags": r.large_bags, "contributed_at": r.contributed_at}
-        for r in bags_by_user_result.fetchall()
-    }
+    bags_by_user = {}
+    all_photos: list[str] = []
+    for r in bags_by_user_result.fetchall():
+        photos = [url for arr in (r.image_url_arrays or []) for url in arr]
+        all_photos.extend(photos)
+        bags_by_user[str(r.user_id)] = {
+            "small_bags": r.small_bags,
+            "large_bags": r.large_bags,
+            "pounds": float(r.pounds) if r.pounds is not None else 0,
+            "contributed_at": r.contributed_at,
+            "photos": photos,
+        }
 
     # A submission counts as "late" once it lands more than 24h after the event's
     # window closes — unrestricted (submissions are never blocked), just flagged.
@@ -390,7 +402,9 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     viewer_rsvp = None
     rsvps = []
     for r in rsvp_result.fetchall():
-        user_bags = bags_by_user.get(str(r.user_id), {"small_bags": 0, "large_bags": 0, "contributed_at": None})
+        user_bags = bags_by_user.get(
+            str(r.user_id), {"small_bags": 0, "large_bags": 0, "pounds": 0, "contributed_at": None, "photos": []}
+        )
         contributed_at = user_bags["contributed_at"]
         entry = {
             "user_id": str(r.user_id),
@@ -400,6 +414,8 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "checked_in_at": r.checked_in_at.isoformat() if r.checked_in_at else None,
             "small_bags": user_bags["small_bags"],
             "large_bags": user_bags["large_bags"],
+            "pounds": user_bags["pounds"],
+            "photos": user_bags["photos"],
             "is_late": bool(contributed_at and late_cutoff and contributed_at > late_cutoff),
         }
         rsvps.append(entry)
@@ -410,6 +426,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
 
     total_small_bags = sum(v["small_bags"] for v in bags_by_user.values())
     total_large_bags = sum(v["large_bags"] for v in bags_by_user.values())
+    total_pounds = sum(v["pounds"] for v in bags_by_user.values())
 
     check_in_window_start = (
         row.scheduled_start - timedelta(minutes=CLEANUP_EVENT_GRACE_MINUTES_BEFORE)
@@ -448,6 +465,8 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "is_full": row.max_attendees is not None and going_count >= row.max_attendees,
         "total_small_bags": total_small_bags,
         "total_large_bags": total_large_bags,
+        "total_pounds": total_pounds,
+        "photos": all_photos,
         "external_link": row.external_link,
         "check_in_window_start": check_in_window_start.isoformat() if check_in_window_start else None,
         "check_in_window_end": check_in_window_end.isoformat() if check_in_window_end else None,
@@ -700,6 +719,7 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
         location_verified=True,
         recorded_by_user_id=payload.organizer_user_id,
         apply_multiplier=False,
+        cleanup_event_id=str(cleanup_id),
     )
 
     await db.execute(

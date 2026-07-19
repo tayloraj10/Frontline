@@ -76,6 +76,7 @@ class ContributionRequest(BaseModel):
     large_bags: int | None = None
     pounds: float | None = None
     resolve_report_id: UUID | None = None
+    claimed_report_id: UUID | None = None
     cleanup_event_id: UUID | None = None
     route: dict | None = None
     route_geo_unit_id: UUID | None = None
@@ -339,6 +340,35 @@ async def submit_contribution(
                     {"campaign_id": str(payload.campaign_id), "geo_unit_id": report_geo_unit_id},
                 )
 
+    # Challenge-mode completion: the report was already resolved by POST
+    # /problem-reports/{id}/claim/after-photo (which verified the claim/timers); this just
+    # links the resulting cleanup contribution to it and applies the challenge bonus.
+    from app.api.routes.problem_reports import CLAIM_CHALLENGE_MULTIPLIER
+
+    challenge_bonus_applied = False
+    if payload.contribution_type == "cleanup" and payload.claimed_report_id:
+        claimed_report = await db.execute(
+            text("""
+                UPDATE problem_reports
+                SET resolved_by_cleanup_id = :cleanup_id
+                WHERE id = :report_id
+                  AND campaign_id = :campaign_id
+                  AND status = 'addressed'
+                  AND resolved_by_user_id = :user_id
+                  AND resolved_by_cleanup_id IS NULL
+                RETURNING geo_unit_id
+            """),
+            {
+                "cleanup_id": cleanup_id,
+                "report_id": str(payload.claimed_report_id),
+                "campaign_id": str(payload.campaign_id),
+                "user_id": str(payload.user_id),
+            },
+        )
+        if claimed_report.fetchone():
+            hotspot_cleared = True
+            challenge_bonus_applied = True
+
     recorded = await record_contribution(
         db,
         user_id=payload.user_id,
@@ -356,6 +386,8 @@ async def submit_contribution(
         notes=payload.notes,
         location_verified=location_verified,
         apply_multiplier=payload.cleanup_event_id is None,
+        challenge_multiplier=CLAIM_CHALLENGE_MULTIPLIER if challenge_bonus_applied else 1.0,
+        cleanup_event_id=str(payload.cleanup_event_id) if payload.cleanup_event_id else None,
     )
 
     if payload.cleanup_event_id:
@@ -491,6 +523,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
                 value,
                 photo_url,
                 submitted_at,
+                cleanup_event_id IS NOT NULL AS is_group_event,
                 ST_Y(location::geometry) AS latitude,
                 ST_X(location::geometry) AS longitude
             FROM contributions
@@ -509,6 +542,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
             "value": row.value,
             "photo_url": row.photo_url,
             "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
+            "is_group_event": row.is_group_event,
             "latitude": float(row.latitude),
             "longitude": float(row.longitude),
         }

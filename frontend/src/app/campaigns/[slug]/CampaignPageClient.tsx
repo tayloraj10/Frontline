@@ -125,12 +125,18 @@ export interface ProblemReportMapData {
   latitude: number;
   longitude: number;
   unit_type: string | null;
+  status: string;
+  claimed_by_user_id: string | null;
+  claim_before_deadline_at: string | null;
+  claim_after_deadline_at: string | null;
+  flag_count: number;
 }
 
 export interface ProblemReports {
   reports: ProblemReportMapData[];
   counts_by_geo_unit: Record<string, number>;
   threshold: number | null;
+  flag_auto_hide_threshold: number;
 }
 
 interface Coords {
@@ -212,6 +218,7 @@ interface NewContribution {
   lng: number;
   value: number;
   photoUrl?: string;
+  isGroupEvent?: boolean;
   key: number;
 }
 
@@ -508,6 +515,7 @@ export default function CampaignPageClient({
   const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | "stats" | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
   const [localProblemReports, setLocalProblemReports] = useState<ProblemReports | null | undefined>(problemReports);
+  const [clickedReport, setClickedReport] = useState<ProblemReportMapData | null>(null);
   const [areaPickerActive, setAreaPickerActive] = useState(false);
   const [pickedAreas, setPickedAreas] = useState<SelectedArea[]>([]);
   const [routePickerActive, setRoutePickerActive] = useState(false);
@@ -586,9 +594,10 @@ export default function CampaignPageClient({
     photoUrl?: string,
     resolvedReportId?: string,
     newRoute?: { id: string; route: RouteLineString },
+    isGroupEvent?: boolean,
   ) => {
     if (lat !== null && lng !== null) {
-      setNewContribution({ lat, lng, value, photoUrl, key: Date.now() });
+      setNewContribution({ lat, lng, value, photoUrl, isGroupEvent, key: Date.now() });
     }
     if (newRoute) {
       handleRouteAdded(newRoute);
@@ -619,6 +628,39 @@ export default function CampaignPageClient({
   const handleReportSubmitted = (lat: number, lng: number, severity: string, photoUrl?: string) => {
     setNewReport({ id: `optimistic-${Date.now()}`, lat, lng, severity, photoUrl, key: Date.now() });
   };
+
+  // Claim-a-report challenge mode: patch a single report's claim fields in place (claimed,
+  // before-photo submitted, expired) rather than removing it — it stays visible on the map
+  // with a different treatment until fully resolved.
+  const handleReportClaimUpdated = (reportId: string, patch: Partial<ProblemReportMapData>) => {
+    setLocalProblemReports((prev) =>
+      prev
+        ? { ...prev, reports: prev.reports.map((r) => (r.id === reportId ? { ...r, ...patch } : r)) }
+        : prev,
+    );
+  };
+
+  // The after-photo step resolves the report server-side immediately (independent of
+  // whether the user goes on to finish logging bags/pounds), so the pin comes off the map
+  // right away — same removal as the plain in-range "resolve_report_id" flow.
+  const handleReportClaimResolved = (reportId: string) => {
+    setLocalProblemReports((prev) =>
+      prev ? { ...prev, reports: prev.reports.filter((r) => r.id !== reportId) } : prev,
+    );
+  };
+
+  // Challenge mode is one-active-claim-per-user — this is the single source of truth for
+  // "which report (if any) does the current user have claimed right now", derived from the
+  // same live report list the map renders, so it stays in sync with every claim/before-photo/
+  // after-photo update and with the local optimistic expiry patch in ContributionPanel.
+  const myActiveClaimReport = useMemo(() => {
+    if (!userId || !localProblemReports) return null;
+    return (
+      localProblemReports.reports.find(
+        (r) => r.claimed_by_user_id === userId && (r.status === "scheduled" || r.status === "in_progress"),
+      ) ?? null
+    );
+  }, [localProblemReports, userId]);
 
   const handleEnterPinPicker = (coords: Coords, constrained = true, label?: string) => {
     setPlacedPinCoords(null);
@@ -723,6 +765,7 @@ export default function CampaignPageClient({
         activeStyle={activeMapStyle}
         nycNeighborhoodsVisible={nycNeighborhoodsVisible}
         problemReports={localProblemReports}
+        onReportClick={setClickedReport}
         eventCentroids={eventCentroids}
         eventGeoUnitIds={localEventGeoUnitIds}
         cleanupRoutes={cleanupRoutesList}
@@ -1033,6 +1076,11 @@ export default function CampaignPageClient({
         pendingCleanupEventId={pendingCleanupEventId}
         onPendingCleanupEventConsumed={() => setPendingCleanupEventId(null)}
         nearbyCleanupEvent={nearbyCleanupEventRaw}
+        clickedReport={clickedReport}
+        onClickedReportConsumed={() => setClickedReport(null)}
+        onClaimReportUpdated={handleReportClaimUpdated}
+        onClaimReportResolved={handleReportClaimResolved}
+        myActiveClaimReport={myActiveClaimReport}
       />
     </>
   );

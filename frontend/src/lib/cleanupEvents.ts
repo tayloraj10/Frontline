@@ -19,6 +19,8 @@ export type CleanupEventRsvp = {
   checked_in_at: string | null;
   small_bags: number;
   large_bags: number;
+  pounds: number;
+  photos: string[];
   is_late: boolean;
 };
 
@@ -49,6 +51,8 @@ export type CleanupEventDetailData = {
   is_full: boolean;
   total_small_bags: number;
   total_large_bags: number;
+  total_pounds: number;
+  photos: string[];
   external_link: string | null;
   check_in_window_start: string | null;
   check_in_window_end: string | null;

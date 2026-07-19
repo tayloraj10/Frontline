@@ -44,6 +44,8 @@ const NORTH_AMERICA_EUROPE_BOUNDS: maplibregl.LngLatBoundsLike = [
 const REPORT_CLAIM_RADIUS_METERS_UK = 100;
 const REPORT_CLAIM_RADIUS_METERS_US = 91.44; // 300 ft
 const EARTH_RADIUS_METERS = 6371000;
+// Mirrors FLAG_AUTO_HIDE_THRESHOLD in backend/app/api/routes/problem_reports.py.
+const FLAG_AUTO_HIDE_THRESHOLD = 3;
 
 // Mirrors CLEANUP_EVENT_PROXIMITY_METERS in backend/app/api/routes/cleanup_events.py — the
 // check-in radius shown as a circle around each group cleanup event, same for every event.
@@ -145,6 +147,7 @@ interface ContributionPoint {
   value: number | null;
   photo_url: string | null;
   submitted_at: string | null;
+  is_group_event?: boolean;
   latitude: number;
   longitude: number;
 }
@@ -289,12 +292,13 @@ interface Props {
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;
   cleanupRoutes?: CampaignCleanupRoute[];
-  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; key: number } | null;
+  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number } | null;
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
+  onReportClick?: (report: ProblemReportMapData) => void;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
@@ -1074,6 +1078,7 @@ export default function CampaignMap({
   focusCoords,
   activeStyle = "outdoor",
   problemReports,
+  onReportClick,
   eventCentroids,
   eventGeoUnitIds,
   partnerBusinesses,
@@ -1107,12 +1112,14 @@ export default function CampaignMap({
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
   const claimLabelsRef = useRef(claimLabels);
   const problemReportsRef = useRef(problemReports);
+  const onReportClickRef = useRef(onReportClick);
   const eventCentroidsRef = useRef(eventCentroids ?? {});
   const eventGeoUnitIdsRef = useRef(eventGeoUnitIds ?? {});
   const contributionFeaturesRef = useRef<Feature<Point>[]>([]);
@@ -1184,6 +1191,7 @@ export default function CampaignMap({
   useEffect(() => { areaPickerUnitTypeRef.current = areaPickerUnitType; }, [areaPickerUnitType]);
   useEffect(() => { onAreaPickerChangeRef.current = onAreaPickerChange; }, [onAreaPickerChange]);
   useEffect(() => { onRoutePickerChangeRef.current = onRoutePickerChange; }, [onRoutePickerChange]);
+  useEffect(() => { onReportClickRef.current = onReportClick; }, [onReportClick]);
 
   const redrawRoutePicker = () => {
     const src = map.current?.getSource("route-picker") as maplibregl.GeoJSONSource | undefined;
@@ -1479,7 +1487,17 @@ export default function CampaignMap({
         features: reports.map((report) => ({
           type: "Feature",
           geometry: { type: "Point", coordinates: [report.longitude, report.latitude] },
-          properties: { severity: report.severity, reported_at: report.reported_at },
+          properties: {
+            id: report.id,
+            severity: report.severity,
+            reported_at: report.reported_at,
+            status: report.status,
+            claimed_by_user_id: report.claimed_by_user_id,
+            claim_before_deadline_at: report.claim_before_deadline_at,
+            claim_after_deadline_at: report.claim_after_deadline_at,
+            flag_count: report.flag_count,
+            unit_type: report.unit_type,
+          },
         })),
       });
     }
@@ -1500,7 +1518,7 @@ export default function CampaignMap({
               ),
             ],
           },
-          properties: { severity: report.severity },
+          properties: { severity: report.severity, status: report.status },
         })),
       });
     }
@@ -2113,19 +2131,35 @@ export default function CampaignMap({
       },
     });
 
-    const addDotLayer = () => m.addLayer({
-      id: "contribution-dots",
-      type: "circle",
-      source: "contribution-pts",
-      paint: {
-        "circle-radius": 6,
-        "circle-color": "#22c55e",
-        "circle-opacity": 0.9,
-        "circle-stroke-width": 1.5,
-        "circle-stroke-color": "#fff",
-        "circle-stroke-opacity": 0.7,
-      },
-    });
+    const addDotLayer = () => {
+      m.addLayer({
+        id: "contribution-dots-halo",
+        type: "circle",
+        source: "contribution-pts",
+        filter: ["==", ["get", "is_group_event"], true],
+        paint: {
+          "circle-radius": 11,
+          "circle-color": "#38bdf8",
+          "circle-opacity": 0.55,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#38bdf8",
+          "circle-stroke-opacity": 0.9,
+        },
+      });
+      m.addLayer({
+        id: "contribution-dots",
+        type: "circle",
+        source: "contribution-pts",
+        paint: {
+          "circle-radius": 6,
+          "circle-color": "#22c55e",
+          "circle-opacity": 0.9,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-opacity": 0.7,
+        },
+      });
+    };
 
     if (contributionFeaturesRef.current.length > 0) {
       m.addSource("contribution-pts", {
@@ -2146,6 +2180,7 @@ export default function CampaignMap({
             properties: {
               value: loc.value ?? 1,
               submitted_at: loc.submitted_at ?? "",
+              is_group_event: loc.is_group_event ?? false,
             },
           }));
           contributionFeaturesRef.current = features;
@@ -2213,7 +2248,7 @@ export default function CampaignMap({
       type: "fill",
       source: "report-radius",
       paint: {
-        "fill-color": "#f97316",
+        "fill-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#a855f7", "#f97316"],
         "fill-opacity": 0.08,
       },
     });
@@ -2222,7 +2257,7 @@ export default function CampaignMap({
       type: "line",
       source: "report-radius",
       paint: {
-        "line-color": "#ea580c",
+        "line-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#9333ea", "#ea580c"],
         "line-width": 1.5,
         "line-opacity": 0.65,
       },
@@ -2262,10 +2297,10 @@ export default function CampaignMap({
       source: "report-points",
       paint: {
         "circle-radius": 5,
-        "circle-color": "#f97316",
+        "circle-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#a855f7", "#f97316"],
         "circle-opacity": 0.9,
         "circle-stroke-width": 1.5,
-        "circle-stroke-color": "#ea580c",
+        "circle-stroke-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#9333ea", "#ea580c"],
       },
     });
 
@@ -2578,12 +2613,49 @@ export default function CampaignMap({
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
+      map.current.on("click", "report-dots", (e) => {
+        if (pinPickerActiveRef.current || routePickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as {
+          id?: string;
+          severity?: string;
+          reported_at?: string;
+          status?: string;
+          claimed_by_user_id?: string | null;
+          claim_before_deadline_at?: string | null;
+          claim_after_deadline_at?: string | null;
+          flag_count?: number;
+          unit_type?: string | null;
+        };
+        if (!props.id) return;
+        const geometry = e.features[0].geometry;
+        if (geometry.type !== "Point") return;
+        const [longitude, latitude] = geometry.coordinates as [number, number];
+        onReportClickRef.current?.({
+          id: props.id,
+          geo_unit_id: null,
+          severity: props.severity ?? "low",
+          reported_at: props.reported_at ?? "",
+          photo_url: null,
+          latitude,
+          longitude,
+          unit_type: props.unit_type ?? null,
+          status: props.status ?? "open",
+          claimed_by_user_id: props.claimed_by_user_id ?? null,
+          flag_count: props.flag_count ?? 0,
+          claim_before_deadline_at: props.claim_before_deadline_at ?? null,
+          claim_after_deadline_at: props.claim_after_deadline_at ?? null,
+        });
+      });
 
       let lastHoveredId: string | number | null = null;
 
       map.current.on("mousemove", "territory-fill", (e) => {
         if (!map.current || !e.features?.[0] || pinPickerActiveRef.current) return;
         map.current.getCanvas().style.cursor = "pointer";
+        // On mobile there's no hover-out equivalent (touch never fires mouseleave), so this
+        // tooltip would stay stuck open and overlap the territory-info panel opened by the
+        // click handler below. Mobile has its own click-to-open info window, so skip it there.
+        if (isMobileViewport) return;
         hoverDiv.style.display = "block";
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
@@ -2996,7 +3068,11 @@ export default function CampaignMap({
     const feature: Feature<Point> = {
       type: "Feature",
       geometry: { type: "Point", coordinates: [newContribution.lng, newContribution.lat] },
-      properties: { value: newContribution.value, submitted_at: new Date().toISOString() },
+      properties: {
+        value: newContribution.value,
+        submitted_at: new Date().toISOString(),
+        is_group_event: newContribution.isGroupEvent ?? false,
+      },
     };
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
     source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
@@ -3015,6 +3091,11 @@ export default function CampaignMap({
       latitude: newReport.lat,
       longitude: newReport.lng,
       unit_type: null,
+      status: "open",
+      claimed_by_user_id: null,
+      claim_before_deadline_at: null,
+      claim_after_deadline_at: null,
+      flag_count: 0,
     };
 
     const nextReports = [...(problemReportsRef.current?.reports ?? []), report];
@@ -3022,6 +3103,7 @@ export default function CampaignMap({
       reports: nextReports,
       counts_by_geo_unit: problemReportsRef.current?.counts_by_geo_unit ?? {},
       threshold: problemReportsRef.current?.threshold ?? null,
+      flag_auto_hide_threshold: problemReportsRef.current?.flag_auto_hide_threshold ?? FLAG_AUTO_HIDE_THRESHOLD,
     };
     problemReportsRef.current = nextData;
     setLiveReports(nextData);
@@ -3371,8 +3453,15 @@ export default function CampaignMap({
       )}
 
       {!pinPickerActive && !areaPickerActive && !routePickerActive && !isCollage && (
-        <div className="absolute bottom-14 right-4 z-10 flex flex-col gap-1 sm:gap-1.5 text-xs">
-          {isChoropleth ? (
+        <div className="absolute bottom-14 right-4 z-10 flex flex-col items-start gap-1 sm:gap-1.5 text-xs">
+          <button
+            onClick={() => setLegendOpen((v) => !v)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-900/80 rounded backdrop-blur-sm text-sm font-medium text-zinc-200 hover:bg-zinc-800/80"
+          >
+            <span>Legend</span>
+            <span className="text-zinc-500">{legendOpen ? "▾" : "▸"}</span>
+          </button>
+          {legendOpen && (isChoropleth ? (
             <>
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
@@ -3413,6 +3502,13 @@ export default function CampaignMap({
                 <span className="text-zinc-300">Cleanup logged</span>
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="relative w-4 h-4 flex items-center justify-center flex-shrink-0">
+                  <span className="absolute inset-0 rounded-full border-2 border-sky-400" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500/90" />
+                </span>
+                <span className="text-zinc-300">Group event cleanup</span>
+              </div>
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
                 <span className="text-zinc-300">Group territory</span>
               </div>
@@ -3429,11 +3525,25 @@ export default function CampaignMap({
                 <span className="text-zinc-300">Open report</span>
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-                <span className="text-sm leading-none">🔥</span>
+                <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm leading-none">🔥</span>
+                </span>
                 <span className="text-zinc-300">Hotspot</span>
               </div>
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-3 rounded-full border border-sky-400 bg-sky-400/10 flex-shrink-0" />
+                <span className="text-zinc-300">Event check-in radius</span>
+              </div>
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-0.5 rounded-full bg-[#0284c7] flex-shrink-0" />
+                <span className="text-zinc-300">Group event route</span>
+              </div>
+              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <span className="w-3 h-0.5 rounded-full bg-[#f59e0b] flex-shrink-0" />
+                <span className="text-zinc-300">Ad-hoc route</span>
+              </div>
             </>
-          )}
+          ))}
         </div>
       )}
 

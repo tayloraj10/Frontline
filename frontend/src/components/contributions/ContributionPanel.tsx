@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createCleanupEvent } from "@/lib/cleanupEvents";
 import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString } from "@/lib/cleanupRoutes";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
+import Lightbox from "@/components/Lightbox";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -23,7 +24,7 @@ interface Coords {
   longitude: number;
 }
 
-// A kitchen trash bag (13-gal) holds ~3x the volume of a plastic grocery bag.
+// Large (~kitchen trash bag, 13-gal) holds ~3x the volume of small (~grocery bag).
 const LARGE_BAG_VALUE = 3;
 const SMALL_BAG_VALUE = 1;
 
@@ -221,7 +222,7 @@ interface ContributionPanelProps {
   onEnterRoutePicker?: () => void;
   routePickerActive?: boolean;
   placedRouteVertices?: [number, number][] | null;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean) => void;
   onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string) => void;
   onRouteAdded?: (route: { id: string; route: RouteLineString }) => void;
   userLocation?: Coords | null;
@@ -232,14 +233,53 @@ interface ContributionPanelProps {
   pendingCleanupEventId?: string | null;
   onPendingCleanupEventConsumed?: () => void;
   nearbyCleanupEvent?: { id: string; title: string } | null;
+  clickedReport?: ClickedReport | null;
+  onClickedReportConsumed?: () => void;
+  onClaimReportUpdated?: (reportId: string, patch: Partial<ClickedReport>) => void;
+  onClaimReportResolved?: (reportId: string) => void;
+  myActiveClaimReport?: ClickedReport | null;
+}
+
+// Trimmed shape of ProblemReportMapData needed by the claim flow — avoids importing the
+// full CampaignPageClient type (and its unrelated fields) into this file.
+interface ClickedReport {
+  id: string;
+  severity: string;
+  reported_at: string;
+  latitude: number;
+  longitude: number;
+  status: string;
+  claimed_by_user_id: string | null;
+  claim_before_deadline_at: string | null;
+  claim_after_deadline_at: string | null;
+  flag_count: number;
+  unit_type: string | null;
 }
 
 const METERS_TO_FEET = 3.28084;
+const CLAIM_RADIUS_EARTH_METERS = 6371000;
+// Mirrors CLAIM_PROXIMITY_METERS_UK/US in backend/app/api/routes/problem_reports.py.
+const CLAIM_PROXIMITY_METERS_UK = 100.0;
+const CLAIM_PROXIMITY_METERS_US = 91.44;
 
 function formatHotspotDistance(distanceM: number, unitType: string | null): string {
   return unitType === "uk_postcode_district"
     ? `${Math.round(distanceM)}m`
     : `${Math.round(distanceM * METERS_TO_FEET)}ft`;
+}
+
+function claimDistanceMeters(a: Coords, lat: number, lng: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat - a.latitude);
+  const dLng = toRad(lng - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * CLAIM_RADIUS_EARTH_METERS * Math.asin(Math.sqrt(h));
+}
+
+function claimRadiusMeters(unitType: string | null): number {
+  return unitType === "uk_postcode_district" ? CLAIM_PROXIMITY_METERS_UK : CLAIM_PROXIMITY_METERS_US;
 }
 
 // ─── GPS hook ────────────────────────────────────────────────────────────────
@@ -398,6 +438,147 @@ function GpsIndicator({
   return null;
 }
 
+// ─── Camera capture ───────────────────────────────────────────────────────────
+
+function CameraModal({
+  onCapture,
+  onClose,
+}: {
+  onCapture: (file: File) => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(() =>
+    typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia
+      ? "Camera not supported on this browser — use gallery instead."
+      : null,
+  );
+
+  useEffect(() => {
+    if (error) return;
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+        setReady(true);
+      })
+      .catch(() => setError("Camera unavailable — check permissions or use gallery instead."));
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const capture = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        onCapture(new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
+        onClose();
+      },
+      "image/jpeg",
+      0.9,
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-4 p-4">
+      {error ? (
+        <>
+          <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
+          <button onClick={onClose} className="text-zinc-400 text-sm underline">
+            Close
+          </button>
+        </>
+      ) : (
+        <>
+          <video ref={videoRef} playsInline muted className="w-full max-w-md rounded-lg bg-black" />
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={capture}
+              disabled={!ready}
+              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              📸 Capture
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PhotoCaptureInput({
+  multiple,
+  onFilesSelected,
+}: {
+  multiple: boolean;
+  onFilesSelected: (files: File[]) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCamera, setShowCamera] = useState(false);
+
+  return (
+    <>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setShowCamera(true)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+        >
+          📷 Take Photo
+        </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+        >
+          🖼️ Choose from Gallery
+        </button>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple={multiple}
+        onChange={(e) => {
+          onFilesSelected(Array.from(e.target.files ?? []));
+          e.target.value = "";
+        }}
+        className="hidden"
+      />
+      {showCamera && (
+        <CameraModal onCapture={(file) => onFilesSelected([file])} onClose={() => setShowCamera(false)} />
+      )}
+    </>
+  );
+}
+
 // ─── Contribute modal ─────────────────────────────────────────────────────────
 
 function ContributeModal({
@@ -414,6 +595,8 @@ function ContributeModal({
   onContributionSubmitted,
   activeMapStyle,
   nearbyEvent,
+  claimedReportId,
+  prefillPhotoUrls,
 }: {
   campaignId: string;
   campaignContributionType: string;
@@ -425,9 +608,16 @@ function ContributeModal({
   onEnterRoutePicker: () => void;
   routeOverride: RouteLineString | null;
   onClose: () => void;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean) => void;
   activeMapStyle?: string;
   nearbyEvent?: { id: string; title: string } | null;
+  // Set when arriving from the claim-a-report challenge flow: the report is already
+  // resolved server-side by that point, so the proximity nearby-hotspot checkbox below
+  // doesn't apply — this is a different report, already claimed and completed.
+  claimedReportId?: string | null;
+  // Before/after photos already captured (and uploaded to R2) during the claim challenge —
+  // prefilled here so the user isn't asked to retake/reselect photos they just took.
+  prefillPhotoUrls?: string[];
 }) {
   const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
@@ -452,6 +642,8 @@ function ContributeModal({
   const [notes, setNotes] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>(() => prefillPhotoUrls ?? []);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [contributeMode, setContributeMode] = useState<"point" | "route">("point");
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [intersectingUnits, setIntersectingUnits] = useState<IntersectingGeoUnit[]>([]);
@@ -541,7 +733,7 @@ function ContributeModal({
   // Point-mode only — route mode has no single GPS/pin location to key this off of, and
   // is handled instead by the per-zip active_multiplier data on intersectingUnits below.
   useEffect(() => {
-    if (!isCleanup || isRouteMode || !submitCoords) {
+    if (!isCleanup || isRouteMode || !submitCoords || claimedReportId) {
       setNearbyReport(null);
       return;
     }
@@ -554,7 +746,7 @@ function ContributeModal({
       .then((data) => setNearbyReport(data?.nearby_report ?? null))
       .catch(() => { });
     return () => controller.abort();
-  }, [isCleanup, isRouteMode, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
+  }, [isCleanup, isRouteMode, campaignId, submitCoords?.latitude, submitCoords?.longitude, claimedReportId]);
 
   // Check whether the submit location is inside an active boss-spawn hotspot, so the
   // dialog can show the same score multiplier that /contributions/submit will apply.
@@ -610,7 +802,8 @@ function ContributeModal({
     setAppliedMultiplier(isCleanup ? effectiveMultiplier : null);
 
     try {
-      const photoUrls = photos.length > 0 ? await Promise.all(photos.map((p) => uploadToR2(p))) : [];
+      const newlyUploadedUrls = photos.length > 0 ? await Promise.all(photos.map((p) => uploadToR2(p))) : [];
+      const photoUrls = [...existingPhotoUrls, ...newlyUploadedUrls];
 
       const value = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 1;
       const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
@@ -631,6 +824,7 @@ function ContributeModal({
         if (photoUrls.length > 1) body.photo_urls = photoUrls;
         if (pounds.trim()) body.pounds = Number(pounds);
         if (nearbyReport && resolveHotspot) body.resolve_report_id = nearbyReport.id;
+        if (claimedReportId) body.claimed_report_id = claimedReportId;
       }
 
       if (isRouteMode && route && selectedRouteGeoUnitId) {
@@ -661,6 +855,7 @@ function ContributeModal({
         photoUrls[0] ?? undefined,
         data.hotspot_cleared && nearbyReport ? nearbyReport.id : undefined,
         isRouteMode && route && data.cleanup_id ? { id: data.cleanup_id, route } : undefined,
+        Boolean(effectiveEventId),
       );
       setHotspotCleared(Boolean(data.hotspot_cleared));
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
@@ -691,6 +886,11 @@ function ContributeModal({
           <p className="text-zinc-100 font-semibold text-center">
             {result === "success" ? config.successClaimed : config.successUnclaimed}
           </p>
+          {isCleanup && claimedReportId && (
+            <p className="text-sm text-violet-300 font-semibold text-center">
+              🎯 Challenge bonus: 1.5× score applied!
+            </p>
+          )}
           {isCleanup && appliedMultiplier && (
             <p
               className={`text-sm text-orange-300 font-semibold text-center transition-all duration-500 ${celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"
@@ -732,6 +932,13 @@ function ContributeModal({
       glow={isEventMode ? "blue" : isCleanup && Boolean(activeMultiplier) ? "orange" : false}
     >
       <div className="flex flex-col gap-4">
+
+        {isCleanup && claimedReportId && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
+            <span className="text-base shrink-0">🎯</span>
+            <span>Challenge complete — this cleanup earns a <span className="font-bold text-violet-200">1.5×</span> score bonus.</span>
+          </div>
+        )}
 
         {isCleanup && nearbyEvent && (
           <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
@@ -981,27 +1188,25 @@ function ContributeModal({
         {isCleanup && (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] text-zinc-600 mb-1">Plastic grocery bags</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={smallBags}
-                  onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-zinc-600 mb-1">Kitchen trash bags</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={largeBags}
-                  onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
-                />
-              </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0">
+              <label className="text-[11px] text-zinc-600">Small bags</label>
+              <label className="text-[11px] text-zinc-600">Large bags</label>
+              <p className="text-[11px] text-zinc-700 mb-1">(about a grocery bag)</p>
+              <p className="text-[11px] text-zinc-700 mb-1">(about a kitchen trash bag)</p>
+              <input
+                type="number"
+                min={0}
+                value={smallBags}
+                onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+              />
+              <input
+                type="number"
+                min={0}
+                value={largeBags}
+                onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+              />
             </div>
             <p className="mt-2 text-xs text-zinc-500">
               Territory value:{" "}
@@ -1017,11 +1222,13 @@ function ContributeModal({
               {effectiveMultiplier ? (
                 <span className="ml-1 text-orange-400/80">({effectiveMultiplier.multiplier}× hotspot multiplier applied)</span>
               ) : (
-                <span className="ml-1 text-zinc-600">(kitchen bags count {LARGE_BAG_VALUE}x)</span>
+                <span className="ml-1 text-zinc-600">(large bags count {LARGE_BAG_VALUE}x)</span>
               )}
             </p>
             <div className="mt-3">
-              <label className="block text-[11px] text-zinc-600 mb-1">Pounds cleaned up (optional)</label>
+              <label className={`block text-[11px] mb-1 ${isEventMode && !pounds.trim() ? "text-amber-400" : "text-zinc-600"}`}>
+                Pounds cleaned up (optional){isEventMode && !pounds.trim() ? " — helps the event's total!" : ""}
+              </label>
               <input
                 type="number"
                 min={0}
@@ -1029,7 +1236,8 @@ function ContributeModal({
                 value={pounds}
                 onChange={(e) => setPounds(e.target.value)}
                 placeholder="e.g. 25"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+                className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 ${isEventMode && !pounds.trim() ? "border-amber-600/60" : "border-zinc-700"
+                  }`}
               />
             </div>
           </div>
@@ -1061,31 +1269,67 @@ function ContributeModal({
         {/* Photo */}
         {showPhoto && (
           <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">
+            <label className={`block text-xs mb-1.5 ${isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? "text-amber-400" : "text-zinc-500"}`}>
               {isCleanup ? "Photos" : "Photo"} {isPhoto ? "(required)" : "(optional)"}
+              {isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? " — helps the event's gallery!" : ""}
             </label>
-            <input
-              type="file"
-              accept="image/*"
+            <PhotoCaptureInput
               multiple={isCleanup}
-              onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
-              className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+              onFilesSelected={(files) =>
+                setPhotos((prev) => (isCleanup ? [...prev, ...files] : files))
+              }
             />
-            {photoPreviews.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
+            {(existingPhotoUrls.length > 0 || photoPreviews.length > 0) && (
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                {existingPhotoUrls.map((url, i) => (
+                  <div key={url} className="relative w-28 h-28 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
+                    <img
+                      src={url}
+                      alt=""
+                      className="w-full h-full object-cover cursor-zoom-in"
+                      onClick={() => setLightboxIndex(i)}
+                    />
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      🔍
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setExistingPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
                 {photoPreviews.map((url, i) => (
-                  <div key={url} className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
-                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  <div key={url} className="relative w-28 h-28 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
+                    <img
+                      src={url}
+                      alt=""
+                      className="w-full h-full object-cover cursor-zoom-in"
+                      onClick={() => setLightboxIndex(existingPhotoUrls.length + i)}
+                    />
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      🔍
+                    </span>
                     <button
                       type="button"
                       onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center bg-black/70 text-white text-[10px] leading-none rounded-bl"
+                      className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
                     >
                       ×
                     </button>
                   </div>
                 ))}
               </div>
+            )}
+            {lightboxIndex !== null && (
+              <Lightbox
+                images={[...existingPhotoUrls, ...photoPreviews]}
+                index={lightboxIndex}
+                onClose={() => setLightboxIndex(null)}
+                onNavigate={setLightboxIndex}
+              />
             )}
           </div>
         )}
@@ -1269,12 +1513,7 @@ function ReportModal({
 
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">Photo (required)</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
-          />
+          <PhotoCaptureInput multiple={false} onFilesSelected={(files) => setPhoto(files[0] ?? null)} />
           {photoPreview && (
             <div className="mt-2 flex flex-wrap gap-2">
               <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
@@ -1341,6 +1580,663 @@ function ReportModal({
         </div>
       </div>
     </ModalShell>
+  );
+}
+
+// ─── Claim-a-report challenge mode ────────────────────────────────────────────
+
+// Display-only mirror of CLAIM_BEFORE_WINDOW_MINUTES / CLAIM_AFTER_WINDOW_MINUTES in
+// backend/app/api/routes/problem_reports.py — the server is authoritative on the actual
+// deadlines, these are just used to show the time limits before a user commits to a claim.
+const CLAIM_BEFORE_WINDOW_MINUTES = 30;
+const CLAIM_AFTER_WINDOW_MINUTES: Record<string, number> = { low: 20, medium: 30, high: 45 };
+// Mirrors FLAG_AUTO_HIDE_THRESHOLD in backend/app/api/routes/problem_reports.py.
+const FLAG_AUTO_HIDE_THRESHOLD = 3;
+function claimAfterWindowMinutes(severity: string): number {
+  return CLAIM_AFTER_WINDOW_MINUTES[severity] ?? CLAIM_AFTER_WINDOW_MINUTES.medium;
+}
+
+// Live mm:ss countdown to a deadline timestamp — ticks locally rather than re-fetching,
+// since the backend uses a check-on-read expiry pattern (no push/websocket for this).
+function useCountdownLabel(deadline: string | null): { label: string; expired: boolean } {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!deadline) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [deadline]);
+  if (!deadline) return { label: "", expired: false };
+  const diffMs = new Date(deadline).getTime() - now;
+  if (diffMs <= 0) return { label: "0:00", expired: true };
+  const totalSec = Math.floor(diffMs / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return { label: `${m}:${s.toString().padStart(2, "0")}`, expired: false };
+}
+
+function ClaimReportModal({
+  report,
+  userId,
+  gps,
+  onClose,
+  activeMapStyle,
+  onClaimUpdated,
+  onClaimResolved,
+  onStartChallengeContribution,
+  myActiveClaimReport,
+  onViewActiveClaim,
+}: {
+  report: ClickedReport;
+  userId: string | null;
+  gps: ReturnType<typeof useGPS>;
+  onClose: () => void;
+  activeMapStyle?: string;
+  onClaimUpdated: (reportId: string, patch: Partial<ClickedReport>) => void;
+  onClaimResolved: (reportId: string) => void;
+  onStartChallengeContribution: (reportId: string, coords: Coords, photoUrls: string[]) => void;
+  myActiveClaimReport?: ClickedReport | null;
+  onViewActiveClaim?: () => void;
+}) {
+  const pathname = usePathname();
+  const [localReport, setLocalReport] = useState(report);
+  useEffect(() => setLocalReport(report), [report]);
+
+  useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [flagState, setFlagState] = useState<"idle" | "submitting" | "done">("idle");
+  const [flagError, setFlagError] = useState<string | null>(null);
+  const [beforePhotoUrl, setBeforePhotoUrl] = useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    if (!photo) {
+      setPhotoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(photo);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+
+  const isMine = !!userId && localReport.claimed_by_user_id === userId;
+  const beforeCountdown = useCountdownLabel(isMine ? localReport.claim_before_deadline_at : null);
+  const afterCountdown = useCountdownLabel(isMine ? localReport.claim_after_deadline_at : null);
+  const blockedByOtherClaim = !!myActiveClaimReport && myActiveClaimReport.id !== localReport.id;
+
+  // Mirrors the backend's ST_DWithin check in _assert_within_claim_radius — gating the
+  // photo upload client-side too so users don't waste an upload on a submission the
+  // server will reject anyway.
+  const radiusMeters = claimRadiusMeters(localReport.unit_type);
+  const distanceToReport = gps.coords ? claimDistanceMeters(gps.coords, localReport.latitude, localReport.longitude) : null;
+  const withinClaimRadius = distanceToReport !== null && distanceToReport <= radiusMeters;
+
+  // The backend only reverts an expired claim to "open" when it's touched by a later
+  // request (check-on-read, not a cron job) — so if the user just sits on this modal
+  // past the deadline, reflect that locally right away rather than waiting for the next
+  // network round trip. This also clears them out of the "one active claim" slot so they
+  // can immediately claim something else.
+  useEffect(() => {
+    if (!isMine) return;
+    if (beforeCountdown.expired || afterCountdown.expired) {
+      const patch: Partial<ClickedReport> = {
+        status: "open",
+        claimed_by_user_id: null,
+        claim_before_deadline_at: null,
+        claim_after_deadline_at: null,
+      };
+      setLocalReport((r) => ({ ...r, ...patch }));
+      onClaimUpdated(localReport.id, patch);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beforeCountdown.expired, afterCountdown.expired, isMine]);
+
+  const handleClaim = async () => {
+    if (!userId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/claim`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        },
+      );
+      if (!res.ok) {
+        let detail: string | null = null;
+        try {
+          detail = ((await res.json()) as { detail?: string })?.detail ?? null;
+        } catch {
+          // response body wasn't JSON — fall through to the generic messages below
+        }
+        if (res.status === 429) throw new Error(detail ?? "You must wait before reclaiming this report.");
+        if (res.status === 409) throw new Error(detail ?? "This report was just claimed by someone else.");
+        throw new Error("Failed to claim report.");
+      }
+      const data = (await res.json()) as { claim_before_deadline_at: string };
+      const patch: Partial<ClickedReport> = {
+        status: "scheduled",
+        claimed_by_user_id: userId,
+        claim_before_deadline_at: data.claim_before_deadline_at,
+      };
+      setLocalReport((r) => ({ ...r, ...patch }));
+      onClaimUpdated(localReport.id, patch);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to claim report.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleBeforePhoto = async () => {
+    if (!userId || !photo) return;
+    if (!gps.coords) {
+      setError("We need your location to confirm you're at the report — enable location and try again.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const photoUrl = await uploadToR2(photo);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/claim/before-photo`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            photo_url: photoUrl,
+            latitude: gps.coords.latitude,
+            longitude: gps.coords.longitude,
+          }),
+        },
+      );
+      if (!res.ok) {
+        if (res.status === 403) throw new Error("You need to be at the report's location to submit this photo.");
+        throw new Error("Claim is not active or has expired.");
+      }
+      const data = (await res.json()) as { claim_after_deadline_at: string };
+      const patch: Partial<ClickedReport> = {
+        status: "in_progress",
+        claim_before_deadline_at: null,
+        claim_after_deadline_at: data.claim_after_deadline_at,
+      };
+      setLocalReport((r) => ({ ...r, ...patch }));
+      onClaimUpdated(localReport.id, patch);
+      setBeforePhotoUrl(photoUrl);
+      setPhoto(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to submit photo.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAfterPhoto = async () => {
+    if (!userId || !photo) return;
+    if (!gps.coords) {
+      setError("We need your location to confirm you're at the report — enable location and try again.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const photoUrl = await uploadToR2(photo);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/claim/after-photo`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            photo_url: photoUrl,
+            latitude: gps.coords.latitude,
+            longitude: gps.coords.longitude,
+          }),
+        },
+      );
+      if (!res.ok) {
+        if (res.status === 403) throw new Error("You need to be at the report's location to submit this photo.");
+        throw new Error("Claim is not active or has expired.");
+      }
+      onClaimResolved(localReport.id);
+      onStartChallengeContribution(
+        localReport.id,
+        { latitude: localReport.latitude, longitude: localReport.longitude },
+        [beforePhotoUrl, photoUrl].filter((url): url is string => !!url),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to submit photo.");
+      setSubmitting(false);
+    }
+  };
+
+  // Voluntary back-out — frees the report for someone else instead of letting the timer
+  // run out. Reuses onClaimUpdated's "revert to open" patch shape, same as auto-expiry.
+  const handleRelease = async () => {
+    if (!userId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/claim/release`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to release this claim.");
+      const patch: Partial<ClickedReport> = {
+        status: "open",
+        claimed_by_user_id: null,
+        claim_before_deadline_at: null,
+        claim_after_deadline_at: null,
+      };
+      onClaimUpdated(localReport.id, patch);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to release this claim.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFlag = async () => {
+    if (!userId) return;
+    setFlagState("submitting");
+    setFlagError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/flag`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to flag this report.");
+      const data = (await res.json()) as { flag_count: number; auto_hidden: boolean };
+      if (data.auto_hidden) {
+        onClaimResolved(localReport.id);
+        onClose();
+        return;
+      }
+      const patch: Partial<ClickedReport> = { flag_count: data.flag_count };
+      setLocalReport((r) => ({ ...r, ...patch }));
+      onClaimUpdated(localReport.id, patch);
+      setFlagState("done");
+    } catch (e) {
+      setFlagError(e instanceof Error ? e.message : "Failed to flag this report.");
+      setFlagState("idle");
+    }
+  };
+
+  const flagControl = (
+    <div className="pt-1 text-center">
+      {flagState === "done" ? (
+        <p className="text-xs text-zinc-500">Thanks — this report has been flagged for review.</p>
+      ) : (
+        <button
+          onClick={handleFlag}
+          disabled={flagState === "submitting"}
+          className="text-xs text-zinc-500 hover:text-red-400 underline disabled:opacity-40"
+          title={`If ${FLAG_AUTO_HIDE_THRESHOLD} people flag this report as inaccurate, it will be automatically removed from the map.`}
+        >
+          {flagState === "submitting" ? "Flagging…" : "🚩 Report this as inaccurate"}
+        </button>
+      )}
+      {localReport.flag_count > 0 && (
+        <p
+          className="text-xs text-zinc-600 mt-1"
+          title={`If ${FLAG_AUTO_HIDE_THRESHOLD} people flag this report as inaccurate, it will be automatically removed from the map.`}
+        >
+          {localReport.flag_count} of {FLAG_AUTO_HIDE_THRESHOLD} flags needed to remove this report
+        </p>
+      )}
+      {flagError && <p className="text-red-400 text-xs mt-1">{flagError}</p>}
+    </div>
+  );
+
+  if (!userId) {
+    return (
+      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-4">
+          <span className="text-4xl">🎯</span>
+          <p className="text-zinc-100 text-sm text-center">Sign in to claim this report and earn a 1.5× challenge bonus.</p>
+          <Link
+            href={`/login?next=${pathname}`}
+            className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold text-center transition-colors"
+          >
+            Sign in
+          </Link>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  // Claimed by someone else — read-only info state.
+  if (localReport.claimed_by_user_id && !isMine) {
+    return (
+      <ModalShell title="Report Claimed" badge="Beta" onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-4">
+          <span className="text-4xl">🔒</span>
+          <p className="text-zinc-100 text-sm text-center">
+            Someone else is already working this report. If they don&apos;t finish in time, it&apos;ll reopen for anyone to claim.
+          </p>
+          <button onClick={onClose} className="mt-1 text-sm text-zinc-400 hover:text-zinc-200">
+            Close
+          </button>
+          {flagControl}
+        </div>
+      </ModalShell>
+    );
+  }
+
+  // Unclaimed, but the user already has a different claim in progress — challenge mode is
+  // one-at-a-time, so point them at their existing claim instead of offering a new one.
+  if (localReport.status === "open" && blockedByOtherClaim) {
+    return (
+      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-4">
+          <span className="text-4xl">⛔</span>
+          <p className="text-zinc-100 text-sm text-center">
+            You already have an active claim in progress. Finish it — or let its timer run out — before claiming another report.
+          </p>
+          <button
+            onClick={onViewActiveClaim}
+            className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors"
+          >
+            View my active claim
+          </button>
+          <button onClick={onClose} className="text-sm text-zinc-400 hover:text-zinc-200">
+            Close
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  // Unclaimed — offer the claim action.
+  if (localReport.status === "open") {
+    const afterWindow = claimAfterWindowMinutes(localReport.severity);
+    return (
+      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
+            <span className="text-base shrink-0">🎯</span>
+            <span>
+              Claim it to start the challenge: arrive with a before photo, then clean it up for an after photo.
+              Complete both in time for a <span className="font-bold text-violet-200">1.5×</span> score bonus.
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900/60 text-xs text-zinc-300">
+            <div className="flex items-center gap-2">
+              <span className="shrink-0">⏱️</span>
+              <span>
+                Arrive & submit before photo: <span className="font-semibold text-zinc-100">{CLAIM_BEFORE_WINDOW_MINUTES} min</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="shrink-0">🧹</span>
+              <span>
+                Clean up & submit after photo: <span className="font-semibold text-zinc-100">{afterWindow} min</span>{" "}
+                <span className="text-zinc-500">({localReport.severity} severity)</span>
+              </span>
+            </div>
+          </div>
+          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} />
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleClaim}
+              disabled={submitting}
+              className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              {submitting ? "Claiming…" : "🎯 Claim"}
+            </button>
+          </div>
+          {flagControl}
+        </div>
+      </ModalShell>
+    );
+  }
+
+  // Claimed by me, awaiting before-photo.
+  if (localReport.status === "scheduled") {
+    return (
+      <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose}>
+        <div className="flex flex-col gap-4">
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${beforeCountdown.expired
+            ? "border-red-800/60 bg-red-950/30 text-red-300"
+            : "border-violet-800/60 bg-violet-950/30 text-violet-300"
+            }`}>
+            <span className="text-base shrink-0">⏱️</span>
+            <span>
+              {beforeCountdown.expired
+                ? "Time's up — this claim has expired. Close and reclaim if it's still available."
+                : <>Time left to arrive: <span className="font-bold">{beforeCountdown.label}</span></>}
+            </span>
+          </div>
+          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} />
+          {!withinClaimRadius && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
+              <span className="text-base shrink-0">📍</span>
+              <span>
+                {distanceToReport === null
+                  ? "Waiting for your location to confirm you're at the report…"
+                  : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
+              </span>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Before photo (required)</label>
+            {withinClaimRadius ? (
+              <>
+                <PhotoCaptureInput multiple={false} onFilesSelected={(files) => setPhoto(files[0] ?? null)} />
+                {photoPreview && (
+                  <div className="mt-2 flex justify-center">
+                    <div className="relative w-40 h-40 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
+                      <img
+                        src={photoPreview}
+                        alt=""
+                        className="w-full h-full object-cover cursor-zoom-in"
+                        onClick={() => setLightboxOpen(true)}
+                      />
+                      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        🔍 Enlarge
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPhoto(null)}
+                        className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="rounded-lg border border-dashed border-zinc-700 px-3 py-4 text-center text-xs text-zinc-500">
+                Get closer to the report location to enable the camera.
+              </div>
+            )}
+          </div>
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleBeforePhoto}
+              disabled={!photo || submitting || beforeCountdown.expired || !withinClaimRadius}
+              className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            >
+              {submitting ? "Submitting…" : "Submit before photo"}
+            </button>
+          </div>
+          <button
+            onClick={handleRelease}
+            disabled={submitting}
+            className="text-xs text-zinc-500 hover:text-red-400 underline disabled:opacity-40 text-center"
+          >
+            Back out of this claim
+          </button>
+          {flagControl}
+        </div>
+        {lightboxOpen && photoPreview && (
+          <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
+        )}
+      </ModalShell>
+    );
+  }
+
+  // Claimed by me, before-photo submitted, awaiting after-photo.
+  return (
+    <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${afterCountdown.expired
+          ? "border-red-800/60 bg-red-950/30 text-red-300"
+          : "border-violet-800/60 bg-violet-950/30 text-violet-300"
+          }`}>
+          <span className="text-base shrink-0">⏱️</span>
+          <span>
+            {afterCountdown.expired
+              ? "Time's up — this claim has expired. Close and reclaim if it's still available."
+              : <>Time left to finish: <span className="font-bold">{afterCountdown.label}</span></>}
+          </span>
+        </div>
+        <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} />
+        {!withinClaimRadius && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
+            <span className="text-base shrink-0">📍</span>
+            <span>
+              {distanceToReport === null
+                ? "Waiting for your location to confirm you're at the report…"
+                : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
+            </span>
+          </div>
+        )}
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">After photo (required)</label>
+          {withinClaimRadius ? (
+            <>
+              <PhotoCaptureInput multiple={false} onFilesSelected={(files) => setPhoto(files[0] ?? null)} />
+              {photoPreview && (
+                <div className="mt-2 flex justify-center">
+                  <div className="relative w-40 h-40 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
+                    <img
+                      src={photoPreview}
+                      alt=""
+                      className="w-full h-full object-cover cursor-zoom-in"
+                      onClick={() => setLightboxOpen(true)}
+                    />
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      🔍 Enlarge
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPhoto(null)}
+                      className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-lg border border-dashed border-zinc-700 px-3 py-4 text-center text-xs text-zinc-500">
+              Get closer to the report location to enable the camera.
+            </div>
+          )}
+        </div>
+        {error && <p className="text-red-400 text-xs">{error}</p>}
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAfterPhoto}
+            disabled={!photo || submitting || afterCountdown.expired || !withinClaimRadius}
+            className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+          >
+            {submitting ? "Submitting…" : "Submit after photo (1.5× bonus)"}
+          </button>
+        </div>
+        <button
+          onClick={handleRelease}
+          disabled={submitting}
+          className="text-xs text-zinc-500 hover:text-red-400 underline disabled:opacity-40 text-center"
+        >
+          Back out of this claim
+        </button>
+        {flagControl}
+      </div>
+      {lightboxOpen && photoPreview && (
+        <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
+      )}
+    </ModalShell>
+  );
+}
+
+// Persistent running timer for the user's one active claim, visible on the map even while
+// the claim modal itself is closed — tapping it reopens the modal to submit the next photo.
+function ActiveClaimBadge({
+  claim,
+  onClick,
+  onExpired,
+}: {
+  claim: ClickedReport;
+  onClick: () => void;
+  onExpired: (reportId: string) => void;
+}) {
+  const isScheduled = claim.status === "scheduled";
+  const countdown = useCountdownLabel(isScheduled ? claim.claim_before_deadline_at : claim.claim_after_deadline_at);
+
+  useEffect(() => {
+    if (countdown.expired) onExpired(claim.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown.expired]);
+
+  return (
+    <button
+      onClick={onClick}
+      className={`absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium backdrop-blur-sm shadow-lg transition-colors ${
+        countdown.expired
+          ? "border-red-800/60 bg-red-950/80 text-red-300 hover:bg-red-900/80"
+          : "border-violet-800/60 bg-violet-950/80 text-violet-200 hover:bg-violet-900/80"
+      }`}
+    >
+      <span className="text-sm">🎯</span>
+      <span>
+        {countdown.expired ? (
+          "Claim expired — tap to view"
+        ) : isScheduled ? (
+          <>Arrive by <span className="font-bold tabular-nums">{countdown.label}</span></>
+        ) : (
+          <>Clean up by <span className="font-bold tabular-nums">{countdown.label}</span></>
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -2239,7 +3135,7 @@ function ModalShell({
           />
         )}
         <div
-          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
+          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[75vh] sm:max-h-[90vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
             }`}
         >
           {title && (
@@ -2293,11 +3189,16 @@ export default function ContributionPanel({
   pendingCleanupEventId,
   onPendingCleanupEventConsumed,
   nearbyCleanupEvent,
+  clickedReport,
+  onClickedReportConsumed,
+  onClaimReportUpdated,
+  onClaimReportResolved,
+  myActiveClaimReport,
 }: ContributionPanelProps) {
   const isSolarpunk = campaignContributionType === "solarpunk_action";
 
   const gps = useGPS(requestLocation, userLocation, locationError);
-  const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | "all_actions" | "host_event" | null>(null);
+  const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | "all_actions" | "host_event" | "claim" | null>(null);
   const [contributeOverrideCoords, setContributeOverrideCoords] = useState<Coords | null>(null);
   const [solarpunkPhotoOverrideCoords, setSolarpunkPhotoOverrideCoords] = useState<Coords | null>(null);
   const [reportOverrideCoords, setReportOverrideCoords] = useState<Coords | null>(null);
@@ -2305,8 +3206,20 @@ export default function ContributionPanel({
   const [logHostExpanded, setLogHostExpanded] = useState(false);
   const [contributeRouteOverride, setContributeRouteOverride] = useState<RouteLineString | null>(null);
   const [hostEventRouteOverride, setHostEventRouteOverride] = useState<RouteLineString | null>(null);
+  const [activeClaimReport, setActiveClaimReport] = useState<ClickedReport | null>(null);
+  const [claimedReportIdForContribute, setClaimedReportIdForContribute] = useState<string | null>(null);
+  const [claimedPhotoUrlsForContribute, setClaimedPhotoUrlsForContribute] = useState<string[]>([]);
   const prevPinPickerActiveRef = useRef(false);
   const prevRoutePickerActiveRef = useRef(false);
+
+  // A pin click on the map hands us a report; jump straight into the claim modal.
+  useEffect(() => {
+    if (!clickedReport) return;
+    setActiveClaimReport(clickedReport);
+    setMode("claim");
+    onClickedReportConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clickedReport]);
 
   // Geofence auto-prompt shortcut: the parent tells us the user tapped the banner's "Log
   // here" action. Jump straight into the contribute modal — since the user is still within
@@ -2398,6 +3311,20 @@ export default function ContributionPanel({
 
   return (
     <>
+      {myActiveClaimReport && mode !== "claim" && (
+        <ActiveClaimBadge
+          claim={myActiveClaimReport}
+          onClick={() => { setActiveClaimReport(myActiveClaimReport); setMode("claim"); }}
+          onExpired={(reportId) =>
+            onClaimReportUpdated?.(reportId, {
+              status: "open",
+              claimed_by_user_id: null,
+              claim_before_deadline_at: null,
+              claim_after_deadline_at: null,
+            })
+          }
+        />
+      )}
       {!pinPickerActive && (
         <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 items-start">
           {/* Mobile: condense Log/Host into one FAB that expands sub-options in an arc */}
@@ -2556,12 +3483,40 @@ export default function ContributionPanel({
               onEnterPinPicker={handleEnterPinPickerForContribute}
               onEnterRoutePicker={handleEnterRoutePickerForContribute}
               routeOverride={contributeRouteOverride}
-              onClose={() => { setMode(null); setContributeOverrideCoords(null); setContributeRouteOverride(null); }}
+              onClose={() => { setMode(null); setContributeOverrideCoords(null); setContributeRouteOverride(null); setClaimedReportIdForContribute(null); setClaimedPhotoUrlsForContribute([]); }}
               onContributionSubmitted={onContributionSubmitted}
               activeMapStyle={activeMapStyle}
               nearbyEvent={nearbyCleanupEvent ?? null}
+              claimedReportId={claimedReportIdForContribute}
+              prefillPhotoUrls={claimedPhotoUrlsForContribute}
             />
           )}
+        </div>
+      )}
+      {mode === "claim" && activeClaimReport && (
+        <div className={pinPickerActive ? "hidden" : undefined}>
+          <ClaimReportModal
+            report={activeClaimReport}
+            userId={userId}
+            activeMapStyle={activeMapStyle}
+            gps={gps}
+            onClose={() => { setMode(null); setActiveClaimReport(null); }}
+            onClaimUpdated={(reportId, patch) => {
+              setActiveClaimReport((r) => (r && r.id === reportId ? { ...r, ...patch } : r));
+              onClaimReportUpdated?.(reportId, patch);
+            }}
+            onClaimResolved={(reportId) => onClaimReportResolved?.(reportId)}
+            onStartChallengeContribution={(reportId, coords, photoUrls) => {
+              setClaimedReportIdForContribute(reportId);
+              setClaimedPhotoUrlsForContribute(photoUrls);
+              setContributeOverrideCoords(coords);
+              setActiveClaimReport(null);
+              setMode("contribute");
+              gps.capture();
+            }}
+            myActiveClaimReport={myActiveClaimReport}
+            onViewActiveClaim={() => myActiveClaimReport && setActiveClaimReport(myActiveClaimReport)}
+          />
         </div>
       )}
       {mode === "all_actions" && !pinPickerActive && (

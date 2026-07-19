@@ -34,6 +34,7 @@ async def record_contribution(
     group_id: UUID | None,
     geo_unit_id: str | None,
     cleanup_id: str | None,
+    cleanup_event_id: str | None = None,
     contribution_type: str,
     value: float | None,
     small_bags: int | None = None,
@@ -45,6 +46,7 @@ async def record_contribution(
     location_verified: bool = False,
     recorded_by_user_id: UUID | None = None,
     apply_multiplier: bool = True,
+    challenge_multiplier: float = 1.0,
 ) -> RecordedContribution:
     has_location = latitude is not None and longitude is not None
 
@@ -71,6 +73,10 @@ async def record_contribution(
             multiplier = float((multiplier_row[0] or {}).get("multiplier", 1))
             effective_value = effective_value * multiplier
 
+    # "Claim-a-report" challenge-mode bonus: applied on top of any active campaign-wide
+    # multiplier, since it rewards the individual claim rather than the geo unit.
+    effective_value = effective_value * challenge_multiplier
+
     insert_params = {
         "campaign_id": str(campaign_id),
         "user_id": str(user_id),
@@ -81,6 +87,7 @@ async def record_contribution(
         "photo_url": photo_url,
         "notes": notes,
         "cleanup_id": cleanup_id,
+        "cleanup_event_id": cleanup_event_id,
         "recorded_by_user_id": str(recorded_by_user_id) if recorded_by_user_id else None,
     }
 
@@ -89,12 +96,13 @@ async def record_contribution(
             text("""
                 INSERT INTO contributions
                     (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
-                     value, photo_url, location, location_verified, notes, cleanup_id, recorded_by_user_id)
+                     value, photo_url, location, location_verified, notes, cleanup_id,
+                     cleanup_event_id, recorded_by_user_id)
                 VALUES
                     (:campaign_id, :user_id, :group_id, :geo_unit_id, :contribution_type,
                      :value, :photo_url,
                      ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
-                     :location_verified, :notes, :cleanup_id, :recorded_by_user_id)
+                     :location_verified, :notes, :cleanup_id, :cleanup_event_id, :recorded_by_user_id)
                 RETURNING id
             """),
             {**insert_params, "lon": longitude, "lat": latitude, "location_verified": location_verified},
@@ -104,10 +112,12 @@ async def record_contribution(
             text("""
                 INSERT INTO contributions
                     (campaign_id, user_id, group_id, geo_unit_id, contribution_type,
-                     value, photo_url, location_verified, notes, cleanup_id, recorded_by_user_id)
+                     value, photo_url, location_verified, notes, cleanup_id,
+                     cleanup_event_id, recorded_by_user_id)
                 VALUES
                     (:campaign_id, :user_id, :group_id, :geo_unit_id, :contribution_type,
-                     :value, :photo_url, :location_verified, :notes, :cleanup_id, :recorded_by_user_id)
+                     :value, :photo_url, :location_verified, :notes, :cleanup_id,
+                     :cleanup_event_id, :recorded_by_user_id)
                 RETURNING id
             """),
             {**insert_params, "location_verified": location_verified},
