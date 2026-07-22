@@ -81,9 +81,9 @@ class ContributionRequest(BaseModel):
     route: dict | None = None
     route_geo_unit_id: UUID | None = None
 
-    @field_validator("small_bags", "large_bags")
+    @field_validator("small_bags", "large_bags", "pounds")
     @classmethod
-    def _non_negative(cls, v: int | None) -> int | None:
+    def _non_negative(cls, v: float | None) -> float | None:
         if v is not None and v < 0:
             raise ValueError("must be non-negative")
         return v

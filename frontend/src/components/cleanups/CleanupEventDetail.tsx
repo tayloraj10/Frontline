@@ -7,8 +7,13 @@ import {
   rsvpToCleanupEvent,
   checkInToCleanupEvent,
   logForAttendee,
+  logTeamTotal,
+  getTeamTotalLogs,
   updateCleanupEvent,
+  promoteOrganizer,
+  demoteOrganizer,
   type CleanupEventDetailData,
+  type TeamTotalLogEntry,
 } from "@/lib/cleanupEvents";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
@@ -21,6 +26,9 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   try {
     const parsed = JSON.parse(err.message);
     if (parsed && typeof parsed.detail === "string") return parsed.detail;
+    if (Array.isArray(parsed?.detail) && typeof parsed.detail[0]?.msg === "string") {
+      return parsed.detail[0].msg.replace(/^Value error,\s*/, "");
+    }
   } catch {
     // not JSON, fall through to raw message
   }
@@ -436,6 +444,10 @@ export default function CleanupEventDetail({
         </div>
       )}
 
+      {event.is_organizer && !isCancelled && (
+        <LogTeamTotalForm cleanupId={event.id} organizerUserId={userId!} rsvps={event.rsvps} onLogged={refresh} />
+      )}
+
       <div className="border border-zinc-800 rounded-xl overflow-hidden">
         <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">
@@ -446,43 +458,90 @@ export default function CleanupEventDetail({
           <div className="px-4 py-6 text-center text-zinc-600 text-sm">No RSVPs yet.</div>
         ) : (
           <ul className="divide-y divide-zinc-800/60">
-            {event.rsvps.map((r) => (
-              <li key={r.user_id} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-400 shrink-0">
-                    {(r.display_name ?? r.username ?? "?")[0].toUpperCase()}
+            {event.rsvps.map((r) => {
+              const hasContribution = r.small_bags + r.large_bags > 0 || r.pounds > 0 || r.points > 0;
+              return (
+                <li key={r.user_id} className="px-4 py-2.5 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-400 shrink-0">
+                        {(r.display_name ?? r.username ?? "?")[0].toUpperCase()}
+                      </div>
+                      <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
+                      <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
+                    </div>
+                    <div className="shrink-0">
+                      {r.checked_in_at ? (
+                        <span className="text-xs text-emerald-400 whitespace-nowrap">✓ checked in</span>
+                      ) : event.is_organizer ? (
+                        <OrganizerLogButton
+                          cleanupId={event.id}
+                          organizerUserId={userId!}
+                          attendeeUserId={r.user_id}
+                          attendeeName={r.display_name ?? r.username ?? "attendee"}
+                          onLogged={refresh}
+                        />
+                      ) : null}
+                    </div>
                   </div>
-                  <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
-                  <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
-                  {(r.small_bags + r.large_bags) > 0 && (
-                    <span
-                      className="text-xs text-emerald-400 shrink-0"
-                      title={`${r.small_bags} small bag${r.small_bags === 1 ? "" : "s"} (about a grocery bag size), ${r.large_bags} large bag${r.large_bags === 1 ? "" : "s"} (about a kitchen trash bag size)`}
-                    >
-                      🗑️ {r.small_bags + r.large_bags}
-                      <span className="text-emerald-400/70"> ({r.small_bags} small, {r.large_bags} large)</span>
-                      {r.pounds > 0 && ` · ${r.pounds.toLocaleString()} lbs`}
-                    </span>
+
+                  {(r.is_organizer || r.is_late || hasContribution) && (
+                    <div className="flex items-center gap-1.5 flex-wrap pl-8">
+                      {r.is_organizer && (
+                        <span className="text-[10px] font-semibold text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0">
+                          ★ Organizer
+                        </span>
+                      )}
+                      {r.is_late && (
+                        <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-0.5 shrink-0">
+                          Late
+                        </span>
+                      )}
+                      {(r.small_bags + r.large_bags > 0 || r.pounds > 0) && (
+                        <span
+                          className="text-xs text-emerald-400 shrink-0"
+                          title={`${r.small_bags} small bag${r.small_bags === 1 ? "" : "s"} (about a grocery bag size), ${r.large_bags} large bag${r.large_bags === 1 ? "" : "s"} (about a kitchen trash bag size)`}
+                        >
+                          {r.small_bags + r.large_bags > 0 && (
+                            <>
+                              🗑️ {r.small_bags + r.large_bags}
+                              <span className="text-emerald-400/70"> ({r.small_bags} small, {r.large_bags} large)</span>
+                            </>
+                          )}
+                          {r.pounds > 0 && `${r.small_bags + r.large_bags > 0 ? " · " : ""}⚖️ ${r.pounds.toLocaleString()} lbs`}
+                        </span>
+                      )}
+                      {r.points > 0 && (
+                        <span
+                          className="text-xs text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0"
+                          title={
+                            r.small_bags + r.large_bags === 0 && r.pounds === 0
+                              ? "Credited as their share of an organizer's team-total log, not an individually logged amount"
+                              : undefined
+                          }
+                        >
+                          +{r.points.toLocaleString()} pts
+                          {r.small_bags + r.large_bags === 0 && r.pounds === 0 && " · team total"}
+                        </span>
+                      )}
+                    </div>
                   )}
-                  {r.is_late && (
-                    <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-0.5 shrink-0">
-                      Late
-                    </span>
+
+                  {event.is_organizer && r.user_id !== userId && (
+                    <div className="pl-8">
+                      <OrganizerRoleButton
+                        cleanupId={event.id}
+                        organizerUserId={userId!}
+                        targetUserId={r.user_id}
+                        isOrganizer={r.is_organizer}
+                        onChanged={refresh}
+                        onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to update organizer"))}
+                      />
+                    </div>
                   )}
-                </div>
-                {r.checked_in_at ? (
-                  <span className="text-xs text-emerald-400 shrink-0">✓ checked in</span>
-                ) : event.is_organizer ? (
-                  <OrganizerLogButton
-                    cleanupId={event.id}
-                    organizerUserId={userId!}
-                    attendeeUserId={r.user_id}
-                    attendeeName={r.display_name ?? r.username ?? "attendee"}
-                    onLogged={refresh}
-                  />
-                ) : null}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -535,15 +594,22 @@ function OrganizerLogButton({
   onLogged: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const [smallBags, setSmallBags] = useState("1");
-  const [largeBags, setLargeBags] = useState("0");
+  const [smallBags, setSmallBags] = useState("");
+  const [largeBags, setLargeBags] = useState("");
+  const [pounds, setPounds] = useState("");
+  const [scoringMethod, setScoringMethod] = useState<"bags" | "pounds">("bags");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const bagPoints = (Number(smallBags) || 0) * SMALL_BAG_VALUE + (Number(largeBags) || 0) * LARGE_BAG_VALUE;
+  const poundPoints = (Number(pounds) || 0) * POUND_VALUE;
+  const hasNegative = (Number(smallBags) || 0) < 0 || (Number(largeBags) || 0) < 0 || (Number(pounds) || 0) < 0;
 
   const submit = async () => {
     const small = Number(smallBags) || 0;
     const large = Number(largeBags) || 0;
-    if (small + large <= 0) return;
+    const lbs = Number(pounds) || 0;
+    if (hasNegative || small + large + lbs <= 0) return;
     setLoading(true);
     setError(null);
     try {
@@ -551,8 +617,10 @@ function OrganizerLogButton({
         cleanupId,
         organizerUserId,
         attendeeUserId,
-        smallBags: small,
-        largeBags: large,
+        smallBags: small || undefined,
+        largeBags: large || undefined,
+        pounds: lbs || undefined,
+        scoringMethod,
       });
       await onLogged();
       setOpen(false);
@@ -581,11 +649,13 @@ function OrganizerLogButton({
         onClick={(e) => e.stopPropagation()}
       >
         <h4 className="text-sm font-semibold text-zinc-100 mb-3">Log contribution for {attendeeName}</h4>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-0 mb-3">
+        <div className="grid grid-cols-3 gap-x-3 gap-y-0 mb-3">
           <label className="text-[11px] text-zinc-600">Small bags</label>
           <label className="text-[11px] text-zinc-600">Large bags</label>
-          <p className="text-[11px] text-zinc-700 mb-1">(about a grocery bag)</p>
-          <p className="text-[11px] text-zinc-700 mb-1">(about a kitchen trash bag)</p>
+          <label className="text-[11px] text-zinc-600">Pounds</label>
+          <p className="text-[11px] text-zinc-700 mb-1">(grocery bag)</p>
+          <p className="text-[11px] text-zinc-700 mb-1">(kitchen trash bag)</p>
+          <p className="text-[11px] text-zinc-700 mb-1">(if weighed)</p>
           <input
             type="number"
             min={0}
@@ -600,12 +670,55 @@ function OrganizerLogButton({
             onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
             className={inputCls}
           />
+          <input
+            type="number"
+            min={0}
+            value={pounds}
+            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
+            className={inputCls}
+          />
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 mb-3">
+          <p className="text-[11px] text-zinc-600">
+            Bags and pounds are two ways of estimating the same haul — pick which one determines points.
+            Both are still saved for the event&apos;s record.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setScoringMethod("bags")}
+              className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+                scoringMethod === "bags"
+                  ? "border-emerald-600 bg-emerald-900/20"
+                  : "border-zinc-800 hover:border-zinc-600"
+              }`}
+            >
+              <p className="text-xs font-semibold text-zinc-200">By bags</p>
+              <p className="text-[10px] text-zinc-500">
+                {smallBags || 0}×{SMALL_BAG_VALUE} + {largeBags || 0}×{LARGE_BAG_VALUE}
+              </p>
+              <p className="text-sm font-bold text-emerald-400 mt-0.5">{bagPoints.toLocaleString()} pts</p>
+            </button>
+            <button
+              onClick={() => setScoringMethod("pounds")}
+              className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+                scoringMethod === "pounds"
+                  ? "border-emerald-600 bg-emerald-900/20"
+                  : "border-zinc-800 hover:border-zinc-600"
+              }`}
+            >
+              <p className="text-xs font-semibold text-zinc-200">By pounds</p>
+              <p className="text-[10px] text-zinc-500">
+                {pounds || 0}×{POUND_VALUE}
+              </p>
+              <p className="text-sm font-bold text-emerald-400 mt-0.5">{poundPoints.toLocaleString()} pts</p>
+            </button>
+          </div>
         </div>
         {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
         <div className="flex items-center gap-2">
           <button
             onClick={submit}
-            disabled={loading}
+            disabled={loading || hasNegative}
             className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
           >
             {loading ? "Logging…" : "Log contribution"}
@@ -619,5 +732,432 @@ function OrganizerLogButton({
         </div>
       </div>
     </div>
+  );
+}
+
+// Mirrors backend/app/services/contribution_scoring.py — keep these in sync.
+const SMALL_BAG_VALUE = 1;
+const LARGE_BAG_VALUE = 3;
+const POUND_VALUE = 0.5;
+
+// Points are awarded in whole/half increments server-side — mirror that here so the
+// preview matches what actually gets recorded.
+function roundHalf(n: number): number {
+  return Math.round(n * 2) / 2;
+}
+
+function LogTeamTotalForm({
+  cleanupId,
+  organizerUserId,
+  rsvps,
+  onLogged,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  rsvps: CleanupEventDetailData["rsvps"];
+  onLogged: () => Promise<void>;
+}) {
+  const [smallBags, setSmallBags] = useState("");
+  const [largeBags, setLargeBags] = useState("");
+  const [pounds, setPounds] = useState("");
+  const [pool, setPool] = useState<"checked_in" | "going">("checked_in");
+  const [scoringMethod, setScoringMethod] = useState<"bags" | "pounds">("bags");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [overrideListOpen, setOverrideListOpen] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [applyAllValue, setApplyAllValue] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [logs, setLogs] = useState<TeamTotalLogEntry[]>([]);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [warningOpen, setWarningOpen] = useState(false);
+  const [emptyPoolOpen, setEmptyPoolOpen] = useState(false);
+
+  const loadLogs = async () => {
+    try {
+      setLogs(await getTeamTotalLogs(cleanupId));
+    } catch {
+      // Non-critical — history is a nice-to-have, don't block the form on it.
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount, no external system to subscribe to instead
+    loadLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleanupId]);
+
+  // Mirrors the backend pool query (contribution_id IS NULL) so the preview count and
+  // override list match who will actually be credited, not just who's going/checked in.
+  const candidates = rsvps.filter(
+    (r) => r.status === "going" && (pool === "going" || r.checked_in_at) && r.points === 0
+  );
+
+  const bagPoints = (Number(smallBags) || 0) * SMALL_BAG_VALUE + (Number(largeBags) || 0) * LARGE_BAG_VALUE;
+  const poundPoints = (Number(pounds) || 0) * POUND_VALUE;
+  const totalPoints = scoringMethod === "pounds" ? poundPoints : bagPoints;
+  const perAttendee = candidates.length > 0 ? roundHalf(totalPoints / candidates.length) : 0;
+  const hasNegative =
+    (Number(smallBags) || 0) < 0 ||
+    (Number(largeBags) || 0) < 0 ||
+    (Number(pounds) || 0) < 0 ||
+    Object.values(overrides).some((v) => v.trim() !== "" && (Number(v) || 0) < 0);
+
+  const applyToAll = () => {
+    if (applyAllValue.trim() === "") return;
+    setOverrides(Object.fromEntries(candidates.map((r) => [r.user_id, applyAllValue])));
+  };
+
+  const clearAll = () => {
+    setOverrides({});
+    setApplyAllValue("");
+  };
+
+  const submit = async () => {
+    const small = Number(smallBags) || 0;
+    const large = Number(largeBags) || 0;
+    const lbs = Number(pounds) || 0;
+    if (hasNegative || small + large + lbs <= 0) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const overridesPayload: Record<string, number> = {};
+      for (const [userId, val] of Object.entries(overrides)) {
+        const num = Number(val);
+        if (val.trim() !== "" && !Number.isNaN(num)) overridesPayload[userId] = num;
+      }
+      const res = await logTeamTotal({
+        cleanupId,
+        organizerUserId,
+        smallBags: small || undefined,
+        largeBags: large || undefined,
+        pounds: lbs || undefined,
+        attendeePool: pool,
+        scoringMethod,
+        overrides: Object.keys(overridesPayload).length ? overridesPayload : undefined,
+      });
+      await onLogged();
+      await loadLogs();
+      setSmallBags("");
+      setLargeBags("");
+      setPounds("");
+      setOverrides({});
+      setResult(`Credited ${res.credited_count} attendee${res.credited_count === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to log team total"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border border-zinc-800 rounded-xl p-4 space-y-3">
+      <div>
+        <p className="text-sm font-semibold text-zinc-300">Log team total</p>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          Enter the whole event&apos;s haul and split credit equally across eligible attendees.
+        </p>
+      </div>
+      <button
+        onClick={() => setWarningOpen((v) => !v)}
+        className="w-full text-left text-[11px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2 hover:bg-amber-500/15 transition-colors"
+      >
+        {warningOpen ? (
+          <>
+            Each submission only splits credit among attendees who don&apos;t already have a contribution
+            for this event: anyone already credited is skipped, whether they logged their own
+            contribution, an organizer logged one for them individually via &quot;Log for them&quot;, or
+            they were credited by an earlier team total (see the log history below). Running this again
+            does <span className="font-semibold">not</span> re-split a combined total across everyone;
+            enter only the <span className="font-semibold">new</span> amount collected since the last
+            submission.{" "}
+            <span className="underline">Show less</span>
+          </>
+        ) : (
+          <>
+            Re-running this only credits new attendees, it won&apos;t re-split a combined total.{" "}
+            <span className="underline">Read more</span>
+          </>
+        )}
+      </button>
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="text-[11px] text-zinc-600">Small bags</label>
+          <input
+            type="number"
+            min={0}
+            value={smallBags}
+            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className="text-[11px] text-zinc-600">Large bags</label>
+          <input
+            type="number"
+            min={0}
+            value={largeBags}
+            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className="text-[11px] text-zinc-600">Pounds</label>
+          <input
+            type="number"
+            min={0}
+            value={pounds}
+            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
+            className={inputCls}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-zinc-600">Split among</span>
+        {(["checked_in", "going"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPool(p)}
+            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+              pool === p
+                ? "bg-emerald-700 border-emerald-700 text-white"
+                : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
+            }`}
+          >
+            {p === "checked_in" ? "Checked in" : "Everyone going"}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
+        <p className="text-[11px] text-zinc-600">
+          Bags and pounds are two ways of estimating the same haul — pick which one determines points for
+          this submission. Both are still saved for the event&apos;s record.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setScoringMethod("bags")}
+            className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+              scoringMethod === "bags"
+                ? "border-emerald-600 bg-emerald-900/20"
+                : "border-zinc-800 hover:border-zinc-600"
+            }`}
+          >
+            <p className="text-xs font-semibold text-zinc-200">By bags</p>
+            <p className="text-[10px] text-zinc-500">
+              {smallBags || 0}×{SMALL_BAG_VALUE} + {largeBags || 0}×{LARGE_BAG_VALUE}
+            </p>
+            <p className="text-sm font-bold text-emerald-400 mt-0.5">{bagPoints.toLocaleString()} pts</p>
+          </button>
+          <button
+            onClick={() => setScoringMethod("pounds")}
+            className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+              scoringMethod === "pounds"
+                ? "border-emerald-600 bg-emerald-900/20"
+                : "border-zinc-800 hover:border-zinc-600"
+            }`}
+          >
+            <p className="text-xs font-semibold text-zinc-200">By pounds</p>
+            <p className="text-[10px] text-zinc-500">
+              {pounds || 0}×{POUND_VALUE}
+            </p>
+            <p className="text-sm font-bold text-emerald-400 mt-0.5">{poundPoints.toLocaleString()} pts</p>
+          </button>
+        </div>
+        <p className="text-xs text-zinc-400">
+          Total: <span className="font-semibold text-zinc-100">{totalPoints.toLocaleString()} pts</span>
+          {candidates.length > 0 && (
+            <>
+              {" "}
+              · ~<span className="font-semibold text-zinc-100">{perAttendee.toLocaleString(undefined, { maximumFractionDigits: 1 })} pts</span> each across {candidates.length} attendee{candidates.length === 1 ? "" : "s"}
+            </>
+          )}
+        </p>
+        {candidates.length === 0 && (
+          <button
+            onClick={() => setEmptyPoolOpen((v) => !v)}
+            className="w-full text-left text-xs text-amber-400/90"
+          >
+            {emptyPoolOpen ? (
+              <>
+                No eligible attendees in the {pool === "checked_in" ? "checked-in" : "everyone going"} pool:
+                everyone in it already has a contribution for this event. Submitting won&apos;t credit
+                anyone. <span className="underline">Show less</span>
+              </>
+            ) : (
+              <>
+                No eligible attendees right now. <span className="underline">Read more</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div>
+        <button
+          onClick={() => setLogsOpen((v) => !v)}
+          className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          {logsOpen ? "Hide" : "Show"} log history{logs.length > 0 ? ` (${logs.length})` : ""}
+        </button>
+        {logsOpen &&
+          (logs.length === 0 ? (
+            <p className="text-xs text-zinc-600 mt-1.5">No team totals logged yet.</p>
+          ) : (
+            <div className="mt-1.5 space-y-1.5">
+              {logs.map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-center justify-between gap-2 text-xs border border-zinc-800 rounded-lg px-2.5 py-1.5"
+                >
+                  <div>
+                    <span className="text-zinc-300">
+                      {log.small_bags ?? 0} small, {log.large_bags ?? 0} large
+                      {log.pounds ? `, ${log.pounds} lbs` : ""}
+                    </span>
+                    <span className="text-zinc-600"> · </span>
+                    <span className="text-zinc-500">
+                      by {log.scoring_method === "pounds" ? "pounds" : "bags"}
+                    </span>
+                    <span className="text-zinc-600"> · </span>
+                    <span className="text-emerald-400">{log.total_value.toLocaleString()} pts</span>
+                    <span className="text-zinc-600"> · </span>
+                    <span className="text-zinc-500">
+                      credited {log.credited_count} attendee{log.credited_count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="text-zinc-600 text-right shrink-0">
+                    <div>{log.organizer_name}</div>
+                    <div>{new Date(log.created_at).toLocaleString()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+      </div>
+
+      <button
+        onClick={() => setAdvancedOpen((v) => !v)}
+        className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors"
+      >
+        {advancedOpen ? "Hide advanced options" : "Advanced options"}
+      </button>
+      {advancedOpen && (
+        <div className="border-t border-zinc-800 pt-2 space-y-2">
+          <p className="text-[11px] text-zinc-600">
+            Override individual point values instead of an equal split. Leave blank for an equal share.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              placeholder={`e.g. ${perAttendee}`}
+              value={applyAllValue}
+              onChange={(e) => setApplyAllValue(e.target.value)}
+              className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-zinc-100 text-xs focus:outline-none focus:border-zinc-500"
+            />
+            <button
+              onClick={applyToAll}
+              disabled={applyAllValue.trim() === ""}
+              className="text-xs text-sky-400 hover:text-sky-300 disabled:opacity-40 disabled:hover:text-sky-400 transition-colors"
+            >
+              Apply to all
+            </button>
+            <button onClick={clearAll} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+              Clear (use auto split)
+            </button>
+          </div>
+
+          <button
+            onClick={() => setOverrideListOpen((v) => !v)}
+            className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors"
+          >
+            {overrideListOpen
+              ? "Hide individual values"
+              : `Show individual values (${candidates.length} attendee${candidates.length === 1 ? "" : "s"})`}
+          </button>
+
+          {overrideListOpen &&
+            (candidates.length === 0 ? (
+              <p className="text-xs text-zinc-600">No eligible attendees for the selected pool.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {candidates.map((r) => (
+                  <div key={r.user_id} className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-zinc-400">
+                      {r.display_name ?? r.username ?? "Unknown"}
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder={String(perAttendee)}
+                      value={overrides[r.user_id] ?? ""}
+                      onChange={(e) => setOverrides((prev) => ({ ...prev, [r.user_id]: e.target.value }))}
+                      className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-zinc-100 text-xs focus:outline-none focus:border-zinc-500"
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+        </div>
+      )}
+
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {result && <p className="text-emerald-400 text-xs">{result}</p>}
+
+      <button
+        onClick={submit}
+        disabled={loading || hasNegative}
+        className="w-full mt-3 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+      >
+        {loading ? "Logging…" : "Log team total"}
+      </button>
+    </div>
+  );
+}
+
+function OrganizerRoleButton({
+  cleanupId,
+  organizerUserId,
+  targetUserId,
+  isOrganizer,
+  onChanged,
+  onError,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  targetUserId: string;
+  isOrganizer: boolean;
+  onChanged: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    setLoading(true);
+    try {
+      if (isOrganizer) {
+        await demoteOrganizer({ cleanupId, organizerUserId, targetUserId });
+      } else {
+        await promoteOrganizer({ cleanupId, organizerUserId, targetUserId });
+      }
+      await onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update organizer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={loading}
+      className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0 disabled:opacity-40"
+    >
+      {loading ? "…" : isOrganizer ? "Remove organizer" : "Make organizer"}
+    </button>
   );
 }
