@@ -106,7 +106,7 @@ export function CampaignStatBar({
         </>
       ) : (
         <>
-          <StatBarItem label="Tracts claimed" value={tractsCount} />
+          <StatBarItem label="Territories claimed" value={tractsCount} />
           <StatBarItem label="Bags collected" value={displayStatValue(totalBags)} />
           <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
         </>
@@ -353,7 +353,7 @@ function StatsPanel({
 }) {
   const totalValue = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const claimedLabel =
-    campaignType === "territory" ? "Tracts claimed" :
+    campaignType === "territory" ? "Territories claimed" :
     campaignType === "choropleth" ? "States claimed" :
     campaignType === "hex_bloom" ? "Hexes claimed" :
     "Areas claimed";

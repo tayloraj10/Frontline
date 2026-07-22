@@ -1538,13 +1538,17 @@ export default function CampaignMap({
       const src = map.current.getSource("cleanup-routes") as maplibregl.GeoJSONSource | undefined;
       const bufferSrc = map.current.getSource("cleanup-routes-buffer") as maplibregl.GeoJSONSource | undefined;
       if (!src || !bufferSrc) return;
-      const eventIds = new Set(events.map((e) => e.id));
+      const eventById = new Map(events.map((e) => [e.id, e]));
       src.setData({
         type: "FeatureCollection",
         features: routes.map((r) => ({
           type: "Feature",
           geometry: r.route,
-          properties: { id: r.id, is_event: eventIds.has(r.id) },
+          properties: {
+            id: r.id,
+            is_event: eventById.has(r.id),
+            is_past: eventById.get(r.id)?.is_past ?? false,
+          },
         })),
       });
       // Server-computed geodesic buffer (ST_Buffer) around event-linked routes only,
@@ -1625,12 +1629,15 @@ export default function CampaignMap({
 
         const el = document.createElement("div");
         const size = 20;
+        const isPast = event?.is_past ?? false;
         el.style.cssText =
-          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
+          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:${isPast ? 5 : 6};` +
           "display:flex;align-items:center;justify-content:center;" +
-          (event
-            ? "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);background:rgba(12,74,110,0.9)"
-            : "border:2px solid #f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.6),0 1px 4px rgba(0,0,0,0.6);background:rgba(69,26,3,0.9)");
+          (isPast
+            ? "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);background:rgba(63,63,70,0.9)"
+            : event
+              ? "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);background:rgba(12,74,110,0.9)"
+              : "border:2px solid #f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.6),0 1px 4px rgba(0,0,0,0.6);background:rgba(69,26,3,0.9)");
 
         const logoUrl = r.group_logo_url ?? event?.group_logo_url ?? null;
         if (logoUrl) {
@@ -1650,7 +1657,7 @@ export default function CampaignMap({
             "</svg>";
           el.style.color = event ? "#7dd3fc" : "#fcd34d";
         }
-        el.title = event ? `${event.title} — ${event.group_name}` : "View this cleanup route";
+        el.title = event ? `${event.title} — ${event.group_name}${isPast ? " (ended)" : ""}` : "View this cleanup route";
 
         const marker = new maplibregl.Marker({ element: el }).setLngLat(mid).addTo(map.current!);
         el.onclick = (e) => {
@@ -2368,7 +2375,7 @@ export default function CampaignMap({
       paint: {
         "line-color": "#ffffff",
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 8],
-        "line-opacity": 0.9,
+        "line-opacity": ["case", ["get", "is_past"], 0.45, 0.9],
       },
     });
     m.addLayer({
@@ -2380,9 +2387,12 @@ export default function CampaignMap({
         // Group-event (pre-planned) routes render blue, matching the event marker
         // palette; individual/group ad-hoc routes render amber — a genuinely
         // different hue (not another blue/cyan shade) so the two categories are
-        // tellable apart at a glance.
-        "line-color": ["case", ["get", "is_event"], "#0284c7", "#f59e0b"],
+        // tellable apart at a glance. A past event's route greys out, mirroring
+        // the point-marker treatment for a past event (is_past never true for
+        // ad-hoc, non-event routes, which don't expire).
+        "line-color": ["case", ["get", "is_past"], "#71717a", ["get", "is_event"], "#0284c7", "#f59e0b"],
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 5],
+        "line-opacity": ["case", ["get", "is_past"], 0.55, 1],
       },
     });
     m.addLayer({
@@ -2404,6 +2414,7 @@ export default function CampaignMap({
         "text-color": ["case", ["get", "is_event"], "#0c4a6e", "#78350f"],
         "text-halo-color": "#ecfeff",
         "text-halo-width": 1,
+        "text-opacity": ["case", ["get", "is_past"], 0.5, 1],
       },
     });
 
