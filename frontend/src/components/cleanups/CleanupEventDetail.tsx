@@ -253,7 +253,7 @@ export default function CleanupEventDetail({
         </div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100 leading-tight truncate">{event.title}</h1>
+            <h1 className="text-2xl font-black text-zinc-100 leading-tight break-words">{event.title}</h1>
             <span
               title="This feature should work but is still being tested."
               className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 shrink-0 cursor-help"

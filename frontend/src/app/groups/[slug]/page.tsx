@@ -179,7 +179,7 @@ export default async function GroupProfilePage({ params }: Props) {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm text-zinc-200 truncate">{e.title}</p>
+                      <p className="text-sm text-zinc-200 break-words">{e.title}</p>
                       <p className="text-xs text-zinc-500">
                         {formatEventDate(e.scheduled_start)}
                         {e.max_attendees ? ` · ${e.going_count}/${e.max_attendees} going` : e.going_count > 0 ? ` · ${e.going_count} going` : ""}
@@ -231,7 +231,7 @@ export default async function GroupProfilePage({ params }: Props) {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm text-zinc-300 truncate">{e.title}</p>
+                        <p className="text-sm text-zinc-300 break-words">{e.title}</p>
                         <p className="text-xs text-zinc-500">
                           {formatEventDate(e.scheduled_start)} · {e.going_count} RSVP&apos;d
                         </p>
