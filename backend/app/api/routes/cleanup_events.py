@@ -6,7 +6,7 @@ from uuid import UUID
 
 import h3
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +71,12 @@ class CreateCleanupEventRequest(BaseModel):
         if not isinstance(coords, list) or len(coords) < 2:
             raise ValueError("route must have at least 2 coordinates")
         return v
+
+    @model_validator(mode="after")
+    def _end_after_start(self) -> "CreateCleanupEventRequest":
+        if self.scheduled_end is not None and self.scheduled_end <= self.scheduled_start:
+            raise ValueError("The event's end time can't be before its start time.")
+        return self
 
 
 class PatchCleanupEventRequest(BaseModel):
@@ -625,6 +631,11 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can edit this event")
+
+    effective_start = payload.scheduled_start or event.scheduled_start
+    effective_end = payload.scheduled_end or event.scheduled_end
+    if effective_end is not None and effective_start is not None and effective_end <= effective_start:
+        raise HTTPException(status_code=400, detail="The event's end time can't be before its start time.")
 
     has_new_location = payload.latitude is not None and payload.longitude is not None
     geo_unit_id = event.geo_unit_id

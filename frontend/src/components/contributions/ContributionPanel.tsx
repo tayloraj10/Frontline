@@ -36,6 +36,20 @@ function cleanupValue(smallBags: number, largeBags: number): number {
   return smallBags * SMALL_BAG_VALUE + largeBags * LARGE_BAG_VALUE;
 }
 
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  try {
+    const parsed = JSON.parse(err.message);
+    if (parsed && typeof parsed.detail === "string") return parsed.detail;
+    if (Array.isArray(parsed?.detail) && typeof parsed.detail[0]?.msg === "string") {
+      return parsed.detail[0].msg.replace(/^Value error,\s*/, "");
+    }
+  } catch {
+    // not JSON, fall through to generic fallback
+  }
+  return fallback;
+}
+
 const MAP_STYLES = [
   { id: "outdoor", label: "Terrain" },
   { id: "streets", label: "Streets" },
@@ -2315,10 +2329,15 @@ function HostEventModal({
   const submitCoords = routeStart
     ? { latitude: routeStart[1], longitude: routeStart[0] }
     : overrideCoords ?? addressCoords ?? gps.coords;
-  const canSubmit = !!groupId && !!title.trim() && !!scheduledStart && !!submitCoords;
+  const endBeforeStart = !!scheduledEnd && !!scheduledStart && new Date(scheduledEnd) <= new Date(scheduledStart);
+  const canSubmit = !!groupId && !!title.trim() && !!scheduledStart && !!submitCoords && !endBeforeStart;
 
   const handleSubmit = async () => {
     if (!canSubmit || !submitCoords) return;
+    if (endBeforeStart) {
+      setError("End time can't be before the start time — pick a later time.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -2340,8 +2359,8 @@ function HostEventModal({
       setCreated(result);
       if (route) onRouteAdded?.({ id: result.id, route });
       router.refresh();
-    } catch {
-      setError("Couldn't create the event. Please try again.");
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't create the event. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -2429,11 +2448,18 @@ function HostEventModal({
           <input
             type="datetime-local"
             value={scheduledEnd}
+            min={scheduledStart || undefined}
             onChange={(e) => setScheduledEnd(e.target.value)}
+            aria-invalid={endBeforeStart}
             className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
           />
           {!scheduledEnd && (
             <p className="mt-1 text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
+          )}
+          {endBeforeStart && (
+            <p className="mt-1 text-[11px] text-red-400">
+              That end time is before the start time ({new Date(scheduledStart).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}). Pick an end time after the start.
+            </p>
           )}
         </div>
 
