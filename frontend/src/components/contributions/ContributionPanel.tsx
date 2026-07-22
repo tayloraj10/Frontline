@@ -786,6 +786,7 @@ function ContributeModal({
     if (isRouteMode) {
       if (!route || !selectedRouteGeoUnitId) return false;
     } else if ((isCleanup || isPhoto) && !submitCoords) return false;
+    if (isCleanup && (smallBagsNum < 0 || largeBagsNum < 0 || Number(pounds || 0) < 0)) return false;
     if (isCleanup && smallBagsNum + largeBagsNum <= 0) return false;
     if (isPhoto && photos.length === 0) return false;
     if (isCivicAction && !selectedAction) return false;

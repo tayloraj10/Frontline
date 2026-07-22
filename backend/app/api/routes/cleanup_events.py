@@ -1,6 +1,7 @@
 import json
 import secrets
 from datetime import datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 import h3
@@ -10,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.services.contribution_scoring import record_contribution
+from app.services.contribution_scoring import LARGE_BAG_VALUE, POUND_VALUE, SMALL_BAG_VALUE, record_contribution
 
 router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
 
@@ -137,13 +138,39 @@ class LogForAttendeeRequest(BaseModel):
     small_bags: int | None = None
     large_bags: int | None = None
     pounds: float | None = None
+    scoring_method: Literal["bags", "pounds"] = "bags"
     photo_urls: list[str] | None = None
 
-    @field_validator("small_bags", "large_bags")
+    @field_validator("small_bags", "large_bags", "pounds")
     @classmethod
-    def _non_negative(cls, v: int | None) -> int | None:
+    def _non_negative(cls, v: float | None) -> float | None:
         if v is not None and v < 0:
             raise ValueError("must be non-negative")
+        return v
+
+
+class LogTeamTotalRequest(BaseModel):
+    organizer_user_id: UUID
+    small_bags: int | None = None
+    large_bags: int | None = None
+    pounds: float | None = None
+    photo_urls: list[str] | None = None
+    attendee_pool: Literal["checked_in", "going"] = "checked_in"
+    scoring_method: Literal["bags", "pounds"] = "bags"
+    overrides: dict[UUID, float] | None = None
+
+    @field_validator("small_bags", "large_bags", "pounds")
+    @classmethod
+    def _non_negative(cls, v: float | None) -> float | None:
+        if v is not None and v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
+    @field_validator("overrides")
+    @classmethod
+    def _overrides_non_negative(cls, v: dict[UUID, float] | None) -> dict[UUID, float] | None:
+        if v is not None and any(share < 0 for share in v.values()):
+            raise ValueError("override values must be non-negative")
         return v
 
 
@@ -359,6 +386,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             SELECT c.id, c.campaign_id, cam.slug AS campaign_slug, c.title, c.description,
                    c.scheduled_start, c.scheduled_end, c.status, c.image_urls, c.join_code,
                    c.max_attendees, c.external_link,
+                   c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    ST_AsGeoJSON(c.route)::json AS route,
                    ST_AsGeoJSON(ST_Buffer(c.route::geography, :radius))::json AS route_buffer,
@@ -397,7 +425,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
                    COALESCE(SUM(cl.metrics_large_bags), 0) AS large_bags,
                    COALESCE(SUM(cl.metrics_pounds), 0) AS pounds,
                    MAX(co.submitted_at) AS contributed_at,
-                   array_agg(cl.image_urls) FILTER (WHERE cl.image_urls IS NOT NULL) AS image_url_arrays
+                   array_agg(cl.image_urls) FILTER (WHERE cl.image_urls IS NOT NULL AND cardinality(cl.image_urls) > 0) AS image_url_arrays
             FROM contributions co
             JOIN cleanups cl ON cl.id = co.cleanup_id
             WHERE co.cleanup_event_id = :id
@@ -417,6 +445,22 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "contributed_at": r.contributed_at,
             "photos": photos,
         }
+
+    # Team-total credits have no dedicated cleanups row (cleanup_id is NULL, see
+    # log_team_total) so they never match the join above and show as 0/0/0 bags —
+    # honest, since we don't know their individual bag breakdown, but it reads as "no
+    # credit happened." Pull each attendee's total points directly from contributions so
+    # the UI can show something even when bags/pounds are all zero.
+    points_by_user_result = await db.execute(
+        text("""
+            SELECT user_id, SUM(value) AS points
+            FROM contributions
+            WHERE cleanup_event_id = :id
+            GROUP BY user_id
+        """),
+        {"id": str(cleanup_id)},
+    )
+    points_by_user = {str(r.user_id): float(r.points) for r in points_by_user_result.fetchall()}
 
     # A submission counts as "late" once it lands more than 24h after the event's
     # window closes — unrestricted (submissions are never blocked), just flagged.
@@ -441,6 +485,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "large_bags": user_bags["large_bags"],
             "pounds": user_bags["pounds"],
             "photos": user_bags["photos"],
+            "points": points_by_user.get(str(r.user_id), 0.0),
             "is_late": bool(contributed_at and late_cutoff and contributed_at > late_cutoff),
         }
         rsvps.append(entry)
@@ -449,9 +494,12 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
 
     going_count = sum(1 for r in rsvps if r["status"] == "going")
 
-    total_small_bags = sum(v["small_bags"] for v in bags_by_user.values())
-    total_large_bags = sum(v["large_bags"] for v in bags_by_user.values())
-    total_pounds = sum(v["pounds"] for v in bags_by_user.values())
+    # Includes the event's own metrics_* columns, which accumulate organizer-logged
+    # team totals (see log_team_total) that aren't attributed to any single attendee's
+    # contribution row and so wouldn't otherwise be reflected in the per-user sums.
+    total_small_bags = sum(v["small_bags"] for v in bags_by_user.values()) + (row.metrics_small_bags or 0)
+    total_large_bags = sum(v["large_bags"] for v in bags_by_user.values()) + (row.metrics_large_bags or 0)
+    total_pounds = sum(v["pounds"] for v in bags_by_user.values()) + float(row.metrics_pounds or 0)
 
     check_in_window_start = (
         row.scheduled_start - timedelta(minutes=CLEANUP_EVENT_GRACE_MINUTES_BEFORE)
@@ -729,11 +777,61 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
 async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db: AsyncSession = Depends(get_db)):
     """Organizer-logged contribution for an attendee who forgot to self-log. No score
     multiplier applies (see record_contribution's apply_multiplier=False), and
-    recorded_by_user_id preserves an audit trail of who logged it."""
+    recorded_by_user_id preserves an audit trail of who logged it.
+
+    Creates its own dedicated `cleanups` row for this attendee (mirroring the self-log
+    path in contributions.py) rather than reusing the event's own row as `cleanup_id` —
+    reusing the shared event row meant every attendee logged this way displayed the
+    event row's own (empty) metrics/photos instead of their own, and multiple attendees
+    sharing that one row's empty `image_urls` array crashed the RSVP-list query's
+    `array_agg` (Postgres can't accumulate multiple empty arrays)."""
     event = await _get_event_or_404(db, cleanup_id)
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can log a contribution for an attendee")
+
+    # Pounds and bags are two ways of estimating the same haul (see log-team-total) —
+    # both are always saved to the attendee's cleanups row below for the event's record,
+    # but only the organizer-selected scoring_method determines points, so switching
+    # methods in the UI doesn't silently drop the other field's value.
+    if payload.scoring_method == "pounds":
+        value = (payload.pounds or 0) * POUND_VALUE
+        small_bags = None
+        large_bags = None
+    else:
+        value = None
+        small_bags = payload.small_bags
+        large_bags = payload.large_bags
+
+    image_urls = payload.photo_urls or []
+    cleanup_result = await db.execute(
+        text("""
+            INSERT INTO cleanups
+                (campaign_id, geo_unit_id, location, status, image_urls,
+                 metrics_small_bags, metrics_large_bags, metrics_pounds,
+                 submitted_by_user_id, attended_user_ids)
+            VALUES
+                (:campaign_id, :geo_unit_id,
+                 CASE WHEN CAST(:lon AS double precision) IS NOT NULL AND CAST(:lat AS double precision) IS NOT NULL
+                      THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
+                      ELSE NULL END,
+                 'completed', :image_urls, :small_bags, :large_bags, :pounds,
+                 :attendee_user_id, ARRAY[:attendee_user_id]::uuid[])
+            RETURNING id
+        """),
+        {
+            "campaign_id": str(event.campaign_id),
+            "geo_unit_id": event.geo_unit_id,
+            "lon": event.longitude,
+            "lat": event.latitude,
+            "image_urls": image_urls,
+            "small_bags": payload.small_bags,
+            "large_bags": payload.large_bags,
+            "pounds": payload.pounds,
+            "attendee_user_id": str(payload.attendee_user_id),
+        },
+    )
+    attendee_cleanup_id = str(cleanup_result.scalar())
 
     recorded = await record_contribution(
         db,
@@ -741,11 +839,11 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
         campaign_id=event.campaign_id,
         group_id=event.group_id,
         geo_unit_id=event.geo_unit_id,
-        cleanup_id=str(cleanup_id),
+        cleanup_id=attendee_cleanup_id,
         contribution_type="cleanup",
-        value=None,
-        small_bags=payload.small_bags,
-        large_bags=payload.large_bags,
+        value=value,
+        small_bags=small_bags,
+        large_bags=large_bags,
         photo_url=payload.photo_urls[0] if payload.photo_urls else None,
         latitude=event.latitude,
         longitude=event.longitude,
@@ -753,6 +851,7 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
         recorded_by_user_id=payload.organizer_user_id,
         apply_multiplier=False,
         cleanup_event_id=str(cleanup_id),
+        allow_explicit_value=True,
     )
 
     await db.execute(
@@ -773,6 +872,158 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
     await db.commit()
 
     return {"contribution_id": recorded.contribution_id, "value": recorded.value}
+
+
+@router.post("/{cleanup_id}/log-team-total")
+async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: AsyncSession = Depends(get_db)):
+    """Organizer-logged total for the whole event, split as individual credit across
+    attendees. Each attendee gets their own contribution row under their own user_id
+    (not one lump sum under the organizer), so territory credit lands on whoever
+    actually showed up. Re-runnable: only attendees without an existing contribution_id
+    are considered, so a later top-up call won't double-credit anyone already logged
+    (by this or any other logging path)."""
+    event = await _get_event_or_404(db, cleanup_id)
+
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can log a team total")
+
+    if payload.scoring_method == "pounds":
+        total_value = (payload.pounds or 0) * POUND_VALUE
+    else:
+        total_value = (payload.small_bags or 0) * SMALL_BAG_VALUE + (payload.large_bags or 0) * LARGE_BAG_VALUE
+
+    overrides = {str(k): v for k, v in (payload.overrides or {}).items()}
+    override_total = sum(overrides.values())
+    if override_total > total_value:
+        raise HTTPException(status_code=400, detail="Overrides can't exceed the event total")
+
+    pool_query = """
+        SELECT user_id FROM cleanup_rsvps
+        WHERE cleanup_id = :cleanup_id AND status = 'going' AND contribution_id IS NULL
+    """
+    if payload.attendee_pool == "checked_in":
+        pool_query += " AND checked_in_at IS NOT NULL"
+    pool_result = await db.execute(text(pool_query), {"cleanup_id": str(cleanup_id)})
+    pool = [str(r.user_id) for r in pool_result.fetchall()]
+
+    missing_overrides = set(overrides) - set(pool)
+    if missing_overrides:
+        raise HTTPException(status_code=400, detail=f"Not eligible attendees: {sorted(missing_overrides)}")
+
+    await db.execute(
+        text("""
+            UPDATE cleanups SET
+                metrics_small_bags = COALESCE(metrics_small_bags, 0) + :sb,
+                metrics_large_bags = COALESCE(metrics_large_bags, 0) + :lb,
+                metrics_pounds = COALESCE(metrics_pounds, 0) + :lbs
+            WHERE id = :id
+        """),
+        {
+            "id": str(cleanup_id),
+            "sb": payload.small_bags or 0,
+            "lb": payload.large_bags or 0,
+            "lbs": payload.pounds or 0,
+        },
+    )
+
+    remaining_pool = [u for u in pool if u not in overrides]
+    split_value = (total_value - override_total) / len(remaining_pool) if remaining_pool else 0
+    # Points are awarded in whole/half increments, not raw division remainders.
+    split_value = round(split_value * 2) / 2
+
+    for user_id in pool:
+        share = round(overrides.get(user_id, split_value) * 2) / 2
+        recorded = await record_contribution(
+            db,
+            user_id=user_id,
+            campaign_id=event.campaign_id,
+            group_id=event.group_id,
+            geo_unit_id=event.geo_unit_id,
+            cleanup_id=None,
+            contribution_type="cleanup",
+            value=share,
+            small_bags=None,
+            large_bags=None,
+            photo_url=payload.photo_urls[0] if payload.photo_urls else None,
+            latitude=event.latitude,
+            longitude=event.longitude,
+            location_verified=True,
+            recorded_by_user_id=payload.organizer_user_id,
+            apply_multiplier=False,
+            cleanup_event_id=str(cleanup_id),
+            allow_explicit_value=True,
+        )
+        await db.execute(
+            text("""
+                INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at, contribution_id)
+                VALUES (:cleanup_id, :user_id, 'going', NOW(), :contribution_id)
+                ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
+                    checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, EXCLUDED.checked_in_at),
+                    contribution_id = EXCLUDED.contribution_id,
+                    updated_at = NOW()
+            """),
+            {"cleanup_id": str(cleanup_id), "user_id": user_id, "contribution_id": recorded.contribution_id},
+        )
+
+    await db.execute(
+        text("""
+            INSERT INTO cleanup_team_total_logs
+                (cleanup_id, organizer_user_id, scoring_method, small_bags, large_bags, pounds,
+                 total_value, credited_count)
+            VALUES
+                (:cleanup_id, :organizer_user_id, :scoring_method, :small_bags, :large_bags, :pounds,
+                 :total_value, :credited_count)
+        """),
+        {
+            "cleanup_id": str(cleanup_id),
+            "organizer_user_id": str(payload.organizer_user_id),
+            "scoring_method": payload.scoring_method,
+            "small_bags": payload.small_bags,
+            "large_bags": payload.large_bags,
+            "pounds": payload.pounds,
+            "total_value": total_value,
+            "credited_count": len(pool),
+        },
+    )
+
+    await db.commit()
+
+    return {"credited_count": len(pool), "total_value": total_value, "per_attendee_value": split_value}
+
+
+@router.get("/{cleanup_id}/team-total-logs")
+async def get_team_total_logs(cleanup_id: UUID, db: AsyncSession = Depends(get_db)):
+    """History of every log-team-total submission for this event, newest first. Each entry
+    only credited attendees who didn't already have a contribution at the time (see
+    log_team_total's docstring) — this list makes that repeat-run behavior visible to
+    organizers instead of it being a silent surprise."""
+    result = await db.execute(
+        text("""
+            SELECT l.id, l.organizer_user_id, p.display_name AS organizer_display_name,
+                   p.username AS organizer_username, l.scoring_method, l.small_bags,
+                   l.large_bags, l.pounds, l.total_value, l.credited_count, l.created_at
+            FROM cleanup_team_total_logs l
+            LEFT JOIN profiles p ON p.id = l.organizer_user_id
+            WHERE l.cleanup_id = :cleanup_id
+            ORDER BY l.created_at DESC
+        """),
+        {"cleanup_id": str(cleanup_id)},
+    )
+    return [
+        {
+            "id": str(row.id),
+            "organizer_user_id": str(row.organizer_user_id) if row.organizer_user_id else None,
+            "organizer_name": row.organizer_display_name or row.organizer_username or "Unknown",
+            "scoring_method": row.scoring_method,
+            "small_bags": row.small_bags,
+            "large_bags": row.large_bags,
+            "pounds": float(row.pounds) if row.pounds is not None else None,
+            "total_value": float(row.total_value),
+            "credited_count": row.credited_count,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in result.fetchall()
+    ]
 
 
 @router.post("/{cleanup_id}/organizers")

@@ -104,7 +104,7 @@ class CleanupTestAttendeesSeeder(Seeder):
                         VALUES (:id, :cleanup_id, :uid, 'going')
                         ON CONFLICT (cleanup_id, user_id) DO NOTHING
                     """),
-                    {"id": _uid(f"rsvp_{u['key']}"), "cleanup_id": cleanup_id, "uid": uid},
+                    {"id": _uid(f"rsvp_{cleanup_id}_{u['key']}"), "cleanup_id": cleanup_id, "uid": uid},
                 )
                 result.inserted += 1
             except Exception as exc:

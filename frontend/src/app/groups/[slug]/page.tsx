@@ -69,7 +69,7 @@ export default async function GroupProfilePage({ params }: Props) {
         </Link>
       </div>
 
-      <div className="mt-6 mb-8 flex items-start justify-between gap-4">
+      <div className="mt-6 mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
           <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
             {group.image_url ? (
@@ -117,7 +117,7 @@ export default async function GroupProfilePage({ params }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {isAdmin && (
             <Link
               href={`/groups/${slug}/events/new`}

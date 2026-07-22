@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # ignored for cleanup contributions so a direct API call can't spoof points.
 SMALL_BAG_VALUE = 1
 LARGE_BAG_VALUE = 3
+POUND_VALUE = 0.5
 
 
 @dataclass
@@ -47,11 +48,20 @@ async def record_contribution(
     recorded_by_user_id: UUID | None = None,
     apply_multiplier: bool = True,
     challenge_multiplier: float = 1.0,
+    allow_explicit_value: bool = False,
 ) -> RecordedContribution:
     has_location = latitude is not None and longitude is not None
 
     if contribution_type == "cleanup":
-        effective_value = (small_bags or 0) * SMALL_BAG_VALUE + (large_bags or 0) * LARGE_BAG_VALUE
+        if small_bags is not None or large_bags is not None:
+            effective_value = (small_bags or 0) * SMALL_BAG_VALUE + (large_bags or 0) * LARGE_BAG_VALUE
+        elif allow_explicit_value:
+            # Only trusted internal callers (e.g. log-team-total's pre-computed split
+            # share) may set `value` directly for a cleanup contribution — user-facing
+            # endpoints never pass this, so a client can't spoof points via `value`.
+            effective_value = value or 0
+        else:
+            effective_value = 0
     else:
         effective_value = value or 1
 
