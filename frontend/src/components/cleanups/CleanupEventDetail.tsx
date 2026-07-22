@@ -222,7 +222,7 @@ export default function CleanupEventDetail({
         </div>
       )}
 
-      {event.route && (
+      {event.route ? (
         <RoutePreviewMap
           coordinates={event.route.coordinates}
           bufferCoordinates={event.route_buffer?.coordinates as [number, number][][] | undefined}
@@ -231,7 +231,25 @@ export default function CleanupEventDetail({
           interactive
           isEvent
         />
+      ) : (
+        <RoutePreviewMap
+          point={[event.lng, event.lat]}
+          pointRadiusMeters={event.check_in_radius_meters}
+          groupLogoUrl={event.group_logo_url}
+          enlargeable
+          interactive
+          isEvent
+        />
       )}
+      <a
+        href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+      >
+        <span aria-hidden="true">🧭</span>
+        Get directions
+      </a>
 
       <div>
         <div className="flex items-center gap-2 mb-1.5">

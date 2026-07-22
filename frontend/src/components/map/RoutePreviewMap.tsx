@@ -16,6 +16,25 @@ function styleUrl(id: string) {
   return `https://api.maptiler.com/maps/${id}/style.json?key=${MAPTILER_KEY}`;
 }
 
+const EARTH_RADIUS_METERS = 6371000;
+
+// Approximates a real-world-meter circle as a GeoJSON polygon so it scales correctly
+// with zoom (a DOM marker, by contrast, stays a fixed pixel size regardless of zoom).
+// Mirrors CampaignMap.tsx's circlePolygon so a point event's zone looks identical here.
+function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 48): [number, number][] {
+  const latRad = (lat * Math.PI) / 180;
+  const coords: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI;
+    const dx = radiusMeters * Math.cos(angle);
+    const dy = radiusMeters * Math.sin(angle);
+    const dLat = (dy / EARTH_RADIUS_METERS) * (180 / Math.PI);
+    const dLng = (dx / (EARTH_RADIUS_METERS * Math.cos(latRad))) * (180 / Math.PI);
+    coords.push([lng + dLng, lat + dLat]);
+  }
+  return coords;
+}
+
 function addRouteLayers(
   m: maplibregl.Map,
   coordinates: [number, number][],
@@ -97,6 +116,35 @@ function addRouteLayers(
   new maplibregl.Marker({ color: "#ef4444" }).setLngLat(coordinates[coordinates.length - 1]).addTo(m);
 }
 
+// Point-event equivalent of addRouteLayers: same buffer layer ids/styling (so the
+// style-switch and buffer-toggle logic works unchanged for both modes), but a circular
+// zone around a single point instead of a corridor around a route, and no route line —
+// the pin itself is rendered as a DOM overlay (logo or sweep-pin badge), not a layer.
+function addPointLayers(m: maplibregl.Map, point: [number, number], radiusMeters?: number) {
+  m.addSource("route-preview-buffer", {
+    type: "geojson",
+    data: radiusMeters
+      ? {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Polygon", coordinates: [circlePolygon(point[1], point[0], radiusMeters)] },
+      }
+      : { type: "FeatureCollection", features: [] },
+  });
+  m.addLayer({
+    id: "route-preview-buffer-fill",
+    type: "fill",
+    source: "route-preview-buffer",
+    paint: { "fill-color": "#38bdf8", "fill-opacity": 0.08 },
+  });
+  m.addLayer({
+    id: "route-preview-buffer-line",
+    type: "line",
+    source: "route-preview-buffer",
+    paint: { "line-color": "#38bdf8", "line-width": 1.5, "line-opacity": 0.65 },
+  });
+}
+
 // The logo badge is a fixed-center DOM overlay (not tied to a lnglat), so unlike a
 // MapLibre layer it never shrinks on its own as the map zooms out — without this it
 // stays full-size and swallows the whole (now visually smaller) route. Scale it down
@@ -107,6 +155,8 @@ const LOGO_SCALE_ZOOM_RANGE = 4; // zoom levels below baseline before hitting LO
 function RouteMap({
   coordinates,
   bufferCoordinates,
+  point,
+  pointRadiusMeters,
   activeMapStyle,
   onStyleChange,
   interactive,
@@ -120,6 +170,8 @@ function RouteMap({
 }: {
   coordinates: [number, number][];
   bufferCoordinates?: [number, number][][];
+  point?: [number, number];
+  pointRadiusMeters?: number;
   activeMapStyle: (typeof MAP_STYLES)[number]["id"];
   onStyleChange?: (id: (typeof MAP_STYLES)[number]["id"]) => void;
   interactive: boolean;
@@ -131,6 +183,7 @@ function RouteMap({
   logoOffset: { x: number; y: number };
   onLogoOffsetChange: (offset: { x: number; y: number }) => void;
 }) {
+  const isPointMode = !!point;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const mapReadyRef = useRef(false);
@@ -160,20 +213,31 @@ function RouteMap({
   };
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current || coordinates.length < 2) return;
-    const bounds = coordinates.reduce(
-      (b, c) => b.extend(c as [number, number]),
-      new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
-    );
+    if (!containerRef.current || mapRef.current) return;
+    if (!isPointMode && coordinates.length < 2) return;
 
-    const m = new maplibregl.Map({
-      container: containerRef.current,
-      style: styleUrl(activeMapStyle),
-      interactive,
-      attributionControl: false,
-      bounds,
-      fitBoundsOptions: { padding: 30 },
-    });
+    const m = new maplibregl.Map(
+      isPointMode
+        ? {
+          container: containerRef.current,
+          style: styleUrl(activeMapStyle),
+          interactive,
+          attributionControl: false,
+          center: point,
+          zoom: 15,
+        }
+        : {
+          container: containerRef.current,
+          style: styleUrl(activeMapStyle),
+          interactive,
+          attributionControl: false,
+          bounds: coordinates.reduce(
+            (b, c) => b.extend(c as [number, number]),
+            new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
+          ),
+          fitBoundsOptions: { padding: 30 },
+        },
+    );
     mapRef.current = m;
     if (interactive) m.addControl(new maplibregl.NavigationControl(), "top-right");
 
@@ -186,7 +250,11 @@ function RouteMap({
     };
 
     m.on("load", () => {
-      addRouteLayers(m, coordinates, isEvent, bufferCoordinates);
+      if (isPointMode) {
+        addPointLayers(m, point!, pointRadiusMeters);
+      } else {
+        addRouteLayers(m, coordinates, isEvent, bufferCoordinates);
+      }
       applyBufferVisibility(m, showBuffer);
       updateLogoScale();
       mapReadyRef.current = true;
@@ -200,12 +268,16 @@ function RouteMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Style switcher — setStyle wipes sources/layers; re-add the route on style.load
+  // Style switcher — setStyle wipes sources/layers; re-add the route/point on style.load
   useEffect(() => {
     const m = mapRef.current;
     if (!m || !mapReadyRef.current) return;
     m.once("style.load", () => {
-      addRouteLayers(m, coordinates, isEvent, bufferCoordinates);
+      if (isPointMode) {
+        addPointLayers(m, point!, pointRadiusMeters);
+      } else {
+        addRouteLayers(m, coordinates, isEvent, bufferCoordinates);
+      }
       applyBufferVisibility(m, showBuffer);
     });
     m.setStyle(styleUrl(activeMapStyle));
@@ -223,32 +295,49 @@ function RouteMap({
   return (
     <div className={`relative w-full ${heightClassName}`}>
       <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden border border-zinc-700/50" />
-      {groupLogoUrl && (
-        <div
-          className="absolute top-1/2 left-1/2 touch-none"
-          style={{
-            transform: `translate(-50%, -50%) translate(${logoOffset.x}px, ${logoOffset.y}px)`,
-          }}
-        >
-          <div
-            ref={logoRef}
-            onPointerDown={handleLogoPointerDown}
-            onPointerMove={handleLogoPointerMove}
-            onPointerUp={handleLogoPointerUp}
-            className="transition-transform duration-150 ease-out cursor-grab active:cursor-grabbing"
-            style={{ transformOrigin: "center" }}
-          >
-            <div className="w-14 h-14 rounded-full bg-zinc-900/70 backdrop-blur-[1px] shadow-xl flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={groupLogoUrl}
-                alt=""
-                draggable={false}
-                className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-lg bg-zinc-900 pointer-events-none"
-              />
-            </div>
+      {isPointMode ? (
+        // The map is centered exactly on the point, so a screen-centered fixed badge
+        // (no drag) correctly represents the pin location — unlike the route logo below,
+        // this isn't decorative placement, it IS the marker. Matches CampaignMap's own
+        // cleanup-event pin styling (sky-blue glow badge, 🧹 fallback) for visual parity.
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+          <div className="w-9 h-9 rounded-full border-2 border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)] bg-sky-950/90 flex items-center justify-center overflow-hidden">
+            {groupLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={groupLogoUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-sm">🧹</span>
+            )}
           </div>
         </div>
+      ) : (
+        groupLogoUrl && (
+          <div
+            className="absolute top-1/2 left-1/2 touch-none"
+            style={{
+              transform: `translate(-50%, -50%) translate(${logoOffset.x}px, ${logoOffset.y}px)`,
+            }}
+          >
+            <div
+              ref={logoRef}
+              onPointerDown={handleLogoPointerDown}
+              onPointerMove={handleLogoPointerMove}
+              onPointerUp={handleLogoPointerUp}
+              className="transition-transform duration-150 ease-out cursor-grab active:cursor-grabbing"
+              style={{ transformOrigin: "center" }}
+            >
+              <div className="w-14 h-14 rounded-full bg-zinc-900/70 backdrop-blur-[1px] shadow-xl flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={groupLogoUrl}
+                  alt=""
+                  draggable={false}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-lg bg-zinc-900 pointer-events-none"
+                />
+              </div>
+            </div>
+          </div>
+        )
       )}
       {onStyleChange && (
         <div className="absolute top-2 left-2 flex flex-col gap-0.5 p-0.5 bg-zinc-900/90 border border-zinc-700/60 rounded-md backdrop-blur-sm shadow-lg">
@@ -269,7 +358,7 @@ function RouteMap({
           ))}
         </div>
       )}
-      {onToggleBuffer && bufferCoordinates && (
+      {onToggleBuffer && (isPointMode ? pointRadiusMeters : bufferCoordinates) && (
         <button
           type="button"
           onClick={onToggleBuffer}
@@ -285,6 +374,8 @@ function RouteMap({
 export default function RoutePreviewMap({
   coordinates,
   bufferCoordinates,
+  point,
+  pointRadiusMeters,
   styleId = "outdoor",
   interactive = false,
   heightClassName = "h-[220px]",
@@ -292,8 +383,10 @@ export default function RoutePreviewMap({
   enlargeable = false,
   isEvent = false,
 }: {
-  coordinates: [number, number][];
+  coordinates?: [number, number][];
   bufferCoordinates?: [number, number][][];
+  point?: [number, number];
+  pointRadiusMeters?: number;
   styleId?: (typeof MAP_STYLES)[number]["id"];
   interactive?: boolean;
   heightClassName?: string;
@@ -309,8 +402,10 @@ export default function RoutePreviewMap({
   return (
     <div className="relative">
       <RouteMap
-        coordinates={coordinates}
+        coordinates={coordinates ?? []}
         bufferCoordinates={bufferCoordinates}
+        point={point}
+        pointRadiusMeters={pointRadiusMeters}
         activeMapStyle={activeMapStyle}
         onStyleChange={setActiveMapStyle}
         interactive={interactive}
@@ -344,8 +439,10 @@ export default function RoutePreviewMap({
           </button>
           <div className="w-full max-w-2xl">
             <RouteMap
-              coordinates={coordinates}
+              coordinates={coordinates ?? []}
               bufferCoordinates={bufferCoordinates}
+              point={point}
+              pointRadiusMeters={pointRadiusMeters}
               activeMapStyle={activeMapStyle}
               onStyleChange={setActiveMapStyle}
               interactive
