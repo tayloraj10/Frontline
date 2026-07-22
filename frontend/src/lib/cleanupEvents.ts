@@ -360,6 +360,37 @@ export async function promoteOrganizer({
   });
 }
 
+export async function uploadEventPhoto(file: File): Promise<string> {
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+  const res = await fetch(
+    `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}`
+  );
+  if (!res.ok) throw new Error("Failed to get upload URL");
+  const { upload_url, public_url } = await res.json();
+  const uploadRes = await fetch(upload_url, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": file.type },
+  });
+  if (!uploadRes.ok) throw new Error("Image upload failed");
+  return public_url;
+}
+
+export async function addEventPhotos({
+  cleanupId,
+  userId,
+  photoUrls,
+}: {
+  cleanupId: string;
+  userId: string;
+  photoUrls: string[];
+}): Promise<{ added: number }> {
+  return postJson(`/cleanup-events/${cleanupId}/photos`, {
+    user_id: userId,
+    photo_urls: photoUrls,
+  });
+}
+
 export async function demoteOrganizer({
   cleanupId,
   organizerUserId,
