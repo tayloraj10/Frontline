@@ -1119,6 +1119,68 @@ class FitExtentControl implements maplibregl.IControl {
   }
 }
 
+// Simplified inline SVG flags (16x11) for the zoom-to-region buttons below.
+// Flag *emoji* render as bare letters ("US"/"GB") or nothing on Windows —
+// Segoe UI Emoji doesn't ship colored flag glyphs — so an emoji icon isn't
+// reliable there. Drawing the flags as SVG sidesteps OS/browser font support
+// entirely.
+const US_FLAG_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="11" viewBox="0 0 16 11">` +
+  `<rect width="16" height="11" fill="#B22234"/>` +
+  `<g fill="#fff"><rect y="0.85" width="16" height="0.85"/><rect y="2.55" width="16" height="0.85"/>` +
+  `<rect y="4.25" width="16" height="0.85"/><rect y="5.95" width="16" height="0.85"/>` +
+  `<rect y="7.65" width="16" height="0.85"/><rect y="9.35" width="16" height="0.85"/></g>` +
+  `<rect width="6.4" height="5.95" fill="#3C3B6E"/>` +
+  `</svg>`;
+const UK_FLAG_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="11" viewBox="0 0 16 11">` +
+  `<rect width="16" height="11" fill="#00247D"/>` +
+  `<path d="M0 0 16 11M16 0 0 11" stroke="#fff" stroke-width="2.2"/>` +
+  `<path d="M0 0 16 11M16 0 0 11" stroke="#CF142B" stroke-width="0.9"/>` +
+  `<path d="M8 0V11M0 5.5H16" stroke="#fff" stroke-width="3.6"/>` +
+  `<path d="M8 0V11M0 5.5H16" stroke="#CF142B" stroke-width="1.6"/>` +
+  `</svg>`;
+
+// Zoom-to-region shortcut buttons (flag icon) — one control per region so
+// they can each be conditionally added/omitted per campaign type.
+class ZoomToRegionControl implements maplibregl.IControl {
+  private _map: maplibregl.Map | null = null;
+  private _container: HTMLDivElement | null = null;
+  private readonly _bounds: maplibregl.LngLatBoundsLike;
+  private readonly _flagSvg: string;
+  private readonly _label: string;
+
+  constructor(bounds: maplibregl.LngLatBoundsLike, flagSvg: string, label: string) {
+    this._bounds = bounds;
+    this._flagSvg = flagSvg;
+    this._label = label;
+  }
+
+  onAdd(map: maplibregl.Map): HTMLElement {
+    this._map = map;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = this._label;
+    btn.style.cssText =
+      "width:29px;height:29px;display:flex;align-items:center;justify-content:center;" +
+      "background:none;border:none;cursor:pointer;padding:0";
+    btn.innerHTML = this._flagSvg;
+    btn.onclick = () => {
+      this._map?.fitBounds(this._bounds, { padding: 40, duration: 800 });
+    };
+    const container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    container.appendChild(btn);
+    this._container = container;
+    return container;
+  }
+
+  onRemove(): void {
+    this._container?.parentNode?.removeChild(this._container);
+    this._map = null;
+  }
+}
+
 
 // ─── Main map component ───────────────────────────────────────────────────────
 
@@ -2592,6 +2654,7 @@ export default function CampaignMap({
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserLocation: false,
+        fitBoundsOptions: { maxZoom: 14 },
       });
       geolocateControlRef.current = control;
       // trigger() toggles: calling it while already tracking (or sitting in an
@@ -2608,11 +2671,28 @@ export default function CampaignMap({
       // silently no-op'ing here left them waiting for a fix that already exists.
       const hasFixRef = { current: false };
       const lastPositionRef = { current: null as { latitude: number; longitude: number } | null };
+      // Tracks whether we still owe the map an initial fly-to-user-location. Set to
+      // false as soon as it's used (or superseded by a real user gesture), so later
+      // watchPosition updates as the user moves around don't keep re-centering on them.
+      const autoFlyPendingRef = { current: true };
+      // dragstart/zoomstart also fire for our own programmatic initial-bounds fitBounds
+      // call above, so only count gestures that carry an originalEvent (i.e. actually
+      // came from the mouse/touch/wheel) as real user interaction.
+      let userInteracted = false;
+      const markInteracted = (e: { originalEvent?: unknown }) => {
+        if (e.originalEvent) userInteracted = true;
+      };
+      map.current.on("dragstart", markInteracted);
+      map.current.on("zoomstart", markInteracted);
       control.on("geolocate", (e) => {
         hasFixRef.current = true;
         const pos = e as GeolocationPosition;
         lastPositionRef.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
         onUserLocationChangeRef.current?.(lastPositionRef.current);
+        if (autoFlyPendingRef.current && !userInteracted) {
+          autoFlyPendingRef.current = false;
+          map.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 14, duration: 1000 });
+        }
       });
       control.on("error", (e) => {
         hasFixRef.current = false;
@@ -2620,16 +2700,51 @@ export default function CampaignMap({
         onUserLocationErrorRef.current?.(err.code);
       });
       map.current.addControl(control, "top-right");
+      // trigger() toggles tracking on/off, so every caller that wants tracking
+      // *started* (as opposed to explicitly re-clicked) must funnel through this
+      // single startedRef-guarded helper. Without it, our own auto-locate-on-mount
+      // call below and ContributionPanel's independent gps.capture()-on-mount calls
+      // (which reach this control via the onGeolocateTrigger callback) can each call
+      // control.trigger() once, and the second call flips tracking back OFF instead
+      // of doing anything useful — silently killing geolocation before a fix ever
+      // arrives.
+      const startedRef = { current: false };
+      const startTracking = () => {
+        if (startedRef.current) return true;
+        startedRef.current = true;
+        return control.trigger();
+      };
       onGeolocateTrigger?.(() => {
         if (hasFixRef.current) {
           if (lastPositionRef.current) onUserLocationChangeRef.current?.(lastPositionRef.current);
           return true;
         }
-        return control.trigger();
+        return startTracking();
+      });
+
+      // Default the initial view to the user's location rather than the generic
+      // continent-wide fit, once they grant permission (the actual camera move happens
+      // in the "geolocate" handler above, via an explicit flyTo — GeolocateControl's own
+      // internal auto-camera-follow only reliably fires from a real button click, not a
+      // programmatic trigger()). Deferred to "load": GeolocateControl finishes its own
+      // internal setup (checkGeolocationSupport(), which sets a private _setup flag)
+      // asynchronously after addControl() returns, and trigger() is a no-op with a
+      // console warning ("Geolocate control triggered before added to a map") if called
+      // before that resolves. "load" (style + tiles fetched) reliably comes after it.
+      map.current.once("load", () => {
+        startTracking();
       });
     }
     map.current.addControl(
       new FitExtentControl(() => dataBoundsRef.current),
+      "top-right",
+    );
+    map.current.addControl(
+      new ZoomToRegionControl(CONTINENTAL_US_BOUNDS, US_FLAG_SVG, "Zoom to US"),
+      "top-right",
+    );
+    map.current.addControl(
+      new ZoomToRegionControl(UK_BOUNDS, UK_FLAG_SVG, "Zoom to UK"),
       "top-right",
     );
     map.current.addControl(
