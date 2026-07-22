@@ -260,6 +260,7 @@ interface ClickedReport {
   id: string;
   severity: string;
   reported_at: string;
+  photo_url?: string | null;
   latitude: number;
   longitude: number;
   status: string;
@@ -1611,6 +1612,15 @@ function claimAfterWindowMinutes(severity: string): number {
   return CLAIM_AFTER_WINDOW_MINUTES[severity] ?? CLAIM_AFTER_WINDOW_MINUTES.medium;
 }
 
+const SEVERITY_META: Record<string, { label: string; icon: string; classes: string }> = {
+  low: { label: "Low severity", icon: "🟢", classes: "border-emerald-800/60 bg-emerald-950/30 text-emerald-300" },
+  medium: { label: "Medium severity", icon: "🟠", classes: "border-amber-800/60 bg-amber-950/30 text-amber-300" },
+  high: { label: "High severity", icon: "🔴", classes: "border-red-800/60 bg-red-950/30 text-red-300" },
+};
+function severityMeta(severity: string) {
+  return SEVERITY_META[severity] ?? SEVERITY_META.medium;
+}
+
 // Live mm:ss countdown to a deadline timestamp — ticks locally rather than re-fetching,
 // since the backend uses a check-on-read expiry pattern (no push/websocket for this).
 function useCountdownLabel(deadline: string | null): { label: string; expired: boolean } {
@@ -1666,6 +1676,7 @@ function ClaimReportModal({
   const [flagError, setFlagError] = useState<string | null>(null);
   const [beforePhotoUrl, setBeforePhotoUrl] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [reportPhotoLightboxOpen, setReportPhotoLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (!photo) {
@@ -1892,6 +1903,33 @@ function ClaimReportModal({
     }
   };
 
+  const severity = severityMeta(localReport.severity);
+  const severityBadge = (
+    <div className={`self-start flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold capitalize ${severity.classes}`}>
+      <span>{severity.icon}</span>
+      <span>{severity.label}</span>
+    </div>
+  );
+  const reportPhotoBlock = localReport.photo_url ? (
+    <div
+      className="relative w-full h-40 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group cursor-zoom-in"
+      onClick={() => setReportPhotoLightboxOpen(true)}
+    >
+      <img src={localReport.photo_url} alt="Reported trash" className="w-full h-full object-cover" />
+      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        🔍 Enlarge
+      </span>
+    </div>
+  ) : null;
+  const reportPhotoLightbox = reportPhotoLightboxOpen && localReport.photo_url && (
+    <Lightbox
+      images={[localReport.photo_url]}
+      index={0}
+      onClose={() => setReportPhotoLightboxOpen(false)}
+      onNavigate={() => {}}
+    />
+  );
+
   const flagControl = (
     <div className="pt-1 text-center">
       {flagState === "done" ? (
@@ -1940,6 +1978,8 @@ function ClaimReportModal({
     return (
       <ModalShell title="Report Claimed" badge="Beta" onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
+          {severityBadge}
+          {reportPhotoBlock}
           <span className="text-4xl">🔒</span>
           <p className="text-zinc-100 text-sm text-center">
             Someone else is already working this report. If they don&apos;t finish in time, it&apos;ll reopen for anyone to claim.
@@ -1949,6 +1989,7 @@ function ClaimReportModal({
           </button>
           {flagControl}
         </div>
+        {reportPhotoLightbox}
       </ModalShell>
     );
   }
@@ -1983,6 +2024,8 @@ function ClaimReportModal({
     return (
       <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
         <div className="flex flex-col gap-4">
+          {severityBadge}
+          {reportPhotoBlock}
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
             <span className="text-base shrink-0">🎯</span>
             <span>
@@ -2000,12 +2043,11 @@ function ClaimReportModal({
             <div className="flex items-center gap-2">
               <span className="shrink-0">🧹</span>
               <span>
-                Clean up & submit after photo: <span className="font-semibold text-zinc-100">{afterWindow} min</span>{" "}
-                <span className="text-zinc-500">({localReport.severity} severity)</span>
+                Clean up & submit after photo: <span className="font-semibold text-zinc-100">{afterWindow} min</span>
               </span>
             </div>
           </div>
-          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} />
+          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
           {error && <p className="text-red-400 text-xs">{error}</p>}
           <div className="flex gap-2 pt-1">
             <button
@@ -2024,6 +2066,7 @@ function ClaimReportModal({
           </div>
           {flagControl}
         </div>
+        {reportPhotoLightbox}
       </ModalShell>
     );
   }
@@ -2033,6 +2076,8 @@ function ClaimReportModal({
     return (
       <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose}>
         <div className="flex flex-col gap-4">
+          {severityBadge}
+          {reportPhotoBlock}
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${beforeCountdown.expired
             ? "border-red-800/60 bg-red-950/30 text-red-300"
             : "border-violet-800/60 bg-violet-950/30 text-violet-300"
@@ -2044,7 +2089,7 @@ function ClaimReportModal({
                 : <>Time left to arrive: <span className="font-bold">{beforeCountdown.label}</span></>}
             </span>
           </div>
-          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} />
+          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
           {!withinClaimRadius && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
               <span className="text-base shrink-0">📍</span>
@@ -2117,6 +2162,7 @@ function ClaimReportModal({
         {lightboxOpen && photoPreview && (
           <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
         )}
+        {reportPhotoLightbox}
       </ModalShell>
     );
   }
@@ -2125,6 +2171,8 @@ function ClaimReportModal({
   return (
     <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose}>
       <div className="flex flex-col gap-4">
+        {severityBadge}
+        {reportPhotoBlock}
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${afterCountdown.expired
           ? "border-red-800/60 bg-red-950/30 text-red-300"
           : "border-violet-800/60 bg-violet-950/30 text-violet-300"
@@ -2136,7 +2184,7 @@ function ClaimReportModal({
               : <>Time left to finish: <span className="font-bold">{afterCountdown.label}</span></>}
           </span>
         </div>
-        <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} />
+        <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
         {!withinClaimRadius && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
             <span className="text-base shrink-0">📍</span>
@@ -2209,6 +2257,7 @@ function ClaimReportModal({
       {lightboxOpen && photoPreview && (
         <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
+      {reportPhotoLightbox}
     </ModalShell>
   );
 }

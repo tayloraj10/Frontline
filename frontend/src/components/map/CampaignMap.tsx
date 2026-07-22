@@ -1625,6 +1625,7 @@ export default function CampaignMap({
             id: report.id,
             severity: report.severity,
             reported_at: report.reported_at,
+            photo_url: report.photo_url,
             status: report.status,
             claimed_by_user_id: report.claimed_by_user_id,
             claim_before_deadline_at: report.claim_before_deadline_at,
@@ -2817,6 +2818,7 @@ export default function CampaignMap({
           id?: string;
           severity?: string;
           reported_at?: string;
+          photo_url?: string | null;
           status?: string;
           claimed_by_user_id?: string | null;
           claim_before_deadline_at?: string | null;
@@ -2833,7 +2835,7 @@ export default function CampaignMap({
           geo_unit_id: null,
           severity: props.severity ?? "low",
           reported_at: props.reported_at ?? "",
-          photo_url: null,
+          photo_url: props.photo_url ?? null,
           latitude,
           longitude,
           unit_type: props.unit_type ?? null,
