@@ -531,8 +531,10 @@ type ContribRow = {
   submitted_at: string | null;
   group_id: string | null;
   user_id: string | null;
+  cleanup_id: string | null;
   profiles: { display_name: string | null; username: string } | null;
   groups: { name: string } | null;
+  cleanups: { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
 };
 
 function TerritoryPanel({
@@ -561,12 +563,14 @@ function TerritoryPanel({
   const [contribs, setContribs] = useState<ContribRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [cleanupPhotos, setCleanupPhotos] = useState<string[]>([]);
+  const [showPointsInfo, setShowPointsInfo] = useState(false);
+  const [bagTotals, setBagTotals] = useState({ small: 0, large: 0 });
 
   useEffect(() => {
     const supabase = createClient();
     (supabase
       .from("contributions")
-      .select("value, submitted_at, group_id, user_id, groups(name)")
+      .select("value, submitted_at, group_id, user_id, cleanup_id, groups(name), cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
       .eq("geo_unit_id", geoUnitId)
       .order("submitted_at", { ascending: false })
       .limit(20) as unknown as Promise<{ data: Omit<ContribRow, "profiles">[] | null }>)
@@ -596,23 +600,39 @@ function TerritoryPanel({
         const urls = (data ?? []).flatMap((c: { image_urls: string[] | null }) => c.image_urls ?? []);
         setCleanupPhotos(urls);
       });
+
+    supabase
+      .from("cleanups")
+      .select("metrics_small_bags, metrics_large_bags")
+      .eq("geo_unit_id", geoUnitId)
+      .then(({ data }) => {
+        const totals = (data ?? []).reduce(
+          (acc, c: { metrics_small_bags: number | null; metrics_large_bags: number | null }) => {
+            acc.small += c.metrics_small_bags ?? 0;
+            acc.large += c.metrics_large_bags ?? 0;
+            return acc;
+          },
+          { small: 0, large: 0 },
+        );
+        setBagTotals(totals);
+      });
   }, [geoUnitId]);
 
   const holdingGroupId = claim?.claimed_by_group ?? null;
 
   const groupBreakdown = useMemo(() => {
-    const map = new Map<string, { name: string; bags: number }>();
+    const map = new Map<string, { name: string; points: number }>();
     for (const c of contribs) {
       if (!c.group_id) continue;
       const name = c.groups?.name ?? "Unknown";
-      const bags = c.value ?? 1;
+      const points = c.value ?? 1;
       const existing = map.get(c.group_id);
-      if (existing) existing.bags += bags;
-      else map.set(c.group_id, { name, bags });
+      if (existing) existing.points += points;
+      else map.set(c.group_id, { name, points });
     }
     return Array.from(map.entries())
       .map(([id, v]) => ({ id, ...v }))
-      .sort((a, b) => b.bags - a.bags);
+      .sort((a, b) => b.points - a.points);
   }, [contribs]);
 
   const groupColors = useMemo(() => {
@@ -625,10 +645,11 @@ function TerritoryPanel({
     return colors;
   }, [groupBreakdown, holdingGroupId]);
 
-  const totalBags = claim?.total_value ?? 0;
+  const totalPoints = claim?.total_value ?? 0;
+  const totalBagCount = bagTotals.small + bagTotals.large;
   const isContested = groupBreakdown.length > 1;
   const isClaimed = !!(claim?.claimed_by_group || claim?.claimed_by_user);
-  const maxGroupBags = groupBreakdown[0]?.bags ?? 1;
+  const maxGroupPoints = groupBreakdown[0]?.points ?? 1;
   const isGroup = claimLabel?.isGroup ?? false;
 
   const accentHex = isClaimed
@@ -636,6 +657,7 @@ function TerritoryPanel({
     : "#3f3f46";
 
   return (
+    <>
     <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
 
@@ -682,7 +704,27 @@ function TerritoryPanel({
             <span className="text-sm text-zinc-600">Unclaimed</span>
           )}
           {isClaimed && (
-            <p className="mt-0.5 text-xs text-zinc-500">{totalBags} bag{totalBags !== 1 ? "s" : ""} total in {unitLabel}</p>
+            <>
+              <p className="mt-0.5 text-xs text-zinc-500 flex items-center gap-1">
+                {totalPoints} point{totalPoints !== 1 ? "s" : ""} total in {unitLabel}
+                <button
+                  onClick={() => setShowPointsInfo(true)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-base text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 leading-none"
+                  aria-label="What are points?"
+                  title="What are points?"
+                >
+                  ⓘ
+                </button>
+              </p>
+              {totalBagCount > 0 && (
+                <p className="text-[11px] text-zinc-600">
+                  {totalBagCount} bag{totalBagCount !== 1 ? "s" : ""} picked up
+                  {bagTotals.small > 0 && bagTotals.large > 0 && (
+                    <span> ({bagTotals.small} small, {bagTotals.large} large)</span>
+                  )}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -696,7 +738,7 @@ function TerritoryPanel({
               {groupBreakdown.map((g) => {
                 const color = groupColors[g.id] ?? "#71717a";
                 const isHolder = g.id === holdingGroupId;
-                const pct = (g.bags / maxGroupBags) * 100;
+                const pct = (g.points / maxGroupPoints) * 100;
                 return (
                   <div key={g.id}>
                     <div className="flex items-start justify-between mb-1">
@@ -709,7 +751,7 @@ function TerritoryPanel({
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 ml-2">
                         {isHolder && <span className="text-[10px] text-zinc-500 leading-none">holds</span>}
-                        <span className="text-xs font-mono tabular-nums text-zinc-300">{g.bags}</span>
+                        <span className="text-xs font-mono tabular-nums text-zinc-300">{g.points}</span>
                       </div>
                     </div>
                     <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -794,6 +836,9 @@ function TerritoryPanel({
                 const name = c.profiles?.display_name ?? c.profiles?.username ?? "Anonymous";
                 const groupName = c.groups?.name;
                 const dotColor = c.group_id ? (groupColors[c.group_id] ?? "#71717a") : null;
+                const small = c.cleanups?.metrics_small_bags ?? 0;
+                const large = c.cleanups?.metrics_large_bags ?? 0;
+                const hasBagSplit = small > 0 || large > 0;
                 return (
                   <div key={i} className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -801,15 +846,19 @@ function TerritoryPanel({
                         ? <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
                         : <div className="w-1.5 h-1.5 shrink-0" />}
                       <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{name}</span>
-                      <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{c.value ?? 1} bags</span>
+                      <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{c.value ?? 1} pts</span>
                       <span className="text-xs text-zinc-600 shrink-0">
                         {c.submitted_at
                           ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                           : ""}
                       </span>
                     </div>
-                    {groupName && (
-                      <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">{groupName}</p>
+                    {(groupName || hasBagSplit) && (
+                      <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">
+                        {groupName}
+                        {groupName && hasBagSplit ? " · " : ""}
+                        {hasBagSplit && `${small} small, ${large} large`}
+                      </p>
                     )}
                   </div>
                 );
@@ -819,6 +868,29 @@ function TerritoryPanel({
         </div>
       </div>
     </div>
+    {showPointsInfo && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        onClick={() => setShowPointsInfo(false)}
+      >
+        <div
+          className="max-w-xs rounded-xl border border-zinc-700/70 bg-zinc-900 p-4 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between mb-2">
+            <p className="text-sm font-semibold text-zinc-100">What are points?</p>
+            <button onClick={() => setShowPointsInfo(false)} className="text-lg leading-none text-zinc-600 hover:text-zinc-300">×</button>
+          </div>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            The ranking total is measured in points, not a literal bag count. Small bags are worth 1 point,
+            large bags are worth 3 points, and pound-based cleanups convert at 0.5 points per pound. The
+            &quot;bags picked up&quot; line below it is the actual physical bag count (small + large), the
+            real-world impact this campaign is about, so the two numbers won&apos;t always match.
+          </p>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -1033,6 +1105,68 @@ class FitExtentControl implements maplibregl.IControl {
           duration: 800,
         });
       }
+    };
+    const container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    container.appendChild(btn);
+    this._container = container;
+    return container;
+  }
+
+  onRemove(): void {
+    this._container?.parentNode?.removeChild(this._container);
+    this._map = null;
+  }
+}
+
+// Simplified inline SVG flags (16x11) for the zoom-to-region buttons below.
+// Flag *emoji* render as bare letters ("US"/"GB") or nothing on Windows —
+// Segoe UI Emoji doesn't ship colored flag glyphs — so an emoji icon isn't
+// reliable there. Drawing the flags as SVG sidesteps OS/browser font support
+// entirely.
+const US_FLAG_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="11" viewBox="0 0 16 11">` +
+  `<rect width="16" height="11" fill="#B22234"/>` +
+  `<g fill="#fff"><rect y="0.85" width="16" height="0.85"/><rect y="2.55" width="16" height="0.85"/>` +
+  `<rect y="4.25" width="16" height="0.85"/><rect y="5.95" width="16" height="0.85"/>` +
+  `<rect y="7.65" width="16" height="0.85"/><rect y="9.35" width="16" height="0.85"/></g>` +
+  `<rect width="6.4" height="5.95" fill="#3C3B6E"/>` +
+  `</svg>`;
+const UK_FLAG_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="11" viewBox="0 0 16 11">` +
+  `<rect width="16" height="11" fill="#00247D"/>` +
+  `<path d="M0 0 16 11M16 0 0 11" stroke="#fff" stroke-width="2.2"/>` +
+  `<path d="M0 0 16 11M16 0 0 11" stroke="#CF142B" stroke-width="0.9"/>` +
+  `<path d="M8 0V11M0 5.5H16" stroke="#fff" stroke-width="3.6"/>` +
+  `<path d="M8 0V11M0 5.5H16" stroke="#CF142B" stroke-width="1.6"/>` +
+  `</svg>`;
+
+// Zoom-to-region shortcut buttons (flag icon) — one control per region so
+// they can each be conditionally added/omitted per campaign type.
+class ZoomToRegionControl implements maplibregl.IControl {
+  private _map: maplibregl.Map | null = null;
+  private _container: HTMLDivElement | null = null;
+  private readonly _bounds: maplibregl.LngLatBoundsLike;
+  private readonly _flagSvg: string;
+  private readonly _label: string;
+
+  constructor(bounds: maplibregl.LngLatBoundsLike, flagSvg: string, label: string) {
+    this._bounds = bounds;
+    this._flagSvg = flagSvg;
+    this._label = label;
+  }
+
+  onAdd(map: maplibregl.Map): HTMLElement {
+    this._map = map;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = this._label;
+    btn.style.cssText =
+      "width:29px;height:29px;display:flex;align-items:center;justify-content:center;" +
+      "background:none;border:none;cursor:pointer;padding:0";
+    btn.innerHTML = this._flagSvg;
+    btn.onclick = () => {
+      this._map?.fitBounds(this._bounds, { padding: 40, duration: 800 });
     };
     const container = document.createElement("div");
     container.className = "maplibregl-ctrl maplibregl-ctrl-group";
@@ -1538,13 +1672,17 @@ export default function CampaignMap({
       const src = map.current.getSource("cleanup-routes") as maplibregl.GeoJSONSource | undefined;
       const bufferSrc = map.current.getSource("cleanup-routes-buffer") as maplibregl.GeoJSONSource | undefined;
       if (!src || !bufferSrc) return;
-      const eventIds = new Set(events.map((e) => e.id));
+      const eventById = new Map(events.map((e) => [e.id, e]));
       src.setData({
         type: "FeatureCollection",
         features: routes.map((r) => ({
           type: "Feature",
           geometry: r.route,
-          properties: { id: r.id, is_event: eventIds.has(r.id) },
+          properties: {
+            id: r.id,
+            is_event: eventById.has(r.id),
+            is_past: eventById.get(r.id)?.is_past ?? false,
+          },
         })),
       });
       // Server-computed geodesic buffer (ST_Buffer) around event-linked routes only,
@@ -1625,12 +1763,15 @@ export default function CampaignMap({
 
         const el = document.createElement("div");
         const size = 20;
+        const isPast = event?.is_past ?? false;
         el.style.cssText =
-          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
+          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:${isPast ? 5 : 6};` +
           "display:flex;align-items:center;justify-content:center;" +
-          (event
-            ? "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);background:rgba(12,74,110,0.9)"
-            : "border:2px solid #f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.6),0 1px 4px rgba(0,0,0,0.6);background:rgba(69,26,3,0.9)");
+          (isPast
+            ? "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);background:rgba(63,63,70,0.9)"
+            : event
+              ? "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);background:rgba(12,74,110,0.9)"
+              : "border:2px solid #f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.6),0 1px 4px rgba(0,0,0,0.6);background:rgba(69,26,3,0.9)");
 
         const logoUrl = r.group_logo_url ?? event?.group_logo_url ?? null;
         if (logoUrl) {
@@ -1650,7 +1791,7 @@ export default function CampaignMap({
             "</svg>";
           el.style.color = event ? "#7dd3fc" : "#fcd34d";
         }
-        el.title = event ? `${event.title} — ${event.group_name}` : "View this cleanup route";
+        el.title = event ? `${event.title} — ${event.group_name}${isPast ? " (ended)" : ""}` : "View this cleanup route";
 
         const marker = new maplibregl.Marker({ element: el }).setLngLat(mid).addTo(map.current!);
         el.onclick = (e) => {
@@ -2368,7 +2509,7 @@ export default function CampaignMap({
       paint: {
         "line-color": "#ffffff",
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 8],
-        "line-opacity": 0.9,
+        "line-opacity": ["case", ["get", "is_past"], 0.45, 0.9],
       },
     });
     m.addLayer({
@@ -2380,9 +2521,12 @@ export default function CampaignMap({
         // Group-event (pre-planned) routes render blue, matching the event marker
         // palette; individual/group ad-hoc routes render amber — a genuinely
         // different hue (not another blue/cyan shade) so the two categories are
-        // tellable apart at a glance.
-        "line-color": ["case", ["get", "is_event"], "#0284c7", "#f59e0b"],
+        // tellable apart at a glance. A past event's route greys out, mirroring
+        // the point-marker treatment for a past event (is_past never true for
+        // ad-hoc, non-event routes, which don't expire).
+        "line-color": ["case", ["get", "is_past"], "#71717a", ["get", "is_event"], "#0284c7", "#f59e0b"],
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 5],
+        "line-opacity": ["case", ["get", "is_past"], 0.55, 1],
       },
     });
     m.addLayer({
@@ -2404,6 +2548,7 @@ export default function CampaignMap({
         "text-color": ["case", ["get", "is_event"], "#0c4a6e", "#78350f"],
         "text-halo-color": "#ecfeff",
         "text-halo-width": 1,
+        "text-opacity": ["case", ["get", "is_past"], 0.5, 1],
       },
     });
 
@@ -2509,6 +2654,7 @@ export default function CampaignMap({
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserLocation: false,
+        fitBoundsOptions: { maxZoom: 14 },
       });
       geolocateControlRef.current = control;
       // trigger() toggles: calling it while already tracking (or sitting in an
@@ -2525,11 +2671,28 @@ export default function CampaignMap({
       // silently no-op'ing here left them waiting for a fix that already exists.
       const hasFixRef = { current: false };
       const lastPositionRef = { current: null as { latitude: number; longitude: number } | null };
+      // Tracks whether we still owe the map an initial fly-to-user-location. Set to
+      // false as soon as it's used (or superseded by a real user gesture), so later
+      // watchPosition updates as the user moves around don't keep re-centering on them.
+      const autoFlyPendingRef = { current: true };
+      // dragstart/zoomstart also fire for our own programmatic initial-bounds fitBounds
+      // call above, so only count gestures that carry an originalEvent (i.e. actually
+      // came from the mouse/touch/wheel) as real user interaction.
+      let userInteracted = false;
+      const markInteracted = (e: { originalEvent?: unknown }) => {
+        if (e.originalEvent) userInteracted = true;
+      };
+      map.current.on("dragstart", markInteracted);
+      map.current.on("zoomstart", markInteracted);
       control.on("geolocate", (e) => {
         hasFixRef.current = true;
         const pos = e as GeolocationPosition;
         lastPositionRef.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
         onUserLocationChangeRef.current?.(lastPositionRef.current);
+        if (autoFlyPendingRef.current && !userInteracted) {
+          autoFlyPendingRef.current = false;
+          map.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 14, duration: 1000 });
+        }
       });
       control.on("error", (e) => {
         hasFixRef.current = false;
@@ -2537,16 +2700,51 @@ export default function CampaignMap({
         onUserLocationErrorRef.current?.(err.code);
       });
       map.current.addControl(control, "top-right");
+      // trigger() toggles tracking on/off, so every caller that wants tracking
+      // *started* (as opposed to explicitly re-clicked) must funnel through this
+      // single startedRef-guarded helper. Without it, our own auto-locate-on-mount
+      // call below and ContributionPanel's independent gps.capture()-on-mount calls
+      // (which reach this control via the onGeolocateTrigger callback) can each call
+      // control.trigger() once, and the second call flips tracking back OFF instead
+      // of doing anything useful — silently killing geolocation before a fix ever
+      // arrives.
+      const startedRef = { current: false };
+      const startTracking = () => {
+        if (startedRef.current) return true;
+        startedRef.current = true;
+        return control.trigger();
+      };
       onGeolocateTrigger?.(() => {
         if (hasFixRef.current) {
           if (lastPositionRef.current) onUserLocationChangeRef.current?.(lastPositionRef.current);
           return true;
         }
-        return control.trigger();
+        return startTracking();
+      });
+
+      // Default the initial view to the user's location rather than the generic
+      // continent-wide fit, once they grant permission (the actual camera move happens
+      // in the "geolocate" handler above, via an explicit flyTo — GeolocateControl's own
+      // internal auto-camera-follow only reliably fires from a real button click, not a
+      // programmatic trigger()). Deferred to "load": GeolocateControl finishes its own
+      // internal setup (checkGeolocationSupport(), which sets a private _setup flag)
+      // asynchronously after addControl() returns, and trigger() is a no-op with a
+      // console warning ("Geolocate control triggered before added to a map") if called
+      // before that resolves. "load" (style + tiles fetched) reliably comes after it.
+      map.current.once("load", () => {
+        startTracking();
       });
     }
     map.current.addControl(
       new FitExtentControl(() => dataBoundsRef.current),
+      "top-right",
+    );
+    map.current.addControl(
+      new ZoomToRegionControl(CONTINENTAL_US_BOUNDS, US_FLAG_SVG, "Zoom to US"),
+      "top-right",
+    );
+    map.current.addControl(
+      new ZoomToRegionControl(UK_BOUNDS, UK_FLAG_SVG, "Zoom to UK"),
       "top-right",
     );
     map.current.addControl(
@@ -2694,11 +2892,11 @@ export default function CampaignMap({
               `<div style="color:${isR ? "#f87171" : "#60a5fa"};font-size:11px;margin-top:4px">${party}</div>` +
               `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${totalVal.toLocaleString()} actions · ${pct}% neutralized</div>`;
           } else {
-            const bags = totalVal;
+            const points = totalVal;
             const claimerHtml = featureState.claimed_label
               ? `<div style="color:${featureState.claim_is_group ? "#34d399" : "#60a5fa"};font-size:11px;margin-top:4px">` +
               `${featureState.claim_is_group ? "👥" : "👤"} ${featureState.claimed_label}</div>` +
-              `<div style="color:#a1a1aa;font-size:11px;margin-top:1px">${bags} bag${bags !== 1 ? "s" : ""}</div>`
+              `<div style="color:#a1a1aa;font-size:11px;margin-top:1px">${points} point${points !== 1 ? "s" : ""}</div>`
               : `<div style="color:#52525b;font-size:11px;margin-top:4px">Unclaimed</div>`;
             hoverDiv.innerHTML =
               `<div style="font-weight:700;font-size:13px;color:#f4f4f5">${featureUnitLabel} ${displayName}</div>` + claimerHtml;

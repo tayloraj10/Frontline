@@ -6,7 +6,7 @@ from uuid import UUID
 
 import h3
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,6 +72,12 @@ class CreateCleanupEventRequest(BaseModel):
             raise ValueError("route must have at least 2 coordinates")
         return v
 
+    @model_validator(mode="after")
+    def _end_after_start(self) -> "CreateCleanupEventRequest":
+        if self.scheduled_end is not None and self.scheduled_end <= self.scheduled_start:
+            raise ValueError("The event's end time can't be before its start time.")
+        return self
+
 
 class PatchCleanupEventRequest(BaseModel):
     organizer_user_id: UUID
@@ -130,6 +136,11 @@ class CheckInRequest(BaseModel):
 class OrganizerRoleRequest(BaseModel):
     organizer_user_id: UUID
     target_user_id: UUID
+
+
+class OrganizerCheckInRequest(BaseModel):
+    organizer_user_id: UUID
+    attendee_user_id: UUID
 
 
 class LogForAttendeeRequest(BaseModel):
@@ -621,6 +632,11 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can edit this event")
 
+    effective_start = payload.scheduled_start or event.scheduled_start
+    effective_end = payload.scheduled_end or event.scheduled_end
+    if effective_end is not None and effective_start is not None and effective_end <= effective_start:
+        raise HTTPException(status_code=400, detail="The event's end time can't be before its start time.")
+
     has_new_location = payload.latitude is not None and payload.longitude is not None
     geo_unit_id = event.geo_unit_id
     if has_new_location:
@@ -766,6 +782,34 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
             RETURNING id, checked_in_at
         """),
         {"cleanup_id": str(cleanup_id), "user_id": str(payload.user_id)},
+    )
+    row = result.fetchone()
+    await db.commit()
+
+    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat()}
+
+
+@router.post("/{cleanup_id}/organizer-check-in")
+async def organizer_check_in_attendee(cleanup_id: UUID, payload: OrganizerCheckInRequest, db: AsyncSession = Depends(get_db)):
+    """Lets an organizer manually check an attendee in — e.g. they forgot their phone,
+    have a dead battery, or are outside the self-check-in proximity/time window but the
+    organizer can vouch for them in person. Bypasses the join-code/GPS-proximity/window
+    checks that gate self-check-in, since the organizer is the verification here."""
+    event = await _get_event_or_404(db, cleanup_id)
+
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can check in an attendee")
+
+    result = await db.execute(
+        text("""
+            INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at)
+            VALUES (:cleanup_id, :user_id, 'going', NOW())
+            ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
+                checked_in_at = NOW(),
+                updated_at = NOW()
+            RETURNING id, checked_in_at
+        """),
+        {"cleanup_id": str(cleanup_id), "user_id": str(payload.attendee_user_id)},
     )
     row = result.fetchone()
     await db.commit()

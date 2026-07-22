@@ -17,6 +17,20 @@ function toDatetimeLocal(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  try {
+    const parsed = JSON.parse(err.message);
+    if (parsed && typeof parsed.detail === "string") return parsed.detail;
+    if (Array.isArray(parsed?.detail) && typeof parsed.detail[0]?.msg === "string") {
+      return parsed.detail[0].msg.replace(/^Value error,\s*/, "");
+    }
+  } catch {
+    // not JSON, fall through to generic fallback
+  }
+  return fallback;
+}
+
 export default function CreateCleanupEventForm({
   groupId,
   groupSlug,
@@ -72,13 +86,19 @@ export default function CreateCleanupEventForm({
     setImagePreview(URL.createObjectURL(file));
   };
 
+  const endBeforeStart = !!scheduledEnd && !!scheduledStart && new Date(scheduledEnd) <= new Date(scheduledStart);
+
   const canSubmit = mode === "edit"
-    ? !!title.trim() && !!scheduledStart && lat !== null && lng !== null
-    : !!campaignId && !!title.trim() && !!scheduledStart && lat !== null && lng !== null;
+    ? !!title.trim() && !!scheduledStart && lat !== null && lng !== null && !endBeforeStart
+    : !!campaignId && !!title.trim() && !!scheduledStart && lat !== null && lng !== null && !endBeforeStart;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || lat === null || lng === null) return;
+    if (endBeforeStart) {
+      setError("End time must be after the start time.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -119,7 +139,7 @@ export default function CreateCleanupEventForm({
       }
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${mode === "edit" ? "save" : "create"} event`);
+      setError(extractErrorMessage(err, `Couldn't ${mode === "edit" ? "save" : "create"} the event. Please try again.`));
       setLoading(false);
     }
   };
@@ -151,9 +171,21 @@ export default function CreateCleanupEventForm({
         </div>
         <div className="space-y-1">
           <label className="text-xs text-zinc-500">Ends</label>
-          <input type="datetime-local" className={inputCls} value={scheduledEnd} onChange={e => setScheduledEnd(e.target.value)} />
+          <input
+            type="datetime-local"
+            className={inputCls}
+            value={scheduledEnd}
+            min={scheduledStart || undefined}
+            onChange={e => setScheduledEnd(e.target.value)}
+            aria-invalid={endBeforeStart}
+          />
           {!scheduledEnd && (
             <p className="text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
+          )}
+          {endBeforeStart && (
+            <p className="text-[11px] text-red-400">
+              That end time is before the start time ({new Date(scheduledStart).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}). Pick an end time after the start.
+            </p>
           )}
         </div>
         <div className="col-span-2 space-y-1">

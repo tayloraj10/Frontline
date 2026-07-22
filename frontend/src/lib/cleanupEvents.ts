@@ -246,6 +246,21 @@ export async function checkInToCleanupEvent({
   });
 }
 
+export async function organizerCheckInAttendee({
+  cleanupId,
+  organizerUserId,
+  attendeeUserId,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  attendeeUserId: string;
+}): Promise<{ id: string; checked_in_at: string }> {
+  return postJson(`/cleanup-events/${cleanupId}/organizer-check-in`, {
+    organizer_user_id: organizerUserId,
+    attendee_user_id: attendeeUserId,
+  });
+}
+
 export async function logForAttendee({
   cleanupId,
   organizerUserId,

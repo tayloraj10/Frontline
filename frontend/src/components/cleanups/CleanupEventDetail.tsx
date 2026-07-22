@@ -6,6 +6,7 @@ import {
   getCleanupEvent,
   rsvpToCleanupEvent,
   checkInToCleanupEvent,
+  organizerCheckInAttendee,
   logForAttendee,
   logTeamTotal,
   getTeamTotalLogs,
@@ -470,10 +471,19 @@ export default function CleanupEventDetail({
                       <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
                       <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
                     </div>
-                    <div className="shrink-0">
+                    <div className="shrink-0 flex items-center gap-2">
                       {r.checked_in_at ? (
                         <span className="text-xs text-emerald-400 whitespace-nowrap">✓ checked in</span>
                       ) : event.is_organizer ? (
+                        <OrganizerCheckInButton
+                          cleanupId={event.id}
+                          organizerUserId={userId!}
+                          attendeeUserId={r.user_id}
+                          onCheckedIn={refresh}
+                          onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to check in attendee"))}
+                        />
+                      ) : null}
+                      {event.is_organizer && (
                         <OrganizerLogButton
                           cleanupId={event.id}
                           organizerUserId={userId!}
@@ -481,7 +491,7 @@ export default function CleanupEventDetail({
                           attendeeName={r.display_name ?? r.username ?? "attendee"}
                           onLogged={refresh}
                         />
-                      ) : null}
+                      )}
                     </div>
                   </div>
 
@@ -577,6 +587,44 @@ export default function CleanupEventDetail({
         />
       )}
     </div>
+  );
+}
+
+function OrganizerCheckInButton({
+  cleanupId,
+  organizerUserId,
+  attendeeUserId,
+  onCheckedIn,
+  onError,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  attendeeUserId: string;
+  onCheckedIn: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    setLoading(true);
+    try {
+      await organizerCheckInAttendee({ cleanupId, organizerUserId, attendeeUserId });
+      await onCheckedIn();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to check in attendee");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={submit}
+      disabled={loading}
+      className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0 disabled:opacity-50"
+    >
+      {loading ? "Checking in…" : "Check in"}
+    </button>
   );
 }
 
