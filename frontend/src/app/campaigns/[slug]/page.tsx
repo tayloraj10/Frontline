@@ -70,6 +70,7 @@ const getCampaignPageData = unstable_cache(
       { data: actContribsData },
       problemReportsRes,
       eventCentroidsRes,
+      { data: bagMetricsData },
     ] = await Promise.all([
       supabase.from("territory_claims").select("*").eq("campaign_id", campaign.id),
       supabase.from("campaign_events").select("*").eq("campaign_id", campaign.id).eq("status", "active").lte("started_at", new Date().toISOString()),
@@ -87,6 +88,9 @@ const getCampaignPageData = unstable_cache(
       campaign.campaign_type === "territory"
         ? fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/centroids`, { cache: "no-store" }).catch(() => null)
         : Promise.resolve(null),
+      campaign.campaign_type === "territory"
+        ? supabase.from("cleanups").select("metrics_small_bags, metrics_large_bags, metrics_pounds").eq("campaign_id", campaign.id)
+        : Promise.resolve({ data: [] as { metrics_small_bags: number | null; metrics_large_bags: number | null; metrics_pounds: number | null }[] }),
     ]);
 
     const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
@@ -151,6 +155,16 @@ const getCampaignPageData = unstable_cache(
       ? await lbRes.json()
       : { users: [], groups: [] };
 
+    const bagMetrics = (bagMetricsData ?? []).reduce(
+      (acc, c) => {
+        acc.small += c.metrics_small_bags ?? 0;
+        acc.large += c.metrics_large_bags ?? 0;
+        acc.pounds += c.metrics_pounds ?? 0;
+        return acc;
+      },
+      { small: 0, large: 0, pounds: 0 }
+    );
+
     return {
       campaign,
       claims: (claimsData ?? []) as TerritoryClaim[],
@@ -162,6 +176,7 @@ const getCampaignPageData = unstable_cache(
       eventGeoUnitIds,
       partnerBusinesses,
       lbRaw,
+      bagMetrics,
     };
   },
   ["campaign-page-data"],
@@ -184,7 +199,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   ]);
 
   if (!pageData) notFound();
-  const { campaign, claims, events, contribCount, actContribs, problemReports, eventCentroids, eventGeoUnitIds, partnerBusinesses, lbRaw } = pageData;
+  const { campaign, claims, events, contribCount, actContribs, problemReports, eventCentroids, eventGeoUnitIds, partnerBusinesses, lbRaw, bagMetrics } = pageData;
 
   // Fetched uncached (unlike the rest of this page's data, which is batched behind a
   // 20s unstable_cache) so a just-created event shows up immediately instead of waiting
@@ -346,6 +361,9 @@ export default async function CampaignPage({ params, searchParams }: Props) {
         initialTotalBags={totalBags}
         initialTractsCount={tractsCount}
         initialContributionCount={contributionCount}
+        initialSmallBags={bagMetrics.small}
+        initialLargeBags={bagMetrics.large}
+        initialPounds={bagMetrics.pounds}
       />
 
       {campaign.campaign_type === "heatmap" && (

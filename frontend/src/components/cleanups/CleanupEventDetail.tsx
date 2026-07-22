@@ -13,6 +13,8 @@ import {
   updateCleanupEvent,
   promoteOrganizer,
   demoteOrganizer,
+  addEventPhotos,
+  uploadEventPhoto,
   type CleanupEventDetailData,
   type TeamTotalLogEntry,
 } from "@/lib/cleanupEvents";
@@ -220,7 +222,7 @@ export default function CleanupEventDetail({
         </div>
       )}
 
-      {event.route && (
+      {event.route ? (
         <RoutePreviewMap
           coordinates={event.route.coordinates}
           bufferCoordinates={event.route_buffer?.coordinates as [number, number][][] | undefined}
@@ -229,7 +231,25 @@ export default function CleanupEventDetail({
           interactive
           isEvent
         />
+      ) : (
+        <RoutePreviewMap
+          point={[event.lng, event.lat]}
+          pointRadiusMeters={event.check_in_radius_meters}
+          groupLogoUrl={event.group_logo_url}
+          enlargeable
+          interactive
+          isEvent
+        />
       )}
+      <a
+        href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+      >
+        <span aria-hidden="true">🧭</span>
+        Get directions
+      </a>
 
       <div>
         <div className="flex items-center gap-2 mb-1.5">
@@ -251,7 +271,7 @@ export default function CleanupEventDetail({
         </div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100 leading-tight truncate">{event.title}</h1>
+            <h1 className="text-2xl font-black text-zinc-100 leading-tight break-words">{event.title}</h1>
             <span
               title="This feature should work but is still being tested."
               className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 shrink-0 cursor-help"
@@ -556,25 +576,30 @@ export default function CleanupEventDetail({
         )}
       </div>
 
-      {event.photos.length > 0 && (
+      {(event.photos.length > 0 || (userId && !isCancelled)) && (
         <div className="border border-zinc-800 rounded-xl overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+          <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
             <span className="text-sm font-semibold text-zinc-300">
               Photos <span className="text-zinc-500 font-normal">({event.photos.length})</span>
             </span>
+            {userId && !isCancelled && (
+              <AddEventPhotoButton cleanupId={event.id} userId={userId} onAdded={refresh} />
+            )}
           </div>
-          <div className="p-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {event.photos.map((url, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={`${url}-${i}`}
-                src={url}
-                alt=""
-                onClick={() => setLightboxIndex(i)}
-                className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 transition-colors"
-              />
-            ))}
-          </div>
+          {event.photos.length > 0 && (
+            <div className="p-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {event.photos.map((url, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={`${url}-${i}`}
+                  src={url}
+                  alt=""
+                  onClick={() => setLightboxIndex(i)}
+                  className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 transition-colors"
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -586,6 +611,53 @@ export default function CleanupEventDetail({
           onNavigate={setLightboxIndex}
         />
       )}
+    </div>
+  );
+}
+
+function AddEventPhotoButton({
+  cleanupId,
+  userId,
+  onAdded,
+}: {
+  cleanupId: string;
+  userId: string;
+  onAdded: () => Promise<void>;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const url = await uploadEventPhoto(file);
+      await addEventPhotos({ cleanupId, userId, photoUrls: [url] });
+      await onAdded();
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to add photo"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {error && <span className="text-xs text-red-400">{error}</span>}
+      <label className="text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg px-3 py-1.5 cursor-pointer transition-colors">
+        {loading ? "Uploading..." : "Add a photo"}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={loading}
+          onChange={(e) => {
+            void handleFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      </label>
     </div>
   );
 }

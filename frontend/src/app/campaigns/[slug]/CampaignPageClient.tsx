@@ -25,13 +25,15 @@ function StatBarItem({
   label,
   value,
   highlight,
+  hiddenOnMobile,
 }: {
   label: string;
   value: string | number;
   highlight?: boolean;
+  hiddenOnMobile?: boolean;
 }) {
   return (
-    <div className="flex items-baseline gap-1.5 shrink-0">
+    <div className={`${hiddenOnMobile ? "hidden sm:flex" : "flex"} items-baseline gap-1 sm:gap-1.5 shrink-0`}>
       <span className={`text-sm font-bold tabular-nums ${highlight ? "text-red-400" : "text-zinc-100"}`}>
         {value}
       </span>
@@ -47,6 +49,9 @@ export function CampaignStatBar({
   initialTotalBags,
   initialTractsCount,
   initialContributionCount,
+  initialSmallBags,
+  initialLargeBags,
+  initialPounds,
 }: {
   campaignId: string;
   campaignType: string | null;
@@ -54,13 +59,42 @@ export function CampaignStatBar({
   initialTotalBags: number;
   initialTractsCount: number;
   initialContributionCount: number;
+  initialSmallBags?: number;
+  initialLargeBags?: number;
+  initialPounds?: number;
 }) {
   const [totalBags, setTotalBags] = useState(initialTotalBags);
   const [tractsCount, setTractsCount] = useState(initialTractsCount);
   const [contributionCount, setContributionCount] = useState(initialContributionCount);
+  const [smallBags, setSmallBags] = useState(initialSmallBags ?? 0);
+  const [largeBags, setLargeBags] = useState(initialLargeBags ?? 0);
+  const [pounds, setPounds] = useState(initialPounds ?? 0);
+  const [showBagBreakdown, setShowBagBreakdown] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
+
+    const refreshBagMetrics = () => {
+      supabase
+        .from("cleanups")
+        .select("metrics_small_bags, metrics_large_bags, metrics_pounds")
+        .eq("campaign_id", campaignId)
+        .then(({ data }) => {
+          const totals = (data ?? []).reduce(
+            (acc, c: { metrics_small_bags: number | null; metrics_large_bags: number | null; metrics_pounds: number | null }) => {
+              acc.small += c.metrics_small_bags ?? 0;
+              acc.large += c.metrics_large_bags ?? 0;
+              acc.pounds += c.metrics_pounds ?? 0;
+              return acc;
+            },
+            { small: 0, large: 0, pounds: 0 },
+          );
+          setSmallBags(totals.small);
+          setLargeBags(totals.large);
+          setPounds(totals.pounds);
+        });
+    };
+
     const channel = supabase
       .channel(`stat-bar:${campaignId}`)
       .on(
@@ -79,6 +113,16 @@ export function CampaignStatBar({
           setTractsCount((prev) => prev + 1);
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "cleanups", filter: `campaign_id=eq.${campaignId}` },
+        refreshBagMetrics,
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "cleanups", filter: `campaign_id=eq.${campaignId}` },
+        refreshBagMetrics,
+      )
       .subscribe();
 
     return () => {
@@ -86,32 +130,62 @@ export function CampaignStatBar({
     };
   }, [campaignId]);
 
+  const isTerritory =
+    campaignType !== "collage" && campaignType !== "choropleth" && campaignType !== "heatmap" && campaignType !== "hex_bloom";
+  const totalBagCount = smallBags + largeBags;
+
   return (
-    <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center gap-6 overflow-x-auto scrollbar-none">
-      {campaignType === "collage" ? (
-        <StatBarItem label="Photos submitted" value={displayStatValue(contributionCount)} />
-      ) : campaignType === "choropleth" ? (
-        <>
-          <StatBarItem label="Total registrations" value={displayStatValue(totalBags)} />
-          <StatBarItem label="States active" value={tractsCount} />
-          <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
-        </>
-      ) : campaignType === "heatmap" ? (
-        <StatBarItem label="Unfollows logged" value={displayStatValue(contributionCount)} />
-      ) : campaignType === "hex_bloom" ? (
-        <>
-          <StatBarItem label="World Bloom Score" value={displayStatValue(totalBags)} />
-          <StatBarItem label="Hexes bloomed" value={tractsCount} />
-          <StatBarItem label="Actions logged" value={displayStatValue(contributionCount)} />
-        </>
-      ) : (
-        <>
-          <StatBarItem label="Territories claimed" value={tractsCount} />
-          <StatBarItem label="Bags collected" value={displayStatValue(totalBags)} />
-          <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
-        </>
+    <div className="border-b border-zinc-800/60 bg-zinc-950/40">
+      <div className="px-3 sm:px-5 py-2 flex items-center gap-x-2.5 sm:gap-x-6 overflow-x-auto">
+        {campaignType === "collage" ? (
+          <StatBarItem label="Photos submitted" value={displayStatValue(contributionCount)} />
+        ) : campaignType === "choropleth" ? (
+          <>
+            <StatBarItem label="Total registrations" value={displayStatValue(totalBags)} />
+            <StatBarItem label="States active" value={tractsCount} />
+            <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
+          </>
+        ) : campaignType === "heatmap" ? (
+          <StatBarItem label="Unfollows logged" value={displayStatValue(contributionCount)} />
+        ) : campaignType === "hex_bloom" ? (
+          <>
+            <StatBarItem label="World Bloom Score" value={displayStatValue(totalBags)} />
+            <StatBarItem label="Hexes bloomed" value={tractsCount} />
+            <StatBarItem label="Actions logged" value={displayStatValue(contributionCount)} />
+          </>
+        ) : (
+          <>
+            <StatBarItem label="Territories claimed" value={tractsCount} />
+            <button
+              type="button"
+              onClick={() => setShowBagBreakdown((v) => !v)}
+              className="flex items-baseline gap-1 sm:gap-1.5 shrink-0 sm:pointer-events-none"
+            >
+              <span className="text-sm font-bold tabular-nums text-zinc-100">{displayStatValue(totalBagCount)}</span>
+              <span className="text-xs text-zinc-500 flex items-center gap-0.5">
+                Total bags
+                <span className="sm:hidden text-zinc-500 text-sm leading-none">{showBagBreakdown ? "▴" : "▾"}</span>
+              </span>
+            </button>
+            <StatBarItem label="Small bags" value={displayStatValue(smallBags)} hiddenOnMobile />
+            <StatBarItem label="Large bags" value={displayStatValue(largeBags)} hiddenOnMobile />
+            {pounds > 0 && (
+              <StatBarItem label="Pounds" value={displayStatValue(Math.round(pounds))} hiddenOnMobile />
+            )}
+            <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
+          </>
+        )}
+        {eventsCount > 0 && <StatBarItem label="Hotspots" value={eventsCount} highlight />}
+      </div>
+      {isTerritory && showBagBreakdown && (
+        <div className="px-4 pb-2 sm:hidden flex justify-center">
+          <div className="flex items-center gap-x-4 max-w-full overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+            <StatBarItem label="Small bags" value={displayStatValue(smallBags)} />
+            <StatBarItem label="Large bags" value={displayStatValue(largeBags)} />
+            {pounds > 0 && <StatBarItem label="Pounds" value={displayStatValue(Math.round(pounds))} />}
+          </div>
+        </div>
       )}
-      {eventsCount > 0 && <StatBarItem label="Hotspots" value={eventsCount} highlight />}
     </div>
   );
 }

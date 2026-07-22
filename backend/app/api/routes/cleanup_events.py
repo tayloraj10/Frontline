@@ -143,6 +143,18 @@ class OrganizerCheckInRequest(BaseModel):
     attendee_user_id: UUID
 
 
+class AddEventPhotosRequest(BaseModel):
+    user_id: UUID
+    photo_urls: list[str]
+
+    @field_validator("photo_urls")
+    @classmethod
+    def _non_empty(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("photo_urls must not be empty")
+        return v
+
+
 class LogForAttendeeRequest(BaseModel):
     organizer_user_id: UUID
     attendee_user_id: UUID
@@ -473,6 +485,15 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     )
     points_by_user = {str(r.user_id): float(r.points) for r in points_by_user_result.fetchall()}
 
+    # Photo-only adds (no bags/pounds/points attached) — kept separate from the
+    # contribution-derived photos above since they don't belong to any attendee's bag
+    # breakdown, just the flat event-wide gallery.
+    event_photos_result = await db.execute(
+        text("SELECT photo_url FROM cleanup_event_photos WHERE cleanup_id = :id ORDER BY created_at ASC"),
+        {"id": str(cleanup_id)},
+    )
+    all_photos.extend(r.photo_url for r in event_photos_result.fetchall())
+
     # A submission counts as "late" once it lands more than 24h after the event's
     # window closes — unrestricted (submissions are never blocked), just flagged.
     late_cutoff = (row.scheduled_end or row.scheduled_start) + timedelta(hours=24) \
@@ -725,6 +746,25 @@ async def rsvp_to_cleanup_event(cleanup_id: UUID, payload: RsvpRequest, db: Asyn
         "status": row.status,
         "checked_in_at": row.checked_in_at.isoformat() if row.checked_in_at else None,
     }
+
+
+@router.post("/{cleanup_id}/photos")
+async def add_event_photos(cleanup_id: UUID, payload: AddEventPhotosRequest, db: AsyncSession = Depends(get_db)):
+    """Photo-only add to an event's gallery — no bags/pounds/points, no contribution
+    row. Distinct from the log-for-attendee/log-team-total/self-log paths, which all
+    attach photos as a side effect of logging a contribution."""
+    await _get_event_or_404(db, cleanup_id)
+
+    await db.execute(
+        text("""
+            INSERT INTO cleanup_event_photos (cleanup_id, user_id, photo_url)
+            SELECT :cleanup_id, :user_id, url FROM unnest(CAST(:photo_urls AS text[])) AS url
+        """),
+        {"cleanup_id": str(cleanup_id), "user_id": str(payload.user_id), "photo_urls": payload.photo_urls},
+    )
+    await db.commit()
+
+    return {"added": len(payload.photo_urls)}
 
 
 @router.post("/{cleanup_id}/check-in")
