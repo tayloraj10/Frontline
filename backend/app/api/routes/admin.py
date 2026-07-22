@@ -1,5 +1,6 @@
 import asyncio
 from functools import partial
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -427,6 +428,126 @@ async def wipe_geo_unit_data(unit_type: str, unit_id: str, db: AsyncSession = De
 
     await db.commit()
     return {"geo_unit_id": geo_unit_id, "deleted": counts}
+
+
+@router.post("/cleanup-events/{cleanup_id}/wipe")
+async def wipe_cleanup_event_data(cleanup_id: UUID, db: AsyncSession = Depends(get_db)):
+    """
+    Reverses everything a cleanup event's logging has produced, so an organizer can start
+    fresh (e.g. a bad individual log before log-team-total existed, followed by a
+    log-team-total run that only partially covers the group). Deletes every contribution
+    tied to the event (cleanup_id or cleanup_event_id), recomputes territory_claims for
+    each affected geo_unit from whatever contributions remain (or removes the claim row if
+    none do), deletes the event's team-total audit log rows, and resets the event's own
+    aggregate metrics to 0. profiles.points/spendable_points self-correct via the
+    contributions INSERT/DELETE trigger. cleanup_rsvps.contribution_id auto-nulls via FK,
+    making attendees eligible again for a fresh log-team-total run. Does not delete the
+    cleanups row itself or its RSVPs.
+
+    Dev/local only — this router is excluded in production (see main.py). For prod, use
+    POST /api/admin-wipe/cleanup-events/{cleanup_id} in admin_wipe.py instead.
+    """
+    return await wipe_cleanup_event(db, cleanup_id)
+
+
+async def wipe_cleanup_event(db: AsyncSession, cleanup_id: UUID) -> dict:
+    cleanup_row = (
+        await db.execute(text("SELECT id FROM cleanups WHERE id = :id"), {"id": str(cleanup_id)})
+    ).fetchone()
+    if not cleanup_row:
+        raise HTTPException(404, f"No cleanup event found for id={cleanup_id}")
+
+    affected = (
+        await db.execute(
+            text("""
+                SELECT DISTINCT campaign_id, geo_unit_id
+                FROM contributions
+                WHERE (cleanup_id = :id OR cleanup_event_id = :id) AND geo_unit_id IS NOT NULL
+            """),
+            {"id": str(cleanup_id)},
+        )
+    ).fetchall()
+
+    result = await db.execute(
+        text("DELETE FROM contributions WHERE cleanup_id = :id OR cleanup_event_id = :id"),
+        {"id": str(cleanup_id)},
+    )
+    contributions_deleted = result.rowcount
+
+    territory_claims_updated = 0
+    territory_claims_deleted = 0
+    for campaign_id, geo_unit_id in affected:
+        new_total = (
+            await db.execute(
+                text("""
+                    SELECT COALESCE(SUM(value), 0) FROM contributions
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                """),
+                {"campaign_id": str(campaign_id), "geo_unit_id": str(geo_unit_id)},
+            )
+        ).scalar()
+        total = float(new_total)
+
+        if total == 0:
+            result = await db.execute(
+                text("""
+                    DELETE FROM territory_claims
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                """),
+                {"campaign_id": str(campaign_id), "geo_unit_id": str(geo_unit_id)},
+            )
+            territory_claims_deleted += result.rowcount
+        else:
+            result = await db.execute(
+                text("""
+                    WITH top_group AS (
+                        SELECT group_id FROM contributions
+                        WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                          AND group_id IS NOT NULL
+                        GROUP BY group_id ORDER BY SUM(value) DESC LIMIT 1
+                    ),
+                    top_user AS (
+                        SELECT user_id FROM contributions
+                        WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                        GROUP BY user_id ORDER BY SUM(value) DESC LIMIT 1
+                    )
+                    UPDATE territory_claims SET
+                        total_value = :total,
+                        claimed_by_group = (SELECT group_id FROM top_group),
+                        claimed_by_user  = (SELECT user_id  FROM top_user),
+                        updated_at = NOW()
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                """),
+                {
+                    "campaign_id": str(campaign_id),
+                    "geo_unit_id": str(geo_unit_id),
+                    "total": total,
+                },
+            )
+            territory_claims_updated += result.rowcount
+
+    result = await db.execute(
+        text("DELETE FROM cleanup_team_total_logs WHERE cleanup_id = :id"), {"id": str(cleanup_id)}
+    )
+    team_total_logs_deleted = result.rowcount
+
+    await db.execute(
+        text("""
+            UPDATE cleanups
+            SET metrics_small_bags = 0, metrics_large_bags = 0, metrics_pounds = 0
+            WHERE id = :id
+        """),
+        {"id": str(cleanup_id)},
+    )
+
+    await db.commit()
+    return {
+        "cleanup_id": str(cleanup_id),
+        "contributions_deleted": contributions_deleted,
+        "territory_claims_updated": territory_claims_updated,
+        "territory_claims_deleted": territory_claims_deleted,
+        "team_total_logs_deleted": team_total_logs_deleted,
+    }
 
 
 @router.get("/users/search")
