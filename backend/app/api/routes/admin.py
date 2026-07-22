@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.services import geo
 from app.services.seeders import GEO_UNIT_SEEDERS, REGISTRY, GeoUnitType, StatesSeeder
+from app.services.seeders.cleanup_rsvps import CleanupTestAttendeesSeeder
 from app.services.seeders.demo_data import DemoDataSeeder, _uid as _demo_uid
 from app.services.seeders.global_hexes import GlobalHexSeeder
 from app.services.seeders.solarpunk_preseed import SolarpunkPreseedSeeder
@@ -195,6 +196,16 @@ async def seed_demo_data(wipe: bool = False, db: AsyncSession = Depends(get_db))
         result = await DemoDataSeeder().run(db, {"wipe": wipe})
     except Exception as exc:
         raise HTTPException(500, f"Demo seeder failed: {exc}")
+    return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
+
+
+@router.post("/seed/cleanup-attendees")
+async def seed_cleanup_attendees(cleanup_id: str, db: AsyncSession = Depends(get_db)):
+    """Seed a handful of test users as 'going' RSVPs on a specific cleanup event, for local testing."""
+    try:
+        result = await CleanupTestAttendeesSeeder().run(db, {"cleanup_id": cleanup_id})
+    except Exception as exc:
+        raise HTTPException(500, f"Cleanup attendees seeder failed: {exc}")
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
 
 

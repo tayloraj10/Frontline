@@ -126,6 +126,11 @@ class CheckInRequest(BaseModel):
     longitude: float | None = None
 
 
+class OrganizerRoleRequest(BaseModel):
+    organizer_user_id: UUID
+    target_user_id: UUID
+
+
 class LogForAttendeeRequest(BaseModel):
     organizer_user_id: UUID
     attendee_user_id: UUID
@@ -151,6 +156,24 @@ async def _is_group_admin(db: AsyncSession, group_id: UUID, user_id: UUID) -> bo
         {"group_id": str(group_id), "user_id": str(user_id)},
     )
     return result.fetchone() is not None
+
+
+async def _is_event_organizer(db: AsyncSession, cleanup_id: UUID, user_id: UUID) -> bool:
+    result = await db.execute(
+        text("""
+            SELECT 1 FROM cleanup_rsvps
+            WHERE cleanup_id = :cleanup_id AND user_id = :user_id AND is_organizer = true
+        """),
+        {"cleanup_id": str(cleanup_id), "user_id": str(user_id)},
+    )
+    return result.fetchone() is not None
+
+
+async def _can_manage_event(db: AsyncSession, group_id: UUID, cleanup_id: UUID, user_id: UUID) -> bool:
+    """Group admins retain their existing blanket override; real per-event
+    organizers (the creator, or anyone an organizer has promoted) get the same
+    powers without needing to be a group admin."""
+    return await _is_group_admin(db, group_id, user_id) or await _is_event_organizer(db, cleanup_id, user_id)
 
 
 async def _generate_join_code(db: AsyncSession) -> str:
@@ -199,6 +222,7 @@ async def _get_event_or_404(db: AsyncSession, cleanup_id: UUID):
         text("""
             SELECT id, campaign_id, group_id, geo_unit_id::text AS geo_unit_id, join_code,
                    scheduled_start, scheduled_end, max_attendees, external_link,
+                   submitted_by_user_id,
                    ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude
             FROM cleanups
             WHERE id = :id AND is_group_event = true
@@ -350,11 +374,11 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     if not row:
         raise HTTPException(status_code=404, detail="Cleanup event not found")
 
-    is_organizer = bool(viewer_user_id) and await _is_group_admin(db, row.group_id, viewer_user_id)
+    is_organizer = bool(viewer_user_id) and await _can_manage_event(db, row.group_id, cleanup_id, viewer_user_id)
 
     rsvp_result = await db.execute(
         text("""
-            SELECT r.user_id, p.username, p.display_name, r.status, r.checked_in_at
+            SELECT r.user_id, p.username, p.display_name, r.status, r.checked_in_at, r.is_organizer
             FROM cleanup_rsvps r
             JOIN profiles p ON p.id = r.user_id
             WHERE r.cleanup_id = :id
@@ -412,6 +436,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "display_name": r.display_name,
             "status": r.status,
             "checked_in_at": r.checked_in_at.isoformat() if r.checked_in_at else None,
+            "is_organizer": r.is_organizer,
             "small_bags": user_bags["small_bags"],
             "large_bags": user_bags["large_bags"],
             "pounds": user_bags["pounds"],
@@ -528,6 +553,14 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
         },
     )
     row = result.fetchone()
+
+    await db.execute(
+        text("""
+            INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, is_organizer)
+            VALUES (:cleanup_id, :organizer_user_id, 'going', true)
+        """),
+        {"cleanup_id": str(row.id), "organizer_user_id": str(payload.organizer_user_id)},
+    )
     await db.commit()
 
     return {"id": str(row.id), "join_code": row.join_code, "geo_unit_id": geo_unit_id}
@@ -537,8 +570,8 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
 async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventRequest, db: AsyncSession = Depends(get_db)):
     event = await _get_event_or_404(db, cleanup_id)
 
-    if not await _is_group_admin(db, event.group_id, payload.organizer_user_id):
-        raise HTTPException(status_code=403, detail="Only a group admin can edit this event")
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can edit this event")
 
     has_new_location = payload.latitude is not None and payload.longitude is not None
     geo_unit_id = event.geo_unit_id
@@ -699,8 +732,8 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
     recorded_by_user_id preserves an audit trail of who logged it."""
     event = await _get_event_or_404(db, cleanup_id)
 
-    if not await _is_group_admin(db, event.group_id, payload.organizer_user_id):
-        raise HTTPException(status_code=403, detail="Only a group admin can log a contribution for an attendee")
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can log a contribution for an attendee")
 
     recorded = await record_contribution(
         db,
@@ -740,6 +773,50 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
     await db.commit()
 
     return {"contribution_id": recorded.contribution_id, "value": recorded.value}
+
+
+@router.post("/{cleanup_id}/organizers")
+async def promote_organizer(cleanup_id: UUID, payload: OrganizerRoleRequest, db: AsyncSession = Depends(get_db)):
+    event = await _get_event_or_404(db, cleanup_id)
+
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can promote co-organizers")
+
+    result = await db.execute(
+        text("""
+            UPDATE cleanup_rsvps SET is_organizer = true, updated_at = NOW()
+            WHERE cleanup_id = :cleanup_id AND user_id = :target_user_id
+            RETURNING id
+        """),
+        {"cleanup_id": str(cleanup_id), "target_user_id": str(payload.target_user_id)},
+    )
+    if not result.fetchone():
+        raise HTTPException(status_code=404, detail="That user must RSVP to the event before becoming an organizer")
+    await db.commit()
+
+    return {"cleanup_id": str(cleanup_id), "user_id": str(payload.target_user_id), "is_organizer": True}
+
+
+@router.delete("/{cleanup_id}/organizers/{user_id}")
+async def demote_organizer(cleanup_id: UUID, user_id: UUID, payload: OrganizerRoleRequest, db: AsyncSession = Depends(get_db)):
+    event = await _get_event_or_404(db, cleanup_id)
+
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can remove co-organizers")
+
+    if event.submitted_by_user_id is not None and str(event.submitted_by_user_id) == str(user_id):
+        raise HTTPException(status_code=400, detail="The event's creator can't be removed as organizer")
+
+    await db.execute(
+        text("""
+            UPDATE cleanup_rsvps SET is_organizer = false, updated_at = NOW()
+            WHERE cleanup_id = :cleanup_id AND user_id = :user_id
+        """),
+        {"cleanup_id": str(cleanup_id), "user_id": str(user_id)},
+    )
+    await db.commit()
+
+    return {"cleanup_id": str(cleanup_id), "user_id": str(user_id), "is_organizer": False}
 
 
 class IntersectingGeoUnitsRequest(BaseModel):

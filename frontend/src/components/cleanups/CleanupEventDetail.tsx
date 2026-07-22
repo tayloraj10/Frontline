@@ -8,6 +8,8 @@ import {
   checkInToCleanupEvent,
   logForAttendee,
   updateCleanupEvent,
+  promoteOrganizer,
+  demoteOrganizer,
   type CleanupEventDetailData,
 } from "@/lib/cleanupEvents";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
@@ -454,6 +456,11 @@ export default function CleanupEventDetail({
                   </div>
                   <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
                   <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
+                  {r.is_organizer && (
+                    <span className="text-[10px] font-semibold text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0">
+                      ★ Organizer
+                    </span>
+                  )}
                   {(r.small_bags + r.large_bags) > 0 && (
                     <span
                       className="text-xs text-emerald-400 shrink-0"
@@ -470,17 +477,29 @@ export default function CleanupEventDetail({
                     </span>
                   )}
                 </div>
-                {r.checked_in_at ? (
-                  <span className="text-xs text-emerald-400 shrink-0">✓ checked in</span>
-                ) : event.is_organizer ? (
-                  <OrganizerLogButton
-                    cleanupId={event.id}
-                    organizerUserId={userId!}
-                    attendeeUserId={r.user_id}
-                    attendeeName={r.display_name ?? r.username ?? "attendee"}
-                    onLogged={refresh}
-                  />
-                ) : null}
+                <div className="flex items-center gap-2 shrink-0">
+                  {r.checked_in_at ? (
+                    <span className="text-xs text-emerald-400">✓ checked in</span>
+                  ) : event.is_organizer ? (
+                    <OrganizerLogButton
+                      cleanupId={event.id}
+                      organizerUserId={userId!}
+                      attendeeUserId={r.user_id}
+                      attendeeName={r.display_name ?? r.username ?? "attendee"}
+                      onLogged={refresh}
+                    />
+                  ) : null}
+                  {event.is_organizer && r.user_id !== userId && (
+                    <OrganizerRoleButton
+                      cleanupId={event.id}
+                      organizerUserId={userId!}
+                      targetUserId={r.user_id}
+                      isOrganizer={r.is_organizer}
+                      onChanged={refresh}
+                      onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to update organizer"))}
+                    />
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -619,5 +638,49 @@ function OrganizerLogButton({
         </div>
       </div>
     </div>
+  );
+}
+
+function OrganizerRoleButton({
+  cleanupId,
+  organizerUserId,
+  targetUserId,
+  isOrganizer,
+  onChanged,
+  onError,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  targetUserId: string;
+  isOrganizer: boolean;
+  onChanged: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    setLoading(true);
+    try {
+      if (isOrganizer) {
+        await demoteOrganizer({ cleanupId, organizerUserId, targetUserId });
+      } else {
+        await promoteOrganizer({ cleanupId, organizerUserId, targetUserId });
+      }
+      await onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update organizer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={loading}
+      className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0 disabled:opacity-40"
+    >
+      {loading ? "…" : isOrganizer ? "Remove organizer" : "Make organizer"}
+    </button>
   );
 }

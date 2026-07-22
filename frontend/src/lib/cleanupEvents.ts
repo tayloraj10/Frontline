@@ -17,6 +17,7 @@ export type CleanupEventRsvp = {
   display_name: string | null;
   status: "going" | "maybe" | "cancelled";
   checked_in_at: string | null;
+  is_organizer: boolean;
   small_bags: number;
   large_bags: number;
   pounds: number;
@@ -269,4 +270,37 @@ export async function logForAttendee({
     pounds,
     photo_urls: photoUrls,
   });
+}
+
+export async function promoteOrganizer({
+  cleanupId,
+  organizerUserId,
+  targetUserId,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  targetUserId: string;
+}): Promise<{ user_id: string; is_organizer: boolean }> {
+  return postJson(`/cleanup-events/${cleanupId}/organizers`, {
+    organizer_user_id: organizerUserId,
+    target_user_id: targetUserId,
+  });
+}
+
+export async function demoteOrganizer({
+  cleanupId,
+  organizerUserId,
+  targetUserId,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  targetUserId: string;
+}): Promise<{ user_id: string; is_organizer: boolean }> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/cleanup-events/${cleanupId}/organizers/${targetUserId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organizer_user_id: organizerUserId, target_user_id: targetUserId }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
