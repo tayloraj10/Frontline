@@ -132,6 +132,11 @@ class OrganizerRoleRequest(BaseModel):
     target_user_id: UUID
 
 
+class OrganizerCheckInRequest(BaseModel):
+    organizer_user_id: UUID
+    attendee_user_id: UUID
+
+
 class LogForAttendeeRequest(BaseModel):
     organizer_user_id: UUID
     attendee_user_id: UUID
@@ -766,6 +771,34 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
             RETURNING id, checked_in_at
         """),
         {"cleanup_id": str(cleanup_id), "user_id": str(payload.user_id)},
+    )
+    row = result.fetchone()
+    await db.commit()
+
+    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat()}
+
+
+@router.post("/{cleanup_id}/organizer-check-in")
+async def organizer_check_in_attendee(cleanup_id: UUID, payload: OrganizerCheckInRequest, db: AsyncSession = Depends(get_db)):
+    """Lets an organizer manually check an attendee in — e.g. they forgot their phone,
+    have a dead battery, or are outside the self-check-in proximity/time window but the
+    organizer can vouch for them in person. Bypasses the join-code/GPS-proximity/window
+    checks that gate self-check-in, since the organizer is the verification here."""
+    event = await _get_event_or_404(db, cleanup_id)
+
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can check in an attendee")
+
+    result = await db.execute(
+        text("""
+            INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at)
+            VALUES (:cleanup_id, :user_id, 'going', NOW())
+            ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
+                checked_in_at = NOW(),
+                updated_at = NOW()
+            RETURNING id, checked_in_at
+        """),
+        {"cleanup_id": str(cleanup_id), "user_id": str(payload.attendee_user_id)},
     )
     row = result.fetchone()
     await db.commit()
