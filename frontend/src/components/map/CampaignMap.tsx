@@ -487,6 +487,32 @@ type LayerToggleState = {
   showPartners: boolean;
 };
 
+// Persists the legend's layer-visibility toggles across page visits (per browser,
+// shared across all campaigns/maps — these are display prefs, not per-campaign data).
+const LEGEND_TOGGLE_STORAGE_KEY = "frontline:map-legend-toggles";
+
+let cachedStoredToggles: Partial<LayerToggleState> | null | undefined;
+
+function readStoredToggles(): Partial<LayerToggleState> {
+  if (cachedStoredToggles === undefined) {
+    cachedStoredToggles = null;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(LEGEND_TOGGLE_STORAGE_KEY);
+        cachedStoredToggles = raw ? (JSON.parse(raw) as Partial<LayerToggleState>) : null;
+      } catch {
+        cachedStoredToggles = null;
+      }
+    }
+  }
+  return cachedStoredToggles ?? {};
+}
+
+function storedToggle(key: keyof LayerToggleState): boolean {
+  const value = readStoredToggles()[key];
+  return typeof value === "boolean" ? value : true;
+}
+
 // Case expression resolving to 1/0 per-feature based on which territory category
 // (unclaimed / group / individual) it currently is, driven by the `claim_owned` /
 // `claim_is_group` feature-state set in applyClaimsAsFeatureState. Multiplying this
@@ -1449,33 +1475,33 @@ export default function CampaignMap({
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
-  const [showUnclaimedTerritory, setShowUnclaimedTerritory] = useState(true);
-  const [showGroupTerritory, setShowGroupTerritory] = useState(true);
-  const [showIndividualTerritory, setShowIndividualTerritory] = useState(true);
-  const [showCleanupDots, setShowCleanupDots] = useState(true);
-  const [showGroupEventDots, setShowGroupEventDots] = useState(true);
-  const [showReports, setShowReports] = useState(true);
-  const [showHotspots, setShowHotspots] = useState(true);
-  const [showEventRadius, setShowEventRadius] = useState(true);
-  const [showGroupRoutes, setShowGroupRoutes] = useState(true);
-  const [showAdhocRoutes, setShowAdhocRoutes] = useState(true);
-  const [showGroupEvents, setShowGroupEvents] = useState(true);
-  const [showMapEvents, setShowMapEvents] = useState(true);
-  const [showPartners, setShowPartners] = useState(true);
+  const [showUnclaimedTerritory, setShowUnclaimedTerritory] = useState(() => storedToggle("showUnclaimedTerritory"));
+  const [showGroupTerritory, setShowGroupTerritory] = useState(() => storedToggle("showGroupTerritory"));
+  const [showIndividualTerritory, setShowIndividualTerritory] = useState(() => storedToggle("showIndividualTerritory"));
+  const [showCleanupDots, setShowCleanupDots] = useState(() => storedToggle("showCleanupDots"));
+  const [showGroupEventDots, setShowGroupEventDots] = useState(() => storedToggle("showGroupEventDots"));
+  const [showReports, setShowReports] = useState(() => storedToggle("showReports"));
+  const [showHotspots, setShowHotspots] = useState(() => storedToggle("showHotspots"));
+  const [showEventRadius, setShowEventRadius] = useState(() => storedToggle("showEventRadius"));
+  const [showGroupRoutes, setShowGroupRoutes] = useState(() => storedToggle("showGroupRoutes"));
+  const [showAdhocRoutes, setShowAdhocRoutes] = useState(() => storedToggle("showAdhocRoutes"));
+  const [showGroupEvents, setShowGroupEvents] = useState(() => storedToggle("showGroupEvents"));
+  const [showMapEvents, setShowMapEvents] = useState(() => storedToggle("showMapEvents"));
+  const [showPartners, setShowPartners] = useState(() => storedToggle("showPartners"));
   const layerToggleRef = useRef<LayerToggleState>({
-    showUnclaimedTerritory: true,
-    showGroupTerritory: true,
-    showIndividualTerritory: true,
-    showCleanupDots: true,
-    showGroupEventDots: true,
-    showReports: true,
-    showHotspots: true,
-    showEventRadius: true,
-    showGroupRoutes: true,
-    showAdhocRoutes: true,
-    showGroupEvents: true,
-    showMapEvents: true,
-    showPartners: true,
+    showUnclaimedTerritory,
+    showGroupTerritory,
+    showIndividualTerritory,
+    showCleanupDots,
+    showGroupEventDots,
+    showReports,
+    showHotspots,
+    showEventRadius,
+    showGroupRoutes,
+    showAdhocRoutes,
+    showGroupEvents,
+    showMapEvents,
+    showPartners,
   });
   const eventMarkerIsHotspotRef = useRef<boolean[]>([]);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
@@ -2855,6 +2881,13 @@ export default function CampaignMap({
       showMapEvents,
       showPartners,
     };
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(LEGEND_TOGGLE_STORAGE_KEY, JSON.stringify(layerToggleRef.current));
+      } catch {
+        // ignore (private-browsing / storage-full)
+      }
+    }
     const m = map.current;
     if (!m || !mapReadyRef.current) return;
     applyLayerVisibility(m, layerToggleRef.current);
