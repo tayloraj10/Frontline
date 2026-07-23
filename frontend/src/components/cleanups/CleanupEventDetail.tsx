@@ -227,6 +227,7 @@ export default function CleanupEventDetail({
           coordinates={event.route.coordinates}
           bufferCoordinates={event.route_buffer?.coordinates as [number, number][][] | undefined}
           groupLogoUrl={event.group_logo_url}
+          cohostLogoUrls={event.cohost_groups.map((g) => g.group_logo_url)}
           enlargeable
           interactive
           isEvent
@@ -236,6 +237,7 @@ export default function CleanupEventDetail({
           point={[event.lng, event.lat]}
           pointRadiusMeters={event.check_in_radius_meters}
           groupLogoUrl={event.group_logo_url}
+          cohostLogoUrls={event.cohost_groups.map((g) => g.group_logo_url)}
           enlargeable
           interactive
           isEvent
@@ -252,22 +254,46 @@ export default function CleanupEventDetail({
       </a>
 
       <div>
-        <div className="flex items-center gap-2 mb-1.5">
-          {event.group_logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={event.group_logo_url}
-              alt={event.group_name}
-              className="w-9 h-9 rounded-full object-cover border border-zinc-700/50"
-            />
-          ) : (
-            <span className="w-9 h-9 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-sm">
-              🧹
-            </span>
+        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          {(event.group_logo_url || event.cohost_groups.some((g) => g.group_logo_url)) && (
+            <div className="flex items-center -space-x-2">
+              {event.group_logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={event.group_logo_url}
+                  alt={event.group_name}
+                  className="w-9 h-9 rounded-full object-cover border border-zinc-700/50 relative"
+                />
+              )}
+              {event.cohost_groups.map((g) => (
+                g.group_logo_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={g.group_id}
+                    src={g.group_logo_url}
+                    alt={g.group_name}
+                    className="w-9 h-9 rounded-full object-cover border border-zinc-700/50 relative"
+                  />
+                )
+              ))}
+            </div>
           )}
           <Link href={`/groups/${event.group_slug}`} className="text-sm text-sky-400 hover:text-sky-300">
             {event.group_name}
           </Link>
+          {event.cohost_groups.length > 0 && (
+            <span className="text-sm text-zinc-400">
+              in partnership with{" "}
+              {event.cohost_groups.map((g, i) => (
+                <span key={g.group_id}>
+                  {i > 0 && ", "}
+                  <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300">
+                    {g.group_name}
+                  </Link>
+                </span>
+              ))}
+            </span>
+          )}
         </div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">

@@ -73,6 +73,7 @@ export default async function EditCleanupEventPage({ params }: Props) {
             imageUrl: event.image_url,
             route: event.route,
           }}
+          initialCohostGroupIds={event.cohost_groups.map((g) => g.group_id)}
         />
       </div>
     </main>

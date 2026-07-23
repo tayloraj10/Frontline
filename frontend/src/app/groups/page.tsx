@@ -17,15 +17,22 @@ const getGroupsListData = unstable_cache(
       supabase.from("group_members").select("group_id, user_id"),
       supabase
         .from("cleanups")
-        .select("group_id")
+        .select("id, group_id")
         .eq("is_group_event", true)
         .neq("status", "cancelled")
         .gt("scheduled_start", new Date().toISOString()),
     ]);
+
+    const eventIds = (eventsData ?? []).map((e) => e.id);
+    const { data: cohostsData } = eventIds.length
+      ? await supabase.from("cleanup_event_cohosts").select("cleanup_id, group_id").in("cleanup_id", eventIds)
+      : { data: [] as { cleanup_id: string; group_id: string }[] };
+
     return {
       groups: (groupsData ?? []) as Group[],
       members: membersData ?? ([] as { group_id: string; user_id: string }[]),
-      events: eventsData ?? ([] as { group_id: string | null }[]),
+      events: eventsData ?? ([] as { id: string; group_id: string | null }[]),
+      cohosts: cohostsData ?? ([] as { cleanup_id: string; group_id: string }[]),
     };
   },
   ["groups-list-data"],
@@ -35,7 +42,7 @@ const getGroupsListData = unstable_cache(
 export default async function GroupsPage() {
   const supabase = await createClient();
 
-  const [{ data: { user } }, { groups: groupsData, members: membersData, events: eventsData }] = await Promise.all([
+  const [{ data: { user } }, { groups: groupsData, members: membersData, events: eventsData, cohosts: cohostsData }] = await Promise.all([
     supabase.auth.getUser(),
     getGroupsListData(),
   ]);
@@ -64,6 +71,9 @@ export default async function GroupsPage() {
   for (const e of eventsData ?? []) {
     if (!e.group_id) continue;
     upcomingEventCountByGroup.set(e.group_id, (upcomingEventCountByGroup.get(e.group_id) ?? 0) + 1);
+  }
+  for (const c of cohostsData ?? []) {
+    upcomingEventCountByGroup.set(c.group_id, (upcomingEventCountByGroup.get(c.group_id) ?? 0) + 1);
   }
 
   return (

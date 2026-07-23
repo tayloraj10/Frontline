@@ -81,6 +81,52 @@ function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 4
   return coords;
 }
 
+// Builds an overlapping row of same-size host-group logo circles (primary + cohosts),
+// mirroring the "in partnership with" avatar stack used on the event detail page. Uses
+// display:inline-flex so the wrapper shrink-wraps to its actual content width — a plain
+// block div here would stretch to the container's full width and throw off maplibre's
+// -50%/-50% centering transform on the marker.
+function createHostLogoStack(
+  hosts: { logo_url?: string | null }[],
+  size: number,
+  isPast: boolean,
+): HTMLDivElement {
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;";
+
+  // Only groups with an actual logo get a circle here — a group without one is skipped
+  // rather than shown as a generic placeholder. If nothing has a logo, fall back to a
+  // single generic circle so the marker stays visible/clickable on the map.
+  const logoHosts = hosts.filter((h) => h.logo_url);
+  const renderHosts = logoHosts.length > 0 ? logoHosts : [{ logo_url: null }];
+
+  const overlap = Math.round(size * 0.35);
+  renderHosts.forEach((host, i) => {
+    const el = document.createElement("div");
+    el.style.cssText =
+      `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;flex-shrink:0;` +
+      `position:relative;z-index:${renderHosts.length - i};` +
+      (i > 0 ? `margin-left:-${overlap}px;` : "") +
+      (isPast
+        ? "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);"
+        : "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);") +
+      "display:flex;align-items:center;justify-content:center;background:rgba(12,74,110,0.9)";
+
+    if (host.logo_url) {
+      const img = document.createElement("img");
+      img.src = host.logo_url;
+      img.style.cssText = "width:100%;height:100%;object-fit:cover";
+      el.appendChild(img);
+    } else {
+      el.textContent = "🧹";
+      el.style.fontSize = `${Math.round(size * 0.5)}px`;
+    }
+    wrapper.appendChild(el);
+  });
+
+  return wrapper;
+}
+
 // Short "at a glance" date/time text for the small pill shown above a cleanup event's
 // marker on the map — same fields as the full detail popup's format, just on one line.
 function formatEventDateTime(iso: string | null): string | null {
@@ -265,6 +311,7 @@ export type MapCleanupEvent = {
   group_name: string;
   group_slug: string;
   group_logo_url: string | null;
+  cohost_groups?: { group_id: string; group_name: string; group_slug: string; group_logo_url: string | null }[];
   is_past?: boolean;
   total_small_bags?: number;
   total_large_bags?: number;
@@ -1548,32 +1595,20 @@ export default function CampaignMap({
     const pointOnlyEvents = events.filter((event) => !routeEventIds.has(event.id));
 
     for (const event of pointOnlyEvents) {
-      const el = document.createElement("div");
       const size = 24;
-      el.style.cssText = event.is_past
-        ? `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
-        "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);" +
-        "display:flex;align-items:center;justify-content:center;background:rgba(63,63,70,0.9)"
-        : `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
-        "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);" +
-        "display:flex;align-items:center;justify-content:center;background:rgba(12,74,110,0.9)";
+      const cohostGroups = event.cohost_groups ?? [];
+      const hosts = [{ logo_url: event.group_logo_url }, ...cohostGroups.map((g) => ({ logo_url: g.group_logo_url }))];
+      const wrapper = createHostLogoStack(hosts, size, !!event.is_past);
 
-      if (event.group_logo_url) {
-        const img = document.createElement("img");
-        img.src = event.group_logo_url;
-        img.style.cssText = "width:100%;height:100%;object-fit:cover";
-        el.appendChild(img);
-      } else {
-        el.textContent = "🧹";
-        el.style.fontSize = "12px";
-      }
-      el.title = event.is_past ? `${event.title} — ${event.group_name} (ended)` : `${event.title} — ${event.group_name}`;
+      const cohostNames = cohostGroups.map((g) => g.group_name).join(", ");
+      const hostLabel = cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name;
+      wrapper.title = event.is_past ? `${event.title} — ${hostLabel} (ended)` : `${event.title} — ${hostLabel}`;
 
-      const marker = new maplibregl.Marker({ element: el })
+      const marker = new maplibregl.Marker({ element: wrapper })
         .setLngLat([event.lng, event.lat])
         .addTo(map.current!);
 
-      el.onclick = () => setSelectedCleanupEvent(event);
+      wrapper.onclick = () => setSelectedCleanupEvent(event);
 
       cleanupEventMarkersRef.current.push(marker);
 
@@ -1762,11 +1797,14 @@ export default function CampaignMap({
         const mid = coords[Math.floor(coords.length / 2)];
         const event = eventById.get(r.id);
 
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;";
+
         const el = document.createElement("div");
         const size = 20;
         const isPast = event?.is_past ?? false;
         el.style.cssText =
-          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:${isPast ? 5 : 6};` +
+          `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;flex-shrink:0;position:relative;z-index:${isPast ? 5 : 6};` +
           "display:flex;align-items:center;justify-content:center;" +
           (isPast
             ? "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);background:rgba(63,63,70,0.9)"
@@ -1792,10 +1830,32 @@ export default function CampaignMap({
             "</svg>";
           el.style.color = event ? "#7dd3fc" : "#fcd34d";
         }
-        el.title = event ? `${event.title} — ${event.group_name}${isPast ? " (ended)" : ""}` : "View this cleanup route";
+        wrapper.appendChild(el);
 
-        const marker = new maplibregl.Marker({ element: el }).setLngLat(mid).addTo(map.current!);
-        el.onclick = (e) => {
+        const cohostGroups = (event?.cohost_groups ?? []).filter((g) => g.group_logo_url);
+        const overlap = Math.round(size * 0.35);
+        cohostGroups.forEach((g, i) => {
+          const cohostEl = document.createElement("div");
+          cohostEl.style.cssText =
+            `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;flex-shrink:0;` +
+            `position:relative;margin-left:-${overlap}px;z-index:${5 - i};` +
+            (isPast
+              ? "border:2px solid #71717a;box-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.5;filter:grayscale(60%);"
+              : "border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.7),0 1px 4px rgba(0,0,0,0.6);") +
+            "display:flex;align-items:center;justify-content:center;background:rgba(12,74,110,0.9)";
+          const img = document.createElement("img");
+          img.src = g.group_logo_url as string;
+          img.style.cssText = "width:100%;height:100%;object-fit:cover";
+          cohostEl.appendChild(img);
+          wrapper.appendChild(cohostEl);
+        });
+
+        const cohostNames = (event?.cohost_groups ?? []).map((g) => g.group_name).join(", ");
+        const hostLabel = event ? (cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name) : "";
+        wrapper.title = event ? `${event.title} — ${hostLabel}${isPast ? " (ended)" : ""}` : "View this cleanup route";
+
+        const marker = new maplibregl.Marker({ element: wrapper }).setLngLat(mid).addTo(map.current!);
+        wrapper.onclick = (e) => {
           e.stopPropagation();
           if (event) {
             setSelectedCleanupEvent(event);
@@ -3858,22 +3918,33 @@ export default function CampaignMap({
               onClick={() => setSelectedCleanupEvent(null)}
               className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
             >
-              ×
+              <span className="-translate-y-[2px]">×</span>
             </button>
             <div className="flex items-center gap-3 mb-3">
-              {selectedCleanupEvent.group_logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={selectedCleanupEvent.group_logo_url}
-                  alt={selectedCleanupEvent.group_name}
-                  className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-xl">
-                  🧹
+              {(selectedCleanupEvent.group_logo_url || selectedCleanupEvent.cohost_groups?.some((g) => g.group_logo_url)) && (
+                <div className="flex items-center -space-x-2 shrink-0">
+                  {selectedCleanupEvent.group_logo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={selectedCleanupEvent.group_logo_url}
+                      alt={selectedCleanupEvent.group_name}
+                      className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
+                    />
+                  )}
+                  {selectedCleanupEvent.cohost_groups?.map((g) => (
+                    g.group_logo_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={g.group_id}
+                        src={g.group_logo_url}
+                        alt={g.group_name}
+                        className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
+                      />
+                    )
+                  ))}
                 </div>
               )}
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold text-white">{selectedCleanupEvent.title}</h3>
                   <span
@@ -3889,6 +3960,19 @@ export default function CampaignMap({
                 >
                   {selectedCleanupEvent.group_name}
                 </Link>
+                {selectedCleanupEvent.cohost_groups && selectedCleanupEvent.cohost_groups.length > 0 && (
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    in partnership with{" "}
+                    {selectedCleanupEvent.cohost_groups.map((g, i) => (
+                      <span key={g.group_id}>
+                        {i > 0 && ", "}
+                        <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300">
+                          {g.group_name}
+                        </Link>
+                      </span>
+                    ))}
+                  </p>
+                )}
               </div>
             </div>
             {selectedCleanupEvent.is_past && (

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createCleanupEvent } from "@/lib/cleanupEvents";
 import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString } from "@/lib/cleanupRoutes";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
+import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import Lightbox from "@/components/Lightbox";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
@@ -246,7 +247,12 @@ interface ContributionPanelProps {
   onStyleChange?: (id: string) => void;
   pendingCleanupEventId?: string | null;
   onPendingCleanupEventConsumed?: () => void;
-  nearbyCleanupEvent?: { id: string; title: string } | null;
+  nearbyCleanupEvent?: {
+    id: string;
+    title: string;
+    group_id: string;
+    cohost_groups?: { group_id: string; group_name: string; group_slug: string; group_logo_url: string | null }[];
+  } | null;
   clickedReport?: ClickedReport | null;
   onClickedReportConsumed?: () => void;
   onClaimReportUpdated?: (reportId: string, patch: Partial<ClickedReport>) => void;
@@ -625,7 +631,12 @@ function ContributeModal({
   onClose: () => void;
   onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean) => void;
   activeMapStyle?: string;
-  nearbyEvent?: { id: string; title: string } | null;
+  nearbyEvent?: {
+    id: string;
+    title: string;
+    group_id: string;
+    cohost_groups?: { group_id: string; group_name: string; group_slug: string; group_logo_url: string | null }[];
+  } | null;
   // Set when arriving from the claim-a-report challenge flow: the report is already
   // resolved server-side by that point, so the proximity nearby-hotspot checkbox below
   // doesn't apply — this is a different report, already claimed and completed.
@@ -709,6 +720,18 @@ function ContributeModal({
   // A proximity-detected nearby event the user has opted into via the checkbox below.
   const effectiveEventId = useNearbyEvent ? nearbyEvent?.id ?? null : null;
   const isEventMode = isCleanup && Boolean(effectiveEventId);
+
+  // When logging toward a co-hosted event, default the credit-group pill to whichever
+  // host group the user belongs to, preferring the primary host over a co-host —
+  // mirrors the backend's _group_for_credit preference order used for organizer-logged
+  // contributions. Only fires if the user actually belongs to a host group; otherwise
+  // leaves whatever default (localStorage / single-group) was already selected.
+  useEffect(() => {
+    if (!isEventMode || !nearbyEvent) return;
+    const hostGroupIds = [nearbyEvent.group_id, ...(nearbyEvent.cohost_groups?.map((g) => g.group_id) ?? [])];
+    const preferredGroupId = hostGroupIds.find((id) => userGroups.some((g) => g.id === id));
+    if (preferredGroupId) setSelectedGroupId(preferredGroupId);
+  }, [isEventMode, nearbyEvent, userGroups]);
 
   const isRouteMode = isCleanup && contributeMode === "route";
 
@@ -2333,6 +2356,7 @@ function HostEventModal({
 }) {
   const router = useRouter();
   const [groupId, setGroupId] = useState(adminGroups[0]?.id ?? "");
+  const [cohostGroupIds, setCohostGroupIds] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [scheduledStart, setScheduledStart] = useState("");
@@ -2404,6 +2428,7 @@ function HostEventModal({
         maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
         externalLink: externalLink.trim() || null,
         route,
+        cohostGroupIds,
       });
       setCreated(result);
       if (route) onRouteAdded?.({ id: result.id, route });
@@ -2451,7 +2476,10 @@ function HostEventModal({
             <label className="block text-xs text-zinc-500 mb-1.5">Hosting group</label>
             <select
               value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
+              onChange={(e) => {
+                setGroupId(e.target.value);
+                setCohostGroupIds((prev) => prev.filter((id) => id !== e.target.value));
+              }}
               className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
             >
               {adminGroups.map((g) => (
@@ -2459,6 +2487,14 @@ function HostEventModal({
               ))}
             </select>
           </div>
+        )}
+
+        {groupId && (
+          <CohostGroupPicker
+            primaryGroupId={groupId}
+            value={cohostGroupIds}
+            onChange={setCohostGroupIds}
+          />
         )}
 
         <div>

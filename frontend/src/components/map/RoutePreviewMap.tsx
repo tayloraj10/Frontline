@@ -162,6 +162,7 @@ function RouteMap({
   interactive,
   heightClassName,
   groupLogoUrl,
+  cohostLogoUrls,
   isEvent,
   showBuffer,
   onToggleBuffer,
@@ -177,6 +178,7 @@ function RouteMap({
   interactive: boolean;
   heightClassName: string;
   groupLogoUrl?: string | null;
+  cohostLogoUrls?: (string | null)[];
   isEvent: boolean;
   showBuffer: boolean;
   onToggleBuffer?: () => void;
@@ -300,15 +302,28 @@ function RouteMap({
         // (no drag) correctly represents the pin location — unlike the route logo below,
         // this isn't decorative placement, it IS the marker. Matches CampaignMap's own
         // cleanup-event pin styling (sky-blue glow badge, 🧹 fallback) for visual parity.
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-          <div className="w-9 h-9 rounded-full border-2 border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)] bg-sky-950/90 flex items-center justify-center overflow-hidden">
-            {groupLogoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={groupLogoUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-sm">🧹</span>
-            )}
-          </div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center">
+          {(() => {
+            // Mirrors CampaignMap's createHostLogoStack (primary + cohost logos, overlapping
+            // circles) so this detail-page pin looks identical to the main map's marker.
+            const logos = [groupLogoUrl, ...(cohostLogoUrls ?? [])].filter((url): url is string => !!url);
+            const hosts = logos.length > 0 ? logos : [null];
+            const overlap = Math.round(9 * 0.35 * 4) / 4; // matches size*0.35 at the 36px (w-9) badge size
+            return hosts.map((url, i) => (
+              <div
+                key={i}
+                className="w-9 h-9 rounded-full border-2 border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)] bg-sky-950/90 flex items-center justify-center overflow-hidden shrink-0"
+                style={{ marginLeft: i > 0 ? `-${overlap}px` : 0, zIndex: hosts.length - i }}
+              >
+                {url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-sm">🧹</span>
+                )}
+              </div>
+            ));
+          })()}
         </div>
       ) : (
         groupLogoUrl && (
@@ -380,6 +395,7 @@ export default function RoutePreviewMap({
   interactive = false,
   heightClassName = "h-[220px]",
   groupLogoUrl = null,
+  cohostLogoUrls,
   enlargeable = false,
   isEvent = false,
 }: {
@@ -391,6 +407,7 @@ export default function RoutePreviewMap({
   interactive?: boolean;
   heightClassName?: string;
   groupLogoUrl?: string | null;
+  cohostLogoUrls?: (string | null)[];
   enlargeable?: boolean;
   isEvent?: boolean;
 }) {
@@ -411,6 +428,7 @@ export default function RoutePreviewMap({
         interactive={interactive}
         heightClassName={heightClassName}
         groupLogoUrl={groupLogoUrl}
+        cohostLogoUrls={cohostLogoUrls}
         isEvent={isEvent}
         showBuffer={showBuffer}
         onToggleBuffer={() => setShowBuffer((v) => !v)}
@@ -448,6 +466,7 @@ export default function RoutePreviewMap({
               interactive
               heightClassName="h-[70vh]"
               groupLogoUrl={groupLogoUrl}
+              cohostLogoUrls={cohostLogoUrls}
               isEvent={isEvent}
               showBuffer={showBuffer}
               onToggleBuffer={() => setShowBuffer((v) => !v)}

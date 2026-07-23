@@ -6,6 +6,7 @@ import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
 import RoutePicker from "@/components/map/RoutePicker";
+import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
 
 const inputCls = "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -39,6 +40,7 @@ export default function CreateCleanupEventForm({
   mode = "create",
   cleanupId,
   initialValues,
+  initialCohostGroupIds = [],
 }: {
   groupId: string;
   groupSlug: string;
@@ -58,6 +60,7 @@ export default function CreateCleanupEventForm({
     imageUrl: string | null;
     route: RouteLineString | null;
   };
+  initialCohostGroupIds?: string[];
 }) {
   const router = useRouter();
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
@@ -78,6 +81,7 @@ export default function CreateCleanupEventForm({
   const [route, setRoute] = useState<RouteLineString | null>(initialValues?.route ?? null);
   const [showRoutePicker, setShowRoutePicker] = useState(!!initialValues?.route);
   const hadInitialRoute = !!initialValues?.route;
+  const [cohostGroupIds, setCohostGroupIds] = useState<string[]>(initialCohostGroupIds);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -117,6 +121,7 @@ export default function CreateCleanupEventForm({
           externalLink: externalLink.trim() || null,
           route,
           clearRoute: hadInitialRoute && !route,
+          cohostGroupIds,
         });
         router.push(`/cleanup-events/${cleanupId}`);
       } else {
@@ -134,6 +139,7 @@ export default function CreateCleanupEventForm({
           maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
           externalLink: externalLink.trim() || null,
           route,
+          cohostGroupIds,
         });
         router.push(`/groups/${groupSlug}`);
       }
@@ -225,6 +231,13 @@ export default function CreateCleanupEventForm({
           {showRoutePicker && (lat === null || lng === null) && (
             <p className="text-[11px] text-zinc-600">Set the event location above first, then draw the route.</p>
           )}
+        </div>
+        <div className="col-span-2">
+          <CohostGroupPicker
+            primaryGroupId={groupId}
+            value={cohostGroupIds}
+            onChange={setCohostGroupIds}
+          />
         </div>
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">RSVP limit (optional)</label>
