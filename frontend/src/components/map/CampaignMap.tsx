@@ -469,6 +469,185 @@ function claimBorderColor(owned: boolean, isGroup: boolean, totalValue: number):
   return claimHeatColor(isGroup, totalValue);
 }
 
+// ─── Legend layer-visibility toggles ──────────────────────────────────────────
+
+type LayerToggleState = {
+  showUnclaimedTerritory: boolean;
+  showGroupTerritory: boolean;
+  showIndividualTerritory: boolean;
+  showCleanupDots: boolean;
+  showGroupEventDots: boolean;
+  showReports: boolean;
+  showHotspots: boolean;
+  showEventRadius: boolean;
+  showGroupRoutes: boolean;
+  showAdhocRoutes: boolean;
+  showGroupEvents: boolean;
+  showMapEvents: boolean;
+  showPartners: boolean;
+};
+
+// Persists the legend's layer-visibility toggles across page visits (per browser,
+// shared across all campaigns/maps — these are display prefs, not per-campaign data).
+const LEGEND_TOGGLE_STORAGE_KEY = "frontline:map-legend-toggles";
+
+let cachedStoredToggles: Partial<LayerToggleState> | null | undefined;
+
+function readStoredToggles(): Partial<LayerToggleState> {
+  if (cachedStoredToggles === undefined) {
+    cachedStoredToggles = null;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(LEGEND_TOGGLE_STORAGE_KEY);
+        cachedStoredToggles = raw ? (JSON.parse(raw) as Partial<LayerToggleState>) : null;
+      } catch {
+        cachedStoredToggles = null;
+      }
+    }
+  }
+  return cachedStoredToggles ?? {};
+}
+
+function storedToggle(key: keyof LayerToggleState): boolean {
+  const value = readStoredToggles()[key];
+  return typeof value === "boolean" ? value : true;
+}
+
+// Case expression resolving to 1/0 per-feature based on which territory category
+// (unclaimed / group / individual) it currently is, driven by the `claim_owned` /
+// `claim_is_group` feature-state set in applyClaimsAsFeatureState. Multiplying this
+// into an opacity expression's per-stop output (not wrapping the whole interpolate)
+// keeps "zoom" as the direct input to the top-level interpolate, per the existing
+// restriction noted where territory-fill/territory-border are defined.
+function territoryCategoryFactor(t: LayerToggleState): unknown {
+  return [
+    "case",
+    ["==", ["coalesce", ["feature-state", "claim_owned"], false], false], t.showUnclaimedTerritory ? 1 : 0,
+    ["==", ["coalesce", ["feature-state", "claim_is_group"], false], true], t.showGroupTerritory ? 1 : 0,
+    t.showIndividualTerritory ? 1 : 0,
+  ];
+}
+
+function territoryFillOpacityExpr(t: LayerToggleState): unknown {
+  const factor = territoryCategoryFactor(t);
+  return [
+    "interpolate", ["linear"], ["zoom"],
+    9, ["*", ["min", ["+", ["coalesce", ["feature-state", "opacity"], 0.14], ["coalesce", ["feature-state", "pulse_extra"], 0]], 0.95], factor],
+    15, ["*", ["min", ["+", ["coalesce", ["feature-state", "opacity"], 0.4], ["coalesce", ["feature-state", "pulse_extra"], 0]], 0.95], factor],
+  ];
+}
+
+function territoryBorderOpacityExpr(t: LayerToggleState): unknown {
+  const factor = territoryCategoryFactor(t);
+  return [
+    "interpolate", ["linear"], ["zoom"],
+    9, ["*", ["case",
+      ["boolean", ["feature-state", "hover"], false],
+      ["coalesce", ["feature-state", "border_opacity"], 0.85],
+      ["*", ["coalesce", ["feature-state", "border_opacity"], 0.85], 0.35],
+    ], factor],
+    15, ["*", ["case",
+      ["boolean", ["feature-state", "hover"], false],
+      ["coalesce", ["feature-state", "border_opacity"], 0.85],
+      ["coalesce", ["feature-state", "border_opacity"], 0.85],
+    ], factor],
+  ];
+}
+
+// Case expression resolving to 1/0 per-feature for the two route categories (a
+// pre-planned group event route vs. an ad-hoc route), driven by the `is_event`
+// geojson property already on each route feature.
+function routeCategoryFactor(t: LayerToggleState): unknown {
+  return ["case", ["get", "is_event"], t.showGroupRoutes ? 1 : 0, t.showAdhocRoutes ? 1 : 0];
+}
+
+// The territory-event-highlight layer's dashed border is driven by two separate
+// feature-state flags (event_highlight_hotspot / event_highlight_map, set in
+// applyEventAreaHighlights) so each category's toggle can independently hide its
+// own highlight without affecting the other's.
+function territoryEventHighlightOpacityExpr(t: LayerToggleState): unknown {
+  return [
+    "case",
+    ["all", ["boolean", ["feature-state", "event_highlight_hotspot"], false], t.showHotspots],
+    0.95,
+    ["all", ["boolean", ["feature-state", "event_highlight_map"], false], t.showMapEvents],
+    0.95,
+    0,
+  ];
+}
+
+function applyLayerVisibility(m: maplibregl.Map, t: LayerToggleState): void {
+  if (m.getLayer("territory-fill")) {
+    m.setPaintProperty("territory-fill", "fill-opacity", territoryFillOpacityExpr(t) as never);
+  }
+  if (m.getLayer("territory-border")) {
+    m.setPaintProperty("territory-border", "line-opacity", territoryBorderOpacityExpr(t) as never);
+  }
+
+  const vis = (show: boolean) => (show ? "visible" : "none");
+  const setVis = (layerId: string, show: boolean) => {
+    if (m.getLayer(layerId)) m.setLayoutProperty(layerId, "visibility", vis(show));
+  };
+  setVis("contribution-dots", t.showCleanupDots);
+  setVis("contribution-dots-halo", t.showGroupEventDots);
+  setVis("report-dots", t.showReports);
+  setVis("report-radius-fill", t.showReports);
+  setVis("report-radius-line", t.showReports);
+  setVis("cleanup-event-radius-fill", t.showEventRadius && t.showGroupEvents);
+  setVis("cleanup-event-radius-line", t.showEventRadius && t.showGroupEvents);
+  setVis("cleanup-routes-buffer-fill", t.showEventRadius && t.showGroupEvents);
+  setVis("cleanup-routes-buffer-line", t.showEventRadius && t.showGroupEvents);
+
+  if (m.getLayer("territory-event-highlight")) {
+    m.setPaintProperty("territory-event-highlight", "line-opacity", territoryEventHighlightOpacityExpr(t) as never);
+  }
+
+  const routeFactor = routeCategoryFactor(t);
+  if (m.getLayer("cleanup-routes-casing")) {
+    m.setPaintProperty("cleanup-routes-casing", "line-opacity", [
+      "*", ["case", ["get", "is_past"], 0.45, 0.9], routeFactor,
+    ] as never);
+  }
+  if (m.getLayer("cleanup-routes-line")) {
+    m.setPaintProperty("cleanup-routes-line", "line-opacity", [
+      "*", ["case", ["get", "is_past"], 0.55, 1], routeFactor,
+    ] as never);
+  }
+  if (m.getLayer("cleanup-routes-arrows")) {
+    m.setPaintProperty("cleanup-routes-arrows", "text-opacity", [
+      "*", ["case", ["get", "is_past"], 0.5, 1], routeFactor,
+    ] as never);
+  }
+}
+
+function LegendToggle({
+  checked,
+  onChange,
+  indent,
+  children,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  indent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm cursor-pointer select-none hover:bg-zinc-800/80 ${
+        indent ? "ml-3" : ""
+      } ${checked ? "" : "opacity-50"}`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-3 h-3 flex-shrink-0 accent-emerald-500"
+      />
+      {children}
+    </label>
+  );
+}
+
 function applyClaimsAsFeatureState(
   map: maplibregl.Map,
   claims: TerritoryClaim[],
@@ -516,6 +695,7 @@ function applyClaimsAsFeatureState(
         total_value: totalValue,
         claimed_label: label?.name ?? null,
         claim_is_group: label?.isGroup ?? false,
+        claim_owned: owned,
       },
     );
   }
@@ -527,11 +707,12 @@ function applyEventAreaHighlights(
   eventGeoUnitIds: Record<string, string[]>,
 ): void {
   for (const event of events) {
+    const isHotspot = event.event_type === "boss_spawn";
     const ids = eventGeoUnitIds[event.id] ?? (event.geo_unit_id ? [event.geo_unit_id] : []);
     for (const id of ids) {
       map.setFeatureState(
         { source: "territory", sourceLayer: "territories", id },
-        { event_highlight: true },
+        isHotspot ? { event_highlight_hotspot: true } : { event_highlight_map: true },
       );
     }
   }
@@ -1294,6 +1475,35 @@ export default function CampaignMap({
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [showUnclaimedTerritory, setShowUnclaimedTerritory] = useState(() => storedToggle("showUnclaimedTerritory"));
+  const [showGroupTerritory, setShowGroupTerritory] = useState(() => storedToggle("showGroupTerritory"));
+  const [showIndividualTerritory, setShowIndividualTerritory] = useState(() => storedToggle("showIndividualTerritory"));
+  const [showCleanupDots, setShowCleanupDots] = useState(() => storedToggle("showCleanupDots"));
+  const [showGroupEventDots, setShowGroupEventDots] = useState(() => storedToggle("showGroupEventDots"));
+  const [showReports, setShowReports] = useState(() => storedToggle("showReports"));
+  const [showHotspots, setShowHotspots] = useState(() => storedToggle("showHotspots"));
+  const [showEventRadius, setShowEventRadius] = useState(() => storedToggle("showEventRadius"));
+  const [showGroupRoutes, setShowGroupRoutes] = useState(() => storedToggle("showGroupRoutes"));
+  const [showAdhocRoutes, setShowAdhocRoutes] = useState(() => storedToggle("showAdhocRoutes"));
+  const [showGroupEvents, setShowGroupEvents] = useState(() => storedToggle("showGroupEvents"));
+  const [showMapEvents, setShowMapEvents] = useState(() => storedToggle("showMapEvents"));
+  const [showPartners, setShowPartners] = useState(() => storedToggle("showPartners"));
+  const layerToggleRef = useRef<LayerToggleState>({
+    showUnclaimedTerritory,
+    showGroupTerritory,
+    showIndividualTerritory,
+    showCleanupDots,
+    showGroupEventDots,
+    showReports,
+    showHotspots,
+    showEventRadius,
+    showGroupRoutes,
+    showAdhocRoutes,
+    showGroupEvents,
+    showMapEvents,
+    showPartners,
+  });
+  const eventMarkerIsHotspotRef = useRef<boolean[]>([]);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const claimsRef = useRef(claims);
@@ -1314,6 +1524,7 @@ export default function CampaignMap({
   const cleanupEventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const cleanupEventDateLabelsRef = useRef<maplibregl.Marker[]>([]);
   const cleanupRouteMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const cleanupRouteMarkerIsEventRef = useRef<boolean[]>([]);
   const cleanupRouteDateLabelsRef = useRef<maplibregl.Marker[]>([]);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
   const setSelectedZipRef = useRef(setSelectedZip);
@@ -1419,6 +1630,7 @@ export default function CampaignMap({
     eventMarkersRef.current.forEach((m) => m.remove());
     eventMarkersRef.current = [];
     eventMarkerScaleElsRef.current = [];
+    eventMarkerIsHotspotRef.current = [];
 
     for (const event of events) {
       const areaIds = eventGeoUnitIdsRef.current[event.id] ?? (event.geo_unit_id ? [event.geo_unit_id] : []);
@@ -1499,6 +1711,10 @@ export default function CampaignMap({
       if (!imageUrl) scaleWrapper.appendChild(innerEl);
       eventMarkerScaleElsRef.current.push(scaleWrapper);
 
+      if (isHotspot ? !layerToggleRef.current.showHotspots : !layerToggleRef.current.showMapEvents) {
+        el.style.display = "none";
+      }
+
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([lng, lat])
         .addTo(map.current!);
@@ -1534,6 +1750,7 @@ export default function CampaignMap({
       };
 
       eventMarkersRef.current.push(marker);
+      eventMarkerIsHotspotRef.current.push(isHotspot);
 
       const entranceTween = gsap.from(innerEl, { scale: 0, duration: 0.4, ease: "back.out(1.4)" });
       const pulseTween = gsap.to(innerEl, { scale: 1.08, duration: 1.6, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.4 });
@@ -1570,6 +1787,10 @@ export default function CampaignMap({
       }
       el.title = hasOffer ? `${business.name} — ${business.activeOfferTitle}` : business.name;
 
+      if (!layerToggleRef.current.showPartners) {
+        el.style.display = "none";
+      }
+
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([business.lng, business.lat])
         .addTo(map.current!);
@@ -1604,6 +1825,10 @@ export default function CampaignMap({
       const hostLabel = cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name;
       wrapper.title = event.is_past ? `${event.title} — ${hostLabel} (ended)` : `${event.title} — ${hostLabel}`;
 
+      if (!layerToggleRef.current.showGroupEvents) {
+        wrapper.style.display = "none";
+      }
+
       const marker = new maplibregl.Marker({ element: wrapper })
         .setLngLat([event.lng, event.lat])
         .addTo(map.current!);
@@ -1615,9 +1840,11 @@ export default function CampaignMap({
       if (!event.is_past) {
         const dateText = formatEventDateTime(event.scheduled_start);
         if (dateText) {
-          cleanupEventDateLabelsRef.current.push(
-            createDateTimeLabelMarker(map.current!, [event.lng, event.lat], dateText, size / 2 + 4),
-          );
+          const dateLabel = createDateTimeLabelMarker(map.current!, [event.lng, event.lat], dateText, size / 2 + 4);
+          if (!layerToggleRef.current.showGroupEvents) {
+            dateLabel.getElement().style.display = "none";
+          }
+          cleanupEventDateLabelsRef.current.push(dateLabel);
         }
       }
     }
@@ -1786,6 +2013,7 @@ export default function CampaignMap({
 
       cleanupRouteMarkersRef.current.forEach((m) => m.remove());
       cleanupRouteMarkersRef.current = [];
+      cleanupRouteMarkerIsEventRef.current = [];
       cleanupRouteDateLabelsRef.current.forEach((m) => m.remove());
       cleanupRouteDateLabelsRef.current = [];
 
@@ -1854,6 +2082,11 @@ export default function CampaignMap({
         const hostLabel = event ? (cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name) : "";
         wrapper.title = event ? `${event.title} — ${hostLabel}${isPast ? " (ended)" : ""}` : "View this cleanup route";
 
+        const routeVisible = event ? layerToggleRef.current.showGroupEvents : layerToggleRef.current.showAdhocRoutes;
+        if (!routeVisible) {
+          wrapper.style.display = "none";
+        }
+
         const marker = new maplibregl.Marker({ element: wrapper }).setLngLat(mid).addTo(map.current!);
         wrapper.onclick = (e) => {
           e.stopPropagation();
@@ -1864,13 +2097,16 @@ export default function CampaignMap({
           }
         };
         cleanupRouteMarkersRef.current.push(marker);
+        cleanupRouteMarkerIsEventRef.current.push(!!event);
 
         if (event && !event.is_past) {
           const dateText = formatEventDateTime(event.scheduled_start);
           if (dateText) {
-            cleanupRouteDateLabelsRef.current.push(
-              createDateTimeLabelMarker(map.current!, mid, dateText, size / 2 + 4),
-            );
+            const dateLabel = createDateTimeLabelMarker(map.current!, mid, dateText, size / 2 + 4);
+            if (!layerToggleRef.current.showGroupEvents) {
+              dateLabel.getElement().style.display = "none";
+            }
+            cleanupRouteDateLabelsRef.current.push(dateLabel);
           }
         }
       }
@@ -2292,7 +2528,10 @@ export default function CampaignMap({
         "line-width": 3,
         "line-opacity": [
           "case",
-          ["boolean", ["feature-state", "event_highlight"], false],
+          ["any",
+            ["boolean", ["feature-state", "event_highlight_hotspot"], false],
+            ["boolean", ["feature-state", "event_highlight_map"], false],
+          ],
           0.95,
           0,
         ],
@@ -2613,6 +2852,8 @@ export default function CampaignMap({
       },
     });
 
+    applyLayerVisibility(m, layerToggleRef.current);
+
     updateEventMarkers(activeEventsRef.current);
     updateBusinessMarkers(partnerBusinessesRef.current);
     updateCleanupEventMarkers(cleanupEventsRef.current, cleanupRoutesRef.current);
@@ -2620,6 +2861,73 @@ export default function CampaignMap({
     updateCleanupRoutesLayer(cleanupRoutesRef.current, cleanupEventsRef.current);
     updateCleanupRouteMarkers(cleanupRoutesRef.current, cleanupEventsRef.current);
   }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers, updateCleanupRoutesLayer, updateCleanupRouteMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Legend layer-visibility toggles: re-apply to the live map whenever any toggle
+  // changes, and keep layerToggleRef in sync so setupCustomLayers (initial load +
+  // every style swap, which wipes and re-adds all layers) can re-apply them too.
+  useEffect(() => {
+    layerToggleRef.current = {
+      showUnclaimedTerritory,
+      showGroupTerritory,
+      showIndividualTerritory,
+      showCleanupDots,
+      showGroupEventDots,
+      showReports,
+      showHotspots,
+      showEventRadius,
+      showGroupRoutes,
+      showAdhocRoutes,
+      showGroupEvents,
+      showMapEvents,
+      showPartners,
+    };
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(LEGEND_TOGGLE_STORAGE_KEY, JSON.stringify(layerToggleRef.current));
+      } catch {
+        // ignore (private-browsing / storage-full)
+      }
+    }
+    const m = map.current;
+    if (!m || !mapReadyRef.current) return;
+    applyLayerVisibility(m, layerToggleRef.current);
+    eventMarkersRef.current.forEach((marker, i) => {
+      const isHotspot = eventMarkerIsHotspotRef.current[i];
+      marker.getElement().style.display =
+        (isHotspot ? !showHotspots : !showMapEvents) ? "none" : "";
+    });
+    businessMarkersRef.current.forEach((marker) => {
+      marker.getElement().style.display = showPartners ? "" : "none";
+    });
+    cleanupEventMarkersRef.current.forEach((marker) => {
+      marker.getElement().style.display = showGroupEvents ? "" : "none";
+    });
+    cleanupEventDateLabelsRef.current.forEach((marker) => {
+      marker.getElement().style.display = showGroupEvents ? "" : "none";
+    });
+    cleanupRouteDateLabelsRef.current.forEach((marker) => {
+      marker.getElement().style.display = showGroupEvents ? "" : "none";
+    });
+    cleanupRouteMarkersRef.current.forEach((marker, i) => {
+      const isEvent = cleanupRouteMarkerIsEventRef.current[i];
+      const visible = isEvent ? showGroupEvents : showAdhocRoutes;
+      marker.getElement().style.display = visible ? "" : "none";
+    });
+  }, [
+    showUnclaimedTerritory,
+    showGroupTerritory,
+    showIndividualTerritory,
+    showCleanupDots,
+    showGroupEventDots,
+    showReports,
+    showHotspots,
+    showEventRadius,
+    showGroupRoutes,
+    showAdhocRoutes,
+    showGroupEvents,
+    showMapEvents,
+    showPartners,
+  ]);
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
   useEffect(() => {
@@ -3442,6 +3750,7 @@ export default function CampaignMap({
                 total_value: totalValue,
                 claimed_label: label?.name ?? null,
                 claim_is_group: label?.isGroup ?? false,
+                claim_owned: owned,
               },
             );
           }
@@ -3757,51 +4066,93 @@ export default function CampaignMap({
             </>
           ) : (
             <>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <LegendToggle
+                checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
+                onChange={(show) => {
+                  setShowGroupTerritory(show);
+                  setShowIndividualTerritory(show);
+                  setShowUnclaimedTerritory(show);
+                }}
+              >
+                <span className="w-3 h-3 rounded-sm bg-zinc-500/70" />
+                <span className="text-zinc-300 font-medium">Territory</span>
+              </LegendToggle>
+              <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
+                <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
+                <span className="text-zinc-300">Group territory</span>
+              </LegendToggle>
+              <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
+                <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
+                <span className="text-zinc-300">Individual territory</span>
+              </LegendToggle>
+              <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
+                <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
+                <span className="text-zinc-300">Unclaimed</span>
+              </LegendToggle>
+              <LegendToggle checked={showCleanupDots} onChange={setShowCleanupDots}>
                 <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
                 <span className="text-zinc-300">Cleanup logged</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              </LegendToggle>
+              <LegendToggle checked={showGroupEventDots} onChange={setShowGroupEventDots}>
                 <span className="relative w-4 h-4 flex items-center justify-center flex-shrink-0">
                   <span className="absolute inset-0 rounded-full border-2 border-sky-400" />
                   <span className="w-2 h-2 rounded-full bg-emerald-500/90" />
                 </span>
                 <span className="text-zinc-300">Group event cleanup</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-                <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
-                <span className="text-zinc-300">Group territory</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-                <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
-                <span className="text-zinc-300">Individual territory</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-                <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
-                <span className="text-zinc-300">Unclaimed</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
-                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
-                <span className="text-zinc-300">Open report</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              </LegendToggle>
+              <LegendToggle checked={showGroupEvents} onChange={setShowGroupEvents}>
+                <span className="w-3 h-3 rounded-full border-2 border-sky-400 bg-sky-900 flex-shrink-0" />
+                <span className="text-zinc-300">Group event</span>
+              </LegendToggle>
+              <LegendToggle checked={showMapEvents} onChange={setShowMapEvents}>
+                <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm leading-none">✨</span>
+                </span>
+                <span className="text-zinc-300">Map event</span>
+              </LegendToggle>
+              <LegendToggle checked={showHotspots} onChange={setShowHotspots}>
                 <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
                   <span className="text-sm leading-none">🔥</span>
                 </span>
                 <span className="text-zinc-300">Hotspot</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              </LegendToggle>
+              <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>
                 <span className="w-3 h-3 rounded-full border border-sky-400 bg-sky-400/10 flex-shrink-0" />
                 <span className="text-zinc-300">Event check-in radius</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              </LegendToggle>
+              <LegendToggle checked={showGroupRoutes} onChange={setShowGroupRoutes}>
                 <span className="w-3 h-0.5 rounded-full bg-[#0284c7] flex-shrink-0" />
                 <span className="text-zinc-300">Group event route</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              </LegendToggle>
+              <LegendToggle checked={showAdhocRoutes} onChange={setShowAdhocRoutes}>
                 <span className="w-3 h-0.5 rounded-full bg-[#f59e0b] flex-shrink-0" />
                 <span className="text-zinc-300">Ad-hoc route</span>
-              </div>
+              </LegendToggle>
+              <LegendToggle checked={showReports} onChange={setShowReports}>
+                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
+                <span className="text-zinc-300">Open report</span>
+              </LegendToggle>
+              <LegendToggle checked={showPartners} onChange={setShowPartners}>
+                <span className="flex items-center gap-0.5 flex-shrink-0">
+                  <span
+                    className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ border: "1.5px solid #22c55e", background: "rgba(20,83,45,0.9)" }}
+                  >
+                    <span className="text-[9px] leading-none">🏪</span>
+                  </span>
+                  <span
+                    className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ border: "1.5px solid #fbbf24", background: "rgba(120,53,15,0.9)" }}
+                  >
+                    <span className="text-[9px] leading-none">🎁</span>
+                  </span>
+                </span>
+                <span className="text-zinc-300 leading-tight">
+                  Partner business
+                  <br />
+                  (🎁 = active offer)
+                </span>
+              </LegendToggle>
             </>
           ))}
         </div>
