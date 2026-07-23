@@ -45,6 +45,7 @@ class CreateCleanupEventRequest(BaseModel):
     max_attendees: int | None = None
     external_link: str | None = None
     route: dict | None = None
+    cohost_group_ids: list[UUID] = []
 
     @field_validator("max_attendees")
     @classmethod
@@ -93,6 +94,7 @@ class PatchCleanupEventRequest(BaseModel):
     external_link: str | None = None
     route: dict | None = None
     clear_route: bool = False
+    cohost_group_ids: list[UUID] | None = None
 
     @field_validator("external_link")
     @classmethod
@@ -219,11 +221,52 @@ async def _is_event_organizer(db: AsyncSession, cleanup_id: UUID, user_id: UUID)
     return result.fetchone() is not None
 
 
+async def _is_any_cohost_admin(db: AsyncSession, cleanup_id: UUID, user_id: UUID) -> bool:
+    result = await db.execute(
+        text("""
+            SELECT 1 FROM cleanup_event_cohosts h
+            JOIN group_members gm ON gm.group_id = h.group_id
+            WHERE h.cleanup_id = :cleanup_id AND gm.user_id = :user_id AND gm.role = 'admin'
+        """),
+        {"cleanup_id": str(cleanup_id), "user_id": str(user_id)},
+    )
+    return result.fetchone() is not None
+
+
 async def _can_manage_event(db: AsyncSession, group_id: UUID, cleanup_id: UUID, user_id: UUID) -> bool:
-    """Group admins retain their existing blanket override; real per-event
-    organizers (the creator, or anyone an organizer has promoted) get the same
-    powers without needing to be a group admin."""
-    return await _is_group_admin(db, group_id, user_id) or await _is_event_organizer(db, cleanup_id, user_id)
+    """Group admins retain their existing blanket override, as do admins of any
+    co-hosting group; real per-event organizers (the creator, or anyone an organizer
+    has promoted) get the same powers without needing to be a group admin."""
+    if await _is_group_admin(db, group_id, user_id):
+        return True
+    if await _is_event_organizer(db, cleanup_id, user_id):
+        return True
+    return await _is_any_cohost_admin(db, cleanup_id, user_id)
+
+
+async def _group_for_credit(db: AsyncSession, primary_group_id: UUID, cleanup_id: UUID, user_id: UUID) -> UUID:
+    """For a co-hosted event, credit lands on whichever host group (primary or
+    co-host) the attendee actually belongs to, preferring the primary host if they
+    belong to more than one. Falls back to the primary host if they belong to none —
+    identical to today's behavior for non-co-hosted events."""
+    result = await db.execute(
+        text("""
+            SELECT gm.group_id FROM group_members gm
+            WHERE gm.user_id = :user_id
+              AND gm.group_id = ANY(
+                ARRAY[CAST(:primary_group_id AS uuid)] ||
+                COALESCE(
+                    (SELECT array_agg(group_id) FROM cleanup_event_cohosts WHERE cleanup_id = :cleanup_id),
+                    ARRAY[]::uuid[]
+                )
+              )
+            ORDER BY (gm.group_id = CAST(:primary_group_id AS uuid)) DESC
+            LIMIT 1
+        """),
+        {"user_id": str(user_id), "primary_group_id": str(primary_group_id), "cleanup_id": str(cleanup_id)},
+    )
+    row = result.fetchone()
+    return row.group_id if row else primary_group_id
 
 
 async def _generate_join_code(db: AsyncSession) -> str:
@@ -303,7 +346,8 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
                    g.id AS group_id, g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url,
                    (COALESCE(c.scheduled_end, c.scheduled_start) + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' < NOW()) AS is_past,
                    COALESCE(bags.total_small_bags, 0) AS total_small_bags,
-                   COALESCE(bags.total_large_bags, 0) AS total_large_bags
+                   COALESCE(bags.total_large_bags, 0) AS total_large_bags,
+                   COALESCE(cohosts.cohost_groups, '[]'::json) AS cohost_groups
             FROM cleanups c
             JOIN groups g ON g.id = c.group_id
             LEFT JOIN LATERAL (
@@ -312,6 +356,15 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
                 JOIN cleanups cl ON cl.id = co.cleanup_id
                 WHERE co.cleanup_event_id = c.id
             ) bags ON true
+            LEFT JOIN LATERAL (
+                SELECT json_agg(json_build_object(
+                    'group_id', hg.id, 'group_name', hg.name,
+                    'group_slug', hg.slug, 'group_logo_url', hg.image_url
+                )) AS cohost_groups
+                FROM cleanup_event_cohosts h
+                JOIN groups hg ON hg.id = h.group_id
+                WHERE h.cleanup_id = c.id
+            ) cohosts ON true
             WHERE c.campaign_id = :campaign_id
               AND c.is_group_event = true
               AND c.status IN ('scheduled', 'in_progress')
@@ -343,6 +396,7 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
             "is_past": r.is_past,
             "total_small_bags": r.total_small_bags,
             "total_large_bags": r.total_large_bags,
+            "cohost_groups": r.cohost_groups,
         }
         for r in rows
     ]
@@ -367,9 +421,11 @@ async def list_group_cleanup_events(group_id: UUID, viewer_user_id: UUID | None 
                         AND c.scheduled_start < NOW()
                         AND COALESCE(c.scheduled_end, c.scheduled_start)
                             + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' >= NOW()) AS is_ongoing,
-                   (SELECT COUNT(*) FROM cleanup_rsvps r WHERE r.cleanup_id = c.id AND r.status = 'going') AS going_count
+                   (SELECT COUNT(*) FROM cleanup_rsvps r WHERE r.cleanup_id = c.id AND r.status = 'going') AS going_count,
+                   (c.group_id != :group_id) AS is_cohosted
             FROM cleanups c
-            WHERE c.group_id = :group_id
+            WHERE (c.group_id = :group_id
+                   OR EXISTS (SELECT 1 FROM cleanup_event_cohosts h WHERE h.cleanup_id = c.id AND h.group_id = :group_id))
               AND c.is_group_event = true
               AND c.location IS NOT NULL
             ORDER BY c.scheduled_start ASC NULLS LAST
@@ -393,6 +449,7 @@ async def list_group_cleanup_events(group_id: UUID, viewer_user_id: UUID | None 
             "going_count": r.going_count,
             "is_past": r.is_past,
             "is_ongoing": r.is_ongoing,
+            "is_cohosted": r.is_cohosted,
         }
         for r in rows
         if is_admin or (not r.is_past and r.status != "cancelled")
@@ -413,10 +470,20 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    ST_AsGeoJSON(c.route)::json AS route,
                    ST_AsGeoJSON(ST_Buffer(c.route::geography, :radius))::json AS route_buffer,
-                   g.id AS group_id, g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url
+                   g.id AS group_id, g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url,
+                   COALESCE(cohosts.cohost_groups, '[]'::json) AS cohost_groups
             FROM cleanups c
             JOIN groups g ON g.id = c.group_id
             JOIN campaigns cam ON cam.id = c.campaign_id
+            LEFT JOIN LATERAL (
+                SELECT json_agg(json_build_object(
+                    'group_id', hg.id, 'group_name', hg.name,
+                    'group_slug', hg.slug, 'group_logo_url', hg.image_url
+                )) AS cohost_groups
+                FROM cleanup_event_cohosts h
+                JOIN groups hg ON hg.id = h.group_id
+                WHERE h.cleanup_id = c.id
+            ) cohosts ON true
             WHERE c.id = :id AND c.is_group_event = true
         """),
         {"id": str(cleanup_id), "radius": CLEANUP_EVENT_PROXIMITY_METERS},
@@ -561,6 +628,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "group_name": row.group_name,
         "group_slug": row.group_slug,
         "group_logo_url": row.group_logo_url,
+        "cohost_groups": row.cohost_groups,
         "join_code": row.join_code if is_organizer else None,
         "is_organizer": is_organizer,
         "rsvps": rsvps,
@@ -641,6 +709,17 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
         """),
         {"cleanup_id": str(row.id), "organizer_user_id": str(payload.organizer_user_id)},
     )
+
+    # Unrestricted for now: the primary host can add any group as a co-host without
+    # that group's consent. TODO: future iteration should require the target group's
+    # own admin to accept before it's attached (invite/accept flow).
+    cohost_group_ids = {str(g) for g in payload.cohost_group_ids if str(g) != str(payload.group_id)}
+    for cohost_group_id in cohost_group_ids:
+        await db.execute(
+            text("INSERT INTO cleanup_event_cohosts (cleanup_id, group_id) VALUES (:cleanup_id, :group_id)"),
+            {"cleanup_id": str(row.id), "group_id": cohost_group_id},
+        )
+
     await db.commit()
 
     return {"id": str(row.id), "join_code": row.join_code, "geo_unit_id": geo_unit_id}
@@ -652,6 +731,9 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can edit this event")
+
+    if payload.cohost_group_ids is not None and not await _is_group_admin(db, event.group_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only the primary host group's admins can manage co-hosts")
 
     effective_start = payload.scheduled_start or event.scheduled_start
     effective_end = payload.scheduled_end or event.scheduled_end
@@ -703,6 +785,19 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
             "clear_route": payload.clear_route,
         },
     )
+
+    if payload.cohost_group_ids is not None:
+        await db.execute(
+            text("DELETE FROM cleanup_event_cohosts WHERE cleanup_id = :cleanup_id"),
+            {"cleanup_id": str(cleanup_id)},
+        )
+        cohost_group_ids = {str(g) for g in payload.cohost_group_ids if str(g) != str(event.group_id)}
+        for cohost_group_id in cohost_group_ids:
+            await db.execute(
+                text("INSERT INTO cleanup_event_cohosts (cleanup_id, group_id) VALUES (:cleanup_id, :group_id)"),
+                {"cleanup_id": str(cleanup_id), "group_id": cohost_group_id},
+            )
+
     await db.commit()
 
     return {"id": str(cleanup_id), "updated": True}
@@ -917,11 +1012,13 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
     )
     attendee_cleanup_id = str(cleanup_result.scalar())
 
+    credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, payload.attendee_user_id)
+
     recorded = await record_contribution(
         db,
         user_id=payload.attendee_user_id,
         campaign_id=event.campaign_id,
-        group_id=event.group_id,
+        group_id=credit_group_id,
         geo_unit_id=event.geo_unit_id,
         cleanup_id=attendee_cleanup_id,
         contribution_type="cleanup",
@@ -1017,11 +1114,12 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
 
     for user_id in pool:
         share = round(overrides.get(user_id, split_value) * 2) / 2
+        credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, UUID(user_id))
         recorded = await record_contribution(
             db,
             user_id=user_id,
             campaign_id=event.campaign_id,
-            group_id=event.group_id,
+            group_id=credit_group_id,
             geo_unit_id=event.geo_unit_id,
             cleanup_id=None,
             contribution_type="cleanup",

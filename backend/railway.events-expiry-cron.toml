@@ -4,5 +4,5 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "python scripts/run_events_expiry.py"
-cronSchedule = "0 */6 * * *"
+cronSchedule = "*/30 * * * *"
 restartPolicyType = "NEVER"

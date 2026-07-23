@@ -26,6 +26,13 @@ export type CleanupEventRsvp = {
   is_late: boolean;
 };
 
+export type CleanupEventCohostGroup = {
+  group_id: string;
+  group_name: string;
+  group_slug: string;
+  group_logo_url: string | null;
+};
+
 export type CleanupEventDetailData = {
   id: string;
   campaign_id: string;
@@ -44,6 +51,7 @@ export type CleanupEventDetailData = {
   group_name: string;
   group_slug: string;
   group_logo_url: string | null;
+  cohost_groups: CleanupEventCohostGroup[];
   join_code: string | null;
   is_organizer: boolean;
   rsvps: CleanupEventRsvp[];
@@ -75,6 +83,7 @@ export type GroupCleanupEventListItem = {
   going_count: number;
   is_past: boolean;
   is_ongoing: boolean;
+  is_cohosted: boolean;
 };
 
 export async function listGroupCleanupEvents(groupId: string, viewerUserId?: string | null): Promise<GroupCleanupEventListItem[]> {
@@ -127,6 +136,7 @@ export async function createCleanupEvent({
   maxAttendees,
   externalLink,
   route,
+  cohostGroupIds,
 }: {
   campaignId: string;
   groupId: string;
@@ -141,6 +151,7 @@ export async function createCleanupEvent({
   maxAttendees?: number | null;
   externalLink?: string | null;
   route?: RouteLineString | null;
+  cohostGroupIds?: string[];
 }): Promise<CreatedCleanupEvent> {
   let imageUrl: string | null = null;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
@@ -159,6 +170,7 @@ export async function createCleanupEvent({
     max_attendees: maxAttendees ?? null,
     external_link: externalLink?.trim() || null,
     route: route ?? null,
+    cohost_group_ids: cohostGroupIds ?? [],
   });
 }
 
@@ -177,6 +189,7 @@ export async function updateCleanupEvent({
   externalLink,
   route,
   clearRoute,
+  cohostGroupIds,
 }: {
   cleanupId: string;
   organizerUserId: string;
@@ -192,6 +205,7 @@ export async function updateCleanupEvent({
   externalLink?: string | null;
   route?: RouteLineString | null;
   clearRoute?: boolean;
+  cohostGroupIds?: string[];
 }): Promise<{ id: string; updated: boolean }> {
   let imageUrl: string | undefined;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
@@ -210,6 +224,7 @@ export async function updateCleanupEvent({
     external_link: externalLink,
     route: route ?? null,
     clear_route: clearRoute ?? false,
+    cohost_group_ids: cohostGroupIds,
   });
 }
 
