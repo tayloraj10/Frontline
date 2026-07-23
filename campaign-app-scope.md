@@ -799,6 +799,8 @@ Tables that drive live map updates:
 - [x] Admin panel (internal only): create campaigns, configure triggers, monitor events
 - [x] Admin panel: date-scoped ("weekly") leaderboard tab per campaign, with per-user submission verification page (enlargeable photos) — supports running real-money/prize promotions on a campaign with visual proof of top contenders
 - [x] Cleanup contribution `value` is recomputed server-side from `small_bags`/`large_bags` (never trusted from the client) — closes the scoring-spoof gap that a real-money prize would otherwise be vulnerable to
+- [x] `POST /api/admin/cleanup-events/{cleanup_id}/wipe` — reverses a cleanup event's logged data (contributions, territory claim recompute, group-total audit rows, event metrics) so an organizer can re-log from scratch. Dev/local only (`admin.py` router is excluded in production). A narrow, secret-header-protected mirror is mounted in every environment at `POST /api/admin-wipe/cleanup-events/{cleanup_id}` (`admin_wipe.py`), fronted by a Next.js route (`/api/admin/cleanup-events/[id]/wipe`) that re-checks `is_admin` server-side before forwarding — used by the AdminPanel Events tab UI.
+- [ ] `admin.py` has **no auth/permission checks on any route** — the prod exclusion (`if not settings.is_production`) is currently the only thing preventing unauthenticated access. TODO: add a real admin-role check (e.g. require `profiles.is_admin` via a dependency) to every route in `admin.py`, then remove the prod exclusion so the full admin panel works in production, not just the one wipe escape hatch.
 
 **Deliverable:** Second campaign live, engine is data-driven not hardcoded
 

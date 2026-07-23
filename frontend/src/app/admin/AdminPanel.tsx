@@ -1117,6 +1117,76 @@ function EventsTab({ campaigns, events, setEvents }: {
           ))}
         </div>
       )}
+
+      <CleanupEventWipeTool />
+    </div>
+  );
+}
+
+// ─── Cleanup Event Reset (danger zone) ─────────────────────────────────────────
+
+function CleanupEventWipeTool() {
+  const [cleanupId, setCleanupId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleWipe = async () => {
+    const id = cleanupId.trim();
+    if (!id) return;
+    if (!confirm(
+      "This deletes every contribution logged for this cleanup event (individual and group-total), " +
+      "removes/recomputes the territory claim for its zip, deletes its group-log audit history, and " +
+      "resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone. Continue?"
+    )) return;
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/admin/cleanup-events/${id}/wipe`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed");
+      setResult(
+        `✓ Deleted ${data.contributions_deleted} contribution(s), ` +
+        `${data.territory_claims_deleted} territory claim(s) removed, ` +
+        `${data.territory_claims_updated} recomputed, ` +
+        `${data.team_total_logs_deleted} group-log record(s) removed.`
+      );
+      setCleanupId("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border border-red-900/60 rounded-xl p-5 bg-red-950/10 space-y-3 mt-6">
+      <p className="text-sm font-semibold text-red-400">Reset a cleanup event's logged data</p>
+      <p className="text-xs text-zinc-500 leading-relaxed">
+        Use this to undo bad logging on a cleanup event — e.g. an individual log made before
+        "log group total" existed, followed by a group-total run that didn't cover everyone.
+        Wipes all contributions, the territory claim, and group-log history for the event so
+        it can be re-logged from scratch. Does not delete the event itself or its RSVPs.
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          className={inputCls}
+          value={cleanupId}
+          onChange={e => setCleanupId(e.target.value)}
+          placeholder="Cleanup event ID (UUID)"
+        />
+        <button
+          onClick={handleWipe}
+          disabled={loading || !cleanupId.trim()}
+          className="px-4 py-2 text-sm bg-red-900/60 hover:bg-red-900 border border-red-800 disabled:opacity-40 text-red-300 rounded-lg font-medium transition-colors shrink-0"
+        >
+          {loading ? "Wiping…" : "Wipe event data"}
+        </button>
+      </div>
+      {result && <p className="text-xs text-emerald-400">{result}</p>}
+      {error && <p className="text-xs text-red-400">✗ {error}</p>}
     </div>
   );
 }
