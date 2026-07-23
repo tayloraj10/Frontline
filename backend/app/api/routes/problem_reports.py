@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -552,12 +553,17 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
         if existing.fetchone():
             continue
 
+        effect_config = trigger.effect_config or {}
+        multiplier = effect_config.get("multiplier")
+        bonus_text = f"a {multiplier}× score multiplier" if multiplier else "bonus XP"
+
         await db.execute(
             text("""
                 INSERT INTO campaign_events
                     (campaign_id, trigger_id, geo_unit_id, event_type, title, description, effect_config, ends_at)
                 VALUES
-                    (:campaign_id, :trigger_id, :geo_unit_id, :event_type, :title, :description, :effect_config,
+                    (:campaign_id, :trigger_id, :geo_unit_id, :event_type, :title, :description,
+                     CAST(:effect_config AS jsonb),
                      NOW() + INTERVAL '72 hours')
             """),
             {
@@ -566,7 +572,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
                 "geo_unit_id": geo_unit_id,
                 "event_type": trigger.event_type,
                 "title": "Trash Hotspot — Surge Needed!",
-                "description": "Reports have reached critical mass. Clean it up in 72 hours for bonus XP!",
-                "effect_config": trigger.effect_config,
+                "description": f"Reports have reached critical mass. Clean it up in 72 hours for {bonus_text}!",
+                "effect_config": json.dumps(effect_config),
             },
         )
