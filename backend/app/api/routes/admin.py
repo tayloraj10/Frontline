@@ -445,7 +445,7 @@ async def wipe_cleanup_event_data(cleanup_id: UUID, db: AsyncSession = Depends(g
     cleanups row itself or its RSVPs.
 
     Dev/local only — this router is excluded in production (see main.py). For prod, use
-    POST /api/admin-wipe/cleanup-events/{cleanup_id} in admin_wipe.py instead.
+    POST /api/admin-prod/cleanup-events/{cleanup_id} in admin_prod.py instead.
     """
     return await wipe_cleanup_event(db, cleanup_id)
 
@@ -555,9 +555,14 @@ async def search_users(q: str, db: AsyncSession = Depends(get_db)):
     """
     Looks up real accounts by username or email, for admin flows that need to grant
     something to a specific user (e.g. partner business-admin access) without relying on
-    someone typing an exact email correctly. Joins through auth.users since email isn't
-    exposed via RLS/PostgREST from the public schema.
+    someone typing an exact email correctly. Also mounted in production via
+    admin_prod.py, which is a secret-protected mirror of this route since this router
+    is dev-only.
     """
+    return await search_users_by_username_or_email(db, q)
+
+
+async def search_users_by_username_or_email(db: AsyncSession, q: str) -> list[dict]:
     query = q.strip()
     if len(query) < 2:
         return []
