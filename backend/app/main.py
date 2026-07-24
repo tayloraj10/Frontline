@@ -2,7 +2,7 @@ import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, admin_wipe, cleanup_events, contributions, decay, events, geo_units, health, leaderboard, partners, problem_reports, tiles, upload
+from app.api.routes import admin, admin_wipe, cleanup_events, contributions, decay, events, geo_units, groups, health, leaderboard, partners, problem_reports, tiles, upload
 from app.core.config import settings
 
 if settings.sentry_dsn:
@@ -35,6 +35,7 @@ app.include_router(geo_units.router, prefix="/api")
 app.include_router(partners.router, prefix="/api")
 app.include_router(cleanup_events.router, prefix="/api")
 app.include_router(cleanup_events.routes_router, prefix="/api")
+app.include_router(groups.router, prefix="/api")
 app.include_router(admin_wipe.router, prefix="/api")
 if not settings.is_production:
     app.include_router(admin.router, prefix="/api")

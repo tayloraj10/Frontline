@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import GroupEditForm from "./GroupEditForm";
 import MemberManager from "./MemberManager";
+import DeleteGroupSection from "./DeleteGroupSection";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -20,14 +21,20 @@ export default async function GroupEditPage({ params }: Props) {
   if (!user) redirect(`/login?next=/groups/${slug}/edit`);
   if (!groupData) notFound();
 
-  const { data: membershipData } = await supabase
-    .from("group_members")
-    .select("role")
-    .eq("group_id", groupData.id)
-    .eq("user_id", user.id)
-    .single();
+  const [{ data: membershipData }, { data: profileData }] = await Promise.all([
+    supabase
+      .from("group_members")
+      .select("role")
+      .eq("group_id", groupData.id)
+      .eq("user_id", user.id)
+      .single(),
+    supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single(),
+  ]);
 
-  if (!membershipData || membershipData.role !== "admin") {
+  const isGroupAdmin = membershipData?.role === "admin";
+  const isSiteAdmin = Boolean(profileData?.is_admin);
+
+  if (!isGroupAdmin && !isSiteAdmin) {
     redirect(`/groups/${slug}`);
   }
 
@@ -90,6 +97,12 @@ export default async function GroupEditPage({ params }: Props) {
           />
         </div>
       </div>
+
+      {isGroupAdmin && isSiteAdmin && (
+        <div className="mt-8">
+          <DeleteGroupSection groupId={groupData.id} groupName={groupData.name} currentUserId={user.id} />
+        </div>
+      )}
     </main>
   );
 }
