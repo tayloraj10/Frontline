@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     environment: str = "development"
     sentry_dsn: str = ""
-    admin_wipe_secret: str = ""
+    admin_api_secret: str = ""
 
     cors_origins: str = (
         "http://localhost:3000,"

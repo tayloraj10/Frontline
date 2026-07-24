@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export async function GET(req: NextRequest) {
+  const q = req.nextUrl.searchParams.get("q") ?? "";
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -21,10 +21,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ detail: "ADMIN_API_SECRET is not configured on the frontend server." }, { status: 503 });
   }
 
-  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/admin-prod/cleanup-events/${id}`, {
-    method: "POST",
-    headers: { "X-Admin-Api-Secret": secret },
-  });
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/admin-prod/users?q=${encodeURIComponent(q)}`,
+    { headers: { "X-Admin-Api-Secret": secret } },
+  );
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }

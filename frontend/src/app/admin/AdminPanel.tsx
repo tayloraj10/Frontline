@@ -1316,9 +1316,16 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
     }
     setSearching(true);
     const timeout = setTimeout(async () => {
-      const res = await fetch(`${fastApiUrl}/api/admin/users/search?q=${encodeURIComponent(query.trim())}`);
+      const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(query.trim())}`);
       setSearching(false);
-      if (res.ok) setResults(await res.json());
+      if (res.ok) {
+        setError(null);
+        setResults(await res.json());
+      } else {
+        const body = await res.json().catch(() => null);
+        setError(body?.detail ?? "User search failed");
+        setResults([]);
+      }
     }, 300);
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
