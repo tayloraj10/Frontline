@@ -1589,6 +1589,7 @@ function ReportModal({
               </button>
             ))}
           </div>
+          <p className="mt-1.5 text-xs text-zinc-500">{SEVERITY_DESCRIPTIONS[severity]}</p>
         </div>
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -1633,6 +1634,18 @@ const CLAIM_AFTER_WINDOW_MINUTES: Record<string, number> = { low: 20, medium: 30
 const FLAG_AUTO_HIDE_THRESHOLD = 3;
 function claimAfterWindowMinutes(severity: string): number {
   return CLAIM_AFTER_WINDOW_MINUTES[severity] ?? CLAIM_AFTER_WINDOW_MINUTES.medium;
+}
+
+// Shown under the severity picker on report creation. Kept in sync with
+// CLAIM_AFTER_WINDOW_MINUTES above — pick the tier that matches how long the clean-up
+// will actually take, since that's the window a claimant gets to submit an after photo.
+const SEVERITY_DESCRIPTIONS: Record<"low" | "medium" | "high", string> = {
+  low: "A few scattered items — a quick grab-and-go. 20 min to clean up once claimed.",
+  medium: "A noticeable pile or small dump site. 30 min to clean up once claimed.",
+  high: "A large dump, bulky items, or hazardous material. 45 min to clean up once claimed.",
+};
+function severityDescription(severity: string): string {
+  return SEVERITY_DESCRIPTIONS[severity as "low" | "medium" | "high"] ?? SEVERITY_DESCRIPTIONS.medium;
 }
 
 const SEVERITY_META: Record<string, { label: string; icon: string; classes: string }> = {
@@ -2048,6 +2061,7 @@ function ClaimReportModal({
       <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
         <div className="flex flex-col gap-4">
           {severityBadge}
+          <p className="-mt-3 text-xs text-zinc-500">{severityDescription(localReport.severity)}</p>
           {reportPhotoBlock}
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
             <span className="text-base shrink-0">🎯</span>
