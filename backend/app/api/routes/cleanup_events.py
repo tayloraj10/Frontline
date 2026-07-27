@@ -46,6 +46,7 @@ class CreateCleanupEventRequest(BaseModel):
     external_link: str | None = None
     route: dict | None = None
     cohost_group_ids: list[UUID] = []
+    logging_mode: Literal["organizer_total", "individual"] = "organizer_total"
 
     @field_validator("max_attendees")
     @classmethod
@@ -95,6 +96,7 @@ class PatchCleanupEventRequest(BaseModel):
     route: dict | None = None
     clear_route: bool = False
     cohost_group_ids: list[UUID] | None = None
+    logging_mode: Literal["organizer_total", "individual"] | None = None
 
     @field_validator("external_link")
     @classmethod
@@ -341,7 +343,7 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
     result = await db.execute(
         text(f"""
             SELECT c.id, c.title, c.description, c.scheduled_start, c.scheduled_end,
-                   c.status, c.image_urls,
+                   c.status, c.image_urls, c.logging_mode,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    g.id AS group_id, g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url,
                    (COALESCE(c.scheduled_end, c.scheduled_start) + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' < NOW()) AS is_past,
@@ -387,6 +389,7 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
             "scheduled_end": r.scheduled_end.isoformat() if r.scheduled_end else None,
             "status": r.status,
             "image_url": r.image_urls[0] if r.image_urls else None,
+            "logging_mode": r.logging_mode,
             "lat": r.latitude,
             "lng": r.longitude,
             "group_id": str(r.group_id),
@@ -465,7 +468,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         text("""
             SELECT c.id, c.campaign_id, cam.slug AS campaign_slug, c.title, c.description,
                    c.scheduled_start, c.scheduled_end, c.status, c.image_urls, c.join_code,
-                   c.max_attendees, c.external_link,
+                   c.max_attendees, c.external_link, c.logging_mode,
                    c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    ST_AsGeoJSON(c.route)::json AS route,
@@ -641,6 +644,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "total_pounds": total_pounds,
         "photos": all_photos,
         "external_link": row.external_link,
+        "logging_mode": row.logging_mode,
         "check_in_window_start": check_in_window_start.isoformat() if check_in_window_start else None,
         "check_in_window_end": check_in_window_end.isoformat() if check_in_window_end else None,
         "check_in_radius_meters": CLEANUP_EVENT_PROXIMITY_METERS,
@@ -670,7 +674,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             INSERT INTO cleanups
                 (campaign_id, geo_unit_id, group_id, is_group_event, join_code,
                  title, description, location, route, scheduled_start, scheduled_end,
-                 status, image_urls, submitted_by_user_id, max_attendees, external_link)
+                 status, image_urls, submitted_by_user_id, max_attendees, external_link, logging_mode)
             VALUES
                 (:campaign_id, :geo_unit_id, :group_id, true, :join_code,
                  :title, :description,
@@ -679,7 +683,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
                       THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
                       ELSE NULL END,
                  :scheduled_start, :scheduled_end,
-                 'scheduled', :image_urls, :organizer_user_id, :max_attendees, :external_link)
+                 'scheduled', :image_urls, :organizer_user_id, :max_attendees, :external_link, :logging_mode)
             RETURNING id, join_code
         """),
         {
@@ -698,6 +702,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             "organizer_user_id": str(payload.organizer_user_id),
             "max_attendees": payload.max_attendees,
             "external_link": payload.external_link,
+            "logging_mode": payload.logging_mode,
         },
     )
     row = result.fetchone()
@@ -756,6 +761,7 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
                 image_urls = CASE WHEN CAST(:image_url AS text) IS NOT NULL THEN ARRAY[CAST(:image_url AS text)]::text[] ELSE image_urls END,
                 max_attendees = COALESCE(:max_attendees, max_attendees),
                 external_link = COALESCE(:external_link, external_link),
+                logging_mode = COALESCE(:logging_mode, logging_mode),
                 geo_unit_id = CASE WHEN :has_new_location THEN CAST(:geo_unit_id AS uuid) ELSE geo_unit_id END,
                 location = CASE WHEN :has_new_location
                                 THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
@@ -781,6 +787,7 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
             "lat": payload.latitude,
             "max_attendees": payload.max_attendees,
             "external_link": payload.external_link,
+            "logging_mode": payload.logging_mode,
             "route": json.dumps(payload.route) if payload.route is not None else None,
             "clear_route": payload.clear_route,
         },

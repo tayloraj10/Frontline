@@ -67,6 +67,7 @@ export type CleanupEventDetailData = {
   check_in_window_start: string | null;
   check_in_window_end: string | null;
   check_in_radius_meters: number;
+  logging_mode: "organizer_total" | "individual";
 };
 
 export type GroupCleanupEventListItem = {
@@ -137,6 +138,7 @@ export async function createCleanupEvent({
   externalLink,
   route,
   cohostGroupIds,
+  loggingMode = "organizer_total",
 }: {
   campaignId: string;
   groupId: string;
@@ -152,6 +154,7 @@ export async function createCleanupEvent({
   externalLink?: string | null;
   route?: RouteLineString | null;
   cohostGroupIds?: string[];
+  loggingMode?: "organizer_total" | "individual";
 }): Promise<CreatedCleanupEvent> {
   let imageUrl: string | null = null;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
@@ -171,6 +174,7 @@ export async function createCleanupEvent({
     external_link: externalLink?.trim() || null,
     route: route ?? null,
     cohost_group_ids: cohostGroupIds ?? [],
+    logging_mode: loggingMode,
   });
 }
 
@@ -190,6 +194,7 @@ export async function updateCleanupEvent({
   route,
   clearRoute,
   cohostGroupIds,
+  loggingMode,
 }: {
   cleanupId: string;
   organizerUserId: string;
@@ -206,6 +211,7 @@ export async function updateCleanupEvent({
   route?: RouteLineString | null;
   clearRoute?: boolean;
   cohostGroupIds?: string[];
+  loggingMode?: "organizer_total" | "individual";
 }): Promise<{ id: string; updated: boolean }> {
   let imageUrl: string | undefined;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
@@ -225,6 +231,7 @@ export async function updateCleanupEvent({
     route: route ?? null,
     clear_route: clearRoute ?? false,
     cohost_group_ids: cohostGroupIds,
+    logging_mode: loggingMode,
   });
 }
 

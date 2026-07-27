@@ -724,6 +724,8 @@ export default function CampaignPageClient({
 
   const nearbyCleanupEvent = useMemo(() => {
     if (!nearbyCleanupEventRaw || dismissedCleanupEventIds.has(nearbyCleanupEventRaw.id)) return null;
+    // Organizer-total events log as a team; don't invite attendees to self-log via this banner.
+    if (nearbyCleanupEventRaw.logging_mode === "organizer_total") return null;
     return nearbyCleanupEventRaw;
   }, [nearbyCleanupEventRaw, dismissedCleanupEventIds]);
 

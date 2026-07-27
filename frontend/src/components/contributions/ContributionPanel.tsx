@@ -252,6 +252,7 @@ interface ContributionPanelProps {
     title: string;
     group_id: string;
     cohost_groups?: { group_id: string; group_name: string; group_slug: string; group_logo_url: string | null }[];
+    logging_mode?: "organizer_total" | "individual";
   } | null;
   clickedReport?: ClickedReport | null;
   onClickedReportConsumed?: () => void;
@@ -636,6 +637,7 @@ function ContributeModal({
     title: string;
     group_id: string;
     cohost_groups?: { group_id: string; group_name: string; group_slug: string; group_logo_url: string | null }[];
+    logging_mode?: "organizer_total" | "individual";
   } | null;
   // Set when arriving from the claim-a-report challenge flow: the report is already
   // resolved server-side by that point, so the proximity nearby-hotspot checkbox below
@@ -829,6 +831,7 @@ function ContributeModal({
     if (isPhoto && photos.length === 0) return false;
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
+    if (isCleanup && nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total") return false;
     return true;
   })();
 
@@ -979,7 +982,24 @@ function ContributeModal({
           </div>
         )}
 
-        {isCleanup && nearbyEvent && (
+        {isCleanup && nearbyEvent && nearbyEvent.logging_mode === "organizer_total" ? (
+          <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useNearbyEvent}
+              onChange={(e) => setUseNearbyEvent(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              ⚠️ You&apos;re at the event{" "}
+              <span className="font-semibold text-amber-200">{nearbyEvent.title}</span>. The organizer logs one team
+              total for everyone at the end. Self-logging here won&apos;t count toward it.
+              <span className="block text-amber-400/70 mt-0.5">
+                Uncheck this to log a separate, unrelated cleanup instead. Submitting is disabled while this stays checked.
+              </span>
+            </span>
+          </label>
+        ) : isCleanup && nearbyEvent && (
           <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
             <input
               type="checkbox"
@@ -2385,6 +2405,7 @@ function HostEventModal({
   const [maxAttendees, setMaxAttendees] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [route, setRoute] = useState<RouteLineString | null>(null);
+  const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">("organizer_total");
 
   // A freshly finished route arrives via routeOverride once the map's route picker reports
   // "Finish route" — this is a purely decorative/pre-planning route for the event listing
@@ -2443,6 +2464,7 @@ function HostEventModal({
         externalLink: externalLink.trim() || null,
         route,
         cohostGroupIds,
+        loggingMode,
       });
       setCreated(result);
       if (route) onRouteAdded?.({ id: result.id, route });
@@ -2560,6 +2582,23 @@ function HostEventModal({
               That end time is before the start time ({new Date(scheduledStart).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}). Pick an end time after the start.
             </p>
           )}
+        </div>
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">How should cleanups get logged?</label>
+          <select
+            value={loggingMode}
+            onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
+            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+          >
+            <option value="organizer_total">Organizer logs team total (recommended)</option>
+            <option value="individual">Attendees self-log individually</option>
+          </select>
+          <p className="mt-1 text-xs text-zinc-400">
+            {loggingMode === "organizer_total"
+              ? "You enter the combined haul once everyone's done; points get split across attendees."
+              : "Attendees self-log from the map near the event; no team total needed."}
+          </p>
         </div>
 
         <div>
