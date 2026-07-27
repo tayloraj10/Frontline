@@ -11,6 +11,8 @@ interface FeedContrib {
   contribution_type: string;
   notes: string | null;
   submitted_at: string;
+  small_bags?: number | null;
+  large_bags?: number | null;
 }
 
 interface FeedProfile {
@@ -118,6 +120,16 @@ export default function FeedActivityList({
                 <span className="text-xs font-semibold text-zinc-300 tabular-nums">
                   {c.value ?? 1} {unit}
                 </span>
+                {((c.small_bags ?? 0) > 0 || (c.large_bags ?? 0) > 0) && (
+                  <span className="text-[11px] text-zinc-600 tabular-nums">
+                    ({(c.small_bags ?? 0) + (c.large_bags ?? 0)} bag
+                    {(c.small_bags ?? 0) + (c.large_bags ?? 0) !== 1 ? "s" : ""}
+                    {(c.small_bags ?? 0) > 0 && (c.large_bags ?? 0) > 0 && (
+                      <> &mdash; {c.small_bags} small, {c.large_bags} large</>
+                    )}
+                    )
+                  </span>
+                )}
               </div>
               {c.notes && (
                 <p className="mt-0.5 text-xs text-zinc-500 line-clamp-2">{c.notes}</p>

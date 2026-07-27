@@ -29,18 +29,47 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
         await db.execute(
             text("""
                 SELECT
-                    user_id::text,
-                    COALESCE(SUM(value), 0)::float  AS total_value,
-                    COUNT(*)::int                    AS contribution_count
-                FROM contributions
-                WHERE campaign_id = :cid AND user_id IS NOT NULL
-                GROUP BY user_id
+                    c.user_id::text,
+                    COALESCE(SUM(c.value), 0)::float             AS total_value,
+                    COUNT(*)::int                                 AS contribution_count
+                FROM contributions c
+                WHERE c.campaign_id = :cid AND c.user_id IS NOT NULL
+                GROUP BY c.user_id
                 ORDER BY total_value DESC
                 LIMIT 20
             """),
             {"cid": str(campaign_id)},
         )
     ).fetchall()
+
+    # Bag/pound metrics live on the `cleanups` row, keyed by whichever of cleanup_id
+    # (self-logged) or cleanup_event_id (organizer team-total split across attendees)
+    # is set. A team-total event can have several attendee contribution rows pointing
+    # at the same cleanup_event_id, so this dedupes to one event per user before
+    # summing metrics — otherwise a split total gets multiplied by attendee count.
+    user_bag_totals = {
+        row.user_id: {"small_bags": row.small_bags, "large_bags": row.large_bags, "pounds": row.pounds}
+        for row in (
+            await db.execute(
+                text("""
+                    SELECT
+                        dc.user_id::text,
+                        COALESCE(SUM(cl.metrics_small_bags), 0)::int AS small_bags,
+                        COALESCE(SUM(cl.metrics_large_bags), 0)::int AS large_bags,
+                        COALESCE(SUM(cl.metrics_pounds), 0)::float   AS pounds
+                    FROM (
+                        SELECT DISTINCT user_id, COALESCE(cleanup_id, cleanup_event_id) AS cid
+                        FROM contributions
+                        WHERE campaign_id = :cid AND user_id IS NOT NULL
+                          AND COALESCE(cleanup_id, cleanup_event_id) IS NOT NULL
+                    ) dc
+                    JOIN cleanups cl ON cl.id = dc.cid
+                    GROUP BY dc.user_id
+                """),
+                {"cid": str(campaign_id)},
+            )
+        ).fetchall()
+    }
 
     user_tracts = {
         row.claimed_by_user: row.tracts
@@ -57,22 +86,62 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
         ).fetchall()
     }
 
+    user_territory_types = {
+        row.claimed_by_user: row.types
+        for row in (
+            await db.execute(
+                text("""
+                    SELECT tc.claimed_by_user::text, array_agg(DISTINCT gu.unit_type) AS types
+                    FROM territory_claims tc
+                    JOIN geo_units gu ON gu.id = tc.geo_unit_id
+                    WHERE tc.campaign_id = :cid AND tc.claimed_by_user IS NOT NULL
+                    GROUP BY tc.claimed_by_user
+                """),
+                {"cid": str(campaign_id)},
+            )
+        ).fetchall()
+    }
+
     group_rows = (
         await db.execute(
             text("""
                 SELECT
-                    group_id::text,
-                    COALESCE(SUM(value), 0)::float  AS total_value,
-                    COUNT(*)::int                    AS contribution_count
-                FROM contributions
-                WHERE campaign_id = :cid AND group_id IS NOT NULL
-                GROUP BY group_id
+                    c.group_id::text,
+                    COALESCE(SUM(c.value), 0)::float             AS total_value,
+                    COUNT(*)::int                                 AS contribution_count
+                FROM contributions c
+                WHERE c.campaign_id = :cid AND c.group_id IS NOT NULL
+                GROUP BY c.group_id
                 ORDER BY total_value DESC
                 LIMIT 20
             """),
             {"cid": str(campaign_id)},
         )
     ).fetchall()
+
+    group_bag_totals = {
+        row.group_id: {"small_bags": row.small_bags, "large_bags": row.large_bags, "pounds": row.pounds}
+        for row in (
+            await db.execute(
+                text("""
+                    SELECT
+                        dc.group_id::text,
+                        COALESCE(SUM(cl.metrics_small_bags), 0)::int AS small_bags,
+                        COALESCE(SUM(cl.metrics_large_bags), 0)::int AS large_bags,
+                        COALESCE(SUM(cl.metrics_pounds), 0)::float   AS pounds
+                    FROM (
+                        SELECT DISTINCT group_id, COALESCE(cleanup_id, cleanup_event_id) AS cid
+                        FROM contributions
+                        WHERE campaign_id = :cid AND group_id IS NOT NULL
+                          AND COALESCE(cleanup_id, cleanup_event_id) IS NOT NULL
+                    ) dc
+                    JOIN cleanups cl ON cl.id = dc.cid
+                    GROUP BY dc.group_id
+                """),
+                {"cid": str(campaign_id)},
+            )
+        ).fetchall()
+    }
 
     group_tracts = {
         row.claimed_by_group: row.tracts
@@ -89,6 +158,22 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
         ).fetchall()
     }
 
+    group_territory_types = {
+        row.claimed_by_group: row.types
+        for row in (
+            await db.execute(
+                text("""
+                    SELECT tc.claimed_by_group::text, array_agg(DISTINCT gu.unit_type) AS types
+                    FROM territory_claims tc
+                    JOIN geo_units gu ON gu.id = tc.geo_unit_id
+                    WHERE tc.campaign_id = :cid AND tc.claimed_by_group IS NOT NULL
+                    GROUP BY tc.claimed_by_group
+                """),
+                {"cid": str(campaign_id)},
+            )
+        ).fetchall()
+    }
+
     return {
         "total_value": totals_row.total_value,
         "contribution_count": totals_row.contribution_count,
@@ -98,6 +183,10 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "tracts_claimed": user_tracts.get(r.user_id, 0),
+                "territory_types": user_territory_types.get(r.user_id, []),
+                "small_bags": user_bag_totals.get(r.user_id, {}).get("small_bags", 0),
+                "large_bags": user_bag_totals.get(r.user_id, {}).get("large_bags", 0),
+                "pounds": user_bag_totals.get(r.user_id, {}).get("pounds", 0),
             }
             for r in user_rows
         ],
@@ -107,6 +196,10 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "tracts_claimed": group_tracts.get(r.group_id, 0),
+                "territory_types": group_territory_types.get(r.group_id, []),
+                "small_bags": group_bag_totals.get(r.group_id, {}).get("small_bags", 0),
+                "large_bags": group_bag_totals.get(r.group_id, {}).get("large_bags", 0),
+                "pounds": group_bag_totals.get(r.group_id, {}).get("pounds", 0),
             }
             for r in group_rows
         ],

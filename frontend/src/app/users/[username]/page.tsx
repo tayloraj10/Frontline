@@ -5,10 +5,16 @@ import type { Database } from "@/types/database";
 import UserActivityList from "@/components/contributions/UserActivityList";
 
 const CAMPAIGN_UNIT: Record<string, string> = {
-  territory: "bags",
+  territory: "pts",
   choropleth: "registrations",
   heatmap: "unfollows",
   hex_bloom: "pts",
+};
+
+const CAMPAIGN_CLAIMED_LABEL: Record<string, string> = {
+  territory: "zip codes",
+  choropleth: "states",
+  hex_bloom: "hexes",
 };
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -41,7 +47,10 @@ export default async function UserProfilePage({ params }: Props) {
   ] = await Promise.all([
     supabase
       .from("contributions")
-      .select("id, campaign_id, value, contribution_type, notes, submitted_at", { count: "exact" })
+      .select(
+        "id, campaign_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)",
+        { count: "exact" },
+      )
       .eq("user_id", profile.id)
       .order("submitted_at", { ascending: false })
       .limit(15),
@@ -51,7 +60,7 @@ export default async function UserProfilePage({ params }: Props) {
       .eq("user_id", profile.id),
     supabase
       .from("contributions")
-      .select("campaign_id, value")
+      .select("campaign_id, value, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
       .eq("user_id", profile.id),
     supabase
       .from("territory_claims")
@@ -60,17 +69,27 @@ export default async function UserProfilePage({ params }: Props) {
   ]);
 
   // Aggregate campaign participation from contributions + territory_claims
-  const campaignStats = new Map<string, { total_value: number; contribution_count: number; tracts_claimed: number }>();
+  const campaignStats = new Map<
+    string,
+    { total_value: number; contribution_count: number; tracts_claimed: number; small_bags: number; large_bags: number }
+  >();
   for (const c of allContribsData ?? []) {
     if (!c.campaign_id) continue;
-    const s = campaignStats.get(c.campaign_id) ?? { total_value: 0, contribution_count: 0, tracts_claimed: 0 };
+    const s =
+      campaignStats.get(c.campaign_id) ??
+      { total_value: 0, contribution_count: 0, tracts_claimed: 0, small_bags: 0, large_bags: 0 };
     s.total_value += c.value ?? 1;
     s.contribution_count += 1;
+    const cleanup = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+    s.small_bags += cleanup?.metrics_small_bags ?? 0;
+    s.large_bags += cleanup?.metrics_large_bags ?? 0;
     campaignStats.set(c.campaign_id, s);
   }
   for (const t of tractsData ?? []) {
     if (!t.campaign_id) continue;
-    const s = campaignStats.get(t.campaign_id) ?? { total_value: 0, contribution_count: 0, tracts_claimed: 0 };
+    const s =
+      campaignStats.get(t.campaign_id) ??
+      { total_value: 0, contribution_count: 0, tracts_claimed: 0, small_bags: 0, large_bags: 0 };
     s.tracts_claimed += 1;
     campaignStats.set(t.campaign_id, s);
   }
@@ -92,7 +111,19 @@ export default async function UserProfilePage({ params }: Props) {
   const groupsById = new Map((groupsData ?? []).map((g) => [g.id, g]));
   const campaignsById = new Map((campaignsData ?? []).map((c) => [c.id, c]));
 
-  const contribs = contribsData ?? [];
+  const contribs = (contribsData ?? []).map((c) => {
+    const cleanup = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+    return {
+      id: c.id,
+      campaign_id: c.campaign_id,
+      value: c.value,
+      contribution_type: c.contribution_type,
+      notes: c.notes,
+      submitted_at: c.submitted_at,
+      small_bags: cleanup?.metrics_small_bags ?? null,
+      large_bags: cleanup?.metrics_large_bags ?? null,
+    };
+  });
   const totalTractsCount = tractsData?.length ?? 0;
 
   const joinedDate = new Date(profile.created_at).toLocaleDateString("en-US", {
@@ -145,7 +176,7 @@ export default async function UserProfilePage({ params }: Props) {
         {[
           { label: "Points", value: Math.round(profile.points ?? 0).toLocaleString() },
           { label: "Contributions", value: (contribCount ?? 0).toLocaleString() },
-          { label: "Tracts claimed", value: totalTractsCount.toLocaleString() },
+          { label: "Territories claimed", value: totalTractsCount.toLocaleString() },
           { label: "Groups", value: (membersData?.length ?? 0).toLocaleString() },
         ].map(({ label, value }) => (
           <div
@@ -169,6 +200,7 @@ export default async function UserProfilePage({ params }: Props) {
               const campaign = campaignsById.get(campaignId);
               if (!campaign) return null;
               const unit = CAMPAIGN_UNIT[campaign.campaign_type] ?? "pts";
+              const claimedLabel = CAMPAIGN_CLAIMED_LABEL[campaign.campaign_type] ?? "territories";
               return (
                 <li key={campaignId} className="px-5 py-3 flex items-center gap-3">
                   <Link
@@ -181,7 +213,12 @@ export default async function UserProfilePage({ params }: Props) {
                     <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                       {Math.round(stats.total_value).toLocaleString()} {unit}
                     </div>
-                    <div className="text-xs text-zinc-600">{stats.tracts_claimed} tracts</div>
+                    {stats.small_bags + stats.large_bags > 0 && (
+                      <div className="text-[11px] text-zinc-600 tabular-nums">
+                        {stats.small_bags + stats.large_bags} bag{stats.small_bags + stats.large_bags !== 1 ? "s" : ""}
+                      </div>
+                    )}
+                    <div className="text-xs text-zinc-600">{stats.tracts_claimed} {claimedLabel}</div>
                   </div>
                 </li>
               );
@@ -222,7 +259,7 @@ export default async function UserProfilePage({ params }: Props) {
           <span className="text-sm font-semibold text-zinc-300">Recent activity</span>
         </div>
         <UserActivityList
-          initialContribs={contribs as { id: string; campaign_id: string | null; value: number | null; contribution_type: string; notes: string | null; submitted_at: string }[]}
+          initialContribs={contribs}
           campaigns={campaignsData ?? []}
           isOwn={isOwn}
           userId={currentUser?.id ?? null}

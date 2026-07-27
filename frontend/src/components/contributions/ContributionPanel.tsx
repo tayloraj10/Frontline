@@ -1248,7 +1248,7 @@ function ContributeModal({
               />
             </div>
             <p className="mt-2 text-xs text-zinc-500">
-              Territory value:{" "}
+              Total points:{" "}
               {effectiveMultiplier && (
                 <span className="line-through text-zinc-600 mr-1.5">{baseValue.toFixed(0)}</span>
               )}

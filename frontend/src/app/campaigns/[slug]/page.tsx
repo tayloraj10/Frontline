@@ -36,7 +36,16 @@ type ProblemReportMapData = {
 };
 type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null; flag_auto_hide_threshold: number };
 type EventCentroid = { geo_unit_id: string; lat: number; lng: number };
-type RawLbEntry = { entity_id: string; total_value: number; contribution_count: number; tracts_claimed: number };
+type RawLbEntry = {
+  entity_id: string;
+  total_value: number;
+  contribution_count: number;
+  tracts_claimed: number;
+  territory_types?: string[];
+  small_bags?: number;
+  large_bags?: number;
+  pounds?: number;
+};
 type PartnerBusinessRow = {
   id: string; name: string; slug: string; description: string | null; logo_url: string | null;
   website_url: string | null; google_maps_url: string | null; lat: number | null; lng: number | null; status: string;
@@ -78,7 +87,7 @@ const getCampaignPageData = unstable_cache(
       fetch(`${fastapiUrl}/api/campaigns/${campaign.id}/leaderboard`, { cache: "no-store" }).catch(() => null),
       supabase
         .from("contributions")
-        .select("id, user_id, group_id, value, notes, submitted_at")
+        .select("id, user_id, group_id, value, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags, metrics_pounds)")
         .eq("campaign_id", campaign.id)
         .order("submitted_at", { ascending: false })
         .limit(20),
@@ -224,7 +233,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   const contributionCount = contribCount ?? 0;
 
   const unit =
-    campaign.campaign_type === "territory" ? "bags" :
+    campaign.campaign_type === "territory" ? "pts" :
     campaign.campaign_type === "choropleth" ? "registrations" :
     campaign.campaign_type === "heatmap" ? "unfollows" :
     campaign.campaign_type === "hex_bloom" ? "bloom points" :
@@ -291,6 +300,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   const activity: ActivityItem[] = actContribs.map((c) => {
     const profile = c.user_id ? profilesById.get(c.user_id) : null;
     const group = c.group_id ? groupsById.get(c.group_id) : null;
+    const cleanup = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null; metrics_pounds: number | null } | null;
     return {
       id: c.id,
       user_id: c.user_id,
@@ -301,6 +311,9 @@ export default async function CampaignPage({ params, searchParams }: Props) {
       value: c.value,
       notes: c.notes,
       submitted_at: c.submitted_at,
+      small_bags: cleanup?.metrics_small_bags ?? null,
+      large_bags: cleanup?.metrics_large_bags ?? null,
+      pounds: cleanup?.metrics_pounds ?? null,
     };
   });
 
@@ -406,6 +419,8 @@ export default async function CampaignPage({ params, searchParams }: Props) {
           partnerBusinesses={partnerBusinesses}
           cleanupEvents={cleanupEvents}
           focusCoords={focusCoords}
+          bagMetrics={bagMetrics}
+          contributionCount={contributionCount}
         />
       </div>
     </div>
