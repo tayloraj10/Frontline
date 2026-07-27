@@ -18,6 +18,7 @@ import {
   type CleanupEventDetailData,
   type TeamTotalLogEntry,
 } from "@/lib/cleanupEvents";
+import { searchUsers, type UserSearchResult } from "@/lib/users";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
 
@@ -496,10 +497,17 @@ export default function CleanupEventDetail({
       )}
 
       <div className="border border-zinc-800 rounded-xl overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+        <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
           <span className="text-sm font-semibold text-zinc-300">
             Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
           </span>
+          {event.is_organizer && !isCancelled && (
+            <AddAttendeeControl
+              cleanupId={event.id}
+              existingUserIds={event.rsvps.map((r) => r.user_id)}
+              onAdded={refresh}
+            />
+          )}
         </div>
         {event.rsvps.length === 0 ? (
           <div className="px-4 py-6 text-center text-zinc-600 text-sm">No RSVPs yet.</div>
@@ -684,6 +692,107 @@ function AddEventPhotoButton({
           }}
         />
       </label>
+    </div>
+  );
+}
+
+function AddAttendeeControl({
+  cleanupId,
+  existingUserIds,
+  onAdded,
+}: {
+  cleanupId: string;
+  existingUserIds: string[];
+  onAdded: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const found = await searchUsers(query.trim());
+        if (!cancelled) setResults(found.filter((u) => !existingUserIds.includes(u.id)));
+      } catch (err) {
+        if (!cancelled) setError(extractErrorMessage(err, "Failed to search users"));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, query, existingUserIds]);
+
+  const select = async (u: UserSearchResult) => {
+    setAdding(u.id);
+    try {
+      await rsvpToCleanupEvent({ cleanupId, userId: u.id, status: "going" });
+      await onAdded();
+      setOpen(false);
+      setQuery("");
+      setResults([]);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to add attendee"));
+    } finally {
+      setAdding(null);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0"
+      >
+        + Add attendee
+      </button>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search by username..."
+        className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-zinc-100 focus:outline-none focus:border-zinc-500 w-40"
+      />
+      {(loading || results.length > 0 || error) && (
+        <div className="absolute right-0 top-full mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-lg divide-y divide-zinc-800 max-h-48 overflow-y-auto z-10 shadow-lg">
+          {loading && <p className="px-3 py-2 text-xs text-zinc-600">Searching…</p>}
+          {error && <p className="px-3 py-2 text-xs text-red-400">{error}</p>}
+          {!loading &&
+            results.map((u) => (
+              <button
+                key={u.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => select(u)}
+                disabled={adding === u.id}
+                className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {u.display_name ?? u.username ?? "Unknown"}
+                {u.username && u.display_name && (
+                  <span className="text-zinc-600 text-xs"> @{u.username}</span>
+                )}
+              </button>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
