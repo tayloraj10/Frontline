@@ -34,11 +34,13 @@ function LeaderboardTable({
   nameMap,
   unit,
   type,
+  claimedLabel,
 }: {
   entries: LeaderboardEntry[];
   nameMap: Map<string, string>;
   unit: string;
   type: "user" | "group";
+  claimedLabel: string;
 }) {
   if (entries.length === 0) {
     return (
@@ -55,11 +57,10 @@ function LeaderboardTable({
           <li key={entry.entity_id} className="px-5 py-3 flex items-center gap-3">
             <RankBadge rank={i + 1} />
             <div className="flex items-center gap-2.5 flex-1 min-w-0">
-              <div className={`w-7 h-7 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 ${
-                type === "group"
+              <div className={`w-7 h-7 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 ${type === "group"
                   ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-400"
                   : "bg-zinc-800 border-zinc-700 text-zinc-400"
-              }`}>
+                }`}>
                 {name[0].toUpperCase()}
               </div>
               <span className="text-sm text-zinc-200 truncate font-medium">{name}</span>
@@ -81,7 +82,7 @@ function LeaderboardTable({
                 <div className="text-xs font-semibold text-zinc-400 tabular-nums">
                   {entry.tracts_claimed}
                 </div>
-                <div className="text-xs text-zinc-600">tracts</div>
+                <div className="text-xs text-zinc-600">{claimedLabel}</div>
               </div>
             </div>
           </li>
@@ -142,8 +143,8 @@ export default async function LeaderboardPage({ params }: Props) {
     }),
     isHeatmap
       ? fetch(`${fastapiUrl}/api/campaigns/${campaignData.id}/dethrone-leaderboard`, {
-          next: { revalidate: 30 },
-        })
+        next: { revalidate: 30 },
+      })
       : Promise.resolve(null),
   ]);
 
@@ -172,10 +173,15 @@ export default async function LeaderboardPage({ params }: Props) {
   const groupsById = new Map((groupsData ?? []).map((g) => [g.id, g.name]));
 
   const unit =
-    campaignData.campaign_type === "territory" ? "bags"
-    : campaignData.contribution_type === "unfollow" ? "unfollows"
-    : campaignData.contribution_type === "civic_action" ? "actions"
-    : "pts";
+    campaignData.contribution_type === "unfollow" ? "unfollows"
+      : campaignData.contribution_type === "civic_action" ? "actions"
+        : "pts";
+
+  const claimedLabel =
+    campaignData.campaign_type === "territory" ? "zip codes"
+      : campaignData.campaign_type === "choropleth" ? "states"
+        : campaignData.campaign_type === "hex_bloom" ? "hexes"
+          : "territories";
 
   return (
     <div className="flex flex-col flex-1">
@@ -216,6 +222,7 @@ export default async function LeaderboardPage({ params }: Props) {
               nameMap={profilesById}
               unit={unit}
               type="user"
+              claimedLabel={claimedLabel}
             />
           </div>
 
@@ -228,6 +235,7 @@ export default async function LeaderboardPage({ params }: Props) {
               nameMap={groupsById}
               unit={unit}
               type="group"
+              claimedLabel={claimedLabel}
             />
           </div>
         </div>

@@ -33,12 +33,18 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
   const { data: contribsData, count } = await supabase
     .from("contributions")
-    .select("id, user_id, group_id, value, contribution_type, notes, submitted_at", { count: "exact" })
+    .select(
+      "id, user_id, group_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)",
+      { count: "exact" },
+    )
     .eq("campaign_id", campaignData.id)
     .order("submitted_at", { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1);
 
-  const contribs = (contribsData ?? []) as Contribution[];
+  const contribs = (contribsData ?? []) as unknown as (Contribution & {
+    cleanup_id: string | null;
+    cleanups: { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+  })[];
   const total = count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -54,7 +60,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
       : Promise.resolve({ data: [] as Group[] }),
   ]);
 
-  const unit = campaignData.campaign_type === "territory" ? "bags" : "pts";
+  const unit = "pts";
 
   return (
     <div className="flex flex-col flex-1">
@@ -83,7 +89,17 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
             </div>
 
             <FeedActivityList
-              initialContribs={contribs as { id: string; user_id: string | null; group_id: string | null; value: number | null; contribution_type: string; notes: string | null; submitted_at: string }[]}
+              initialContribs={contribs.map((c) => ({
+                id: c.id,
+                user_id: c.user_id,
+                group_id: c.group_id,
+                value: c.value,
+                contribution_type: c.contribution_type,
+                notes: c.notes,
+                submitted_at: c.submitted_at,
+                small_bags: c.cleanups?.metrics_small_bags ?? null,
+                large_bags: c.cleanups?.metrics_large_bags ?? null,
+              }))}
               profiles={profilesData ?? []}
               groups={groupsData ?? []}
               unit={unit}

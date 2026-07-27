@@ -50,3 +50,11 @@ async def get_presigned_url(
 
     public_url = f"{settings.r2_public_url.rstrip('/')}/{key}"
     return {"upload_url": upload_url, "public_url": public_url, "key": key}
+
+
+def delete_r2_object(public_url: str) -> None:
+    prefix = f"{settings.r2_public_url.rstrip('/')}/"
+    if not public_url.startswith(prefix):
+        raise ValueError(f"URL {public_url!r} does not match configured r2_public_url prefix")
+    key = public_url[len(prefix):]
+    _r2_client().delete_object(Bucket=settings.r2_bucket_name, Key=key)

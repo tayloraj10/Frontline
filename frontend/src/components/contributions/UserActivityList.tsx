@@ -10,6 +10,8 @@ interface Contribution {
   contribution_type: string;
   notes: string | null;
   submitted_at: string;
+  small_bags?: number | null;
+  large_bags?: number | null;
 }
 
 interface Campaign {
@@ -31,7 +33,7 @@ const CONTRIBUTION_ICON: Record<string, string> = {
 };
 
 const CONTRIBUTION_UNIT: Record<string, string> = {
-  cleanup: "bags",
+  cleanup: "pts",
   photo: "photo",
   registration: "registration",
   advocacy: "action",
@@ -112,6 +114,16 @@ export default function UserActivityList({
                 <span className="text-sm font-semibold text-zinc-300 tabular-nums">
                   {c.value ?? 1} {unit}
                 </span>
+                {((c.small_bags ?? 0) > 0 || (c.large_bags ?? 0) > 0) && (
+                  <span className="text-[11px] text-zinc-600 tabular-nums">
+                    ({(c.small_bags ?? 0) + (c.large_bags ?? 0)} bag
+                    {(c.small_bags ?? 0) + (c.large_bags ?? 0) !== 1 ? "s" : ""}
+                    {(c.small_bags ?? 0) > 0 && (c.large_bags ?? 0) > 0 && (
+                      <> &mdash; {c.small_bags} small, {c.large_bags} large</>
+                    )}
+                    )
+                  </span>
+                )}
                 {campaign && (
                   <>
                     <span className="text-xs text-zinc-600">in</span>

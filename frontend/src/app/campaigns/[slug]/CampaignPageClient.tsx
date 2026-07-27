@@ -252,6 +252,10 @@ export interface LeaderboardEntry {
   total_value: number;
   contribution_count: number;
   tracts_claimed: number;
+  territory_types?: string[];
+  small_bags?: number;
+  large_bags?: number;
+  pounds?: number;
 }
 
 export interface ActivityItem {
@@ -264,6 +268,9 @@ export interface ActivityItem {
   value: number | null;
   notes: string | null;
   submitted_at: string;
+  small_bags?: number | null;
+  large_bags?: number | null;
+  pounds?: number | null;
 }
 
 interface Props {
@@ -285,6 +292,8 @@ interface Props {
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
   focusCoords?: { latitude: number; longitude: number } | null;
+  bagMetrics?: { small: number; large: number; pounds: number };
+  contributionCount?: number;
 }
 
 interface NewContribution {
@@ -325,6 +334,70 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className={`${base} text-zinc-600 tabular-nums`}>{rank}</span>;
 }
 
+function LeaderboardRow({
+  entry,
+  rank,
+  unit,
+  campaignType,
+  variant,
+}: {
+  entry: LeaderboardEntry;
+  rank: number;
+  unit: string;
+  campaignType: string;
+  variant: "user" | "group";
+}) {
+  const claimedLabel =
+    campaignType === "territory" ? territoryClaimedLabel(entry.territory_types) :
+    campaignType === "choropleth" ? "states" :
+    null;
+  const breakdownParts = bagBreakdownParts(entry);
+
+  return (
+    <li className="px-4 py-2.5 flex items-center gap-2.5">
+      <RankBadge rank={rank} />
+      <div
+        className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 ${
+          variant === "group"
+            ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-400"
+            : "bg-zinc-800 border-zinc-700 text-zinc-400"
+        }`}
+      >
+        {(entry.name || "?")[0].toUpperCase()}
+      </div>
+      <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
+      <div className="text-right shrink-0">
+        <div className="text-xs font-semibold text-zinc-300 tabular-nums">
+          {Math.round(entry.total_value).toLocaleString()} {unit}
+        </div>
+        {breakdownParts.map((part) => (
+          <div key={part} className="text-[11px] text-zinc-600 tabular-nums">
+            {part}
+          </div>
+        ))}
+        {claimedLabel && (
+          <div className="text-xs text-zinc-600">{entry.tracts_claimed} {claimedLabel}</div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function territoryClaimedLabel(territoryTypes: string[] | null | undefined): string {
+  const units = new Set(territoryTypes ?? []);
+  if (units.size === 1 && units.has("zip")) return "zip codes";
+  if (units.size === 1 && units.has("uk_postcode_district")) return "postcodes";
+  return "territories";
+}
+
+function bagBreakdownParts(entry: { small_bags?: number | null; large_bags?: number | null; pounds?: number | null }): string[] {
+  const parts: string[] = [];
+  if (entry.small_bags) parts.push(`${entry.small_bags.toLocaleString()} small bag${entry.small_bags !== 1 ? "s" : ""}`);
+  if (entry.large_bags) parts.push(`${entry.large_bags.toLocaleString()} large bag${entry.large_bags !== 1 ? "s" : ""}`);
+  if (entry.pounds) parts.push(`${Math.round(entry.pounds).toLocaleString()} lbs`);
+  return parts;
+}
+
 function LeaderboardPanel({
   users,
   groups,
@@ -336,11 +409,6 @@ function LeaderboardPanel({
   unit: string;
   campaignType: string;
 }) {
-  const claimedLabel =
-    campaignType === "territory" ? "tracts" :
-    campaignType === "choropleth" ? "states" :
-    null;
-
   return (
     <div className="py-2 space-y-3">
       <section>
@@ -352,21 +420,7 @@ function LeaderboardPanel({
         ) : (
           <ul className="divide-y divide-zinc-800/50">
             {users.map((entry, i) => (
-              <li key={entry.entity_id} className="px-4 py-2.5 flex items-center gap-2.5">
-                <RankBadge rank={i + 1} />
-                <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0">
-                  {(entry.name || "?")[0].toUpperCase()}
-                </div>
-                <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
-                <div className="text-right shrink-0">
-                  <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-                    {Math.round(entry.total_value).toLocaleString()} {unit}
-                  </div>
-                  {claimedLabel && (
-                    <div className="text-xs text-zinc-600">{entry.tracts_claimed} {claimedLabel}</div>
-                  )}
-                </div>
-              </li>
+              <LeaderboardRow key={entry.entity_id} entry={entry} rank={i + 1} unit={unit} campaignType={campaignType} variant="user" />
             ))}
           </ul>
         )}
@@ -381,21 +435,7 @@ function LeaderboardPanel({
         ) : (
           <ul className="divide-y divide-zinc-800/50">
             {groups.map((entry, i) => (
-              <li key={entry.entity_id} className="px-4 py-2.5 flex items-center gap-2.5">
-                <RankBadge rank={i + 1} />
-                <div className="w-6 h-6 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">
-                  {(entry.name || "?")[0].toUpperCase()}
-                </div>
-                <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
-                <div className="text-right shrink-0">
-                  <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-                    {Math.round(entry.total_value).toLocaleString()} {unit}
-                  </div>
-                  {claimedLabel && (
-                    <div className="text-xs text-zinc-600">{entry.tracts_claimed} {claimedLabel}</div>
-                  )}
-                </div>
-              </li>
+              <LeaderboardRow key={entry.entity_id} entry={entry} rank={i + 1} unit={unit} campaignType={campaignType} variant="group" />
             ))}
           </ul>
         )}
@@ -416,6 +456,8 @@ function StatsPanel({
   eventCount,
   startsAt,
   userId,
+  contributionCount,
+  bagMetrics,
 }: {
   claims: TerritoryClaim[];
   leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
@@ -424,6 +466,8 @@ function StatsPanel({
   eventCount: number;
   startsAt: string | null;
   userId: string | null;
+  contributionCount: number;
+  bagMetrics: { small: number; large: number; pounds: number };
 }) {
   const totalValue = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
   const claimedLabel =
@@ -436,10 +480,14 @@ function StatsPanel({
   const topGroup = leaderboard.groups[0];
   const daysRunning = startsAt ? daysSince(startsAt) : null;
   const userRank = userId ? leaderboard.users.findIndex((u) => u.entity_id === userId) + 1 : 0;
+  const isTerritory =
+    campaignType !== "collage" && campaignType !== "choropleth" && campaignType !== "heatmap" && campaignType !== "hex_bloom";
+  const totalBagCount = bagMetrics.small + bagMetrics.large;
 
   const stats: { label: string; value: string }[] = [
     { label: "Total contributed", value: displayUnit(totalValue, unit) },
     { label: claimedLabel, value: claims.length.toLocaleString() },
+    { label: "Contributions", value: contributionCount.toLocaleString() },
     { label: "Contributors", value: contributorCount.toLocaleString() },
     { label: "Active events", value: eventCount.toLocaleString() },
   ];
@@ -449,6 +497,33 @@ function StatsPanel({
 
   return (
     <div className="py-3">
+      {isTerritory && totalBagCount > 0 && (
+        <div className="px-4 mb-3">
+          <div className="bg-emerald-950/20 border border-emerald-800/30 rounded-lg px-3 py-2.5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-zinc-500">Total bags collected</span>
+              <span className="text-lg font-bold text-emerald-400 tabular-nums">{totalBagCount.toLocaleString()}</span>
+            </div>
+            <div className={`mt-2 grid gap-2 ${bagMetrics.pounds > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
+              <div>
+                <div className="text-[11px] text-zinc-600">Small bags</div>
+                <div className="text-xs font-semibold text-zinc-300 tabular-nums">{bagMetrics.small.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-zinc-600">Large bags</div>
+                <div className="text-xs font-semibold text-zinc-300 tabular-nums">{bagMetrics.large.toLocaleString()}</div>
+              </div>
+              {bagMetrics.pounds > 0 && (
+                <div>
+                  <div className="text-[11px] text-zinc-600">Pounds</div>
+                  <div className="text-xs font-semibold text-zinc-300 tabular-nums">{Math.round(bagMetrics.pounds).toLocaleString()}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <dl className="grid grid-cols-2 gap-3 px-4">
         {stats.map((s) => (
           <div key={s.label} className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5">
@@ -462,15 +537,25 @@ function StatsPanel({
         <div className="mt-4 px-4 space-y-2">
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Leading the way</div>
           {topUser && (
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-start justify-between text-xs">
               <span className="text-zinc-300">🏆 {topUser.name}</span>
-              <span className="text-zinc-500 tabular-nums">{displayUnit(topUser.total_value, unit)}</span>
+              <div className="text-right">
+                <div className="text-zinc-500 tabular-nums">{displayUnit(topUser.total_value, unit)}</div>
+                {bagBreakdownParts(topUser).map((part) => (
+                  <div key={part} className="text-[11px] text-zinc-600 tabular-nums">{part}</div>
+                ))}
+              </div>
             </div>
           )}
           {topGroup && (
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-start justify-between text-xs">
               <span className="text-emerald-400">🏆 {topGroup.name}</span>
-              <span className="text-zinc-500 tabular-nums">{displayUnit(topGroup.total_value, unit)}</span>
+              <div className="text-right">
+                <div className="text-zinc-500 tabular-nums">{displayUnit(topGroup.total_value, unit)}</div>
+                {bagBreakdownParts(topGroup).map((part) => (
+                  <div key={part} className="text-[11px] text-zinc-600 tabular-nums">{part}</div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -500,45 +585,57 @@ function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { ite
   }
   return (
     <ul className="divide-y divide-zinc-800/50">
-      {items.map((item) => (
-        <li key={item.id} className="px-4 py-3 flex items-start gap-2.5">
-          <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0 mt-0.5">
-            {(item.actorName || "?")[0].toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-1 flex-wrap">
-              {item.actorUsername ? (
-                <Link
-                  href={`/users/${item.actorUsername}`}
-                  className="text-xs font-semibold text-zinc-200 hover:text-zinc-100 transition-colors"
-                >
-                  {item.actorName}
-                </Link>
-              ) : (
-                <span className="text-xs font-semibold text-zinc-200">{item.actorName}</span>
-              )}
-              {item.groupName && item.groupSlug && (
-                <>
-                  <span className="text-xs text-zinc-600">via</span>
-                  <Link
-                    href={`/groups/${item.groupSlug}`}
-                    className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
-                  >
-                    {item.groupName}
-                  </Link>
-                </>
-              )}
-              <span className="text-xs text-zinc-500">
-                {displayUnit(item.value ?? 1, unit)}
-              </span>
+      {items.map((item) => {
+        const breakdownParts: string[] = [];
+        if (item.small_bags) breakdownParts.push(`${item.small_bags.toLocaleString()} small bag${item.small_bags !== 1 ? "s" : ""}`);
+        if (item.large_bags) breakdownParts.push(`${item.large_bags.toLocaleString()} large bag${item.large_bags !== 1 ? "s" : ""}`);
+        if (item.pounds) breakdownParts.push(`${Math.round(item.pounds).toLocaleString()} lbs`);
+
+        return (
+          <li key={item.id} className="px-4 py-3 flex items-start gap-2.5">
+            <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0 mt-0.5">
+              {(item.actorName || "?")[0].toUpperCase()}
             </div>
-            {item.notes && (
-              <p className="mt-0.5 text-xs text-zinc-600 line-clamp-1">{item.notes}</p>
-            )}
-          </div>
-          <span className="text-xs text-zinc-600 shrink-0 mt-0.5">{timeAgo(item.submitted_at)}</span>
-        </li>
-      ))}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-1 flex-wrap">
+                {item.actorUsername ? (
+                  <Link
+                    href={`/users/${item.actorUsername}`}
+                    className="text-xs font-semibold text-zinc-200 hover:text-zinc-100 transition-colors"
+                  >
+                    {item.actorName}
+                  </Link>
+                ) : (
+                  <span className="text-xs font-semibold text-zinc-200">{item.actorName}</span>
+                )}
+                {item.groupName && item.groupSlug && (
+                  <>
+                    <span className="text-xs text-zinc-600">via</span>
+                    <Link
+                      href={`/groups/${item.groupSlug}`}
+                      className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      {item.groupName}
+                    </Link>
+                  </>
+                )}
+                <span className="text-xs text-zinc-500">
+                  {displayUnit(item.value ?? 1, unit)}
+                </span>
+              </div>
+              {breakdownParts.map((part) => (
+                <div key={part} className="text-[11px] text-zinc-600 tabular-nums">
+                  {part}
+                </div>
+              ))}
+              {item.notes && (
+                <p className="mt-0.5 text-xs text-zinc-600 line-clamp-1">{item.notes}</p>
+              )}
+            </div>
+            <span className="text-xs text-zinc-600 shrink-0 mt-0.5">{timeAgo(item.submitted_at)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -569,6 +666,8 @@ export default function CampaignPageClient({
   partnerBusinesses,
   cleanupEvents,
   focusCoords,
+  bagMetrics = { small: 0, large: 0, pounds: 0 },
+  contributionCount = 0,
 }: Props) {
   const [hexEventsExpanded, setHexEventsExpanded] = useState(false);
   const [pinPickerActive, setPinPickerActive] = useState(false);
@@ -942,6 +1041,8 @@ export default function CampaignPageClient({
                 eventCount={activeEventsList.length}
                 startsAt={campaign.starts_at}
                 userId={userId}
+                contributionCount={contributionCount}
+                bagMetrics={bagMetrics}
               />
             )}
           </div>
@@ -978,7 +1079,7 @@ export default function CampaignPageClient({
 
       {isAdmin && !pinPickerActive && (
         <>
-          {!adminControlsHidden && (
+          {!adminControlsHidden && !openPanel && (
             <button
               onClick={() => setShowAdminDialog(true)}
               title="Admin controls"
