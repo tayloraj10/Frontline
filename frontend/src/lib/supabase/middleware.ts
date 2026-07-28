@@ -35,7 +35,9 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/campaigns") ||
     request.nextUrl.pathname.startsWith("/legal") ||
     request.nextUrl.pathname.startsWith("/users") ||
-    request.nextUrl.pathname.startsWith("/leaderboard");
+    request.nextUrl.pathname.startsWith("/leaderboard") ||
+    request.nextUrl.pathname.startsWith("/groups") ||
+    request.nextUrl.pathname.startsWith("/partners");
 
   if (!user && !isAuthPage && !isPublicPage) {
     const url = request.nextUrl.clone();

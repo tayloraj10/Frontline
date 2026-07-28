@@ -54,15 +54,19 @@ async def delete_group(group_id: UUID, payload: DeleteGroupRequest, db: AsyncSes
     """
     group_row = (
         await db.execute(
-            text("SELECT id, name, image_url FROM groups WHERE id = :id"),
+            text("SELECT id, name, image_url, status FROM groups WHERE id = :id"),
             {"id": str(group_id)},
         )
     ).fetchone()
     if not group_row:
         raise HTTPException(404, f"No group found for id={group_id}")
 
-    is_authorized = await _is_site_admin(db, payload.requesting_user_id) and await _is_group_admin(
-        db, group_id, payload.requesting_user_id
+    # A pending/rejected application has no group_members yet, so the usual
+    # "site admin who is also a group admin" bar can never be cleared for it --
+    # a site admin alone may delete those. Live (approved) groups still need both.
+    is_authorized = await _is_site_admin(db, payload.requesting_user_id) and (
+        group_row.status != "approved"
+        or await _is_group_admin(db, group_id, payload.requesting_user_id)
     )
     if not is_authorized:
         raise HTTPException(403, "Only a site admin who is also an admin of this group can delete it.")

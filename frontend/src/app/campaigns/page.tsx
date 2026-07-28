@@ -104,6 +104,12 @@ export default async function CampaignsPage() {
     supabase.auth.getUser(),
   ]);
 
+  let contribCount: number | null = null;
+  if (user) {
+    const { count } = await supabase.from("contributions").select("*", { count: "exact", head: true });
+    contribCount = count ?? 0;
+  }
+
   const campaigns = [...campaignsData].sort((a, b) => {
     const ai = CAMPAIGN_SLUG_ORDER.indexOf(a.slug);
     const bi = CAMPAIGN_SLUG_ORDER.indexOf(b.slug);
@@ -118,7 +124,7 @@ export default async function CampaignsPage() {
   return (
     <main className="max-w-5xl mx-auto px-6 py-10 w-full">
       {user && <OnboardingModalClient campaigns={campaigns} />}
-      <div className="mb-10">
+      <div className={user && contribCount !== null ? "mb-6" : "mb-10"}>
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
           Active Campaigns
         </h1>
@@ -126,6 +132,18 @@ export default async function CampaignsPage() {
           {campaigns.length} mission{campaigns.length !== 1 ? "s" : ""} running —{" "}
           pick your fight.
         </p>
+        {user && contribCount !== null && (
+          <div className="mt-6 flex justify-center gap-4 sm:gap-6">
+            <div className="flex-1 max-w-[160px] rounded-2xl border border-emerald-800/40 bg-emerald-950/20 px-4 py-4 text-center">
+              <div className="text-2xl sm:text-3xl font-black text-emerald-400 tabular-nums">{campaigns.length}</div>
+              <div className="text-xs text-zinc-500 mt-1 tracking-wide">active campaigns</div>
+            </div>
+            <div className="flex-1 max-w-[160px] rounded-2xl border border-emerald-800/40 bg-emerald-950/20 px-4 py-4 text-center">
+              <div className="text-2xl sm:text-3xl font-black text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
+              <div className="text-xs text-zinc-500 mt-1 tracking-wide">contributions logged</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {campaigns.length === 0 ? (

@@ -10,7 +10,8 @@ import TimedEventForm from "@/components/events/TimedEventForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
 import { updateEvent } from "@/lib/events";
-import type { Json } from "@/types/database";
+import { deleteGroup } from "@/lib/groups";
+import type { Json, Database } from "@/types/database";
 
 export type Campaign = {
   id: string;
@@ -91,7 +92,11 @@ export type OfferRedemption = {
   offer_id: string;
 };
 
-type Tab = "campaigns" | "triggers" | "events" | "partners" | "leaderboard";
+export type AdminGroup = Database["public"]["Tables"]["groups"]["Row"] & {
+  applicant: { username: string | null; display_name: string | null } | null;
+};
+
+type Tab = "campaigns" | "triggers" | "events" | "partners" | "groups" | "leaderboard";
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -134,6 +139,8 @@ function StatusBadge({ status }: { status: string }) {
     completed: "bg-blue-900/60 text-blue-400 border-blue-800",
     pending: "bg-amber-900/60 text-amber-400 border-amber-800",
     inactive: "bg-zinc-800 text-zinc-500 border-zinc-700",
+    approved: "bg-emerald-900/60 text-emerald-400 border-emerald-800",
+    rejected: "bg-red-900/60 text-red-400 border-red-800",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs border capitalize ${colors[status] ?? colors.draft}`}>
@@ -1438,6 +1445,7 @@ function BusinessCard({
   setBusinessCampaignLinks: (l: BusinessCampaignLink[]) => void;
 }) {
   const isPending = business.status === "pending";
+  const isRejected = business.status === "rejected";
   const [expanded, setExpanded] = useState(isPending);
   const [editing, setEditing] = useState(isPending);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
@@ -1512,25 +1520,29 @@ function BusinessCard({
   };
 
   const handleReject = async () => {
-    if (!confirm(`Reject and delete "${business.name}"? This can't be undone.`)) return;
+    if (!confirm(`Reject "${business.name}"?`)) return;
     setRejecting(true);
     const supabase = createClient();
-    const { error: deleteErr } = await supabase
+    const { data, error: updateErr } = await supabase
       .schema("public")
       .from("partner_businesses")
-      .delete()
-      .eq("id", business.id);
+      .update({ status: "rejected" })
+      .eq("id", business.id)
+      .select(
+        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+      )
+      .single();
     setRejecting(false);
-    if (deleteErr) {
-      alert(deleteErr.message);
+    if (updateErr) {
+      alert(updateErr.message);
       return;
     }
-    setBusinesses(businesses.filter(b => b.id !== business.id));
-    setBusinessCampaignLinks(businessCampaignLinks.filter(l => l.business_id !== business.id));
+    const updated = data as PartnerBusiness;
+    setBusinesses(businesses.map(b => (b.id === updated.id ? updated : b)));
   };
 
   return (
-    <div className={`border rounded-xl overflow-hidden ${isPending ? "border-amber-800/60" : "border-zinc-800"}`}>
+    <div className={`border rounded-xl overflow-hidden ${isPending ? "border-amber-800/60" : isRejected ? "border-red-900/60" : "border-zinc-800"}`}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-zinc-900/30 transition-colors text-left"
@@ -1577,6 +1589,9 @@ function BusinessCard({
             <p className="text-xs text-amber-400">
               Submitted by the business for review. Assign campaigns below and save to approve and publish it.
             </p>
+          )}
+          {isRejected && (
+            <p className="text-xs text-red-400">This application was rejected and kept as a record.</p>
           )}
           {editing && (
             <BusinessForm
@@ -1638,7 +1653,8 @@ function PartnersTab({
   const [showCreate, setShowCreate] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const pendingBusinesses = businesses.filter(b => b.status === "pending");
-  const publishedBusinesses = businesses.filter(b => b.status !== "pending");
+  const rejectedBusinesses = businesses.filter(b => b.status === "rejected");
+  const publishedBusinesses = businesses.filter(b => b.status !== "pending" && b.status !== "rejected");
 
   const handleCreateSubmit = async (payload: BusinessFormPayload): Promise<string | null> => {
     const supabase = createClient();
@@ -1741,6 +1757,28 @@ function PartnersTab({
         </div>
       )}
 
+      {rejectedBusinesses.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-red-500 uppercase tracking-wider">
+            Rejected ({rejectedBusinesses.length})
+          </p>
+          {rejectedBusinesses.map(b => (
+            <BusinessCard
+              key={b.id}
+              business={b}
+              offers={offers}
+              setOffers={setOffers}
+              redemptionCounts={redemptionCounts}
+              campaigns={campaigns}
+              businesses={businesses}
+              setBusinesses={setBusinesses}
+              businessCampaignLinks={businessCampaignLinks}
+              setBusinessCampaignLinks={setBusinessCampaignLinks}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="space-y-2">
         {businesses.length === 0 && (
           <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
@@ -1761,6 +1799,437 @@ function PartnersTab({
             setBusinessCampaignLinks={setBusinessCampaignLinks}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+function GroupCard({
+  group,
+  groups,
+  setGroups,
+  currentUserId,
+}: {
+  group: AdminGroup;
+  groups: AdminGroup[];
+  setGroups: (g: AdminGroup[]) => void;
+  currentUserId: string;
+}) {
+  const isPending = group.status === "pending";
+  const isRejected = group.status === "rejected";
+  const isApproved = group.status === "approved";
+  const [expanded, setExpanded] = useState(isPending);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [typedName, setTypedName] = useState("");
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const handleApprove = async () => {
+    setWorking(true);
+    setError(null);
+    const supabase = createClient();
+    const { data, error: updateErr } = await supabase
+      .from("groups")
+      .update({ status: "approved" })
+      .eq("id", group.id)
+      .select("*")
+      .single();
+    if (updateErr) {
+      setWorking(false);
+      setError(updateErr.message);
+      return;
+    }
+    if (group.created_by) {
+      const { error: memberErr } = await supabase
+        .from("group_members")
+        .insert({ group_id: group.id, user_id: group.created_by, role: "admin" });
+      if (memberErr) {
+        setWorking(false);
+        setError(`Approved, but failed to grant admin membership: ${memberErr.message}`);
+        setGroups(groups.map(g => (g.id === group.id ? { ...g, ...(data as AdminGroup) } : g)));
+        return;
+      }
+    }
+    setWorking(false);
+    setGroups(groups.map(g => (g.id === group.id ? { ...g, ...(data as AdminGroup) } : g)));
+  };
+
+  const handleReject = async () => {
+    if (!confirm(`Reject "${group.name}"?`)) return;
+    setWorking(true);
+    setError(null);
+    const supabase = createClient();
+    const { data, error: updateErr } = await supabase
+      .from("groups")
+      .update({ status: "rejected" })
+      .eq("id", group.id)
+      .select("*")
+      .single();
+    setWorking(false);
+    if (updateErr) {
+      setError(updateErr.message);
+      return;
+    }
+    setGroups(groups.map(g => (g.id === group.id ? { ...g, ...(data as AdminGroup) } : g)));
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Permanently delete "${group.name}"? This can't be undone.`)) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await deleteGroup(group.id, group.created_by ?? "");
+      setGroups(groups.filter(g => g.id !== group.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleConfirmedDelete = async () => {
+    setWorking(true);
+    setError(null);
+    try {
+      await deleteGroup(group.id, currentUserId);
+      setGroups(groups.filter(g => g.id !== group.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete");
+      setWorking(false);
+    }
+  };
+
+  const socialEntries = group.social_links
+    ? (Object.entries(group.social_links).filter(([, v]) => v) as [string, string][])
+    : [];
+
+  return (
+    <div className={`border rounded-xl overflow-hidden ${isPending ? "border-amber-800/60" : isRejected ? "border-red-900/60" : "border-zinc-800"}`}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-zinc-900/30 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-zinc-500 text-xs">{expanded ? "▾" : "▸"}</span>
+          {group.image_url ? (
+            <img src={group.image_url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+          ) : (
+            <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-xs font-black text-zinc-400 shrink-0">
+              {group.name[0]?.toUpperCase()}
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-zinc-200">{group.name}</p>
+            <p className="text-xs text-zinc-600">
+              {group.applicant?.display_name ?? group.applicant?.username ?? "Unknown applicant"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isPending && (
+            <>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); handleApprove(); }}
+                className="text-xs text-emerald-500 hover:text-emerald-400 transition-colors px-2 py-1"
+              >
+                {working ? "Working…" : "Approve"}
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); handleReject(); }}
+                className="text-xs text-red-500 hover:text-red-400 transition-colors px-2 py-1"
+              >
+                Reject
+              </span>
+            </>
+          )}
+          {(isPending || isRejected) && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1"
+            >
+              Delete
+            </span>
+          )}
+          {isApproved && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setExpanded(true); setConfirmingDelete(true); }}
+              className="text-xs text-zinc-500 hover:text-red-400 transition-colors px-2 py-1"
+            >
+              Delete
+            </span>
+          )}
+          <StatusBadge status={group.status} />
+        </div>
+      </button>
+      {expanded && (
+        <div className="border-t border-zinc-800 px-5 py-4 space-y-3 bg-zinc-950/40">
+          {isPending && (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-amber-400">
+                Submitted for review. Approving grants the applicant admin membership and publishes the group.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowDetailModal(true)}
+                className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-amber-800/60 text-amber-400 hover:bg-amber-900/20 transition-colors"
+              >
+                View full submission
+              </button>
+            </div>
+          )}
+          {isRejected && (
+            <p className="text-xs text-red-400">This application was rejected and kept as a record.</p>
+          )}
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          {isApproved ? (
+            <Link
+              href={`/groups/${group.slug}`}
+              target="_blank"
+              className="inline-block text-xs text-emerald-500 hover:text-emerald-400 underline"
+            >
+              View public group page → /groups/{group.slug}
+            </Link>
+          ) : (
+            <p className="text-xs text-zinc-600">/groups/{group.slug}</p>
+          )}
+
+          {group.description && <p className="text-sm text-zinc-400">{group.description}</p>}
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-zinc-500">
+            <p>
+              <span className="text-zinc-600">Applicant: </span>
+              {group.applicant?.display_name ?? group.applicant?.username ?? "Unknown"}
+              {group.applicant?.username && group.applicant?.display_name ? ` (@${group.applicant.username})` : ""}
+            </p>
+            <p>
+              <span className="text-zinc-600">Submitted: </span>
+              {new Date(group.created_at).toLocaleDateString()}
+            </p>
+            {group.categories && group.categories.length > 0 && (
+              <p className="col-span-2">
+                <span className="text-zinc-600">Categories: </span>
+                {group.categories.join(", ")}
+              </p>
+            )}
+          </div>
+
+          {socialEntries.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {socialEntries.map(([platform, url]) => (
+                <a
+                  key={platform}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs px-2 py-1 rounded-full border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-colors"
+                >
+                  {platform}
+                </a>
+              ))}
+            </div>
+          )}
+
+          {isApproved && (
+            <div className="pt-2 border-t border-zinc-800/60">
+              {!confirmingDelete ? (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setConfirmingDelete(true)}
+                  className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                >
+                  Delete this group…
+                </span>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-red-400">
+                    This permanently deletes &quot;{group.name}&quot;. Type the group name to confirm.
+                  </p>
+                  <input
+                    type="text"
+                    value={typedName}
+                    onChange={(e) => setTypedName(e.target.value)}
+                    placeholder={group.name}
+                    className="w-full max-w-xs bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-red-700"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={typedName !== group.name || working}
+                      onClick={handleConfirmedDelete}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-800 text-red-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-900/60 transition-colors"
+                    >
+                      {working ? "Deleting…" : "Confirm delete"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setConfirmingDelete(false); setTypedName(""); }}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showDetailModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8"
+          onClick={() => setShowDetailModal(false)}
+        >
+          <div
+            className="w-full max-w-lg max-h-full overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <h3 className="text-lg font-bold text-zinc-100">{group.name}</h3>
+              <button
+                type="button"
+                onClick={() => setShowDetailModal(false)}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {group.image_url ? (
+              <img
+                src={group.image_url}
+                alt={group.name}
+                className="w-full max-h-80 object-contain rounded-xl bg-zinc-900 mb-4"
+              />
+            ) : (
+              <div className="w-full h-40 rounded-xl bg-zinc-900 flex items-center justify-center text-3xl font-black text-zinc-700 mb-4">
+                {group.name[0]?.toUpperCase()}
+              </div>
+            )}
+
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs text-zinc-600 mb-0.5">Slug</p>
+                <p className="text-zinc-300">/groups/{group.slug}</p>
+              </div>
+
+              <div>
+                <p className="text-xs text-zinc-600 mb-0.5">Applicant</p>
+                <p className="text-zinc-300">
+                  {group.applicant?.display_name ?? group.applicant?.username ?? "Unknown"}
+                  {group.applicant?.username && group.applicant?.display_name ? ` (@${group.applicant.username})` : ""}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-zinc-600 mb-0.5">Submitted</p>
+                <p className="text-zinc-300">{new Date(group.created_at).toLocaleString()}</p>
+              </div>
+
+              {group.description && (
+                <div>
+                  <p className="text-xs text-zinc-600 mb-0.5">Description</p>
+                  <p className="text-zinc-300 whitespace-pre-wrap">{group.description}</p>
+                </div>
+              )}
+
+              {group.categories && group.categories.length > 0 && (
+                <div>
+                  <p className="text-xs text-zinc-600 mb-0.5">Categories</p>
+                  <p className="text-zinc-300">{group.categories.join(", ")}</p>
+                </div>
+              )}
+
+              {socialEntries.length > 0 && (
+                <div>
+                  <p className="text-xs text-zinc-600 mb-1">Links</p>
+                  <div className="flex flex-wrap gap-2">
+                    {socialEntries.map(([platform, url]) => (
+                      <a
+                        key={platform}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs px-2.5 py-1 rounded-full border border-zinc-800 text-zinc-300 hover:border-zinc-700 transition-colors"
+                      >
+                        {platform}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-6 pt-4 border-t border-zinc-800">
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={() => { setShowDetailModal(false); handleApprove(); }}
+                className="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/40 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/60 transition-colors"
+              >
+                {working ? "Working…" : "Approve"}
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={() => { setShowDetailModal(false); handleReject(); }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 transition-colors"
+              >
+                Reject
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GroupsTab({ groups, setGroups, currentUserId }: { groups: AdminGroup[]; setGroups: (g: AdminGroup[]) => void; currentUserId: string }) {
+  const pendingGroups = groups.filter(g => g.status === "pending");
+  const rejectedGroups = groups.filter(g => g.status === "rejected");
+  const approvedGroups = groups.filter(g => g.status === "approved");
+
+  return (
+    <div className="space-y-4">
+      <span className="text-sm text-zinc-500">{groups.length} group{groups.length !== 1 ? "s" : ""}</span>
+
+      {pendingGroups.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+            Pending review ({pendingGroups.length})
+          </p>
+          {pendingGroups.map(g => <GroupCard key={g.id} group={g} groups={groups} setGroups={setGroups} currentUserId={currentUserId} />)}
+        </div>
+      )}
+
+      {rejectedGroups.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-red-500 uppercase tracking-wider">
+            Rejected ({rejectedGroups.length})
+          </p>
+          {rejectedGroups.map(g => <GroupCard key={g.id} group={g} groups={groups} setGroups={setGroups} currentUserId={currentUserId} />)}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {groups.length === 0 && (
+          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
+            No groups.
+          </div>
+        )}
+        {approvedGroups.map(g => <GroupCard key={g.id} group={g} groups={groups} setGroups={setGroups} currentUserId={currentUserId} />)}
       </div>
     </div>
   );
@@ -1935,6 +2404,8 @@ export default function AdminPanel({
   initialOffers,
   initialOfferRedemptions,
   initialBusinessCampaignLinks,
+  initialGroups,
+  currentUserId,
 }: {
   initialCampaigns: Campaign[];
   initialEvents: ActiveEvent[];
@@ -1943,6 +2414,8 @@ export default function AdminPanel({
   initialOffers: PartnerOffer[];
   initialOfferRedemptions: OfferRedemption[];
   initialBusinessCampaignLinks: BusinessCampaignLink[];
+  initialGroups: AdminGroup[];
+  currentUserId: string;
 }) {
   const [tab, setTab] = useState<Tab>("campaigns");
   const [campaigns, setCampaigns] = useState(initialCampaigns);
@@ -1957,6 +2430,7 @@ export default function AdminPanel({
     return acc;
   }, {});
   const [businessCampaignLinks, setBusinessCampaignLinks] = useState(initialBusinessCampaignLinks);
+  const [groups, setGroups] = useState(initialGroups);
   const [seedingDemo, setSeedingDemo] = useState(false);
   const [seedDemoResult, setSeedDemoResult] = useState<string | null>(null);
 
@@ -2005,7 +2479,7 @@ export default function AdminPanel({
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
-        {(["campaigns", "triggers", "events", "partners", "leaderboard"] as Tab[]).map(t => (
+        {(["campaigns", "triggers", "events", "partners", "groups", "leaderboard"] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -2019,6 +2493,11 @@ export default function AdminPanel({
             {t === "events" && events.filter(e => e.status === "active").length > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-red-900/60 text-red-400 text-xs tabular-nums">
                 {events.filter(e => e.status === "active").length}
+              </span>
+            )}
+            {t === "groups" && groups.filter(g => g.status === "pending").length > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-400 text-xs tabular-nums">
+                {groups.filter(g => g.status === "pending").length}
               </span>
             )}
           </button>
@@ -2040,6 +2519,7 @@ export default function AdminPanel({
           setBusinessCampaignLinks={setBusinessCampaignLinks}
         />
       )}
+      {tab === "groups" && <GroupsTab groups={groups} setGroups={setGroups} currentUserId={currentUserId} />}
       {tab === "leaderboard" && <LeaderboardTab campaigns={activeCampaigns} />}
     </main>
   );

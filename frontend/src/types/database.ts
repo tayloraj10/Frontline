@@ -54,15 +54,17 @@ export interface Database {
           categories: string[];
           featured: boolean;
           verified: boolean;
+          status: "pending" | "approved" | "rejected";
           created_by: string | null;
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["groups"]["Row"], "id" | "categories" | "featured" | "verified" | "created_at" | "updated_at"> & {
+        Insert: Omit<Database["public"]["Tables"]["groups"]["Row"], "id" | "categories" | "featured" | "verified" | "status" | "created_at" | "updated_at"> & {
           id?: string;
           categories?: string[];
           featured?: boolean;
           verified?: boolean;
+          status?: "pending" | "approved" | "rejected";
           created_at?: string;
           updated_at?: string;
         };

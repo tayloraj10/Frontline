@@ -941,7 +941,7 @@ Per decision, Frontline does not call the live DOGS API at runtime — all data 
 ### Groups Page Cleanup
 
 #### Create Group — access control
-`/groups/new` is open to any logged-in user who has at least one contribution on record. The listing page hides the button otherwise, and the page server component redirects users with no contributions back to `/groups`. The RLS `groups_insert` policy enforces creation at the DB layer via `auth.uid() = created_by OR is_site_admin()` (migration 015) — any authenticated user can already insert a group for themselves; the app-level gate just adds the "has contributed" requirement on top.
+Direct creation replaced with an admin-approved application flow: `/groups/apply` (formerly `/groups/new`) is open to any logged-in user who has at least one contribution on record — same gate as before (listing page hides the button otherwise, server component redirects contribution-less users back to `/groups`) — but the insert now lands with `status: "pending"` instead of going live immediately. A site admin reviews it in the admin panel's Groups tab: **Approve** flips `status` to `approved` and grants the applicant a `group_members` admin row (skipped at insert time now); **Reject** flips it to `rejected` (kept as a record, not deleted); **Delete** (pending/rejected only) permanently removes it via `DELETE /api/groups/{id}`. Visiting a pending/rejected group's `/groups/[slug]` page shows a simple "pending review"/"not approved" placeholder instead of the full profile. RLS (`groups_insert`, `groups_select`, new `groups_update_site_admin`/`group_members_insert_site_admin`, migration `047_group_applications.sql`) mirrors the pre-existing `partner_businesses` pending pattern; the partner-business reject flow was also retrofitted at the same time from hard-delete to `status: "rejected"` for consistency. **Migration 047 is written but not yet applied to the (production) database.**
 
 #### Group profile page (`/groups/[slug]`) — what's built
 
@@ -951,7 +951,7 @@ Per decision, Frontline does not call the live DOGS API at runtime — all data 
 - **Edit button** — visible on `/groups/[slug]` when `isAdmin` is true, routes to `/groups/[slug]/edit`.
 
 #### What works today
-- Group creation (any logged-in user with a contribution — button hidden otherwise, server-side redirect enforced, DB-layer RLS guard)
+- Group application/approval flow (any logged-in user with a contribution can apply at `/groups/apply`; site admin approves/rejects/deletes in the admin panel Groups tab; pending/rejected groups show a placeholder page instead of the full profile)
 - Groups nav link hidden in `AppHeader` for logged-out users
 - Group profile display: name, description, website, logo, verified badge, member list with roles
 - Join / leave membership (`GroupMembershipButton`)
