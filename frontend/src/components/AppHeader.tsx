@@ -41,7 +41,7 @@ export default async function AppHeader() {
     { href: "/campaigns", label: "Campaigns" },
     { href: "/leaderboard", label: "Leaderboard" },
     { href: "/partners", label: "Partners" },
-    ...(user ? [{ href: "/groups", label: "Groups" }] : []),
+    { href: "/groups", label: "Groups" },
     ...(isBusinessAdmin ? [{ href: "/partners/dashboard", label: "Manage Business" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
   ];
@@ -82,14 +82,12 @@ export default async function AppHeader() {
             >
               Partners
             </Link>
-            {user && (
-              <Link
-                href="/groups"
-                className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
-              >
-                Groups
-              </Link>
-            )}
+            <Link
+              href="/groups"
+              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+            >
+              Groups
+            </Link>
             {isBusinessAdmin && (
               <Link
                 href="/partners/dashboard"

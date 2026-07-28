@@ -21,7 +21,7 @@ function toSlug(name: string): string {
     .replace(/-+/g, "-");
 }
 
-export default function CreateGroupForm({ userId }: { userId: string }) {
+export default function ApplyGroupForm({ userId }: { userId: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -99,6 +99,7 @@ export default function CreateGroupForm({ userId }: { userId: string }) {
           },
           image_url: logoUrl,
           created_by: userId,
+          status: "pending",
         })
         .select("id, slug")
         .single();
@@ -109,20 +110,10 @@ export default function CreateGroupForm({ userId }: { userId: string }) {
         return;
       }
 
-      const { error: memberErr } = await supabase
-        .from("group_members")
-        .insert({ group_id: group.id, user_id: userId, role: "admin" });
-
-      if (memberErr) {
-        setError(memberErr.message);
-        setLoading(false);
-        return;
-      }
-
       router.push(`/groups/${group.slug}`);
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      setError(err instanceof Error ? err.message : "Submission failed");
       setLoading(false);
     }
   };
@@ -130,8 +121,10 @@ export default function CreateGroupForm({ userId }: { userId: string }) {
   return (
     <main className="max-w-lg mx-auto px-6 py-16 w-full">
       <div className="mb-8">
-        <h1 className="text-3xl font-black tracking-tight text-zinc-100">Create a Group</h1>
-        <p className="text-zinc-500 mt-2 text-sm">Organize your crew and compete together.</p>
+        <h1 className="text-3xl font-black tracking-tight text-zinc-100">Add Your Group</h1>
+        <p className="text-zinc-500 mt-2 text-sm">
+          Already running a crew? Add it here. A site admin will review it before it's listed.
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -254,7 +247,7 @@ export default function CreateGroupForm({ userId }: { userId: string }) {
           disabled={loading || !name.trim() || !slug.trim()}
           className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm"
         >
-          {loading ? "Creating…" : "Create Group"}
+          {loading ? "Submitting…" : "Submit Group"}
         </button>
       </form>
     </main>

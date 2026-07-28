@@ -34,6 +34,26 @@ export default async function GroupProfilePage({ params }: Props) {
   const group = groupData as Group | null;
   if (!group) notFound();
 
+  if (group.status !== "approved") {
+    const isPending = group.status === "pending";
+    return (
+      <main className="max-w-lg mx-auto px-6 py-16 w-full text-center">
+        <div className="mb-2 text-left">
+          <Link href="/groups" className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
+            ← Groups
+          </Link>
+        </div>
+        <p className="text-5xl mb-4">{isPending ? "⏳" : "🚫"}</p>
+        <h1 className="text-2xl font-black text-zinc-100 mb-2">{group.name}</h1>
+        <p className="text-zinc-400 text-sm leading-relaxed">
+          {isPending
+            ? "This group is pending review. It'll be listed once a site admin approves it."
+            : "This group was not approved for listing."}
+        </p>
+      </main>
+    );
+  }
+
   const { data: membersData } = await supabase
     .from("group_members")
     .select("user_id, role, joined_at")
@@ -142,7 +162,7 @@ export default async function GroupProfilePage({ params }: Props) {
               href={`/login?next=/groups/${slug}`}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
             >
-              Join Group
+              Sign In to Join
             </Link>
           )}
         </div>

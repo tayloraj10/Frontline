@@ -3,8 +3,10 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { Database } from "@/types/database";
+import GroupsListClient from "./GroupsListClient";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
+type OwnSubmission = Pick<Group, "id" | "slug" | "name" | "status" | "image_url">;
 
 // Public, RLS-open data shared across all visitors — bounds these two
 // (currently unfiltered, whole-table) queries to once per 30s regardless of
@@ -47,33 +49,37 @@ export default async function GroupsPage() {
     getGroupsListData(),
   ]);
 
-  let canCreateGroup = false;
+  const canCreateGroup = !!user;
+  let ownSubmissions: OwnSubmission[] = [];
   if (user) {
-    const { data: contribution } = await supabase
-      .from("contributions")
-      .select("id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    canCreateGroup = !!contribution;
+    const { data: submissions } = await supabase
+      .from("groups")
+      .select("id, slug, name, status, image_url")
+      .eq("created_by", user.id)
+      .neq("status", "approved");
+    ownSubmissions = submissions ?? [];
   }
 
   const groups = (groupsData ?? []) as Group[];
 
-  const memberCountByGroup = new Map<string, number>();
-  const userGroupIds = new Set<string>();
+  const memberCountByGroup: Record<string, number> = {};
+  const userGroupIds: string[] = [];
+  const userGroupIdSet = new Set<string>();
   for (const m of membersData ?? []) {
-    memberCountByGroup.set(m.group_id, (memberCountByGroup.get(m.group_id) ?? 0) + 1);
-    if (user && m.user_id === user.id) userGroupIds.add(m.group_id);
+    memberCountByGroup[m.group_id] = (memberCountByGroup[m.group_id] ?? 0) + 1;
+    if (user && m.user_id === user.id && !userGroupIdSet.has(m.group_id)) {
+      userGroupIdSet.add(m.group_id);
+      userGroupIds.push(m.group_id);
+    }
   }
 
-  const upcomingEventCountByGroup = new Map<string, number>();
+  const upcomingEventCountByGroup: Record<string, number> = {};
   for (const e of eventsData ?? []) {
     if (!e.group_id) continue;
-    upcomingEventCountByGroup.set(e.group_id, (upcomingEventCountByGroup.get(e.group_id) ?? 0) + 1);
+    upcomingEventCountByGroup[e.group_id] = (upcomingEventCountByGroup[e.group_id] ?? 0) + 1;
   }
   for (const c of cohostsData ?? []) {
-    upcomingEventCountByGroup.set(c.group_id, (upcomingEventCountByGroup.get(c.group_id) ?? 0) + 1);
+    upcomingEventCountByGroup[c.group_id] = (upcomingEventCountByGroup[c.group_id] ?? 0) + 1;
   }
 
   return (
@@ -89,13 +95,48 @@ export default async function GroupsPage() {
         </div>
         {canCreateGroup && (
           <Link
-            href="/groups/new"
+            href="/groups/apply"
             className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
           >
-            + Create Group
+            Add Your Group
           </Link>
         )}
       </div>
+
+      {ownSubmissions.length > 0 && (
+        <div className="mb-8 rounded-2xl border border-amber-800/50 bg-amber-950/20 p-5">
+          <h2 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">
+            Your submission{ownSubmissions.length !== 1 ? "s" : ""}
+          </h2>
+          <div className="space-y-2">
+            {ownSubmissions.map((g) => (
+              <Link
+                key={g.id}
+                href={`/groups/${g.slug}`}
+                className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 hover:border-zinc-600 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+                  {g.image_url ? (
+                    <img src={g.image_url} alt={g.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xs font-bold text-zinc-300">{(g.name || "?")[0].toUpperCase()}</span>
+                  )}
+                </div>
+                <span className="flex-1 text-sm font-semibold text-zinc-200">{g.name}</span>
+                <span
+                  className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                    g.status === "pending"
+                      ? "bg-amber-900/60 text-amber-400 border-amber-800"
+                      : "bg-red-900/60 text-red-400 border-red-800"
+                  }`}
+                >
+                  {g.status === "pending" ? "Pending review" : "Rejected"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {groups.length === 0 ? (
         <div className="text-center py-28 text-zinc-600">
@@ -103,75 +144,20 @@ export default async function GroupsPage() {
           <p className="font-semibold text-zinc-500">No groups yet.</p>
           {canCreateGroup && (
             <p className="text-sm mt-1">
-              <Link href="/groups/new" className="text-emerald-400 hover:text-emerald-300">
-                Create the first one.
+              <Link href="/groups/apply" className="text-emerald-400 hover:text-emerald-300">
+                Add the first one.
               </Link>
             </p>
           )}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {groups.map((group) => {
-            const count = memberCountByGroup.get(group.id) ?? 0;
-            const eventCount = upcomingEventCountByGroup.get(group.id) ?? 0;
-            const isMember = userGroupIds.has(group.id);
-
-            return (
-              <Link
-                key={group.id}
-                href={`/groups/${group.slug}`}
-                className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40"
-              >
-                <div className="absolute inset-y-0 left-0 w-[3px] rounded-l-2xl bg-emerald-500 opacity-40 transition-opacity duration-300 group-hover:opacity-100" />
-
-                <div className="relative flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
-                        {group.image_url ? (
-                          <img src={group.image_url} alt={group.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-sm font-bold text-zinc-300">{(group.name || "?")[0].toUpperCase()}</span>
-                        )}
-                      </div>
-                      {group.verified && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
-                          ✓ Verified
-                        </span>
-                      )}
-                      {isMember && (
-                        <span className="inline-flex items-center rounded-full border border-zinc-600 bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
-                          Member
-                        </span>
-                      )}
-                      <span className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-                        {eventCount > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-sky-700/50 bg-sky-950/30 px-2 py-0.5 text-sky-400">
-                            🗓️ {eventCount} upcoming
-                          </span>
-                        )}
-                        {count} member{count !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-
-                    <h2 className="text-lg font-bold leading-snug text-zinc-100 group-hover:text-white">
-                      {group.name}
-                    </h2>
-                    {group.description && (
-                      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-zinc-500">
-                        {group.description}
-                      </p>
-                    )}
-                  </div>
-
-                  <span className="mt-0.5 flex-shrink-0 text-xl text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300">
-                    →
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        <GroupsListClient
+          groups={groups}
+          memberCountByGroup={memberCountByGroup}
+          upcomingEventCountByGroup={upcomingEventCountByGroup}
+          userGroupIds={userGroupIds}
+          isLoggedIn={!!user}
+        />
       )}
     </main>
   );

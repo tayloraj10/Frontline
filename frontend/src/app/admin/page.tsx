@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "./AdminPanel";
-import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink } from "./AdminPanel";
+import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink, AdminGroup } from "./AdminPanel";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -25,6 +25,7 @@ export default async function AdminPage() {
     { data: businesses },
     { data: offers },
     { data: redemptions },
+    { data: groups },
   ] = await Promise.all([
     supabase
       .schema("public")
@@ -57,12 +58,26 @@ export default async function AdminPage() {
       .schema("public")
       .from("partner_redemptions")
       .select("offer_id"),
+    supabase
+      .from("groups")
+      .select("*")
+      .order("created_at", { ascending: false }),
   ]);
 
   const { data: businessCampaignLinks } = await supabase
     .schema("public")
     .from("campaign_partner_businesses")
     .select("business_id, campaign_id");
+
+  const applicantIds = [...new Set((groups ?? []).map((g) => g.created_by).filter(Boolean) as string[])];
+  const { data: applicantProfiles } = applicantIds.length > 0
+    ? await supabase.schema("public").from("profiles").select("id, username, display_name").in("id", applicantIds)
+    : { data: [] as { id: string; username: string | null; display_name: string | null }[] };
+  const applicantsById = new Map((applicantProfiles ?? []).map((p) => [p.id, { username: p.username, display_name: p.display_name }]));
+  const groupsWithApplicant = (groups ?? []).map((g) => ({
+    ...g,
+    applicant: g.created_by ? applicantsById.get(g.created_by) ?? null : null,
+  }));
 
   const eventCampaignIds = [...new Set((activeEvents ?? []).map((e) => e.campaign_id).filter(Boolean) as string[])];
   const { data: eventCampaignsData } = eventCampaignIds.length > 0
@@ -83,6 +98,8 @@ export default async function AdminPage() {
       initialOffers={(offers ?? []) as PartnerOffer[]}
       initialOfferRedemptions={(redemptions ?? []) as OfferRedemption[]}
       initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
+      initialGroups={groupsWithApplicant as AdminGroup[]}
+      currentUserId={user.id}
     />
   );
 }
