@@ -326,6 +326,23 @@ export default function CleanupEventDetail({
             </div>
           )}
         </div>
+        <div className="mt-1.5">
+          {event.logging_mode === "organizer_total" ? (
+            <span
+              title="The organizer logs one combined total for everyone at the end."
+              className="inline-flex items-center gap-1 text-xs text-amber-300 bg-amber-950/40 border border-amber-700/40 rounded-full px-2 py-0.5 cursor-help"
+            >
+              👥 Team log
+            </span>
+          ) : (
+            <span
+              title="Attendees log their own cleanup individually from the map."
+              className="inline-flex items-center gap-1 text-xs text-sky-300 bg-sky-950/40 border border-sky-700/40 rounded-full px-2 py-0.5 cursor-help"
+            >
+              🙋 Self-log
+            </span>
+          )}
+        </div>
         {isCancelled && (
           <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-red-800/60 bg-red-950/30 px-2.5 py-1 text-xs font-semibold text-red-400">
             Cancelled
@@ -474,13 +491,20 @@ export default function CleanupEventDetail({
             </div>
           )}
 
-          <Link
-            href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-colors"
-          >
-            <span aria-hidden="true">📍</span>
-            Log your cleanup on the map
-          </Link>
+          {event.logging_mode === "organizer_total" ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg">
+              <span aria-hidden="true">ℹ️</span>
+              The organizer will log the event totals for everyone.
+            </div>
+          ) : (
+            <Link
+              href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-colors"
+            >
+              <span aria-hidden="true">📍</span>
+              Log your cleanup on the map
+            </Link>
+          )}
         </div>
       )}
 
@@ -492,7 +516,7 @@ export default function CleanupEventDetail({
         </div>
       )}
 
-      {event.is_organizer && !isCancelled && (
+      {event.is_organizer && !isCancelled && event.logging_mode === "organizer_total" && (
         <LogTeamTotalForm cleanupId={event.id} organizerUserId={userId!} rsvps={event.rsvps} onLogged={refresh} />
       )}
 

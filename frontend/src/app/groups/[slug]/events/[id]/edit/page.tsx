@@ -72,6 +72,7 @@ export default async function EditCleanupEventPage({ params }: Props) {
             externalLink: event.external_link,
             imageUrl: event.image_url,
             route: event.route,
+            loggingMode: event.logging_mode,
           }}
           initialCohostGroupIds={event.cohost_groups.map((g) => g.group_id)}
         />

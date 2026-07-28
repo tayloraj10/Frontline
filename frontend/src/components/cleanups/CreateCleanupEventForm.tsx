@@ -59,6 +59,7 @@ export default function CreateCleanupEventForm({
     externalLink: string | null;
     imageUrl: string | null;
     route: RouteLineString | null;
+    loggingMode?: "organizer_total" | "individual";
   };
   initialCohostGroupIds?: string[];
 }) {
@@ -82,6 +83,7 @@ export default function CreateCleanupEventForm({
   const [showRoutePicker, setShowRoutePicker] = useState(!!initialValues?.route);
   const hadInitialRoute = !!initialValues?.route;
   const [cohostGroupIds, setCohostGroupIds] = useState<string[]>(initialCohostGroupIds);
+  const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">(initialValues?.loggingMode ?? "organizer_total");
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -122,6 +124,7 @@ export default function CreateCleanupEventForm({
           route,
           clearRoute: hadInitialRoute && !route,
           cohostGroupIds,
+          loggingMode,
         });
         router.push(`/cleanup-events/${cleanupId}`);
       } else {
@@ -140,6 +143,7 @@ export default function CreateCleanupEventForm({
           externalLink: externalLink.trim() || null,
           route,
           cohostGroupIds,
+          loggingMode,
         });
         router.push(`/groups/${groupSlug}`);
       }
@@ -238,6 +242,22 @@ export default function CreateCleanupEventForm({
             value={cohostGroupIds}
             onChange={setCohostGroupIds}
           />
+        </div>
+        <div className="col-span-2 space-y-1">
+          <label className="text-xs text-zinc-500">How should cleanups get logged?</label>
+          <select
+            className={inputCls}
+            value={loggingMode}
+            onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
+          >
+            <option value="organizer_total">Organizer logs team total (recommended)</option>
+            <option value="individual">Attendees self-log individually</option>
+          </select>
+          <p className="text-xs text-zinc-400">
+            {loggingMode === "organizer_total"
+              ? "You enter the combined haul once everyone's done; points get split across attendees."
+              : "Attendees self-log from the map near the event; no team total needed."}
+          </p>
         </div>
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">RSVP limit (optional)</label>

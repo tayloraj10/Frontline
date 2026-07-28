@@ -315,6 +315,7 @@ export type MapCleanupEvent = {
   is_past?: boolean;
   total_small_bags?: number;
   total_large_bags?: number;
+  logging_mode?: "organizer_total" | "individual";
 };
 
 interface Props {
