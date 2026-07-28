@@ -244,15 +244,24 @@ export default function CleanupEventDetail({
           isEvent
         />
       )}
-      <a
-        href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
-      >
-        <span aria-hidden="true">🧭</span>
-        Get directions
-      </a>
+      <div className="flex items-center gap-4">
+        <a
+          href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+        >
+          <span aria-hidden="true">🧭</span>
+          Get directions
+        </a>
+        <Link
+          href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
+          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+        >
+          <span aria-hidden="true">📍</span>
+          Show on map
+        </Link>
+      </div>
 
       <div>
         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
