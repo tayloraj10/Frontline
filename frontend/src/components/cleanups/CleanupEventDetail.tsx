@@ -491,13 +491,20 @@ export default function CleanupEventDetail({
             </div>
           )}
 
-          <Link
-            href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-colors"
-          >
-            <span aria-hidden="true">📍</span>
-            Log your cleanup on the map
-          </Link>
+          {event.logging_mode === "organizer_total" ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg">
+              <span aria-hidden="true">ℹ️</span>
+              The organizer will log the event totals for everyone.
+            </div>
+          ) : (
+            <Link
+              href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-colors"
+            >
+              <span aria-hidden="true">📍</span>
+              Log your cleanup on the map
+            </Link>
+          )}
         </div>
       )}
 
