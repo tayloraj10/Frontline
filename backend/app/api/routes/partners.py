@@ -18,6 +18,10 @@ class AddBusinessAdminRequest(BaseModel):
     user_id: UUID
 
 
+class UpdateBusinessAdminRequest(BaseModel):
+    business_only: bool
+
+
 @router.post("/offers/{offer_id}/redeem")
 async def redeem_offer(
     offer_id: UUID,
@@ -206,7 +210,7 @@ async def list_business_admins(
     rows = (
         await db.execute(
             text("""
-                SELECT pba.id, pba.user_id, p.username, u.email
+                SELECT pba.id, pba.user_id, p.username, p.is_business_only, u.email
                 FROM partner_business_admins pba
                 JOIN profiles p ON p.id = pba.user_id
                 JOIN auth.users u ON u.id = pba.user_id
@@ -218,7 +222,13 @@ async def list_business_admins(
     ).fetchall()
 
     return [
-        {"id": str(r.id), "user_id": str(r.user_id), "username": r.username, "email": r.email}
+        {
+            "id": str(r.id),
+            "user_id": str(r.user_id),
+            "username": r.username,
+            "email": r.email,
+            "business_only": r.is_business_only,
+        }
         for r in rows
     ]
 
@@ -257,17 +267,47 @@ async def add_business_admin(
         {"business_id": str(business_id), "user_id": str(user_row.id)},
     )
     admin_row = insert_result.fetchone()
-    await db.commit()
 
     if admin_row is None:
+        await db.rollback()
         raise HTTPException(status_code=409, detail="This user already administers this business")
+
+    await db.commit()
 
     return {
         "id": str(admin_row.id),
         "user_id": str(user_row.id),
         "username": user_row.username,
         "email": user_row.email,
+        "business_only": False,
     }
+
+
+@router.patch("/businesses/{business_id}/admins/{admin_id}")
+async def update_business_admin(
+    business_id: UUID,
+    admin_id: UUID,
+    payload: UpdateBusinessAdminRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggles whether this admin's account is business-only (redirected straight to
+    their dashboard on login, with the main app nav de-emphasized)."""
+    result = await db.execute(
+        text("""
+            UPDATE profiles SET is_business_only = :business_only
+            WHERE id = (
+                SELECT user_id FROM partner_business_admins
+                WHERE id = :admin_id AND business_id = :business_id
+            )
+            RETURNING id
+        """),
+        {"business_only": payload.business_only, "admin_id": str(admin_id), "business_id": str(business_id)},
+    )
+    if not result.fetchone():
+        raise HTTPException(status_code=404, detail="Business admin not found")
+    await db.commit()
+
+    return {"business_only": payload.business_only}
 
 
 @router.delete("/businesses/{business_id}/admins/{admin_id}")

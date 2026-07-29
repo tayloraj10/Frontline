@@ -35,6 +35,19 @@ export default async function PartnerDetailPage({
 
   if (!business) notFound();
 
+  const { data: campaignLinks } = await supabase
+    .schema("public")
+    .from("campaign_partner_businesses")
+    .select("campaigns(slug, title)")
+    .eq("business_id", (business as BrowseBusiness).id);
+
+  const businessWithCampaign: BrowseBusiness = {
+    ...(business as BrowseBusiness),
+    campaigns: (campaignLinks ?? [])
+      .map((row) => row.campaigns as unknown as { slug: string; title: string } | null)
+      .filter((c): c is { slug: string; title: string } => !!c),
+  };
+
   const { data: offers } = await supabase
     .schema("public")
     .from("partner_offers")
@@ -52,7 +65,7 @@ export default async function PartnerDetailPage({
       </Link>
       <div className="mt-4">
         <PartnerDetailClient
-          business={business as BrowseBusiness}
+          business={businessWithCampaign}
           offers={(offers ?? []) as BrowseOffer[]}
           userId={user?.id ?? null}
           userPoints={profileResult?.data?.spendable_points ?? null}

@@ -60,12 +60,17 @@ export default function AddressAutocomplete({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const skipNextFetchRef = useRef(false);
+  const userEditedRef = useRef(false);
 
   useEffect(() => {
     if (skipNextFetchRef.current) {
       skipNextFetchRef.current = false;
       return;
     }
+    // Don't fetch/open suggestions just because `value` was populated from an
+    // existing record on mount (e.g. editing a partner business) — only once
+    // the user actually types into the field.
+    if (!userEditedRef.current) return;
     if (!MAPTILER_KEY || value.trim().length < 3) {
       setSuggestions([]);
       return;
@@ -114,7 +119,10 @@ export default function AddressAutocomplete({
       <input
         className={inputCls}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          userEditedRef.current = true;
+          onChange(e.target.value);
+        }}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
         placeholder={placeholder}
         autoComplete="off"
