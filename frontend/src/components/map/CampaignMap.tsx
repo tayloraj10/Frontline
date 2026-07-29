@@ -3044,7 +3044,11 @@ export default function CampaignMap({
       // Tracks whether we still owe the map an initial fly-to-user-location. Set to
       // false as soon as it's used (or superseded by a real user gesture), so later
       // watchPosition updates as the user moves around don't keep re-centering on them.
-      const autoFlyPendingRef = { current: true };
+      // Starts false when a focusCoords deep link is present (e.g. "Show on map" from a
+      // partner business page) — otherwise the geolocate fix arriving shortly after the
+      // deep-link flyTo would immediately re-center on the user's real location instead,
+      // reading as an unwanted "zoom in then back out" right after the map loads.
+      const autoFlyPendingRef = { current: !focusCoords };
       // dragstart/zoomstart also fire for our own programmatic initial-bounds fitBounds
       // call above, so only count gestures that carry an originalEvent (i.e. actually
       // came from the mouse/touch/wheel) as real user interaction.
@@ -3093,16 +3097,21 @@ export default function CampaignMap({
       });
 
       // Default the initial view to the user's location rather than the generic
-      // continent-wide fit, once they grant permission (the actual camera move happens
-      // in the "geolocate" handler above, via an explicit flyTo — GeolocateControl's own
-      // internal auto-camera-follow only reliably fires from a real button click, not a
-      // programmatic trigger()). Deferred to "load": GeolocateControl finishes its own
-      // internal setup (checkGeolocationSupport(), which sets a private _setup flag)
-      // asynchronously after addControl() returns, and trigger() is a no-op with a
-      // console warning ("Geolocate control triggered before added to a map") if called
-      // before that resolves. "load" (style + tiles fetched) reliably comes after it.
+      // continent-wide fit, once they grant permission. Skipped when a focusCoords deep
+      // link is present (e.g. "Show on map" from a partner business page) — GeolocateControl
+      // recenters the camera itself on its first fix (_updateCamera/fitBounds, unconditional
+      // on trigger source, not just real button clicks as previously assumed here), so
+      // auto-starting tracking on mount would yank the map away from the deep-linked
+      // location moments after the flyToFocus finished, reading as an unwanted "zoom in
+      // then back out". Tracking can still be started later via onGeolocateTrigger (e.g.
+      // when the user opens ContributionPanel to log a cleanup).
+      // Deferred to "load": GeolocateControl finishes its own internal setup
+      // (checkGeolocationSupport(), which sets a private _setup flag) asynchronously
+      // after addControl() returns, and trigger() is a no-op with a console warning
+      // ("Geolocate control triggered before added to a map") if called before that
+      // resolves. "load" (style + tiles fetched) reliably comes after it.
       map.current.once("load", () => {
-        startTracking();
+        if (!focusCoords) startTracking();
       });
     }
     map.current.addControl(

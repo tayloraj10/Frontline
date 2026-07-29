@@ -8,7 +8,15 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect("/campaigns");
+  if (user) {
+    const { data: profile } = await supabase
+      .schema("public")
+      .from("profiles")
+      .select("is_business_only")
+      .eq("id", user.id)
+      .single();
+    redirect(profile?.is_business_only ? "/partners/dashboard" : "/campaigns");
+  }
 
   const [{ count: campaignCount }, { count: contribCount }] = await Promise.all([
     supabase.schema("public").from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active"),

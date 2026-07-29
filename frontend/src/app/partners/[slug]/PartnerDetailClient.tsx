@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { OfferCard, type BrowseBusiness, type BrowseOffer } from "../PartnersBrowseClient";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), { ssr: false });
@@ -57,6 +58,30 @@ export default function PartnerDetailClient({
         />
       )}
 
+      {hasLocation && (
+        <div className="flex flex-wrap items-center gap-4">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address ?? `${business.lat},${business.lng}`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+          >
+            <span aria-hidden="true">🧭</span>
+            Get directions
+          </a>
+          {(business.campaigns ?? []).map((c) => (
+            <Link
+              key={c.slug}
+              href={`/campaigns/${c.slug}?lat=${business.lat}&lng=${business.lng}`}
+              className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+            >
+              <span aria-hidden="true">📍</span>
+              {(business.campaigns?.length ?? 0) > 1 ? `Show on map (${c.title})` : "Show on map"}
+            </Link>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-4 text-sm">
         {business.website_url && (
           <a
@@ -66,16 +91,6 @@ export default function PartnerDetailClient({
             className="text-emerald-400 hover:text-emerald-300"
           >
             Website
-          </a>
-        )}
-        {business.google_maps_url && (
-          <a
-            href={business.google_maps_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-emerald-400 hover:text-emerald-300"
-          >
-            Get directions
           </a>
         )}
         {socialEntries.map(([platform, url]) => (

@@ -1294,7 +1294,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
 
 export type BusinessCampaignLink = { business_id: string; campaign_id: string };
 
-type BusinessAdmin = { id: string; user_id: string; username: string | null; email: string };
+type BusinessAdmin = { id: string; user_id: string; username: string | null; email: string; business_only: boolean };
 type UserSearchResult = { id: string; username: string | null; email: string };
 
 function BusinessAdminsManager({ businessId }: { businessId: string }) {
@@ -1304,6 +1304,7 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
 
   const loadAdmins = async () => {
@@ -1357,6 +1358,23 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
     await loadAdmins();
   };
 
+  const handleToggleBusinessOnly = async (adminId: string, businessOnly: boolean) => {
+    setTogglingId(adminId);
+    setError(null);
+    const res = await fetch(`${fastApiUrl}/api/partners/businesses/${businessId}/admins/${adminId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_only: businessOnly }),
+    });
+    setTogglingId(null);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.detail ?? "Failed to update admin");
+      return;
+    }
+    setAdmins((prev) => (prev ?? []).map((a) => (a.id === adminId ? { ...a, business_only: businessOnly } : a)));
+  };
+
   const handleRemove = async (adminId: string) => {
     if (!confirm("Remove this person's access to manage this business?")) return;
     const res = await fetch(`${fastApiUrl}/api/partners/businesses/${businessId}/admins/${adminId}`, {
@@ -1381,9 +1399,21 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
           {admins.map((a) => (
             <li key={a.id} className="flex items-center justify-between text-xs bg-zinc-900/60 rounded-lg px-3 py-1.5">
               <span className="text-zinc-300">{a.username ?? a.email} <span className="text-zinc-600">({a.email})</span></span>
-              <button onClick={() => handleRemove(a.id)} className="text-red-500 hover:text-red-400 transition-colors">
-                Remove
-              </button>
+              <div className="flex items-center gap-3 shrink-0">
+                <label className="flex items-center gap-1.5 text-zinc-500" title="Business-only user — sign-in takes them straight to their dashboard">
+                  <input
+                    type="checkbox"
+                    checked={a.business_only}
+                    disabled={togglingId === a.id}
+                    onChange={(e) => handleToggleBusinessOnly(a.id, e.target.checked)}
+                    className="accent-sky-500"
+                  />
+                  Business-only
+                </label>
+                <button onClick={() => handleRemove(a.id)} className="text-red-500 hover:text-red-400 transition-colors">
+                  Remove
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -1446,8 +1476,8 @@ function BusinessCard({
 }) {
   const isPending = business.status === "pending";
   const isRejected = business.status === "rejected";
-  const [expanded, setExpanded] = useState(isPending);
-  const [editing, setEditing] = useState(isPending);
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [rejecting, setRejecting] = useState(false);
 

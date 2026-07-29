@@ -14,6 +14,7 @@ export default async function AppHeader() {
 
   let isAdmin = false;
   let isBusinessAdmin = false;
+  let isBusinessOnly = false;
   let points = 0;
   let spendablePoints = 0;
   if (user) {
@@ -21,7 +22,7 @@ export default async function AppHeader() {
       supabase
         .schema("public")
         .from("profiles")
-        .select("is_admin, points, spendable_points")
+        .select("is_admin, points, spendable_points, is_business_only")
         .eq("id", user.id)
         .single(),
       supabase
@@ -35,16 +36,24 @@ export default async function AppHeader() {
     points = profile?.points ?? 0;
     spendablePoints = profile?.spendable_points ?? 0;
     isBusinessAdmin = (businessAdminRows?.length ?? 0) > 0;
+    isBusinessOnly = profile?.is_business_only ?? false;
   }
 
-  const navLinks = [
-    { href: "/campaigns", label: "Campaigns" },
-    { href: "/leaderboard", label: "Leaderboard" },
-    { href: "/partners", label: "Partners" },
-    { href: "/groups", label: "Groups" },
-    ...(isBusinessAdmin ? [{ href: "/partners/dashboard", label: "Manage Business" }] : []),
-    ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
-  ];
+  const navLinks = isBusinessOnly
+    ? [
+        { href: "/partners/dashboard", label: "Manage Business" },
+        { href: "/partners", label: "Partners" },
+        { href: "/campaigns", label: "Explore Frontline" },
+        ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
+      ]
+    : [
+        { href: "/campaigns", label: "Campaigns" },
+        { href: "/leaderboard", label: "Leaderboard" },
+        { href: "/partners", label: "Partners" },
+        { href: "/groups", label: "Groups" },
+        ...(isBusinessAdmin ? [{ href: "/partners/dashboard", label: "Manage Business" }] : []),
+        ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
+      ];
 
   return (
     <header className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
@@ -64,46 +73,19 @@ export default async function AppHeader() {
             </span>
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
-            <Link
-              href="/campaigns"
-              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
-            >
-              Campaigns
-            </Link>
-            <Link
-              href="/leaderboard"
-              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
-            >
-              Leaderboard
-            </Link>
-            <Link
-              href="/partners"
-              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
-            >
-              Partners
-            </Link>
-            <Link
-              href="/groups"
-              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
-            >
-              Groups
-            </Link>
-            {isBusinessAdmin && (
+            {navLinks.map((link) => (
               <Link
-                href="/partners/dashboard"
-                className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+                key={link.href}
+                href={link.href}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors hover:bg-zinc-800/60 ${
+                  link.highlight
+                    ? "text-amber-500 hover:text-amber-400"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
               >
-                Manage Business
+                {link.label}
               </Link>
-            )}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="px-3 py-1.5 text-sm text-amber-500 hover:text-amber-400 hover:bg-zinc-800/60 rounded-lg transition-colors"
-              >
-                Admin
-              </Link>
-            )}
+            ))}
           </nav>
         </div>
         <div className="flex items-center gap-2">

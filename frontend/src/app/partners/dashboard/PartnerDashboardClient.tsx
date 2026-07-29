@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
@@ -51,6 +52,10 @@ function BusinessPanel({
   businesses,
   setBusinesses,
   redemptionCounts,
+  allCampaigns,
+  campaignIds,
+  setCampaignIdsByBusiness,
+  isSiteAdmin,
 }: {
   business: DashboardBusiness;
   offers: DashboardOffer[];
@@ -58,14 +63,29 @@ function BusinessPanel({
   businesses: DashboardBusiness[];
   setBusinesses: (b: DashboardBusiness[]) => void;
   redemptionCounts: Record<string, number>;
+  allCampaigns: { id: string; title: string; slug: string }[];
+  campaignIds: string[];
+  setCampaignIdsByBusiness: (updater: (prev: Record<string, string[]>) => Record<string, string[]>) => void;
+  isSiteAdmin: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const businessOffers = offers.filter((o) => o.business_id === business.id);
+  const linkedCampaigns = campaignIds
+    .map((id) => allCampaigns.find((c) => c.id === id))
+    .filter((c): c is { id: string; title: string; slug: string } => !!c);
 
   const handleEditBusiness = async (payload: BusinessFormPayload): Promise<string | null> => {
     const supabase = createClient();
-    const { campaignIds: _campaignIds, ...rest } = payload;
+    const { campaignIds: submittedCampaignIds, ...rest } = payload;
+    // Non-admins never see the Campaigns selector (only Trash War is live on the map
+    // right now), so always pin their businesses to it regardless of prior linkage.
+    const trashWarCampaignId = allCampaigns.find((c) => c.slug === "trash-war")?.id;
+    const nextCampaignIds = isSiteAdmin
+      ? submittedCampaignIds
+      : trashWarCampaignId
+        ? [trashWarCampaignId]
+        : [];
     const { data, error: updateErr } = await supabase
       .schema("public")
       .from("partner_businesses")
@@ -77,6 +97,30 @@ function BusinessPanel({
       .single();
 
     if (updateErr) return updateErr.code === "23505" ? "Slug already taken." : updateErr.message;
+
+    const currentLinked = new Set(campaignIds);
+    const nextLinked = new Set(nextCampaignIds);
+    const toAdd = nextCampaignIds.filter((id) => !currentLinked.has(id));
+    const toRemove = campaignIds.filter((id) => !nextLinked.has(id));
+
+    if (toAdd.length > 0) {
+      const { error: linkErr } = await supabase
+        .schema("public")
+        .from("campaign_partner_businesses")
+        .insert(toAdd.map((campaign_id) => ({ business_id: business.id, campaign_id })));
+      if (linkErr) return `Business updated, but failed to link some campaigns: ${linkErr.message}`;
+    }
+    if (toRemove.length > 0) {
+      const { error: unlinkErr } = await supabase
+        .schema("public")
+        .from("campaign_partner_businesses")
+        .delete()
+        .eq("business_id", business.id)
+        .in("campaign_id", toRemove);
+      if (unlinkErr) return `Business updated, but failed to unlink some campaigns: ${unlinkErr.message}`;
+    }
+
+    setCampaignIdsByBusiness((prev) => ({ ...prev, [business.id]: nextCampaignIds }));
 
     const updated = data as DashboardBusiness;
     setBusinesses(businesses.map((b) => (b.id === updated.id ? updated : b)));
@@ -116,17 +160,30 @@ function BusinessPanel({
             <p className="text-xs text-zinc-600">{businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
-        <button
-          onClick={() => setEditing(!editing)}
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 shrink-0"
-        >
-          {editing ? "Cancel edit" : "Edit business info"}
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {business.lat != null && business.lng != null && linkedCampaigns.map((c) => (
+            <Link
+              key={c.id}
+              href={`/campaigns/${c.slug}?lat=${business.lat}&lng=${business.lng}`}
+              className="text-xs text-sky-400 hover:text-sky-300 transition-colors px-2 py-1"
+            >
+              {linkedCampaigns.length > 1 ? `View on map (${c.title})` : "View on map"}
+            </Link>
+          ))}
+          <button
+            onClick={() => setEditing(!editing)}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1"
+          >
+            {editing ? "Cancel edit" : "Edit business info"}
+          </button>
+        </div>
       </div>
       <div className="border-t border-zinc-800 px-5 py-4 space-y-3 bg-zinc-950/40">
         {editing && (
           <BusinessForm
             initial={business}
+            initialCampaignIds={campaignIds}
+            campaigns={isSiteAdmin ? allCampaigns : undefined}
             onSubmit={handleEditBusiness}
             onCancel={() => setEditing(false)}
             submitLabel="Save changes"
@@ -162,13 +219,20 @@ export default function PartnerDashboardClient({
   initialBusinesses,
   initialOffers,
   redemptionCounts,
+  allCampaigns,
+  initialCampaignIdsByBusiness,
+  isSiteAdmin,
 }: {
   initialBusinesses: DashboardBusiness[];
   initialOffers: DashboardOffer[];
   redemptionCounts: Record<string, number>;
+  allCampaigns: { id: string; title: string; slug: string }[];
+  initialCampaignIdsByBusiness: Record<string, string[]>;
+  isSiteAdmin: boolean;
 }) {
   const [businesses, setBusinesses] = useState(initialBusinesses);
   const [offers, setOffers] = useState(initialOffers);
+  const [campaignIdsByBusiness, setCampaignIdsByBusiness] = useState(initialCampaignIdsByBusiness);
 
   if (businesses.length === 0) {
     return (
@@ -190,6 +254,10 @@ export default function PartnerDashboardClient({
           businesses={businesses}
           setBusinesses={setBusinesses}
           redemptionCounts={redemptionCounts}
+          allCampaigns={allCampaigns}
+          campaignIds={campaignIdsByBusiness[b.id] ?? []}
+          setCampaignIdsByBusiness={setCampaignIdsByBusiness}
+          isSiteAdmin={isSiteAdmin}
         />
       ))}
     </div>

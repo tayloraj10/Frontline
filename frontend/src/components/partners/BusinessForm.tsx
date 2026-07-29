@@ -243,6 +243,12 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
 
       <div className="space-y-3 border-t border-zinc-800 pt-4">
         <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Location</p>
+        {(lat == null || lng == null) && (
+          <p className="text-xs text-amber-400 bg-amber-950/30 border border-amber-900/50 rounded-lg px-3 py-2">
+            No location set — this business won't show up on the map until an address is
+            selected from the suggestions (or coordinates are set on the map below).
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 space-y-1">
             <label className="text-xs text-zinc-500">Address line 1</label>

@@ -28,9 +28,11 @@ export default async function PartnersPage() {
       .or(`ends_at.is.null,ends_at.gt.${nowIso}`)
       .order("created_at", { ascending: false }),
     user
-      ? supabase.schema("public").from("profiles").select("spendable_points").eq("id", user.id).single()
+      ? supabase.schema("public").from("profiles").select("spendable_points, is_business_only").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
+
+  const isBusinessOnly = profileResult?.data?.is_business_only ?? false;
 
   const offersByBusiness = new Map<string, BrowseOffer[]>();
   for (const offer of (offers ?? []) as BrowseOffer[]) {
@@ -51,6 +53,14 @@ export default async function PartnersPage() {
           Redeem the points you've earned from campaigns for discounts at local partner businesses.
         </p>
       </div>
+
+      {isBusinessOnly && (
+        <div className="mb-6 px-4 py-3 rounded-lg border border-sky-900/50 bg-sky-950/30 text-sm text-sky-300">
+          This is what other users see for your business's listing and offers. A business
+          only appears here while it has at least one active offer, but it shows up on the
+          map at all times regardless of offers.
+        </div>
+      )}
 
       <PartnersBrowseClient
         businesses={businessesWithOffers}

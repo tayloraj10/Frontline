@@ -8,6 +8,14 @@ export default async function PartnerDashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: profile } = await supabase
+    .schema("public")
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single();
+  const isSiteAdmin = profile?.is_admin ?? false;
+
   const { data: adminLinks } = await supabase
     .schema("public")
     .from("partner_business_admins")
@@ -16,11 +24,31 @@ export default async function PartnerDashboardPage() {
     )
     .eq("user_id", user.id);
 
-  const businesses = ((adminLinks ?? [])
+  const businesses: DashboardBusiness[] = ((adminLinks ?? [])
     .map((row) => row.partner_businesses as unknown as DashboardBusiness | null)
     .filter((b): b is DashboardBusiness => !!b));
 
   const businessIds = businesses.map((b) => b.id);
+
+  const { data: campaignLinks } = businessIds.length > 0
+    ? await supabase
+        .schema("public")
+        .from("campaign_partner_businesses")
+        .select("business_id, campaign_id")
+        .in("business_id", businessIds)
+    : { data: [] as { business_id: string; campaign_id: string }[] };
+
+  const campaignIdsByBusiness: Record<string, string[]> = {};
+  for (const row of campaignLinks ?? []) {
+    (campaignIdsByBusiness[row.business_id] ??= []).push(row.campaign_id);
+  }
+
+  const { data: allCampaignsRaw } = await supabase
+    .schema("public")
+    .from("campaigns")
+    .select("id, title, slug")
+    .order("title");
+  const allCampaigns = allCampaignsRaw ?? [];
 
   const { data: offers } = businessIds.length > 0
     ? await supabase
@@ -57,6 +85,9 @@ export default async function PartnerDashboardPage() {
         initialBusinesses={businesses}
         initialOffers={(offers ?? []) as DashboardOffer[]}
         redemptionCounts={redemptionCounts}
+        allCampaigns={allCampaigns}
+        initialCampaignIdsByBusiness={campaignIdsByBusiness}
+        isSiteAdmin={isSiteAdmin}
       />
     </main>
   );

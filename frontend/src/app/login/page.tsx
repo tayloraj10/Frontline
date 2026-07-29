@@ -22,14 +22,27 @@ function LoginForm() {
     setError(null);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setError(error.message);
       setLoading(false);
-    } else {
-      window.location.href = next && next.startsWith("/") ? next : "/campaigns";
+      return;
     }
+
+    if (next && next.startsWith("/")) {
+      window.location.href = next;
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .schema("public")
+      .from("profiles")
+      .select("is_business_only")
+      .eq("id", data.user.id)
+      .single();
+
+    window.location.href = profile?.is_business_only ? "/partners/dashboard" : "/campaigns";
   }
 
   async function handleGoogleLogin() {

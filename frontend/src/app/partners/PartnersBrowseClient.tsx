@@ -21,6 +21,7 @@ export type BrowseBusiness = {
   lng: number | null;
   google_maps_url: string | null;
   social_links: Record<string, string> | null;
+  campaigns?: { slug: string; title: string }[];
 };
 
 export type BrowseOffer = {

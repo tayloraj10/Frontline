@@ -5,10 +5,11 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const rawNext = searchParams.get("next") ?? "";
-  const next = rawNext.startsWith("/") ? rawNext : "/campaigns";
+  const hasExplicitNext = rawNext.startsWith("/");
 
   if (code) {
-    const redirectResponse = NextResponse.redirect(`${origin}${next}`);
+    let redirectTo = hasExplicitNext ? rawNext : "/campaigns";
+    const redirectResponse = NextResponse.redirect(`${origin}${redirectTo}`);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,8 +28,20 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      if (!hasExplicitNext) {
+        const { data: profile } = await supabase
+          .schema("public")
+          .from("profiles")
+          .select("is_business_only")
+          .eq("id", data.user.id)
+          .single();
+        if (profile?.is_business_only) {
+          redirectTo = "/partners/dashboard";
+          redirectResponse.headers.set("location", `${origin}${redirectTo}`);
+        }
+      }
       return redirectResponse;
     }
   }
