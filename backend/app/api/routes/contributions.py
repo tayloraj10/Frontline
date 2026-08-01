@@ -80,6 +80,7 @@ class ContributionRequest(BaseModel):
     cleanup_event_id: UUID | None = None
     route: dict | None = None
     route_geo_unit_id: UUID | None = None
+    from_solarpunk_redirect: bool = False
 
     @field_validator("small_bags", "large_bags", "pounds")
     @classmethod
@@ -409,8 +410,21 @@ async def submit_contribution(
             },
         )
 
+    # Only the Solarpunk -> Trash War redirect (`ref=solarpunk`) earns this hex credit, and
+    # only for an individually-logged cleanup — not group/team-total logs (a different entry
+    # point entirely; see contribution_scoring.record_contribution's docstring) and not the
+    # claim-a-report timed challenge. It uses a dedicated contribution_type so it still bumps
+    # the hex's bloom score (territory_claims.total_value) and shows in activity history, but
+    # contributes 0 lifetime/spendable points (see contribution_points() in migration 051) —
+    # the user's points/spendable already come entirely from the Trash War cleanup itself.
     solarpunk_credit_id = None
-    if payload.contribution_type == "cleanup" and has_location:
+    if (
+        payload.contribution_type == "cleanup"
+        and has_location
+        and payload.from_solarpunk_redirect
+        and payload.cleanup_event_id is None
+        and payload.claimed_report_id is None
+    ):
         solarpunk_result = await db.execute(
             text("SELECT id FROM campaigns WHERE slug = 'solarpunk' AND status = 'active'")
         )
@@ -426,7 +440,7 @@ async def submit_contribution(
                 group_id=payload.group_id,
                 geo_unit_id=solarpunk_geo_unit_id,
                 cleanup_id=None,
-                contribution_type="solarpunk_action",
+                contribution_type="solarpunk_hex_credit",
                 value=TRASH_WAR_SOLARPUNK_CREDIT,
                 latitude=payload.latitude,
                 longitude=payload.longitude,

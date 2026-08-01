@@ -30,6 +30,7 @@ const CONTRIBUTION_ICON: Record<string, string> = {
   unfollow: "🧠",
   solarpunk_action: "🌿",
   solarpunk_photo: "📸",
+  solarpunk_hex_credit: "🌱",
 };
 
 const CONTRIBUTION_UNIT: Record<string, string> = {
@@ -41,6 +42,7 @@ const CONTRIBUTION_UNIT: Record<string, string> = {
   unfollow: "unfollow",
   solarpunk_action: "pts",
   solarpunk_photo: "pts",
+  solarpunk_hex_credit: "bloom",
 };
 
 function timeAgo(dateStr: string) {
