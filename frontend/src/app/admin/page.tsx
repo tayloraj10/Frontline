@@ -30,7 +30,7 @@ export default async function AdminPage() {
     supabase
       .schema("public")
       .from("campaigns")
-      .select("id, slug, title, description, campaign_type, contribution_type, geo_unit, status, created_at")
+      .select("id, slug, title, description, campaign_type, contribution_type, geo_unit, status, created_at, counts_toward_spendable_points")
       .order("created_at", { ascending: false }),
     supabase
       .from("campaign_events")

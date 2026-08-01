@@ -3,7 +3,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.admin import search_users_by_username_or_email, wipe_cleanup_event
+from app.api.routes.admin import (
+    preview_campaign_spendable_points_impact,
+    preview_points_recompute_impact,
+    recompute_all_points,
+    search_users_by_username_or_email,
+    toggle_campaign_spendable_points,
+    wipe_cleanup_event,
+)
 from app.core.config import settings
 from app.db.database import get_db
 
@@ -43,3 +50,43 @@ async def wipe_cleanup_event_data(
 ):
     _check_secret(x_admin_api_secret)
     return await wipe_cleanup_event(db, cleanup_id)
+
+
+@router.get("/campaigns/{campaign_id}/spendable-points-impact")
+async def preview_spendable_points_impact(
+    campaign_id: str,
+    enabled: bool,
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await preview_campaign_spendable_points_impact(db, campaign_id, enabled)
+
+
+@router.post("/campaigns/{campaign_id}/spendable-points-toggle")
+async def apply_spendable_points_toggle(
+    campaign_id: str,
+    enabled: bool,
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await toggle_campaign_spendable_points(db, campaign_id, enabled)
+
+
+@router.get("/points/recompute-impact")
+async def preview_points_recompute(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await preview_points_recompute_impact(db)
+
+
+@router.post("/points/recompute")
+async def apply_points_recompute(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await recompute_all_points(db)

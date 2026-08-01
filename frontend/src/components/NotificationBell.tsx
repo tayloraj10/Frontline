@@ -11,6 +11,7 @@ const TYPE_ICON: Record<string, string> = {
   event: "⚡",
   tract_claimed: "⚑",
   milestone: "🏆",
+  points_adjusted: "🪙",
 };
 
 function timeAgo(dateStr: string) {
