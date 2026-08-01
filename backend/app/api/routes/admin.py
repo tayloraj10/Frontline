@@ -649,3 +649,294 @@ async def recompute_user_points(user_id: str, db: AsyncSession = Depends(get_db)
     }
 
     return {"geo_unit_id": geo_unit_id, "unit_type": unit_type, "unit_id": unit_id, "wiped": counts}
+
+
+@router.get("/campaigns/{campaign_id}/spendable-points-impact")
+async def preview_campaign_spendable_points_toggle(
+    campaign_id: str, enabled: bool, db: AsyncSession = Depends(get_db)
+):
+    return await preview_campaign_spendable_points_impact(db, campaign_id, enabled)
+
+
+async def preview_campaign_spendable_points_impact(db: AsyncSession, campaign_id: str, enabled: bool) -> dict:
+    """
+    Dry-run preview for flipping campaigns.counts_toward_spendable_points: shows what every
+    affected user's spendable_points balance would eventually become under the proposed
+    value, without persisting anything. "Affected" = has a contribution or problem_report
+    tied to this campaign, since only those users' balances could possibly change. Toggling
+    the flag itself does not apply these changes — an admin must separately run the global
+    "recompute all balances" action (see recompute_all_points below) to actually persist and
+    notify. This preview exists purely to inform that decision ahead of time.
+    """
+    campaign_row = (
+        await db.execute(
+            text("SELECT id, slug, title, counts_toward_spendable_points FROM campaigns WHERE id = :id"),
+            {"id": campaign_id},
+        )
+    ).fetchone()
+    if not campaign_row:
+        raise HTTPException(404, "Campaign not found")
+
+    rows = (
+        await db.execute(
+            text("""
+                WITH effective_campaigns AS (
+                    SELECT id FROM campaigns
+                    WHERE (counts_toward_spendable_points AND id != :campaign_id)
+                       OR (id = :campaign_id AND :enabled)
+                ),
+                affected_users AS (
+                    SELECT DISTINCT user_id AS id FROM contributions
+                    WHERE campaign_id = :campaign_id AND user_id IS NOT NULL
+                    UNION
+                    SELECT DISTINCT submitted_by_user_id AS id FROM problem_reports
+                    WHERE campaign_id = :campaign_id AND submitted_by_user_id IS NOT NULL
+                )
+                SELECT
+                    p.id,
+                    p.username,
+                    p.spendable_points AS current_spendable_points,
+                    COALESCE(c.total, 0) + COALESCE(r.total, 0) - COALESCE(rd.total, 0) AS new_spendable_points
+                FROM affected_users au
+                JOIN profiles p ON p.id = au.id
+                LEFT JOIN (
+                    SELECT co.user_id, SUM(contribution_points(co.contribution_type, co.value)) AS total
+                    FROM contributions co
+                    WHERE co.campaign_id IN (SELECT id FROM effective_campaigns)
+                    GROUP BY co.user_id
+                ) c ON c.user_id = p.id
+                LEFT JOIN (
+                    SELECT pr.submitted_by_user_id AS user_id, COUNT(*) AS total
+                    FROM problem_reports pr
+                    WHERE pr.campaign_id IN (SELECT id FROM effective_campaigns)
+                    GROUP BY pr.submitted_by_user_id
+                ) r ON r.user_id = p.id
+                LEFT JOIN (
+                    SELECT user_id, SUM(points_spent) AS total FROM partner_redemptions GROUP BY user_id
+                ) rd ON rd.user_id = p.id
+                ORDER BY p.username
+            """),
+            {"campaign_id": campaign_id, "enabled": enabled},
+        )
+    ).fetchall()
+
+    return {
+        "campaign": {
+            "id": str(campaign_row.id),
+            "slug": campaign_row.slug,
+            "title": campaign_row.title,
+            "currently_enabled": campaign_row.counts_toward_spendable_points,
+        },
+        "users": [
+            {
+                "id": str(r.id),
+                "username": r.username,
+                "current_spendable_points": float(r.current_spendable_points),
+                "new_spendable_points": float(r.new_spendable_points),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/campaigns/{campaign_id}/spendable-points-toggle")
+async def apply_campaign_spendable_points_toggle(
+    campaign_id: str, enabled: bool, db: AsyncSession = Depends(get_db)
+):
+    return await toggle_campaign_spendable_points(db, campaign_id, enabled)
+
+
+async def toggle_campaign_spendable_points(db: AsyncSession, campaign_id: str, enabled: bool) -> dict:
+    """
+    Flips campaigns.counts_toward_spendable_points only. Does NOT touch any user's stored
+    points/spendable_points and does NOT notify anyone — this just changes which campaigns
+    are counted going forward. Balances are left stale (out of sync with the new flag) until
+    an admin explicitly runs the "recompute all balances" action below, which is the only
+    thing that actually mutates profiles.points/spendable_points and notifies affected users.
+    Decoupling these two steps means flipping a flag can never surprise a user with an
+    immediate, unreviewed balance change or notification.
+    """
+    campaign_row = (
+        await db.execute(text("SELECT id FROM campaigns WHERE id = :id"), {"id": campaign_id})
+    ).fetchone()
+    if not campaign_row:
+        raise HTTPException(404, "Campaign not found")
+
+    await db.execute(
+        text("UPDATE campaigns SET counts_toward_spendable_points = :enabled WHERE id = :id"),
+        {"enabled": enabled, "id": campaign_id},
+    )
+    await db.commit()
+
+    return {"campaign_id": campaign_id, "counts_toward_spendable_points": enabled}
+
+
+async def _notify_points_changes(db: AsyncSession, changes: list[dict]) -> None:
+    """
+    Inserts a user_notifications row for each user whose points and/or spendable_points
+    actually changed as a result of an admin recompute/toggle action. No-op for entries
+    where nothing moved. `changes` entries may omit either points or spendable_points
+    keys if that action doesn't touch that field.
+    """
+    rows_to_insert = []
+    for c in changes:
+        parts = []
+        if "old_points" in c and c["old_points"] != c["new_points"]:
+            parts.append(f"points {c['old_points']:g} → {c['new_points']:g}")
+        if "old_spendable_points" in c and c["old_spendable_points"] != c["new_spendable_points"]:
+            parts.append(f"spendable points {c['old_spendable_points']:g} → {c['new_spendable_points']:g}")
+        if not parts:
+            continue
+        rows_to_insert.append({
+            "user_id": c["user_id"],
+            "title": "Your points balance was adjusted",
+            "body": "; ".join(parts) + ".",
+        })
+
+    if not rows_to_insert:
+        return
+
+    await db.execute(
+        text("""
+            INSERT INTO user_notifications (user_id, type, title, body)
+            VALUES (:user_id, 'points_adjusted', :title, :body)
+        """),
+        rows_to_insert,
+    )
+
+
+_POINTS_RECOMPUTE_TOTALS_CTE = """
+    contrib_totals AS (
+        SELECT
+            co.user_id AS id,
+            SUM(contribution_points(co.contribution_type, co.value)) AS lifetime_total,
+            SUM(contribution_points(co.contribution_type, co.value))
+                FILTER (WHERE ca.counts_toward_spendable_points) AS spendable_total
+        FROM contributions co
+        JOIN campaigns ca ON ca.id = co.campaign_id
+        WHERE co.user_id IS NOT NULL
+        GROUP BY co.user_id
+    ),
+    report_totals AS (
+        SELECT
+            pr.submitted_by_user_id AS id,
+            COUNT(*) AS lifetime_total,
+            COUNT(*) FILTER (WHERE ca.counts_toward_spendable_points) AS spendable_total
+        FROM problem_reports pr
+        JOIN campaigns ca ON ca.id = pr.campaign_id
+        WHERE pr.submitted_by_user_id IS NOT NULL
+        GROUP BY pr.submitted_by_user_id
+    ),
+    redeemed AS (
+        SELECT user_id AS id, SUM(points_spent) AS total FROM partner_redemptions GROUP BY user_id
+    )
+"""
+
+
+@router.get("/points/recompute-impact")
+async def preview_points_recompute(db: AsyncSession = Depends(get_db)):
+    return await preview_points_recompute_impact(db)
+
+
+async def preview_points_recompute_impact(db: AsyncSession) -> dict:
+    """
+    Dry-run preview for recomputing every user's lifetime `points` and `spendable_points`
+    from scratch off their current contributions/problem_reports/partner_redemptions,
+    discarding whatever is currently stored. This only re-sums existing contribution
+    values — it does not change any contribution's stored `value` (see dev-backlog #8 for
+    that separate, unscoped problem). Useful after toggling which campaigns count toward
+    spendable_points, or as a general drift-correction sweep. Only returns users whose
+    recomputed totals differ from what's currently stored.
+    """
+    rows = (
+        await db.execute(
+            text(f"""
+                WITH {_POINTS_RECOMPUTE_TOTALS_CTE}
+                SELECT
+                    p.id,
+                    p.username,
+                    p.points AS current_points,
+                    p.spendable_points AS current_spendable_points,
+                    COALESCE(c.lifetime_total, 0) + COALESCE(r.lifetime_total, 0) AS new_points,
+                    COALESCE(c.spendable_total, 0) + COALESCE(r.spendable_total, 0) - COALESCE(rd.total, 0) AS new_spendable_points
+                FROM profiles p
+                LEFT JOIN contrib_totals c ON c.id = p.id
+                LEFT JOIN report_totals r ON r.id = p.id
+                LEFT JOIN redeemed rd ON rd.id = p.id
+                WHERE p.points IS DISTINCT FROM (COALESCE(c.lifetime_total, 0) + COALESCE(r.lifetime_total, 0))
+                   OR p.spendable_points IS DISTINCT FROM (COALESCE(c.spendable_total, 0) + COALESCE(r.spendable_total, 0) - COALESCE(rd.total, 0))
+                ORDER BY p.username
+            """)
+        )
+    ).fetchall()
+
+    return {
+        "users": [
+            {
+                "id": str(r.id),
+                "username": r.username,
+                "current_points": float(r.current_points),
+                "new_points": float(r.new_points),
+                "current_spendable_points": float(r.current_spendable_points),
+                "new_spendable_points": float(r.new_spendable_points),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/points/recompute")
+async def apply_points_recompute(db: AsyncSession = Depends(get_db)):
+    return await recompute_all_points(db)
+
+
+async def recompute_all_points(db: AsyncSession) -> dict:
+    """
+    Persists the recompute previewed above: every user's points/spendable_points are
+    overwritten with a from-scratch resum of their current contributions/reports/
+    redemptions. Notifies any user whose balance actually changes.
+    """
+    updated = (
+        await db.execute(
+            text(f"""
+                WITH {_POINTS_RECOMPUTE_TOTALS_CTE},
+                old_vals AS (
+                    SELECT id, points, spendable_points FROM profiles
+                )
+                UPDATE profiles p
+                SET
+                    points = COALESCE(c.lifetime_total, 0) + COALESCE(r.lifetime_total, 0),
+                    spendable_points = COALESCE(c.spendable_total, 0) + COALESCE(r.spendable_total, 0) - COALESCE(rd.total, 0)
+                FROM old_vals ov
+                LEFT JOIN contrib_totals c ON c.id = ov.id
+                LEFT JOIN report_totals r ON r.id = ov.id
+                LEFT JOIN redeemed rd ON rd.id = ov.id
+                WHERE p.id = ov.id
+                RETURNING
+                    p.id,
+                    ov.points AS old_points,
+                    p.points AS new_points,
+                    ov.spendable_points AS old_spendable_points,
+                    p.spendable_points AS new_spendable_points
+            """)
+        )
+    ).fetchall()
+
+    changes = [
+        {
+            "user_id": str(r.id),
+            "old_points": float(r.old_points),
+            "new_points": float(r.new_points),
+            "old_spendable_points": float(r.old_spendable_points),
+            "new_spendable_points": float(r.new_spendable_points),
+        }
+        for r in updated
+    ]
+    await _notify_points_changes(db, changes)
+    await db.commit()
+
+    changed = [
+        c for c in changes
+        if c["old_points"] != c["new_points"] or c["old_spendable_points"] != c["new_spendable_points"]
+    ]
+    return {"users_checked": len(changes), "users_changed": len(changed)}

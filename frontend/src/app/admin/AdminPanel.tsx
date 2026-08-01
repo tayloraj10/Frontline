@@ -23,6 +23,7 @@ export type Campaign = {
   geo_unit: string[] | null;
   status: string;
   created_at: string;
+  counts_toward_spendable_points: boolean;
 };
 
 export type ActiveEvent = {
@@ -210,6 +211,109 @@ function CampaignsTab({ campaigns, setCampaigns }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [spendableImpact, setSpendableImpact] = useState<{
+    campaign: Campaign;
+    enabled: boolean;
+    users: { id: string; username: string; current_spendable_points: number; new_spendable_points: number }[];
+  } | null>(null);
+  const [spendableLoading, setSpendableLoading] = useState(false);
+  const [spendableError, setSpendableError] = useState<string | null>(null);
+  const [spendableApplying, setSpendableApplying] = useState(false);
+
+  const [recomputeImpact, setRecomputeImpact] = useState<{
+    users: { id: string; username: string; current_points: number; new_points: number; current_spendable_points: number; new_spendable_points: number }[];
+  } | null>(null);
+  const [recomputeLoading, setRecomputeLoading] = useState(false);
+  const [recomputeError, setRecomputeError] = useState<string | null>(null);
+  const [recomputeApplying, setRecomputeApplying] = useState(false);
+  const [recomputeResult, setRecomputeResult] = useState<string | null>(null);
+  const [pendingRecomputeCount, setPendingRecomputeCount] = useState<number | null>(null);
+
+  const checkRecomputePending = async () => {
+    try {
+      const res = await fetch("/api/admin/points/recompute-impact");
+      const data = await res.json();
+      if (res.ok) setPendingRecomputeCount(data.users.length);
+    } catch {
+      // best-effort indicator only; button just won't highlight
+    }
+  };
+
+  useEffect(() => {
+    checkRecomputePending();
+  }, []);
+
+  const openRecomputeImpact = async () => {
+    setRecomputeError(null);
+    setRecomputeResult(null);
+    setRecomputeLoading(true);
+    setRecomputeImpact(null);
+    try {
+      const res = await fetch("/api/admin/points/recompute-impact");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to load impact preview.");
+      setRecomputeImpact({ users: data.users });
+    } catch (e) {
+      setRecomputeError(e instanceof Error ? e.message : "Failed to load impact preview.");
+    } finally {
+      setRecomputeLoading(false);
+    }
+  };
+
+  const confirmRecompute = async () => {
+    setRecomputeApplying(true);
+    setRecomputeError(null);
+    try {
+      const res = await fetch("/api/admin/points/recompute", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to apply recompute.");
+      setRecomputeImpact(null);
+      setRecomputeResult(`Updated ${data.users_changed} of ${data.users_checked} affected users.`);
+      setPendingRecomputeCount(0);
+    } catch (e) {
+      setRecomputeError(e instanceof Error ? e.message : "Failed to apply recompute.");
+    } finally {
+      setRecomputeApplying(false);
+    }
+  };
+
+  const openSpendableToggle = async (campaign: Campaign, enabled: boolean) => {
+    setSpendableError(null);
+    setSpendableLoading(true);
+    setSpendableImpact(null);
+    try {
+      const res = await fetch(`/api/admin/campaigns/${campaign.id}/spendable-points-impact?enabled=${enabled}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to load impact preview.");
+      setSpendableImpact({ campaign, enabled, users: data.users });
+    } catch (e) {
+      setSpendableError(e instanceof Error ? e.message : "Failed to load impact preview.");
+    } finally {
+      setSpendableLoading(false);
+    }
+  };
+
+  const confirmSpendableToggle = async () => {
+    if (!spendableImpact) return;
+    setSpendableApplying(true);
+    setSpendableError(null);
+    try {
+      const { campaign, enabled } = spendableImpact;
+      const res = await fetch(`/api/admin/campaigns/${campaign.id}/spendable-points-toggle?enabled=${enabled}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to apply change.");
+      setCampaigns(campaigns.map(c => c.id === campaign.id ? { ...c, counts_toward_spendable_points: enabled } : c));
+      setSpendableImpact(null);
+      checkRecomputePending();
+    } catch (e) {
+      setSpendableError(e instanceof Error ? e.message : "Failed to apply change.");
+    } finally {
+      setSpendableApplying(false);
+    }
+  };
+
   const handleTitleChange = (val: string) => {
     setTitle(val);
     if (!slugEdited) setSlug(toSlug(val));
@@ -241,7 +345,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
         scoring_rules: scoringRules,
         win_condition: { type: "open_ended" },
       })
-      .select("id, slug, title, description, campaign_type, contribution_type, geo_unit, status, created_at")
+      .select("id, slug, title, description, campaign_type, contribution_type, geo_unit, status, created_at, counts_toward_spendable_points")
       .single();
 
     if (insertErr) {
@@ -267,13 +371,34 @@ function CampaignsTab({ campaigns, setCampaigns }: {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-zinc-500">{campaigns.length} campaign{campaigns.length !== 1 ? "s" : ""}</span>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
-        >
-          {showCreate ? "Cancel" : "+ New Campaign"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openRecomputeImpact}
+            disabled={recomputeLoading}
+            title={pendingRecomputeCount ? `${pendingRecomputeCount} user${pendingRecomputeCount !== 1 ? "s" : ""} have stale balances` : undefined}
+            className={`px-3 py-1.5 text-xs disabled:opacity-40 rounded-lg font-medium transition-colors ${
+              pendingRecomputeCount
+                ? "bg-amber-700 hover:bg-amber-600 text-white"
+                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+            }`}
+          >
+            {recomputeLoading
+              ? "Checking…"
+              : pendingRecomputeCount
+                ? `Recompute all balances (${pendingRecomputeCount} pending)`
+                : "Recompute all balances"}
+          </button>
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+          >
+            {showCreate ? "Cancel" : "+ New Campaign"}
+          </button>
+        </div>
       </div>
+      {recomputeResult && (
+        <p className="text-xs text-emerald-400">{recomputeResult}</p>
+      )}
 
       {showCreate && (
         <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
@@ -346,12 +471,13 @@ function CampaignsTab({ campaigns, setCampaigns }: {
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Campaign</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Type</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Status</th>
+              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Spendable points</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/60">
             {campaigns.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-zinc-600 text-sm">No campaigns.</td>
+                <td colSpan={4} className="px-4 py-8 text-center text-zinc-600 text-sm">No campaigns.</td>
               </tr>
             )}
             {campaigns.map(c => (
@@ -375,11 +501,211 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                     <option value="completed">completed</option>
                   </select>
                 </td>
+                <td className="px-4 py-3">
+                  <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="accent-sky-500"
+                      checked={c.counts_toward_spendable_points}
+                      onChange={e => openSpendableToggle(c, e.target.checked)}
+                    />
+                    {c.counts_toward_spendable_points ? "Counts" : "Doesn't count"}
+                  </label>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {(spendableLoading || spendableImpact || spendableError) && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 max-w-lg w-full max-h-[80vh] overflow-y-auto space-y-4">
+            {spendableLoading && <p className="text-sm text-zinc-400">Loading impact preview…</p>}
+            {spendableError && (
+              <>
+                <p className="text-red-400 text-sm">{spendableError}</p>
+                <button
+                  onClick={() => { setSpendableError(null); setSpendableImpact(null); }}
+                  className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg"
+                >
+                  Close
+                </button>
+              </>
+            )}
+            {spendableImpact && !spendableError && (
+              <>
+                <p className="text-sm font-semibold text-zinc-200">
+                  {spendableImpact.enabled ? "Enable" : "Disable"} spendable points for &ldquo;{spendableImpact.campaign.title}&rdquo;?
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {spendableImpact.enabled
+                    ? "Contributions/reports on this campaign will start counting toward redeemable balances."
+                    : "Contributions/reports on this campaign will stop counting toward redeemable balances."}
+                  {" "}This only changes the rule going forward — no one's balance changes yet. The preview below shows what
+                  would happen the next time you run &ldquo;Recompute all balances&rdquo;; you'll need to run that separately
+                  afterward to actually apply it and notify affected users.
+                </p>
+                {spendableImpact.users.length === 0 ? (
+                  <p className="text-xs text-zinc-600">No users have contributions or reports on this campaign — no balances would change.</p>
+                ) : (
+                  <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-800 bg-zinc-900/60">
+                          <th className="text-left px-3 py-2 text-zinc-500 font-medium">User</th>
+                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Current</th>
+                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">New</th>
+                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Change</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/60">
+                        {[...spendableImpact.users]
+                          .sort((a, b) => Math.abs(b.new_spendable_points - b.current_spendable_points) - Math.abs(a.new_spendable_points - a.current_spendable_points))
+                          .map(u => {
+                            const change = u.new_spendable_points - u.current_spendable_points;
+                            return (
+                              <tr key={u.id}>
+                                <td className="px-3 py-2 text-zinc-300">{u.username}</td>
+                                <td className="px-3 py-2 text-right text-zinc-400">{u.current_spendable_points}</td>
+                                <td className={`px-3 py-2 text-right font-medium ${change === 0 ? "text-zinc-400" : change > 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                                  {u.new_spendable_points}
+                                </td>
+                                <td className={`px-3 py-2 text-right font-medium ${change === 0 ? "text-zinc-600" : change > 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                                  {change > 0 ? `+${change}` : change}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setSpendableImpact(null)}
+                    disabled={spendableApplying}
+                    className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmSpendableToggle}
+                    disabled={spendableApplying}
+                    className="px-3 py-1.5 text-xs bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white rounded-lg font-medium"
+                  >
+                    {spendableApplying ? "Saving…" : `${spendableImpact.enabled ? "Enable" : "Disable"} (won't apply balances yet)`}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(recomputeLoading || recomputeImpact || recomputeError) && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            {recomputeLoading && (
+              <p className="text-sm text-zinc-400">Checking affected users…</p>
+            )}
+            {recomputeError && (
+              <>
+                <p className="text-sm text-red-400 mb-4">{recomputeError}</p>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setRecomputeError(null)}
+                    className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+            {recomputeImpact && (
+              <>
+                <h3 className="text-sm font-semibold text-zinc-200 mb-1">Recompute all balances</h3>
+                <p className="text-xs text-zinc-500 mb-3">
+                  {recomputeImpact.users.length === 0
+                    ? "No users would be affected — everyone's stored balances already match their contributions."
+                    : `${recomputeImpact.users.length} user${recomputeImpact.users.length !== 1 ? "s" : ""} would be affected and will each get a notification about their balance change.`}
+                </p>
+                {recomputeImpact.users.some(u => u.new_spendable_points < 0) && (
+                  <p className="text-xs text-red-400 mb-2 flex items-center gap-1.5">
+                    <span aria-hidden="true">⚠️</span>
+                    One or more users would end up with a negative spendable balance — this means they&rsquo;ve
+                    already redeemed more points than they&rsquo;ll have left under the new totals. Review those
+                    rows before confirming.
+                  </p>
+                )}
+                {recomputeImpact.users.length > 0 && (
+                  <table className="w-full text-xs mb-4">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">User</th>
+                        <th className="text-right px-3 py-2 text-zinc-500 font-medium">Points</th>
+                        <th className="text-right px-3 py-2 text-zinc-500 font-medium">Points change</th>
+                        <th className="text-right px-3 py-2 text-zinc-500 font-medium">Spendable</th>
+                        <th className="text-right px-3 py-2 text-zinc-500 font-medium">Spendable change</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...recomputeImpact.users]
+                        .sort((a, b) =>
+                          (Math.abs(b.new_points - b.current_points) + Math.abs(b.new_spendable_points - b.current_spendable_points)) -
+                          (Math.abs(a.new_points - a.current_points) + Math.abs(a.new_spendable_points - a.current_spendable_points))
+                        )
+                        .map(u => {
+                          const pointsChange = u.new_points - u.current_points;
+                          const spendableChange = u.new_spendable_points - u.current_spendable_points;
+                          const goingNegative = u.new_spendable_points < 0;
+                          return (
+                            <tr key={u.id} className={`border-b border-zinc-800/50 ${goingNegative ? "bg-red-950/40" : ""}`}>
+                              <td className="px-3 py-2 text-zinc-300">
+                                <span className="inline-flex items-center gap-1.5">
+                                  {goingNegative && <span aria-label="Warning: negative balance" title="Would end up with a negative spendable balance">⚠️</span>}
+                                  {u.username}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right text-zinc-400">
+                                {u.current_points} → {u.new_points}
+                              </td>
+                              <td className={`px-3 py-2 text-right font-medium ${pointsChange === 0 ? "text-zinc-600" : pointsChange > 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                                {pointsChange > 0 ? `+${pointsChange}` : pointsChange}
+                              </td>
+                              <td className={`px-3 py-2 text-right ${goingNegative ? "text-red-400 font-semibold" : "text-zinc-400"}`}>
+                                {u.current_spendable_points} → {u.new_spendable_points}
+                              </td>
+                              <td className={`px-3 py-2 text-right font-medium ${goingNegative ? "text-red-400" : spendableChange === 0 ? "text-zinc-600" : spendableChange > 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                                {spendableChange > 0 ? `+${spendableChange}` : spendableChange}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                )}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setRecomputeImpact(null)}
+                    disabled={recomputeApplying}
+                    className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmRecompute}
+                    disabled={recomputeApplying || recomputeImpact.users.length === 0}
+                    className="px-3 py-1.5 text-xs bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white rounded-lg font-medium"
+                  >
+                    {recomputeApplying ? "Applying…" : "Confirm"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
