@@ -1076,10 +1076,11 @@ function LogTeamTotalForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleanupId]);
 
-  // Mirrors the backend pool query (contribution_id IS NULL) so the preview count and
-  // override list match who will actually be credited, not just who's going/checked in.
+  // Excludes only attendees credited via self-log or "log for them" — those are never
+  // touched by log-team-total. Attendees currently credited via a prior team-total log stay
+  // eligible here, since submitting again wipes and re-splits their credit from scratch.
   const candidates = rsvps.filter(
-    (r) => r.status === "going" && (pool === "going" || r.checked_in_at) && r.points === 0
+    (r) => r.status === "going" && (pool === "going" || r.checked_in_at) && !r.has_individual_contribution
   );
 
   const bagPoints = (Number(smallBags) || 0) * SMALL_BAG_VALUE + (Number(largeBags) || 0) * LARGE_BAG_VALUE;
@@ -1154,18 +1155,18 @@ function LogTeamTotalForm({
       >
         {warningOpen ? (
           <>
-            Each submission only splits credit among attendees who don&apos;t already have a contribution
-            for this event: anyone already credited is skipped, whether they logged their own
-            contribution, an organizer logged one for them individually via &quot;Log for them&quot;, or
-            they were credited by an earlier team total (see the log history below). Running this again
-            does <span className="font-semibold">not</span> re-split a combined total across everyone;
-            enter only the <span className="font-semibold">new</span> amount collected since the last
-            submission.{" "}
+            Enter the event&apos;s <span className="font-semibold">full</span> total each time, not just
+            what&apos;s new — submitting wipes any credit from a previous team-total submission and
+            re-splits the full new total across everyone currently eligible (see the log history below
+            for a record of past totals). Attendees credited another way — their own self-logged
+            contribution, or an organizer&apos;s &quot;Log for them&quot; — are untouched and stay
+            excluded from the split.{" "}
             <span className="underline">Show less</span>
           </>
         ) : (
           <>
-            Re-running this only credits new attendees, it won&apos;t re-split a combined total.{" "}
+            Re-running this wipes and re-splits the full total — enter the whole event total, not just
+            what&apos;s new.{" "}
             <span className="underline">Read more</span>
           </>
         )}
@@ -1295,33 +1296,47 @@ function LogTeamTotalForm({
             <p className="text-xs text-zinc-600 mt-1.5">No team totals logged yet.</p>
           ) : (
             <div className="mt-1.5 space-y-1.5">
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between gap-2 text-xs border border-zinc-800 rounded-lg px-2.5 py-1.5"
-                >
-                  <div>
-                    <span className="text-zinc-300">
-                      {log.small_bags ?? 0} small, {log.large_bags ?? 0} large
-                      {log.pounds ? `, ${log.pounds} lbs` : ""}
-                    </span>
-                    <span className="text-zinc-600"> · </span>
-                    <span className="text-zinc-500">
-                      by {log.scoring_method === "pounds" ? "pounds" : "bags"}
-                    </span>
-                    <span className="text-zinc-600"> · </span>
-                    <span className="text-emerald-400">{log.total_value.toLocaleString()} pts</span>
-                    <span className="text-zinc-600"> · </span>
-                    <span className="text-zinc-500">
-                      credited {log.credited_count} attendee{log.credited_count === 1 ? "" : "s"}
-                    </span>
+              {logs.map((log, i) => {
+                const isCurrent = i === 0;
+                return (
+                  <div
+                    key={log.id}
+                    className={`flex items-center justify-between gap-2 text-xs border rounded-lg px-2.5 py-1.5 ${
+                      isCurrent ? "border-zinc-800" : "border-zinc-900 opacity-60"
+                    }`}
+                  >
+                    <div>
+                      <div className="mb-0.5">
+                        {isCurrent ? (
+                          <span className="text-emerald-400 font-medium">Current</span>
+                        ) : (
+                          <span className="text-zinc-600">Overridden — no longer credited</span>
+                        )}
+                      </div>
+                      <span className={isCurrent ? "text-zinc-300" : "text-zinc-500 line-through"}>
+                        {log.small_bags ?? 0} small, {log.large_bags ?? 0} large
+                        {log.pounds ? `, ${log.pounds} lbs` : ""}
+                      </span>
+                      <span className="text-zinc-600"> · </span>
+                      <span className="text-zinc-500">
+                        by {log.scoring_method === "pounds" ? "pounds" : "bags"}
+                      </span>
+                      <span className="text-zinc-600"> · </span>
+                      <span className={isCurrent ? "text-emerald-400" : "text-zinc-500"}>
+                        {log.total_value.toLocaleString()} pts
+                      </span>
+                      <span className="text-zinc-600"> · </span>
+                      <span className="text-zinc-500">
+                        credited {log.credited_count} attendee{log.credited_count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <div className="text-zinc-600 text-right shrink-0">
+                      <div>{log.organizer_name}</div>
+                      <div>{new Date(log.created_at).toLocaleString()}</div>
+                    </div>
                   </div>
-                  <div className="text-zinc-600 text-right shrink-0">
-                    <div>{log.organizer_name}</div>
-                    <div>{new Date(log.created_at).toLocaleString()}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ))}
       </div>
@@ -1397,10 +1412,10 @@ function LogTeamTotalForm({
 
       <button
         onClick={submit}
-        disabled={loading || hasNegative}
+        disabled={loading || hasNegative || candidates.length === 0}
         className="w-full mt-3 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
       >
-        {loading ? "Logging…" : "Log team total"}
+        {loading ? "Logging…" : candidates.length === 0 ? "No eligible attendees" : "Log team total"}
       </button>
     </div>
   );

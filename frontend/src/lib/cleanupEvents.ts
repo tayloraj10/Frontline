@@ -24,6 +24,7 @@ export type CleanupEventRsvp = {
   points: number;
   photos: string[];
   is_late: boolean;
+  has_individual_contribution: boolean;
 };
 
 export type CleanupEventCohostGroup = {

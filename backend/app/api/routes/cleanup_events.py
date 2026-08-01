@@ -589,6 +589,13 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "photos": user_bags["photos"],
             "points": points_by_user.get(str(r.user_id), 0.0),
             "is_late": bool(contributed_at and late_cutoff and contributed_at > late_cutoff),
+            # True only for credit from self-log / "log for them" (both create their own
+            # cleanups row, which is how they land in bags_by_user). Team-total credit never
+            # gets a cleanups row and is NOT reflected here, because it's always wiped and
+            # re-split on the next log-team-total submission — so an attendee currently
+            # credited only via team-total is still eligible to be re-included next time,
+            # even though their cleanup_rsvps.contribution_id is non-NULL right now.
+            "has_individual_contribution": str(r.user_id) in bags_by_user,
         }
         rsvps.append(entry)
         if viewer_user_id and str(r.user_id) == str(viewer_user_id):
@@ -1067,9 +1074,16 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     """Organizer-logged total for the whole event, split as individual credit across
     attendees. Each attendee gets their own contribution row under their own user_id
     (not one lump sum under the organizer), so territory credit lands on whoever
-    actually showed up. Re-runnable: only attendees without an existing contribution_id
-    are considered, so a later top-up call won't double-credit anyone already logged
-    (by this or any other logging path)."""
+    actually showed up.
+
+    Each submission represents the event's full total, not a delta: any contributions
+    previously credited by this endpoint for this event are wiped first (their
+    territory-claim value reversed and their `cleanup_rsvps.contribution_id` cleared so
+    they re-enter the eligible pool), then the new total is split fresh across everyone
+    currently eligible — including attendees added or checked in since the last log.
+    Attendees credited via a different path (self-logged, or `log-for-attendee`) are
+    untouched, since they carry their own `cleanup_id` and are never targeted by the
+    wipe below."""
     event = await _get_event_or_404(db, cleanup_id)
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
@@ -1085,6 +1099,39 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     if override_total > total_value:
         raise HTTPException(status_code=400, detail="Overrides can't exceed the event total")
 
+    # Wipe prior team-total credit for this event before re-splitting. These rows are
+    # uniquely identifiable as cleanup_id IS NULL (team-total credit never gets its own
+    # cleanups row, unlike self-logs and log-for-attendee) + cleanup_event_id = this event.
+    prior_result = await db.execute(
+        text("""
+            SELECT id, user_id, value FROM contributions
+            WHERE cleanup_event_id = :cleanup_id AND cleanup_id IS NULL AND contribution_type = 'cleanup'
+        """),
+        {"cleanup_id": str(cleanup_id)},
+    )
+    prior_rows = prior_result.fetchall()
+    if prior_rows:
+        prior_value_sum = sum(float(r.value) for r in prior_rows)
+        await db.execute(
+            text("DELETE FROM contributions WHERE id = ANY(:ids)"),
+            {"ids": [str(r.id) for r in prior_rows]},
+        )
+        await db.execute(
+            text("""
+                UPDATE cleanup_rsvps SET contribution_id = NULL, updated_at = NOW()
+                WHERE cleanup_id = :cleanup_id AND user_id = ANY(:user_ids)
+            """),
+            {"cleanup_id": str(cleanup_id), "user_ids": [str(r.user_id) for r in prior_rows]},
+        )
+        if event.geo_unit_id and prior_value_sum:
+            await db.execute(
+                text("""
+                    UPDATE territory_claims SET total_value = total_value - :v, updated_at = NOW()
+                    WHERE campaign_id = :campaign_id AND geo_unit_id = :geo_unit_id
+                """),
+                {"campaign_id": str(event.campaign_id), "geo_unit_id": event.geo_unit_id, "v": prior_value_sum},
+            )
+
     pool_query = """
         SELECT user_id FROM cleanup_rsvps
         WHERE cleanup_id = :cleanup_id AND status = 'going' AND contribution_id IS NULL
@@ -1094,16 +1141,30 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     pool_result = await db.execute(text(pool_query), {"cleanup_id": str(cleanup_id)})
     pool = [str(r.user_id) for r in pool_result.fetchall()]
 
+    # Nothing has been committed yet (the wipe above is still pending on this session), so
+    # bailing out here just discards it — the prior log stays intact. Without this check, an
+    # organizer re-logging with an empty pool (e.g. "checked in" selected but nobody's
+    # currently checked in) would wipe the previous credit and silently award the new total
+    # to no one.
+    if not pool:
+        raise HTTPException(
+            status_code=400,
+            detail="No eligible attendees in the selected pool. Nobody would be credited, "
+            "so the previous log has been left as-is.",
+        )
+
     missing_overrides = set(overrides) - set(pool)
     if missing_overrides:
         raise HTTPException(status_code=400, detail=f"Not eligible attendees: {sorted(missing_overrides)}")
 
+    # The submitted total is the event's new full total, not an increment, so these
+    # columns are set outright rather than accumulated.
     await db.execute(
         text("""
             UPDATE cleanups SET
-                metrics_small_bags = COALESCE(metrics_small_bags, 0) + :sb,
-                metrics_large_bags = COALESCE(metrics_large_bags, 0) + :lb,
-                metrics_pounds = COALESCE(metrics_pounds, 0) + :lbs
+                metrics_small_bags = :sb,
+                metrics_large_bags = :lb,
+                metrics_pounds = :lbs
             WHERE id = :id
         """),
         {
@@ -1182,10 +1243,10 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
 
 @router.get("/{cleanup_id}/team-total-logs")
 async def get_team_total_logs(cleanup_id: UUID, db: AsyncSession = Depends(get_db)):
-    """History of every log-team-total submission for this event, newest first. Each entry
-    only credited attendees who didn't already have a contribution at the time (see
-    log_team_total's docstring) — this list makes that repeat-run behavior visible to
-    organizers instead of it being a silent surprise."""
+    """History of every log-team-total submission for this event, newest first. Each
+    submission wipes and fully re-splits credit (see log_team_total's docstring), so only
+    the most recent entry reflects who's currently credited — earlier entries are kept as
+    an audit trail of superseded totals, not still-standing credit."""
     result = await db.execute(
         text("""
             SELECT l.id, l.organizer_user_id, p.display_name AS organizer_display_name,
