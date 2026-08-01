@@ -867,6 +867,7 @@ function ContributeModal({
         if (pounds.trim()) body.pounds = Number(pounds);
         if (nearbyReport && resolveHotspot) body.resolve_report_id = nearbyReport.id;
         if (claimedReportId) body.claimed_report_id = claimedReportId;
+        if (fromSolarpunk) body.from_solarpunk_redirect = true;
       }
 
       if (isRouteMode && route && selectedRouteGeoUnitId) {

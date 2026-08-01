@@ -1,7 +1,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 export type CampaignType = "territory" | "collage" | "choropleth" | "heatmap" | "hex_bloom";
-export type ContributionType = "cleanup" | "photo" | "registration" | "advocacy" | "civic_action" | "unfollow" | "solarpunk_action" | "solarpunk_photo";
+export type ContributionType = "cleanup" | "photo" | "registration" | "advocacy" | "civic_action" | "unfollow" | "solarpunk_action" | "solarpunk_photo" | "solarpunk_hex_credit";
 export type CampaignStatus = "draft" | "active" | "completed" | "paused";
 export type GeoUnit = "census_tract" | "zip" | "state" | "point" | "h3_hex" | "uk_postcode_district";
 export type EntityType = "user" | "group";
