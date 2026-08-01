@@ -88,9 +88,8 @@ export type GroupCleanupEventListItem = {
   is_cohosted: boolean;
 };
 
-export async function listGroupCleanupEvents(groupId: string, viewerUserId?: string | null): Promise<GroupCleanupEventListItem[]> {
-  const qs = viewerUserId ? `?viewer_user_id=${viewerUserId}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/cleanup-events/group/${groupId}${qs}`, {
+export async function listGroupCleanupEvents(groupId: string): Promise<GroupCleanupEventListItem[]> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/cleanup-events/group/${groupId}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
