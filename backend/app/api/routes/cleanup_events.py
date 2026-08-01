@@ -406,13 +406,11 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
 
 
 @router.get("/group/{group_id}")
-async def list_group_cleanup_events(group_id: UUID, viewer_user_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
-    """Cleanup events hosted by a group, for the group page. Non-admins only see
-    upcoming (non-past, non-cancelled) events; group admins also get past/cancelled
-    events for a full history view. is_past is computed in SQL against NOW() so it's
-    correct regardless of server timezone handling."""
-    is_admin = bool(viewer_user_id) and await _is_group_admin(db, group_id, viewer_user_id)
-
+async def list_group_cleanup_events(group_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Cleanup events hosted by a group, for the group page — everyone gets both
+    upcoming and past/cancelled events (the latter for the "Event History" section).
+    is_past is computed in SQL against NOW() so it's correct regardless of server
+    timezone handling."""
     result = await db.execute(
         text(f"""
             SELECT c.id, c.title, c.description, c.scheduled_start, c.scheduled_end,
@@ -455,7 +453,6 @@ async def list_group_cleanup_events(group_id: UUID, viewer_user_id: UUID | None 
             "is_cohosted": r.is_cohosted,
         }
         for r in rows
-        if is_admin or (not r.is_past and r.status != "cancelled")
     ]
     return events
 
@@ -1394,9 +1391,16 @@ async def get_intersecting_geo_units(payload: IntersectingGeoUnitsRequest, db: A
 async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
     """All drawn routes (individual, group, or pre-planned group-event) for a campaign's
     map layer — geometry plus enough group info to badge the marker with a logo, and (for
-    event-linked routes only) a buffered corridor polygon for the check-in zone display."""
+    event-linked routes only) a buffered corridor polygon for the check-in zone display.
+
+    Ad-hoc (non-event) routes never expire here. Group-event routes must pass the same
+    status/expiry filter as list_campaign_cleanup_events's point markers, otherwise an
+    event's route would keep being returned after its point-marker counterpart aged out —
+    the frontend derives its "is this an event route" styling/expiry purely from whether
+    the id is still present in that events list, so a route left behind here silently
+    renders forever as if it were a plain ad-hoc route instead of disappearing."""
     result = await db.execute(
-        text("""
+        text(f"""
             SELECT
                 c.id, ST_AsGeoJSON(c.route)::json AS route,
                 c.group_id, g.name AS group_name, g.image_url AS group_logo_url,
@@ -1406,7 +1410,19 @@ async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Dep
                 END AS buffer
             FROM cleanups c
             LEFT JOIN groups g ON g.id = c.group_id
-            WHERE c.campaign_id = :campaign_id AND c.route IS NOT NULL
+            WHERE c.campaign_id = :campaign_id
+              AND c.route IS NOT NULL
+              AND (
+                NOT c.is_group_event
+                OR (
+                    c.status IN ('scheduled', 'in_progress')
+                    AND (
+                        COALESCE(c.scheduled_end, c.scheduled_start) IS NULL
+                        OR COALESCE(c.scheduled_end, c.scheduled_start)
+                            + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' + INTERVAL '1 day' > NOW()
+                    )
+                )
+              )
             ORDER BY c.created_at DESC
             LIMIT 500
         """),

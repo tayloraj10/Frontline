@@ -537,6 +537,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
                 value,
                 photo_url,
                 submitted_at,
+                cleanup_event_id::text,
                 cleanup_event_id IS NOT NULL AS is_group_event,
                 ST_Y(location::geometry) AS latitude,
                 ST_X(location::geometry) AS longitude
@@ -557,6 +558,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
             "photo_url": row.photo_url,
             "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
             "is_group_event": row.is_group_event,
+            "cleanup_event_id": row.cleanup_event_id,
             "latitude": float(row.latitude),
             "longitude": float(row.longitude),
         }

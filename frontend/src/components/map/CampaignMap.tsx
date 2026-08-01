@@ -194,6 +194,7 @@ interface ContributionPoint {
   photo_url: string | null;
   submitted_at: string | null;
   is_group_event?: boolean;
+  cleanup_event_id?: string | null;
   latitude: number;
   longitude: number;
 }
@@ -1528,6 +1529,7 @@ export default function CampaignMap({
   const cleanupRouteMarkerIsEventRef = useRef<boolean[]>([]);
   const cleanupRouteDateLabelsRef = useRef<maplibregl.Marker[]>([]);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
+  const contributionPopupRef = useRef<maplibregl.Popup | null>(null);
   const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
   const pinPickerMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -2623,6 +2625,7 @@ export default function CampaignMap({
               value: loc.value ?? 1,
               submitted_at: loc.submitted_at ?? "",
               is_group_event: loc.is_group_event ?? false,
+              cleanup_event_id: loc.cleanup_event_id ?? "",
             },
           }));
           contributionFeaturesRef.current = features;
@@ -3165,6 +3168,25 @@ export default function CampaignMap({
       map.current.on("mouseleave", "contribution-dots", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
+      });
+      // A dot for a contribution logged against a group event (halo ring) links back
+      // to that event's page — plain ad-hoc/individual cleanups have nowhere to link to.
+      map.current.on("click", "contribution-dots", (e) => {
+        if (pinPickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as { cleanup_event_id?: string };
+        if (!props.cleanup_event_id) return;
+        if (!map.current) return;
+        contributionPopupRef.current?.remove();
+        const coords = (e.features[0].geometry as GeoJSON.Point).coordinates.slice() as [number, number];
+        contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
+          .setLngLat(coords)
+          .setHTML(
+            `<div style="font-family:inherit;font-size:12px;">` +
+              `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
+              `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>` +
+              `</div>`,
+          )
+          .addTo(map.current);
       });
 
       map.current.on("mouseenter", "report-dots", () => {
