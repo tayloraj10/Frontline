@@ -55,6 +55,11 @@ export default function CreateCleanupEventForm({
     scheduledEnd: string | null;
     lat: number;
     lng: number;
+    addressLine1: string | null;
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    country: string | null;
     maxAttendees: number | null;
     externalLink: string | null;
     imageUrl: string | null;
@@ -71,7 +76,11 @@ export default function CreateCleanupEventForm({
   const [scheduledEnd, setScheduledEnd] = useState(toDatetimeLocal(initialValues?.scheduledEnd ?? null));
   const [lat, setLat] = useState<number | null>(initialValues?.lat ?? null);
   const [lng, setLng] = useState<number | null>(initialValues?.lng ?? null);
-  const [address, setAddress] = useState("");
+  const [addressLine1, setAddressLine1] = useState(initialValues?.addressLine1 ?? "");
+  const [city, setCity] = useState(initialValues?.city ?? "");
+  const [state, setState] = useState(initialValues?.state ?? "");
+  const [postalCode, setPostalCode] = useState(initialValues?.postalCode ?? "");
+  const [country, setCountry] = useState(initialValues?.country ?? "");
   const [maxAttendees, setMaxAttendees] = useState(initialValues?.maxAttendees ? String(initialValues.maxAttendees) : "");
   const [externalLink, setExternalLink] = useState(initialValues?.externalLink ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -119,6 +128,11 @@ export default function CreateCleanupEventForm({
           scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
           latitude: lat,
           longitude: lng,
+          addressLine1: addressLine1.trim() || null,
+          city: city.trim() || null,
+          state: state.trim() || null,
+          postalCode: postalCode.trim() || null,
+          country: country.trim() || null,
           maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
           externalLink: externalLink.trim() || null,
           route,
@@ -139,6 +153,11 @@ export default function CreateCleanupEventForm({
           scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
           latitude: lat,
           longitude: lng,
+          addressLine1: addressLine1.trim() || null,
+          city: city.trim() || null,
+          state: state.trim() || null,
+          postalCode: postalCode.trim() || null,
+          country: country.trim() || null,
           maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
           externalLink: externalLink.trim() || null,
           route,
@@ -199,18 +218,38 @@ export default function CreateCleanupEventForm({
           )}
         </div>
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Location</label>
+          <label className="text-xs text-zinc-500">Street address</label>
           <AddressAutocomplete
-            value={address}
-            onChange={setAddress}
+            value={addressLine1}
+            onChange={setAddressLine1}
             onSelect={(s) => {
-              setAddress(s.addressLine1);
+              setAddressLine1(s.addressLine1);
+              setCity(s.city);
+              setState(s.state);
+              setPostalCode(s.postalCode);
+              setCountry(s.country);
               setLat(s.lat);
               setLng(s.lng);
             }}
             placeholder="Search for an address..."
           />
           <BusinessLocationMapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} locationNoun="event" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-500">City</label>
+          <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-500">State</label>
+          <input className={inputCls} value={state} onChange={e => setState(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-500">Postal code</label>
+          <input className={inputCls} value={postalCode} onChange={e => setPostalCode(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-500">Country</label>
+          <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} />
         </div>
         <div className="col-span-2 space-y-2">
           <label className="flex items-center gap-2 text-xs text-zinc-500">

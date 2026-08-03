@@ -2402,6 +2402,10 @@ function HostEventModal({
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ id: string; join_code: string } | null>(null);
   const [addressValue, setAddressValue] = useState("");
+  const [addressCity, setAddressCity] = useState("");
+  const [addressState, setAddressState] = useState("");
+  const [addressPostalCode, setAddressPostalCode] = useState("");
+  const [addressCountry, setAddressCountry] = useState("");
   const [addressCoords, setAddressCoords] = useState<Coords | null>(null);
   const [maxAttendees, setMaxAttendees] = useState("");
   const [externalLink, setExternalLink] = useState("");
@@ -2461,6 +2465,11 @@ function HostEventModal({
         scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
         latitude: submitCoords.latitude,
         longitude: submitCoords.longitude,
+        addressLine1: !route && addressValue.trim() ? addressValue.trim() : null,
+        city: !route && addressCity.trim() ? addressCity.trim() : null,
+        state: !route && addressState.trim() ? addressState.trim() : null,
+        postalCode: !route && addressPostalCode.trim() ? addressPostalCode.trim() : null,
+        country: !route && addressCountry.trim() ? addressCountry.trim() : null,
         maxAttendees: maxAttendees.trim() ? Number(maxAttendees) : null,
         externalLink: externalLink.trim() || null,
         route,
@@ -2627,16 +2636,54 @@ function HostEventModal({
 
         {!route && (
           <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Event location</label>
+            <label className="block text-xs text-zinc-500 mb-1.5">Street address</label>
             <AddressAutocomplete
               value={addressValue}
               onChange={setAddressValue}
               onSelect={(s) => {
                 setAddressValue(s.addressLine1);
+                setAddressCity(s.city);
+                setAddressState(s.state);
+                setAddressPostalCode(s.postalCode);
+                setAddressCountry(s.country);
                 setAddressCoords({ latitude: s.lat, longitude: s.lng });
               }}
               placeholder="Search for an address..."
             />
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">City</label>
+                <input
+                  value={addressCity}
+                  onChange={(e) => setAddressCity(e.target.value)}
+                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">State</label>
+                <input
+                  value={addressState}
+                  onChange={(e) => setAddressState(e.target.value)}
+                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">Postal code</label>
+                <input
+                  value={addressPostalCode}
+                  onChange={(e) => setAddressPostalCode(e.target.value)}
+                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">Country</label>
+                <input
+                  value={addressCountry}
+                  onChange={(e) => setAddressCountry(e.target.value)}
+                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+            </div>
             {!overrideCoords && !addressCoords && (
               <GpsIndicator
                 status={gps.status}
