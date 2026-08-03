@@ -2,7 +2,7 @@
 
 Living inventory of what the app actually does today, split by user perspective. This is a **tracking doc**, not a design spec — update it whenever a feature is added, changed, or removed. Source of truth is the code; when this doc and the code disagree, the code wins (fix the doc).
 
-Companion: a human-facing version of this doc (for onboarding/stakeholders, not engineers) lives at `app-capability-doc-external.md` — regenerate it from this one after edits, don't maintain it independently.
+Companion: a human-facing version of this doc (for onboarding/stakeholders, not engineers) lives at `app-capability-doc-external.md` (same folder) — regenerate it from this one after edits, don't maintain it independently. A business-partner-only overview (for sending to prospective partners) lives at `frontline-partner-overview.md`.
 
 Status legend: no tag = fully working · **(Beta)** = shipped but flagged as still being tested in prod · *(stub)* = record/UI exists but the effect isn't implemented yet.
 
