@@ -2953,7 +2953,7 @@ function SettingsTab({ settings, setSettings }: {
         </div>
       ))}
       {settings.length === 0 && (
-        <p className="text-sm text-zinc-500">No settings found — has migration 046_game_settings.sql been applied?</p>
+        <p className="text-sm text-zinc-500">No settings found — has migration 055_game_settings.sql been applied?</p>
       )}
     </div>
   );
