@@ -33,6 +33,10 @@ export interface Database {
           total_contributions: number;
           points: number;
           spendable_points: number;
+          terms_version_accepted: string | null;
+          terms_accepted_at: string | null;
+          privacy_version_accepted: string | null;
+          privacy_accepted_at: string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "total_contributions" | "points" | "spendable_points" | "created_at"> & {

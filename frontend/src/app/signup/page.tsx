@@ -4,12 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { acceptLegal } from "@/app/legal/actions";
 
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [agreedToLegal, setAgreedToLegal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -32,6 +34,7 @@ export default function SignupPage() {
       setLoading(false);
     } else if (data.session) {
       // Email confirmation disabled — user is immediately logged in
+      await acceptLegal({ terms: true, privacy: true });
       window.location.href = "/campaigns";
     } else {
       // Email confirmation required — show check-your-email state
@@ -142,9 +145,26 @@ export default function SignupPage() {
 
           {error && <p className="text-red-400 text-sm">{error}</p>}
 
+          <label className="flex items-start gap-2 text-xs text-zinc-400">
+            <input
+              type="checkbox"
+              checked={agreedToLegal}
+              onChange={(e) => setAgreedToLegal(e.target.checked)}
+              required
+              className="mt-0.5 accent-emerald-600"
+            />
+            <span>
+              I agree to the{" "}
+              <Link href="/legal/terms" target="_blank" className="hover:text-zinc-200 transition-colors underline">Terms</Link>
+              {" "}and{" "}
+              <Link href="/legal/privacy" target="_blank" className="hover:text-zinc-200 transition-colors underline">Privacy Policy</Link>
+              .
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !agreedToLegal}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm"
           >
             {loading ? "Creating account…" : "Create account"}
@@ -156,14 +176,6 @@ export default function SignupPage() {
           <Link href="/login" className="text-emerald-400 hover:text-emerald-300">
             Sign in
           </Link>
-        </p>
-
-        <p className="text-center text-zinc-600 text-xs">
-          By signing up you agree to our{" "}
-          <Link href="/legal/terms" className="hover:text-zinc-400 transition-colors underline">Terms</Link>
-          {" "}and{" "}
-          <Link href="/legal/privacy" className="hover:text-zinc-400 transition-colors underline">Privacy Policy</Link>
-          .
         </p>
       </div>
     </main>
