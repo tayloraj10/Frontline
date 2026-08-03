@@ -16,7 +16,7 @@ export type AddressSelection = {
   lng: number;
 };
 
-type MapTilerContextItem = { id: string; text: string };
+type MapTilerContextItem = { id: string; text: string; place_designation?: string };
 type MapTilerFeature = {
   place_name?: string;
   text?: string;
@@ -29,6 +29,13 @@ type MapTilerFeature = {
 function parseFeature(feature: MapTilerFeature): AddressSelection {
   const context = feature.context ?? [];
   const find = (prefix: string) => context.find((c) => c.id?.startsWith(prefix))?.text ?? "";
+  // MapTiler's OSM-backed geocoder doesn't put the city under a consistent id —
+  // e.g. for NYC addresses "place.*" is the neighbourhood ("Inwood") while the actual
+  // city/borough lives under "subregion.*"/"joint_municipality.*" tagged with
+  // place_designation. Prefer that designation when present; fall back to the old
+  // place/locality lookup for geocoders/features that don't set it.
+  const findByDesignation = (designation: string) =>
+    context.find((c) => c.place_designation === designation)?.text ?? "";
   const [lng, lat] = feature.center ?? [0, 0];
   const addressLine1 = feature.place_type?.includes("address")
     ? [feature.address, feature.text].filter(Boolean).join(" ")
@@ -36,7 +43,7 @@ function parseFeature(feature: MapTilerFeature): AddressSelection {
 
   return {
     addressLine1,
-    city: find("place.") || find("locality."),
+    city: findByDesignation("city") || findByDesignation("suburb") || find("place.") || find("locality."),
     state: find("region."),
     postalCode: find("postal_code."),
     country: find("country."),

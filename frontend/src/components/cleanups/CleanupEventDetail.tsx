@@ -244,6 +244,20 @@ export default function CleanupEventDetail({
           isEvent
         />
       )}
+      {(() => {
+        const fullAddress = [
+          event.address_line1,
+          [event.city, event.state].filter(Boolean).join(", "),
+          event.postal_code,
+          event.country,
+        ].filter(Boolean).join(", ");
+        return fullAddress ? (
+          <p className="text-sm text-zinc-400 flex items-center gap-1.5">
+            <span aria-hidden="true">📍</span>
+            {fullAddress}
+          </p>
+        ) : null;
+      })()}
       <div className="flex items-center gap-4">
         <a
           href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}

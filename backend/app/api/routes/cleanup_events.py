@@ -41,6 +41,11 @@ class CreateCleanupEventRequest(BaseModel):
     scheduled_end: datetime | None = None
     latitude: float
     longitude: float
+    address_line1: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
     image_url: str | None = None
     max_attendees: int | None = None
     external_link: str | None = None
@@ -89,6 +94,11 @@ class PatchCleanupEventRequest(BaseModel):
     scheduled_end: datetime | None = None
     latitude: float | None = None
     longitude: float | None = None
+    address_line1: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
     image_url: str | None = None
     status: str | None = None
     max_attendees: int | None = None
@@ -466,6 +476,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             SELECT c.id, c.campaign_id, cam.slug AS campaign_slug, c.title, c.description,
                    c.scheduled_start, c.scheduled_end, c.status, c.image_urls, c.join_code,
                    c.max_attendees, c.external_link, c.logging_mode,
+                   c.address_line1, c.city, c.state, c.postal_code, c.country,
                    c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    ST_AsGeoJSON(c.route)::json AS route,
@@ -629,6 +640,11 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "image_url": row.image_urls[0] if row.image_urls else None,
         "lat": row.latitude,
         "lng": row.longitude,
+        "address_line1": row.address_line1,
+        "city": row.city,
+        "state": row.state,
+        "postal_code": row.postal_code,
+        "country": row.country,
         "route": row.route,
         "route_buffer": row.route_buffer,
         "group_id": str(row.group_id),
@@ -677,12 +693,15 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
         text("""
             INSERT INTO cleanups
                 (campaign_id, geo_unit_id, group_id, is_group_event, join_code,
-                 title, description, location, route, scheduled_start, scheduled_end,
+                 title, description, location,
+                 address_line1, city, state, postal_code, country,
+                 route, scheduled_start, scheduled_end,
                  status, image_urls, submitted_by_user_id, max_attendees, external_link, logging_mode)
             VALUES
                 (:campaign_id, :geo_unit_id, :group_id, true, :join_code,
                  :title, :description,
                  ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                 :address_line1, :city, :state, :postal_code, :country,
                  CASE WHEN CAST(:route AS text) IS NOT NULL
                       THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
                       ELSE NULL END,
@@ -699,6 +718,11 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             "description": payload.description,
             "lon": payload.longitude,
             "lat": payload.latitude,
+            "address_line1": payload.address_line1,
+            "city": payload.city,
+            "state": payload.state,
+            "postal_code": payload.postal_code,
+            "country": payload.country,
             "route": json.dumps(payload.route) if payload.route is not None else None,
             "scheduled_start": payload.scheduled_start,
             "scheduled_end": payload.scheduled_end,
@@ -770,6 +794,11 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
                 location = CASE WHEN :has_new_location
                                 THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
                                 ELSE location END,
+                address_line1 = COALESCE(:address_line1, address_line1),
+                city = COALESCE(:city, city),
+                state = COALESCE(:state, state),
+                postal_code = COALESCE(:postal_code, postal_code),
+                country = COALESCE(:country, country),
                 route = CASE WHEN CAST(:route AS text) IS NOT NULL
                               THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
                               WHEN :clear_route THEN NULL
@@ -789,6 +818,11 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
             "geo_unit_id": geo_unit_id,
             "lon": payload.longitude,
             "lat": payload.latitude,
+            "address_line1": payload.address_line1,
+            "city": payload.city,
+            "state": payload.state,
+            "postal_code": payload.postal_code,
+            "country": payload.country,
             "max_attendees": payload.max_attendees,
             "external_link": payload.external_link,
             "logging_mode": payload.logging_mode,

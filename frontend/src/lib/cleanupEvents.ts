@@ -46,6 +46,11 @@ export type CleanupEventDetailData = {
   image_url: string | null;
   lat: number;
   lng: number;
+  address_line1: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
   route: RouteLineString | null;
   route_buffer: GeoJSON.Polygon | null;
   group_id: string;
@@ -134,6 +139,11 @@ export async function createCleanupEvent({
   scheduledEnd,
   latitude,
   longitude,
+  addressLine1,
+  city,
+  state,
+  postalCode,
+  country,
   maxAttendees,
   externalLink,
   route,
@@ -150,6 +160,11 @@ export async function createCleanupEvent({
   scheduledEnd: string | null;
   latitude: number;
   longitude: number;
+  addressLine1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
   maxAttendees?: number | null;
   externalLink?: string | null;
   route?: RouteLineString | null;
@@ -169,6 +184,11 @@ export async function createCleanupEvent({
     scheduled_end: scheduledEnd,
     latitude,
     longitude,
+    address_line1: addressLine1?.trim() || null,
+    city: city?.trim() || null,
+    state: state?.trim() || null,
+    postal_code: postalCode?.trim() || null,
+    country: country?.trim() || null,
     image_url: imageUrl,
     max_attendees: maxAttendees ?? null,
     external_link: externalLink?.trim() || null,
@@ -188,6 +208,11 @@ export async function updateCleanupEvent({
   scheduledEnd,
   latitude,
   longitude,
+  addressLine1,
+  city,
+  state,
+  postalCode,
+  country,
   status,
   maxAttendees,
   externalLink,
@@ -205,6 +230,11 @@ export async function updateCleanupEvent({
   scheduledEnd?: string | null;
   latitude?: number;
   longitude?: number;
+  addressLine1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
   status?: string;
   maxAttendees?: number | null;
   externalLink?: string | null;
@@ -224,6 +254,11 @@ export async function updateCleanupEvent({
     scheduled_end: scheduledEnd,
     latitude,
     longitude,
+    address_line1: addressLine1 === undefined ? undefined : addressLine1?.trim() || null,
+    city: city === undefined ? undefined : city?.trim() || null,
+    state: state === undefined ? undefined : state?.trim() || null,
+    postal_code: postalCode === undefined ? undefined : postalCode?.trim() || null,
+    country: country === undefined ? undefined : country?.trim() || null,
     image_url: imageUrl,
     status,
     max_attendees: maxAttendees,
