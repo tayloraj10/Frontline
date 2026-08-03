@@ -108,10 +108,10 @@ Site admins implicitly inherit every group-admin and business-admin capability a
 ## 5. Known gaps / not-yet-built (tracked so this doc stays honest)
 
 - **Event trigger effects** — `threshold_reached` and `report_count` triggers fire and dedupe correctly, but of the five event *types* only `boss_spawn` and admin-created `timed_event` actually apply their effect (`score_multiplier`). `notification`, `cascade_unlock`, and `seasonal_reset` create a `campaign_events` row but do nothing beyond that *(stub)*. `decay_elapsed` and `external_api` trigger conditions aren't implemented at all — nothing sets `territory_claims.decay_starts_at`, so the deployed decay cron is currently a no-op.
-- **Campaign `status` enforcement is frontend-only** for `draft`/`paused`/`completed` hiding from listings; there's no backend guard rejecting contributions to a non-`active` campaign beyond what's already wired (see `campaign-app-scope.md` for the up-to-date matrix).
+- **Campaign `status` enforcement is frontend-only** for `draft`/`paused`/`completed` hiding from listings; there's no backend guard rejecting contributions to a non-`active` campaign beyond what's already wired (see `dev-docs/campaign-app-scope.md` for the up-to-date matrix).
 - **Cleanup-event contribution proximity is honor-system** — the 150m gate only exists client-side to show/hide the "count toward event" checkbox; nothing blocks a submission claiming an event link from an arbitrary location. (Check-in itself *is* server-enforced; this gap is specific to the contribution-submit path.)
 - **`census_tract` geo unit is selectable in the campaign-create form but has no data loader** — would silently produce a campaign with zero geo units.
-- **Recompute of historical `contributions.value`** if bag/pound point constants change is not built — deferred pending a planned "engine-admin-changes" effort to centralize scoring constants (see `dev-backlog-2026-07-24.md` #8 Part B).
+- **Recompute of historical `contributions.value`** if bag/pound point constants change is not built — deferred pending a planned "engine-admin-changes" effort to centralize scoring constants (see `dev-docs/dev-backlog-2026-07-24.md` #8 Part B).
 - **Business self-service for multiple admins per business** doesn't exist — currently admin-only via `BusinessAdminsManager`.
 - **No redemption-history detail for business owners** — dashboard shows only a raw redemption count per offer, not who/when.
 - **Legal re-acceptance gate is built but switched off** (`LEGAL_GATE_ENABLED = false`).
