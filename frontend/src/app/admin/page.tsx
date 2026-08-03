@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "./AdminPanel";
-import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink, AdminGroup } from "./AdminPanel";
+import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink, AdminGroup, GameSetting } from "./AdminPanel";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -26,6 +26,7 @@ export default async function AdminPage() {
     { data: offers },
     { data: redemptions },
     { data: groups },
+    { data: gameSettings },
   ] = await Promise.all([
     supabase
       .schema("public")
@@ -62,6 +63,11 @@ export default async function AdminPage() {
       .from("groups")
       .select("*")
       .order("created_at", { ascending: false }),
+    supabase
+      .schema("public")
+      .from("game_settings")
+      .select("key, value, category, label, description")
+      .order("category"),
   ]);
 
   const { data: businessCampaignLinks } = await supabase
@@ -111,6 +117,7 @@ export default async function AdminPage() {
       initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
       initialGroups={groupsWithApplicant as AdminGroup[]}
       currentUserId={user.id}
+      initialSettings={(gameSettings ?? []) as GameSetting[]}
     />
   );
 }

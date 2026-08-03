@@ -98,7 +98,15 @@ export type AdminGroup = Database["public"]["Tables"]["groups"]["Row"] & {
   admin_count: number;
 };
 
-type Tab = "campaigns" | "triggers" | "events" | "partners" | "groups" | "leaderboard";
+export type GameSetting = {
+  key: string;
+  value: number;
+  category: string;
+  label: string;
+  description: string | null;
+};
+
+type Tab = "campaigns" | "triggers" | "events" | "partners" | "groups" | "leaderboard" | "settings";
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -713,10 +721,11 @@ function CampaignsTab({ campaigns, setCampaigns }: {
 
 // ─── Triggers Tab ─────────────────────────────────────────────────────────────
 
-function TriggersTab({ campaigns, triggers, setTriggers }: {
+function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
   campaigns: Campaign[];
   triggers: Trigger[];
   setTriggers: (t: Trigger[]) => void;
+  hotspotMultiplier: number;
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
@@ -727,7 +736,7 @@ function TriggersTab({ campaigns, triggers, setTriggers }: {
   );
   const [eventType, setEventType] = useState("boss_spawn");
   const [effectConfigRaw, setEffectConfigRaw] = useState(
-    JSON.stringify(EFFECT_TEMPLATES.boss_spawn, null, 2)
+    JSON.stringify({ ...EFFECT_TEMPLATES.boss_spawn, multiplier: hotspotMultiplier }, null, 2)
   );
   const [cooldownHours, setCooldownHours] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -742,7 +751,11 @@ function TriggersTab({ campaigns, triggers, setTriggers }: {
   const handleEventTypeChange = (val: string) => {
     setEventType(val);
     const t = EFFECT_TEMPLATES[val];
-    if (t) setEffectConfigRaw(JSON.stringify(t, null, 2));
+    if (t) {
+      setEffectConfigRaw(
+        JSON.stringify(val === "boss_spawn" ? { ...t, multiplier: hotspotMultiplier } : t, null, 2)
+      );
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -2844,6 +2857,108 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
   );
 }
 
+// ─── Settings Tab ─────────────────────────────────────────────────────────────
+
+const CATEGORY_LABELS: Record<string, string> = {
+  points: "Points",
+  multipliers: "Multipliers",
+  claim_timing: "Claim timing",
+  proximity: "Proximity",
+  triggers: "Trigger defaults",
+  moderation: "Moderation",
+};
+
+function SettingsTab({ settings, setSettings }: {
+  settings: GameSetting[];
+  setSettings: (s: GameSetting[]) => void;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>(
+    () => Object.fromEntries(settings.map(s => [s.key, String(s.value)]))
+  );
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+
+  const grouped = useMemo(() => {
+    const groups: Record<string, GameSetting[]> = {};
+    for (const s of settings) {
+      (groups[s.category] ??= []).push(s);
+    }
+    return groups;
+  }, [settings]);
+
+  const handleSave = async (setting: GameSetting) => {
+    const raw = drafts[setting.key];
+    const parsed = Number(raw);
+    if (raw === "" || Number.isNaN(parsed)) {
+      setErrorKey(setting.key);
+      return;
+    }
+    setSavingKey(setting.key);
+    setErrorKey(null);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .schema("public")
+      .from("game_settings")
+      .update({ value: parsed, updated_at: new Date().toISOString(), updated_by: user?.id ?? null })
+      .eq("key", setting.key);
+    setSavingKey(null);
+    if (error) {
+      setErrorKey(setting.key);
+      return;
+    }
+    setSettings(settings.map(s => s.key === setting.key ? { ...s, value: parsed } : s));
+    setSavedKey(setting.key);
+    setTimeout(() => setSavedKey(k => k === setting.key ? null : k), 1500);
+  };
+
+  return (
+    <div className="space-y-8">
+      {Object.entries(grouped).map(([category, rows]) => (
+        <div key={category} className="space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-300">{CATEGORY_LABELS[category] ?? category}</h2>
+          <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
+            {rows.map(setting => {
+              const dirty = drafts[setting.key] !== String(setting.value);
+              return (
+                <div key={setting.key} className="flex items-center gap-4 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-zinc-200 font-medium">{setting.label}</p>
+                    {setting.description && (
+                      <p className="text-xs text-zinc-500 mt-0.5">{setting.description}</p>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    step="any"
+                    className="w-28 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm text-right focus:outline-none focus:border-zinc-500"
+                    value={drafts[setting.key] ?? ""}
+                    onChange={e => setDrafts({ ...drafts, [setting.key]: e.target.value })}
+                  />
+                  <button
+                    onClick={() => handleSave(setting)}
+                    disabled={!dirty || savingKey === setting.key}
+                    className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors shrink-0"
+                  >
+                    {savingKey === setting.key ? "Saving…" : savedKey === setting.key ? "Saved ✓" : "Save"}
+                  </button>
+                  {errorKey === setting.key && (
+                    <span className="text-xs text-red-400 shrink-0">Error</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {settings.length === 0 && (
+        <p className="text-sm text-zinc-500">No settings found — has migration 046_game_settings.sql been applied?</p>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPanel({
   initialCampaigns,
   initialEvents,
@@ -2854,6 +2969,7 @@ export default function AdminPanel({
   initialBusinessCampaignLinks,
   initialGroups,
   currentUserId,
+  initialSettings,
 }: {
   initialCampaigns: Campaign[];
   initialEvents: ActiveEvent[];
@@ -2864,6 +2980,7 @@ export default function AdminPanel({
   initialBusinessCampaignLinks: BusinessCampaignLink[];
   initialGroups: AdminGroup[];
   currentUserId: string;
+  initialSettings: GameSetting[];
 }) {
   const [tab, setTab] = useState<Tab>("campaigns");
   const [campaigns, setCampaigns] = useState(initialCampaigns);
@@ -2879,6 +2996,8 @@ export default function AdminPanel({
   }, {});
   const [businessCampaignLinks, setBusinessCampaignLinks] = useState(initialBusinessCampaignLinks);
   const [groups, setGroups] = useState(initialGroups);
+  const [settings, setSettings] = useState(initialSettings);
+  const hotspotMultiplier = settings.find(s => s.key === "hotspot_multiplier")?.value ?? 1;
   const [seedingDemo, setSeedingDemo] = useState(false);
   const [seedDemoResult, setSeedDemoResult] = useState<string | null>(null);
 
@@ -2927,7 +3046,7 @@ export default function AdminPanel({
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
-        {(["campaigns", "triggers", "events", "partners", "groups", "leaderboard"] as Tab[]).map(t => (
+        {(["campaigns", "triggers", "events", "partners", "groups", "leaderboard", "settings"] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -2953,7 +3072,7 @@ export default function AdminPanel({
       </div>
 
       {tab === "campaigns" && <CampaignsTab campaigns={sortedCampaigns} setCampaigns={setCampaigns} />}
-      {tab === "triggers" && <TriggersTab campaigns={activeCampaigns} triggers={triggers} setTriggers={setTriggers} />}
+      {tab === "triggers" && <TriggersTab campaigns={activeCampaigns} triggers={triggers} setTriggers={setTriggers} hotspotMultiplier={hotspotMultiplier} />}
       {tab === "events" && <EventsTab campaigns={activeCampaigns} events={events} setEvents={setEvents} />}
       {tab === "partners" && (
         <PartnersTab
@@ -2969,6 +3088,7 @@ export default function AdminPanel({
       )}
       {tab === "groups" && <GroupsTab groups={groups} setGroups={setGroups} currentUserId={currentUserId} />}
       {tab === "leaderboard" && <LeaderboardTab campaigns={activeCampaigns} />}
+      {tab === "settings" && <SettingsTab settings={settings} setSettings={setSettings} />}
     </main>
   );
 }

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal, get_db
+from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -29,6 +30,7 @@ async def get_active_multiplier(
     )
     camp_row = camp_result.fetchone()
     campaign_geo_unit = camp_row[0] if camp_row else None
+    settings = await get_game_settings(db)
 
     geo_unit_id = None
     if campaign_geo_unit and "h3_hex" in campaign_geo_unit:
@@ -82,7 +84,7 @@ async def get_active_multiplier(
     effect_config = row[0] or {}
     return {
         "active": True,
-        "multiplier": float(effect_config.get("multiplier", 1)),
+        "multiplier": float(effect_config.get("multiplier", settings.get("hotspot_multiplier", 1))),
         "title": row[1],
     }
 
@@ -179,21 +181,23 @@ async def _evaluate_triggers(campaign_id: UUID):
             {"campaign_id": str(campaign_id)},
         )
 
+        settings = await get_game_settings(db)
+
         for trigger in triggers.fetchall():
             if trigger.condition_type == "report_count":
-                await _check_report_count_trigger(campaign_id, trigger, db)
+                await _check_report_count_trigger(campaign_id, trigger, db, settings)
             elif trigger.condition_type == "threshold_reached":
-                await _check_threshold_trigger(campaign_id, trigger, db)
+                await _check_threshold_trigger(campaign_id, trigger, db, settings)
             elif trigger.condition_type == "time_elapsed":
-                await _check_time_elapsed_trigger(campaign_id, trigger, db)
+                await _check_time_elapsed_trigger(campaign_id, trigger, db, settings)
 
         await db.commit()
 
 
-async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession):
+async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession, settings: dict):
     """Fire an event when total campaign-wide or geo-unit contributions cross a threshold."""
     config = trigger.condition_config
-    threshold = config.get("threshold", 1000)
+    threshold = config.get("threshold", settings.get("threshold_reached_default", 1000))
     metric = config.get("metric", "total_value")  # 'total_value' | 'contribution_count'
     geo_unit_id = config.get("geo_unit_id")
 
@@ -236,13 +240,14 @@ async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession)
     if existing.fetchone():
         return
 
+    threshold_duration_hours = int(settings.get("threshold_reached_event_duration_hours", 168))
     await db.execute(
         text("""
             INSERT INTO campaign_events
                 (campaign_id, trigger_id, geo_unit_id, event_type, title, description, effect_config, ends_at)
             VALUES
                 (:campaign_id, :trigger_id, :geo_unit_id, :event_type,
-                 :title, :description, :effect_config, NOW() + INTERVAL '7 days')
+                 :title, :description, :effect_config, NOW() + (:duration_hours * INTERVAL '1 hour'))
         """),
         {
             "campaign_id": str(campaign_id),
@@ -252,14 +257,15 @@ async def _check_threshold_trigger(campaign_id: UUID, trigger, db: AsyncSession)
             "title": config.get("title", f"Milestone reached — {int(current_value):,} {metric.replace('_', ' ')}!"),
             "description": config.get("description", "A campaign milestone has been hit. Keep the momentum going!"),
             "effect_config": json.dumps(trigger.effect_config) if isinstance(trigger.effect_config, dict) else trigger.effect_config,
+            "duration_hours": threshold_duration_hours,
         },
     )
 
 
-async def _check_time_elapsed_trigger(campaign_id: UUID, trigger, db: AsyncSession):
+async def _check_time_elapsed_trigger(campaign_id: UUID, trigger, db: AsyncSession, settings: dict):
     """Fire when the campaign has been running for at least elapsed_hours since it became active."""
     config = trigger.condition_config or {}
-    elapsed_hours = config.get("elapsed_hours", 24)
+    elapsed_hours = config.get("elapsed_hours", settings.get("time_elapsed_default_hours", 24))
 
     result = await db.execute(
         text("""
@@ -283,7 +289,7 @@ async def _check_time_elapsed_trigger(campaign_id: UUID, trigger, db: AsyncSessi
     if existing.fetchone():
         return
 
-    duration_hours = int(config.get("duration_hours", 48))
+    duration_hours = int(config.get("duration_hours", settings.get("time_elapsed_event_duration_hours_default", 48)))
     await db.execute(
         text("""
             INSERT INTO campaign_events
@@ -304,9 +310,9 @@ async def _check_time_elapsed_trigger(campaign_id: UUID, trigger, db: AsyncSessi
     )
 
 
-async def _check_report_count_trigger(campaign_id: UUID, trigger, db: AsyncSession):
+async def _check_report_count_trigger(campaign_id: UUID, trigger, db: AsyncSession, settings: dict):
     config = trigger.condition_config
-    threshold = config.get("threshold", 5)
+    threshold = config.get("threshold", settings.get("report_count_threshold_default", 5))
     geo_unit_id = config.get("geo_unit_id")
 
     query_params = {"campaign_id": str(campaign_id), "threshold": threshold}
@@ -343,7 +349,7 @@ async def _check_report_count_trigger(campaign_id: UUID, trigger, db: AsyncSessi
         if existing.fetchone():
             continue
 
-        duration_hours = int(config.get("duration_hours", 72))
+        duration_hours = int(config.get("duration_hours", settings.get("hotspot_event_duration_hours", 72)))
         await db.execute(
             text("""
                 INSERT INTO campaign_events (campaign_id, trigger_id, geo_unit_id, event_type, title, description, effect_config, ends_at)

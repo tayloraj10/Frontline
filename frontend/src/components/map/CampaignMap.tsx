@@ -795,6 +795,28 @@ function TerritoryPanel({
   const [cleanupPhotos, setCleanupPhotos] = useState<string[]>([]);
   const [showPointsInfo, setShowPointsInfo] = useState(false);
   const [bagTotals, setBagTotals] = useState({ small: 0, large: 0 });
+  const [pointValues, setPointValues] = useState({ small_bag_value: 1, large_bag_value: 3, pound_value: 0.5 });
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .schema("public")
+      .from("game_settings")
+      .select("key, value")
+      .in("key", ["small_bag_value", "large_bag_value", "pound_value"])
+      .then(({ data }) => {
+        if (!data) return;
+        setPointValues((prev) => {
+          const next = { ...prev };
+          for (const row of data as { key: string; value: number }[]) {
+            if (row.key === "small_bag_value") next.small_bag_value = row.value;
+            else if (row.key === "large_bag_value") next.large_bag_value = row.value;
+            else if (row.key === "pound_value") next.pound_value = row.value;
+          }
+          return next;
+        });
+      });
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -1112,10 +1134,12 @@ function TerritoryPanel({
             <button onClick={() => setShowPointsInfo(false)} className="text-lg leading-none text-zinc-600 hover:text-zinc-300">×</button>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            The ranking total is measured in points, not a literal bag count. Small bags are worth 1 point,
-            large bags are worth 3 points, and pound-based cleanups convert at 0.5 points per pound. The
-            &quot;bags picked up&quot; line below it is the actual physical bag count (small + large), the
-            real-world impact this campaign is about, so the two numbers won&apos;t always match.
+            The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
+            {pointValues.small_bag_value} point{pointValues.small_bag_value !== 1 ? "s" : ""}, large bags are
+            worth {pointValues.large_bag_value} points, and pound-based cleanups convert at{" "}
+            {pointValues.pound_value} points per pound. The &quot;bags picked up&quot; line below it is the
+            actual physical bag count (small + large), the real-world impact this campaign is about, so the
+            two numbers won&apos;t always match.
           </p>
         </div>
       </div>

@@ -7,24 +7,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/problem-reports", tags=["problem-reports"])
-
-# "Claim-a-report" challenge mode timers/rewards (Trash War backlog item #3).
-# Arrival + before-photo window is flat regardless of severity; the after-photo
-# (clean-up) window scales with severity since more severe sites take longer to clear.
-CLAIM_BEFORE_WINDOW_MINUTES = 30
-CLAIM_AFTER_WINDOW_MINUTES = {"low": 20, "medium": 30, "high": 45}
-CLAIM_RECLAIM_COOLDOWN_MINUTES = 15
-CLAIM_CHALLENGE_MULTIPLIER = 1.5
-FLAG_AUTO_HIDE_THRESHOLD = 3
-
-# Same proximity convention as HOTSPOT_PROXIMITY_METERS_UK/US in contributions.py (and the
-# REPORT_CLAIM_RADIUS_METERS_* circle already drawn on the map) — reused here so a claim's
-# before/after photo has to be submitted from roughly the same spot a plain in-range cleanup
-# would require, with enough slack for a report pin that isn't pixel-perfect.
-CLAIM_PROXIMITY_METERS_UK = 100.0
-CLAIM_PROXIMITY_METERS_US = 91.44  # 300 ft
 
 
 class ProblemReportRequest(BaseModel):
@@ -59,6 +44,7 @@ class FlagReportRequest(BaseModel):
 async def _assert_within_claim_radius(report_id: UUID, lat: float, lon: float, db: AsyncSession) -> None:
     """Re-verify proximity server-side rather than trusting the client's own distance
     calculation, mirroring the existing hotspot-resolve proximity check in contributions.py."""
+    settings = await get_game_settings(db)
     check = await db.execute(
         text("""
             SELECT ST_DWithin(
@@ -75,8 +61,8 @@ async def _assert_within_claim_radius(report_id: UUID, lat: float, lon: float, d
             "report_id": str(report_id),
             "lat": lat,
             "lon": lon,
-            "threshold_uk": CLAIM_PROXIMITY_METERS_UK,
-            "threshold_us": CLAIM_PROXIMITY_METERS_US,
+            "threshold_uk": settings.get("claim_proximity_meters_uk", 100.0),
+            "threshold_us": settings.get("claim_proximity_meters_us", 91.44),
         },
     )
     row = check.fetchone()
@@ -221,7 +207,9 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
         {"campaign_id": str(campaign_id)},
     )
     trigger_row = trigger_result.fetchone()
-    threshold = (trigger_row.condition_config or {}).get("threshold", 5) if trigger_row else None
+    settings = await get_game_settings(db)
+    default_threshold = settings.get("report_count_threshold_default", 5)
+    threshold = (trigger_row.condition_config or {}).get("threshold", default_threshold) if trigger_row else None
 
     return {
         "reports": [
@@ -248,7 +236,7 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
         ],
         "counts_by_geo_unit": counts,
         "threshold": threshold,
-        "flag_auto_hide_threshold": FLAG_AUTO_HIDE_THRESHOLD,
+        "flag_auto_hide_threshold": settings.get("flag_auto_hide_threshold", 3),
     }
 
 
@@ -258,6 +246,7 @@ async def claim_problem_report(report_id: UUID, payload: ClaimRequest, db: Async
     arrival + before-photo timer. Reverting the plain in-range cleanup flow is unaffected —
     an unclaimed open report can still be resolved that way."""
     await _expire_stale_claim(report_id, db)
+    settings = await get_game_settings(db)
 
     cooldown_check = await db.execute(
         text("""
@@ -290,14 +279,15 @@ async def claim_problem_report(report_id: UUID, payload: ClaimRequest, db: Async
         and str(report_row.claimed_by_user_id) == str(payload.user_id)
         and report_row.claim_released_at
     ):
+        reclaim_cooldown = settings.get("claim_reclaim_cooldown_minutes", 15)
         cooldown_check2 = await db.execute(
             text("SELECT NOW() - :released_at < make_interval(mins => :cooldown)"),
-            {"released_at": report_row.claim_released_at, "cooldown": CLAIM_RECLAIM_COOLDOWN_MINUTES},
+            {"released_at": report_row.claim_released_at, "cooldown": reclaim_cooldown},
         )
         if cooldown_check2.scalar():
             raise HTTPException(
                 status_code=429,
-                detail=f"You must wait before reclaiming this report again ({CLAIM_RECLAIM_COOLDOWN_MINUTES} min cooldown)",
+                detail=f"You must wait before reclaiming this report again ({reclaim_cooldown:g} min cooldown)",
             )
 
     result = await db.execute(
@@ -313,7 +303,11 @@ async def claim_problem_report(report_id: UUID, payload: ClaimRequest, db: Async
             WHERE id = :report_id AND status = 'open'
             RETURNING claim_before_deadline_at
         """),
-        {"report_id": str(report_id), "user_id": str(payload.user_id), "window": CLAIM_BEFORE_WINDOW_MINUTES},
+        {
+            "report_id": str(report_id),
+            "user_id": str(payload.user_id),
+            "window": settings.get("claim_before_window_minutes", 30),
+        },
     )
     row = result.fetchone()
     if not row:
@@ -330,6 +324,7 @@ async def submit_claim_before_photo(
     """Submit the arrival/before photo, moving the claim into its clean-up window."""
     await _expire_stale_claim(report_id, db)
     await _assert_within_claim_radius(report_id, payload.latitude, payload.longitude, db)
+    settings = await get_game_settings(db)
 
     severity_result = await db.execute(
         text("SELECT severity FROM problem_reports WHERE id = :report_id"),
@@ -338,7 +333,12 @@ async def submit_claim_before_photo(
     severity_row = severity_result.fetchone()
     if not severity_row:
         raise HTTPException(status_code=404, detail="Report not found")
-    after_window = CLAIM_AFTER_WINDOW_MINUTES.get(severity_row.severity, CLAIM_AFTER_WINDOW_MINUTES["medium"])
+    after_window_by_severity = {
+        "low": settings.get("claim_after_window_minutes_low", 20),
+        "medium": settings.get("claim_after_window_minutes_medium", 30),
+        "high": settings.get("claim_after_window_minutes_high", 45),
+    }
+    after_window = after_window_by_severity.get(severity_row.severity, after_window_by_severity["medium"])
 
     result = await db.execute(
         text("""
@@ -421,10 +421,11 @@ async def submit_claim_after_photo(
                 {"campaign_id": str(campaign_id), "geo_unit_id": geo_unit_id},
             )
 
+    settings = await get_game_settings(db)
     await db.commit()
     return {
         "status": "addressed",
-        "challenge_multiplier": CLAIM_CHALLENGE_MULTIPLIER,
+        "challenge_multiplier": settings.get("claim_challenge_multiplier", 1.5),
         "report_id": str(report_id),
     }
 
@@ -464,8 +465,9 @@ async def release_problem_report_claim(
 @router.post("/{report_id}/flag")
 async def flag_problem_report(report_id: UUID, payload: FlagReportRequest, db: AsyncSession = Depends(get_db)):
     """Report a trash report as inaccurate (wrong location, no actual trash, etc). Once
-    FLAG_AUTO_HIDE_THRESHOLD distinct users have flagged it, it's auto-pulled from the map
-    ('flagged' status) pending manual review, and any active claim on it is released."""
+    the flag_auto_hide_threshold setting's number of distinct users have flagged it, it's
+    auto-pulled from the map ('flagged' status) pending manual review, and any active
+    claim on it is released."""
     exists = await db.execute(
         text("SELECT 1 FROM problem_reports WHERE id = :report_id"),
         {"report_id": str(report_id)},
@@ -487,9 +489,10 @@ async def flag_problem_report(report_id: UUID, payload: FlagReportRequest, db: A
         {"report_id": str(report_id)},
     )
     flag_count = count_result.scalar() or 0
+    settings = await get_game_settings(db)
 
     auto_hidden = False
-    if flag_count >= FLAG_AUTO_HIDE_THRESHOLD:
+    if flag_count >= settings.get("flag_auto_hide_threshold", 3):
         hide_result = await db.execute(
             text("""
                 UPDATE problem_reports
@@ -526,6 +529,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
         {"campaign_id": str(campaign_id), "geo_unit_id": geo_unit_id},
     )
     report_count = count_result.scalar() or 0
+    settings = await get_game_settings(db)
 
     triggers = await db.execute(
         text("""
@@ -537,7 +541,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
     )
 
     for trigger in triggers.fetchall():
-        threshold = (trigger.condition_config or {}).get("threshold", 5)
+        threshold = (trigger.condition_config or {}).get("threshold", settings.get("report_count_threshold_default", 5))
         if report_count < threshold:
             continue
 
@@ -554,8 +558,9 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
             continue
 
         effect_config = trigger.effect_config or {}
-        multiplier = effect_config.get("multiplier")
+        multiplier = effect_config.get("multiplier", settings.get("hotspot_multiplier", 1))
         bonus_text = f"a {multiplier}× score multiplier" if multiplier else "bonus XP"
+        duration_hours = int(settings.get("hotspot_event_duration_hours", 72))
 
         await db.execute(
             text("""
@@ -564,7 +569,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
                 VALUES
                     (:campaign_id, :trigger_id, :geo_unit_id, :event_type, :title, :description,
                      CAST(:effect_config AS jsonb),
-                     NOW() + INTERVAL '72 hours')
+                     NOW() + make_interval(hours => :duration_hours))
             """),
             {
                 "campaign_id": str(campaign_id),
@@ -572,7 +577,8 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
                 "geo_unit_id": geo_unit_id,
                 "event_type": trigger.event_type,
                 "title": "Trash Hotspot — Surge Needed!",
-                "description": f"Reports have reached critical mass. Clean it up in 72 hours for {bonus_text}!",
+                "description": f"Reports have reached critical mass. Clean it up in {duration_hours:g} hours for {bonus_text}!",
                 "effect_config": json.dumps(effect_config),
+                "duration_hours": duration_hours,
             },
         )

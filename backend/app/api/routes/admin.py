@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.database import get_db
 from app.services import geo
+from app.services.game_settings import get_game_settings as get_game_balance_settings
 from app.services.seeders import GEO_UNIT_SEEDERS, REGISTRY, GeoUnitType, StatesSeeder
 from app.services.seeders.cleanup_rsvps import CleanupTestAttendeesSeeder
 from app.services.seeders.demo_data import DemoDataSeeder, _uid as _demo_uid
@@ -599,6 +600,8 @@ async def recompute_user_points(user_id: str, db: AsyncSession = Depends(get_db)
     if not profile_row:
         raise HTTPException(404, "User not found")
 
+    game_settings = await get_game_balance_settings(db)
+
     before = (
         await db.execute(
             text("SELECT points, spendable_points FROM profiles WHERE id = :id"),
@@ -633,7 +636,7 @@ async def recompute_user_points(user_id: str, db: AsyncSession = Depends(get_db)
         )
     ).scalar()
 
-    lifetime_points = contribution_total + report_total
+    lifetime_points = contribution_total + report_total * game_settings.get("trash_report_value", 1)
     spendable_points = lifetime_points - redeemed_total
 
     await db.execute(

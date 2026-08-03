@@ -11,7 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.services.contribution_scoring import LARGE_BAG_VALUE, POUND_VALUE, SMALL_BAG_VALUE, record_contribution
+from app.services.contribution_scoring import record_contribution
+from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
 
@@ -19,9 +20,8 @@ router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
 # alternative to a single point, usable by individuals, groups, and group events.
 routes_router = APIRouter(prefix="/cleanup-routes", tags=["cleanup-routes"])
 
-# How close (and how early/late) a check-in may be relative to the event's own location
-# and schedule. Named alongside contributions.py's HOTSPOT_PROXIMITY_METERS_* constants.
-CLEANUP_EVENT_PROXIMITY_METERS = 150.0
+# How early/late a check-in may be relative to the event's own schedule. Proximity is
+# now the admin-editable `cleanup_event_proximity_meters` game_settings row instead.
 CLEANUP_EVENT_GRACE_MINUTES_BEFORE = 30
 CLEANUP_EVENT_GRACE_MINUTES_AFTER = 120
 
@@ -471,6 +471,7 @@ async def list_group_cleanup_events(group_id: UUID, db: AsyncSession = Depends(g
 async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
     """Single event detail for the RSVP/check-in page. join_code is only included
     when the viewer is a group admin, mirroring the omission in the list endpoint."""
+    settings = await get_game_settings(db)
     result = await db.execute(
         text("""
             SELECT c.id, c.campaign_id, cam.slug AS campaign_slug, c.title, c.description,
@@ -497,7 +498,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             ) cohosts ON true
             WHERE c.id = :id AND c.is_group_event = true
         """),
-        {"id": str(cleanup_id), "radius": CLEANUP_EVENT_PROXIMITY_METERS},
+        {"id": str(cleanup_id), "radius": settings.get("cleanup_event_proximity_meters", 150.0)},
     )
     row = result.fetchone()
     if not row:
@@ -667,7 +668,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "logging_mode": row.logging_mode,
         "check_in_window_start": check_in_window_start.isoformat() if check_in_window_start else None,
         "check_in_window_end": check_in_window_end.isoformat() if check_in_window_end else None,
-        "check_in_radius_meters": CLEANUP_EVENT_PROXIMITY_METERS,
+        "check_in_radius_meters": settings.get("cleanup_event_proximity_meters", 150.0),
     }
 
 
@@ -934,6 +935,7 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
         raise HTTPException(status_code=403, detail="Check-in is only available around the event's check-in window")
 
     if not payload.join_code:
+        settings = await get_game_settings(db)
         prox_result = await db.execute(
             text("""
                 SELECT ST_DWithin(
@@ -945,7 +947,7 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
             {
                 "lon": payload.longitude,
                 "lat": payload.latitude,
-                "threshold": CLEANUP_EVENT_PROXIMITY_METERS,
+                "threshold": settings.get("cleanup_event_proximity_meters", 150.0),
                 "id": str(cleanup_id),
             },
         )
@@ -1014,12 +1016,14 @@ async def log_for_attendee(cleanup_id: UUID, payload: LogForAttendeeRequest, db:
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can log a contribution for an attendee")
 
+    settings = await get_game_settings(db)
+
     # Pounds and bags are two ways of estimating the same haul (see log-team-total) —
     # both are always saved to the attendee's cleanups row below for the event's record,
     # but only the organizer-selected scoring_method determines points, so switching
     # methods in the UI doesn't silently drop the other field's value.
     if payload.scoring_method == "pounds":
-        value = (payload.pounds or 0) * POUND_VALUE
+        value = (payload.pounds or 0) * settings.get("pound_value", 0.5)
         small_bags = None
         large_bags = None
     else:
@@ -1120,10 +1124,14 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can log a team total")
 
+    settings = await get_game_settings(db)
+
     if payload.scoring_method == "pounds":
-        total_value = (payload.pounds or 0) * POUND_VALUE
+        total_value = (payload.pounds or 0) * settings.get("pound_value", 0.5)
     else:
-        total_value = (payload.small_bags or 0) * SMALL_BAG_VALUE + (payload.large_bags or 0) * LARGE_BAG_VALUE
+        total_value = (payload.small_bags or 0) * settings.get("small_bag_value", 1) + (
+            payload.large_bags or 0
+        ) * settings.get("large_bag_value", 3)
 
     overrides = {str(k): v for k, v in (payload.overrides or {}).items()}
     override_total = sum(overrides.values())
@@ -1433,6 +1441,7 @@ async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Dep
     the frontend derives its "is this an event route" styling/expiry purely from whether
     the id is still present in that events list, so a route left behind here silently
     renders forever as if it were a plain ad-hoc route instead of disappearing."""
+    settings = await get_game_settings(db)
     result = await db.execute(
         text(f"""
             SELECT
@@ -1460,7 +1469,7 @@ async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Dep
             ORDER BY c.created_at DESC
             LIMIT 500
         """),
-        {"campaign_id": str(campaign_id), "radius": CLEANUP_EVENT_PROXIMITY_METERS},
+        {"campaign_id": str(campaign_id), "radius": settings.get("cleanup_event_proximity_meters", 150.0)},
     )
     return [
         {
