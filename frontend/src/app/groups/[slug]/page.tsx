@@ -71,6 +71,8 @@ export default async function GroupProfilePage({ params }: Props) {
 
   const isMember = user ? members.some((m) => m.user_id === user.id) : false;
   const isAdmin = user ? members.some((m) => m.user_id === user.id && m.role === "admin") : false;
+  const adminCount = members.filter((m) => m.role === "admin").length;
+  const isOnlyAdmin = isAdmin && adminCount === 1;
 
   const groupEvents = await listGroupCleanupEvents(group.id).catch(() => []);
   const upcomingEvents = groupEvents.filter((e) => !e.is_past && e.status !== "cancelled");
@@ -154,8 +156,13 @@ export default async function GroupProfilePage({ params }: Props) {
               Edit group
             </Link>
           )}
-          {user && !isAdmin && (
-            <GroupMembershipButton groupId={group.id} userId={user.id} isMember={isMember} />
+          {user && (
+            <GroupMembershipButton
+              groupId={group.id}
+              userId={user.id}
+              isMember={isMember}
+              isOnlyAdmin={isOnlyAdmin}
+            />
           )}
           {!user && (
             <Link

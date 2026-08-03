@@ -95,6 +95,7 @@ export type OfferRedemption = {
 
 export type AdminGroup = Database["public"]["Tables"]["groups"]["Row"] & {
   applicant: { username: string | null; display_name: string | null } | null;
+  admin_count: number;
 };
 
 type Tab = "campaigns" | "triggers" | "events" | "partners" | "groups" | "leaderboard";
@@ -1526,6 +1527,14 @@ function CleanupEventWipeTool() {
 
 // ─── Partners Tab ─────────────────────────────────────────────────────────────
 
+type RedemptionDetail = {
+  id: string;
+  redeemed_at: string;
+  used_at: string | null;
+  points_spent: number;
+  profiles: { username: string | null; display_name: string | null } | null;
+};
+
 export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
   offer: PartnerOffer;
   redemptionCount: number;
@@ -1534,6 +1543,28 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [showRedemptions, setShowRedemptions] = useState(false);
+  const [redemptions, setRedemptions] = useState<RedemptionDetail[] | null>(null);
+  const [loadingRedemptions, setLoadingRedemptions] = useState(false);
+
+  const toggleRedemptions = async () => {
+    if (showRedemptions) {
+      setShowRedemptions(false);
+      return;
+    }
+    setShowRedemptions(true);
+    if (redemptions !== null) return;
+    setLoadingRedemptions(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .schema("public")
+      .from("partner_redemptions")
+      .select("id, redeemed_at, used_at, points_spent, profiles(username, display_name)")
+      .eq("offer_id", offer.id)
+      .order("redeemed_at", { ascending: false });
+    setRedemptions((data ?? []) as unknown as RedemptionDetail[]);
+    setLoadingRedemptions(false);
+  };
 
   const handleEditOffer = async (payload: OfferFormPayload): Promise<string | null> => {
     const supabase = createClient();
@@ -1592,9 +1623,53 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
               ? <span className="text-zinc-500">{offer.points_cost} pts</span>
               : <span className="text-zinc-500">{offer.points_threshold}+ pts to unlock</span>}
             <StatusBadge status={offer.status} />
-            <span className="text-zinc-600">{redemptionCount}/{offer.max_total_redemptions ?? "∞"} redeemed</span>
+            {redemptionCount > 0 ? (
+              <button
+                type="button"
+                onClick={toggleRedemptions}
+                className="text-zinc-500 hover:text-zinc-300 underline decoration-dotted transition-colors"
+              >
+                {redemptionCount}/{offer.max_total_redemptions ?? "∞"} redeemed
+              </button>
+            ) : (
+              <span className="text-zinc-600">{redemptionCount}/{offer.max_total_redemptions ?? "∞"} redeemed</span>
+            )}
             {offer.code && <span className="text-zinc-600 font-mono">code: {offer.code}</span>}
           </div>
+          {showRedemptions && (
+            <div className="mt-2 border border-zinc-800 rounded-lg divide-y divide-zinc-800/60 overflow-hidden">
+              {loadingRedemptions ? (
+                <p className="px-3 py-2 text-xs text-zinc-600">Loading…</p>
+              ) : redemptions && redemptions.length > 0 ? (
+                redemptions.map((r) => (
+                  <div key={r.id} className="px-3 py-1.5 flex items-center justify-between gap-3 text-xs">
+                    <span className="text-zinc-400 truncate">
+                      {r.profiles?.display_name ?? r.profiles?.username ?? "Unknown user"}
+                    </span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="text-zinc-600">
+                        {new Date(r.redeemed_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </span>
+                      {r.used_at ? (
+                        <span
+                          title={`Used ${new Date(r.used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`}
+                          className="text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 cursor-help"
+                        >
+                          Used
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5">
+                          Not used
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="px-3 py-2 text-xs text-zinc-600">No redemptions yet.</p>
+              )}
+            </div>
+          )}
         </div>
         {offer.status !== "cancelled" && (
           <div className="flex items-center gap-2 shrink-0">
@@ -2174,6 +2249,7 @@ function GroupCard({
   const isPending = group.status === "pending";
   const isRejected = group.status === "rejected";
   const isApproved = group.status === "approved";
+  const hasNoAdmin = isApproved && group.admin_count === 0;
   const [expanded, setExpanded] = useState(isPending);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2321,6 +2397,14 @@ function GroupCard({
               className="text-xs text-zinc-500 hover:text-red-400 transition-colors px-2 py-1"
             >
               Delete
+            </span>
+          )}
+          {hasNoAdmin && (
+            <span
+              title="This group has no admin. Add someone to group_members with role='admin' to give it one."
+              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 cursor-help"
+            >
+              ⚠️ No admin
             </span>
           )}
           <StatusBadge status={group.status} />
@@ -2556,10 +2640,18 @@ function GroupsTab({ groups, setGroups, currentUserId }: { groups: AdminGroup[];
   const pendingGroups = groups.filter(g => g.status === "pending");
   const rejectedGroups = groups.filter(g => g.status === "rejected");
   const approvedGroups = groups.filter(g => g.status === "approved");
+  const noAdminCount = approvedGroups.filter(g => g.admin_count === 0).length;
 
   return (
     <div className="space-y-4">
-      <span className="text-sm text-zinc-500">{groups.length} group{groups.length !== 1 ? "s" : ""}</span>
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-sm text-zinc-500">{groups.length} group{groups.length !== 1 ? "s" : ""}</span>
+        {noAdminCount > 0 && (
+          <span className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5">
+            ⚠️ {noAdminCount} with no admin
+          </span>
+        )}
+      </div>
 
       {pendingGroups.length > 0 && (
         <div className="space-y-2">

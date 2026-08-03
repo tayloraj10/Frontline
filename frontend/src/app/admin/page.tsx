@@ -74,9 +74,20 @@ export default async function AdminPage() {
     ? await supabase.schema("public").from("profiles").select("id, username, display_name").in("id", applicantIds)
     : { data: [] as { id: string; username: string | null; display_name: string | null }[] };
   const applicantsById = new Map((applicantProfiles ?? []).map((p) => [p.id, { username: p.username, display_name: p.display_name }]));
+
+  const groupIds = (groups ?? []).map((g) => g.id);
+  const { data: adminMemberships } = groupIds.length > 0
+    ? await supabase.from("group_members").select("group_id").eq("role", "admin").in("group_id", groupIds)
+    : { data: [] as { group_id: string }[] };
+  const adminCountByGroup = new Map<string, number>();
+  for (const m of adminMemberships ?? []) {
+    adminCountByGroup.set(m.group_id, (adminCountByGroup.get(m.group_id) ?? 0) + 1);
+  }
+
   const groupsWithApplicant = (groups ?? []).map((g) => ({
     ...g,
     applicant: g.created_by ? applicantsById.get(g.created_by) ?? null : null,
+    admin_count: adminCountByGroup.get(g.id) ?? 0,
   }));
 
   const eventCampaignIds = [...new Set((activeEvents ?? []).map((e) => e.campaign_id).filter(Boolean) as string[])];
