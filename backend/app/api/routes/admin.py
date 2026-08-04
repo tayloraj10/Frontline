@@ -680,6 +680,8 @@ async def preview_campaign_spendable_points_impact(db: AsyncSession, campaign_id
     if not campaign_row:
         raise HTTPException(404, "Campaign not found")
 
+    game_settings = await get_game_balance_settings(db)
+
     rows = (
         await db.execute(
             text("""
@@ -694,32 +696,45 @@ async def preview_campaign_spendable_points_impact(db: AsyncSession, campaign_id
                     UNION
                     SELECT DISTINCT submitted_by_user_id AS id FROM problem_reports
                     WHERE campaign_id = :campaign_id AND submitted_by_user_id IS NOT NULL
+                ),
+                computed AS (
+                    SELECT
+                        p.id,
+                        p.username,
+                        p.points AS current_points,
+                        p.points AS new_points,
+                        p.spendable_points AS current_spendable_points,
+                        COALESCE(c.total, 0) + COALESCE(r.total, 0) - COALESCE(rd.total, 0) AS new_spendable_points
+                    FROM affected_users au
+                    JOIN profiles p ON p.id = au.id
+                    LEFT JOIN (
+                        SELECT co.user_id, SUM(contribution_points(co.contribution_type, co.value)) AS total
+                        FROM contributions co
+                        WHERE co.campaign_id IN (SELECT id FROM effective_campaigns)
+                        GROUP BY co.user_id
+                    ) c ON c.user_id = p.id
+                    LEFT JOIN (
+                        SELECT pr.submitted_by_user_id AS user_id, COUNT(*) * CAST(:trash_report_value AS numeric) AS total
+                        FROM problem_reports pr
+                        WHERE pr.campaign_id IN (SELECT id FROM effective_campaigns)
+                        GROUP BY pr.submitted_by_user_id
+                    ) r ON r.user_id = p.id
+                    LEFT JOIN (
+                        SELECT user_id, SUM(points_spent) AS total FROM partner_redemptions GROUP BY user_id
+                    ) rd ON rd.user_id = p.id
                 )
-                SELECT
-                    p.id,
-                    p.username,
-                    p.spendable_points AS current_spendable_points,
-                    COALESCE(c.total, 0) + COALESCE(r.total, 0) - COALESCE(rd.total, 0) AS new_spendable_points
-                FROM affected_users au
-                JOIN profiles p ON p.id = au.id
-                LEFT JOIN (
-                    SELECT co.user_id, SUM(contribution_points(co.contribution_type, co.value)) AS total
-                    FROM contributions co
-                    WHERE co.campaign_id IN (SELECT id FROM effective_campaigns)
-                    GROUP BY co.user_id
-                ) c ON c.user_id = p.id
-                LEFT JOIN (
-                    SELECT pr.submitted_by_user_id AS user_id, COUNT(*) AS total
-                    FROM problem_reports pr
-                    WHERE pr.campaign_id IN (SELECT id FROM effective_campaigns)
-                    GROUP BY pr.submitted_by_user_id
-                ) r ON r.user_id = p.id
-                LEFT JOIN (
-                    SELECT user_id, SUM(points_spent) AS total FROM partner_redemptions GROUP BY user_id
-                ) rd ON rd.user_id = p.id
-                ORDER BY p.username
+                -- Lifetime "points" is never affected by this toggle (only spendable_points
+                -- is), so new_points always equals current_points here; the column exists
+                -- purely so this preview reads the same shape as the recompute-all preview.
+                SELECT * FROM computed
+                WHERE new_spendable_points IS DISTINCT FROM current_spendable_points
+                ORDER BY username
             """),
-            {"campaign_id": campaign_id, "enabled": enabled},
+            {
+                "campaign_id": campaign_id,
+                "enabled": enabled,
+                "trash_report_value": game_settings.get("trash_report_value", 1),
+            },
         )
     ).fetchall()
 
@@ -734,6 +749,8 @@ async def preview_campaign_spendable_points_impact(db: AsyncSession, campaign_id
             {
                 "id": str(r.id),
                 "username": r.username,
+                "current_points": float(r.current_points),
+                "new_points": float(r.new_points),
                 "current_spendable_points": float(r.current_spendable_points),
                 "new_spendable_points": float(r.new_spendable_points),
             }
@@ -823,8 +840,8 @@ _POINTS_RECOMPUTE_TOTALS_CTE = """
     report_totals AS (
         SELECT
             pr.submitted_by_user_id AS id,
-            COUNT(*) AS lifetime_total,
-            COUNT(*) FILTER (WHERE ca.counts_toward_spendable_points) AS spendable_total
+            COUNT(*) * CAST(:trash_report_value AS numeric) AS lifetime_total,
+            COUNT(*) FILTER (WHERE ca.counts_toward_spendable_points) * CAST(:trash_report_value AS numeric) AS spendable_total
         FROM problem_reports pr
         JOIN campaigns ca ON ca.id = pr.campaign_id
         WHERE pr.submitted_by_user_id IS NOT NULL
@@ -851,6 +868,7 @@ async def preview_points_recompute_impact(db: AsyncSession) -> dict:
     spendable_points, or as a general drift-correction sweep. Only returns users whose
     recomputed totals differ from what's currently stored.
     """
+    game_settings = await get_game_balance_settings(db)
     rows = (
         await db.execute(
             text(f"""
@@ -869,7 +887,8 @@ async def preview_points_recompute_impact(db: AsyncSession) -> dict:
                 WHERE p.points IS DISTINCT FROM (COALESCE(c.lifetime_total, 0) + COALESCE(r.lifetime_total, 0))
                    OR p.spendable_points IS DISTINCT FROM (COALESCE(c.spendable_total, 0) + COALESCE(r.spendable_total, 0) - COALESCE(rd.total, 0))
                 ORDER BY p.username
-            """)
+            """),
+            {"trash_report_value": game_settings.get("trash_report_value", 1)},
         )
     ).fetchall()
 
@@ -899,6 +918,7 @@ async def recompute_all_points(db: AsyncSession) -> dict:
     overwritten with a from-scratch resum of their current contributions/reports/
     redemptions. Notifies any user whose balance actually changes.
     """
+    game_settings = await get_game_balance_settings(db)
     updated = (
         await db.execute(
             text(f"""
@@ -921,7 +941,8 @@ async def recompute_all_points(db: AsyncSession) -> dict:
                     p.points AS new_points,
                     ov.spendable_points AS old_spendable_points,
                     p.spendable_points AS new_spendable_points
-            """)
+            """),
+            {"trash_report_value": game_settings.get("trash_report_value", 1)},
         )
     ).fetchall()
 

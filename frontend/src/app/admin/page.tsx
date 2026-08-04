@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "./AdminPanel";
 import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink, AdminGroup, GameSetting } from "./AdminPanel";
@@ -41,7 +42,7 @@ export default async function AdminPage() {
     supabase
       .schema("public")
       .from("event_triggers")
-      .select("id, name, condition_type, event_type, cooldown_hours, is_active, campaign_id, campaigns(title, slug)")
+      .select("id, name, condition_type, condition_config, event_type, cooldown_hours, is_active, campaign_id, campaigns(title, slug)")
       .order("campaign_id"),
     supabase
       .schema("public")
@@ -66,8 +67,8 @@ export default async function AdminPage() {
     supabase
       .schema("public")
       .from("game_settings")
-      .select("key, value, category, label, description")
-      .order("category"),
+      .select("key, value, category, label, description, sort_order")
+      .order("sort_order"),
   ]);
 
   const { data: businessCampaignLinks } = await supabase
@@ -107,17 +108,19 @@ export default async function AdminPage() {
   }));
 
   return (
-    <AdminPanel
-      initialCampaigns={(campaigns ?? []) as Campaign[]}
-      initialEvents={eventsWithCampaigns as unknown as ActiveEvent[]}
-      initialTriggers={(triggers ?? []) as unknown as Trigger[]}
-      initialBusinesses={(businesses ?? []) as PartnerBusiness[]}
-      initialOffers={(offers ?? []) as PartnerOffer[]}
-      initialOfferRedemptions={(redemptions ?? []) as OfferRedemption[]}
-      initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
-      initialGroups={groupsWithApplicant as AdminGroup[]}
-      currentUserId={user.id}
-      initialSettings={(gameSettings ?? []) as GameSetting[]}
-    />
+    <Suspense>
+      <AdminPanel
+        initialCampaigns={(campaigns ?? []) as Campaign[]}
+        initialEvents={eventsWithCampaigns as unknown as ActiveEvent[]}
+        initialTriggers={(triggers ?? []) as unknown as Trigger[]}
+        initialBusinesses={(businesses ?? []) as PartnerBusiness[]}
+        initialOffers={(offers ?? []) as PartnerOffer[]}
+        initialOfferRedemptions={(redemptions ?? []) as OfferRedemption[]}
+        initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
+        initialGroups={groupsWithApplicant as AdminGroup[]}
+        currentUserId={user.id}
+        initialSettings={(gameSettings ?? []) as GameSetting[]}
+      />
+    </Suspense>
   );
 }

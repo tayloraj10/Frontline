@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatPoints } from "@/lib/formatPoints";
 import type { Database } from "@/types/database";
 import UserActivityList from "@/components/contributions/UserActivityList";
 
@@ -174,7 +175,7 @@ export default async function UserProfilePage({ params }: Props) {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         {[
-          { label: "Points", value: Math.round(profile.points ?? 0).toLocaleString() },
+          { label: "Points", value: formatPoints(profile.points ?? 0) },
           { label: "Contributions", value: (contribCount ?? 0).toLocaleString() },
           { label: "Territories claimed", value: totalTractsCount.toLocaleString() },
           { label: "Groups", value: (membersData?.length ?? 0).toLocaleString() },
@@ -211,7 +212,7 @@ export default async function UserProfilePage({ params }: Props) {
                   </Link>
                   <div className="text-right shrink-0">
                     <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-                      {Math.round(stats.total_value).toLocaleString()} {unit}
+                      {formatPoints(stats.total_value)} {unit}
                     </div>
                     {stats.small_bags + stats.large_bags > 0 && (
                       <div className="text-[11px] text-zinc-600 tabular-nums">

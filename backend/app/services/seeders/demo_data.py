@@ -773,7 +773,11 @@ class DemoDataSeeder(Seeder):
             except Exception as exc:
                 result.errors.append(f"event {ev['id']}: {exc}")
 
-        # Seed report_count event_trigger so hotspot threshold shows in territory panel
+        # Seed report_count event_trigger so hotspot threshold shows in territory panel.
+        # threshold is read from game_settings.report_count_threshold_default rather than
+        # hardcoded, since that setting is the single source of truth for this value (an
+        # UPDATE trigger keeps existing rows in sync — see migration 058 — but a fresh
+        # INSERT here needs to read it directly to avoid seeding a stale number).
         try:
             await db.execute(
                 text("""
@@ -782,7 +786,10 @@ class DemoDataSeeder(Seeder):
                          event_type, effect_config, is_active)
                     VALUES
                         (:id, :cid, 'Trash Hotspot Trigger', 'report_count',
-                         '{"threshold": 3}'::jsonb, 'boss_spawn',
+                         jsonb_build_object(
+                             'threshold',
+                             (SELECT value FROM game_settings WHERE key = 'report_count_threshold_default')
+                         ), 'boss_spawn',
                          '{"type": "score_multiplier", "multiplier": 2.0}'::jsonb, TRUE)
                     ON CONFLICT (id) DO UPDATE SET
                         condition_config = EXCLUDED.condition_config,

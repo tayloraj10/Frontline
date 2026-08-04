@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { SelectedArea } from "./EventAreaMapPicker";
 import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
@@ -44,6 +45,7 @@ export type Trigger = {
   id: string;
   name: string;
   condition_type: string;
+  condition_config: Json | null;
   event_type: string;
   cooldown_hours: number;
   is_active: boolean;
@@ -104,9 +106,11 @@ export type GameSetting = {
   category: string;
   label: string;
   description: string | null;
+  sort_order: number;
 };
 
-type Tab = "campaigns" | "triggers" | "events" | "partners" | "groups" | "leaderboard" | "settings";
+const TAB_VALUES = ["campaigns", "triggers", "events", "partners", "groups", "leaderboard", "settings"] as const;
+type Tab = (typeof TAB_VALUES)[number];
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -223,7 +227,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
   const [spendableImpact, setSpendableImpact] = useState<{
     campaign: Campaign;
     enabled: boolean;
-    users: { id: string; username: string; current_spendable_points: number; new_spendable_points: number }[];
+    users: { id: string; username: string; current_points: number; new_points: number; current_spendable_points: number; new_spendable_points: number }[];
   } | null>(null);
   const [spendableLoading, setSpendableLoading] = useState(false);
   const [spendableError, setSpendableError] = useState<string | null>(null);
@@ -556,32 +560,39 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                   afterward to actually apply it and notify affected users.
                 </p>
                 {spendableImpact.users.length === 0 ? (
-                  <p className="text-xs text-zinc-600">No users have contributions or reports on this campaign — no balances would change.</p>
+                  <p className="text-xs text-zinc-600">No users would be affected — everyone's spendable balance already matches what it would be.</p>
                 ) : (
                   <div className="border border-zinc-800 rounded-lg overflow-hidden">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-zinc-800 bg-zinc-900/60">
                           <th className="text-left px-3 py-2 text-zinc-500 font-medium">User</th>
-                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Current</th>
-                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">New</th>
-                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Change</th>
+                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Points</th>
+                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Points change</th>
+                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Spendable</th>
+                          <th className="text-right px-3 py-2 text-zinc-500 font-medium">Spendable change</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/60">
                         {[...spendableImpact.users]
                           .sort((a, b) => Math.abs(b.new_spendable_points - b.current_spendable_points) - Math.abs(a.new_spendable_points - a.current_spendable_points))
                           .map(u => {
-                            const change = u.new_spendable_points - u.current_spendable_points;
+                            const pointsChange = u.new_points - u.current_points;
+                            const spendableChange = u.new_spendable_points - u.current_spendable_points;
                             return (
                               <tr key={u.id}>
                                 <td className="px-3 py-2 text-zinc-300">{u.username}</td>
-                                <td className="px-3 py-2 text-right text-zinc-400">{u.current_spendable_points}</td>
-                                <td className={`px-3 py-2 text-right font-medium ${change === 0 ? "text-zinc-400" : change > 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                                  {u.new_spendable_points}
+                                <td className="px-3 py-2 text-right text-zinc-400">
+                                  {u.current_points} → {u.new_points}
                                 </td>
-                                <td className={`px-3 py-2 text-right font-medium ${change === 0 ? "text-zinc-600" : change > 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                                  {change > 0 ? `+${change}` : change}
+                                <td className={`px-3 py-2 text-right font-medium ${pointsChange === 0 ? "text-zinc-600" : pointsChange > 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                                  {pointsChange > 0 ? `+${pointsChange}` : pointsChange}
+                                </td>
+                                <td className="px-3 py-2 text-right text-zinc-400">
+                                  {u.current_spendable_points} → {u.new_spendable_points}
+                                </td>
+                                <td className={`px-3 py-2 text-right font-medium ${spendableChange === 0 ? "text-zinc-600" : spendableChange > 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                                  {spendableChange > 0 ? `+${spendableChange}` : spendableChange}
                                 </td>
                               </tr>
                             );
@@ -638,6 +649,13 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                   {recomputeImpact.users.length === 0
                     ? "No users would be affected — everyone's stored balances already match their contributions."
                     : `${recomputeImpact.users.length} user${recomputeImpact.users.length !== 1 ? "s" : ""} would be affected and will each get a notification about their balance change.`}
+                </p>
+                <p className="text-xs text-amber-400/80 mb-3 flex items-start gap-1.5">
+                  <span aria-hidden="true">ℹ️</span>
+                  <span>
+                    This only catches drift from the trash report point value, since that&rsquo;s calculated live. It does <strong>not re-price</strong>{" "}
+                    existing bag/pound cleanup contributions or the hotspot/claim multipliers if you change those settings, since those are baked into each contribution at the time it was submitted and can&rsquo;t be safely recalculated after the fact.
+                  </span>
                 </p>
                 {recomputeImpact.users.some(u => u.new_spendable_points < 0) && (
                   <p className="text-xs text-red-400 mb-2 flex items-center gap-1.5">
@@ -788,7 +806,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
         cooldown_hours: cooldownHours,
         is_active: true,
       })
-      .select("id, name, condition_type, event_type, cooldown_hours, is_active, campaign_id")
+      .select("id, name, condition_type, condition_config, event_type, cooldown_hours, is_active, campaign_id")
       .single();
 
     if (insertErr) {
@@ -806,6 +824,19 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
     setName("");
     setShowCreate(false);
     setLoading(false);
+  };
+
+  const triggerValueLabel = (trigger: Trigger): string => {
+    const config = trigger.condition_config;
+    if (!config || typeof config !== "object" || Array.isArray(config)) return "—";
+    const c = config as Record<string, unknown>;
+    if (trigger.condition_type === "report_count" || trigger.condition_type === "threshold_reached") {
+      return typeof c.threshold === "number" ? String(c.threshold) : "—";
+    }
+    if (trigger.condition_type === "time_elapsed") {
+      return typeof c.hours === "number" ? `${c.hours}h` : "—";
+    }
+    return typeof c.threshold === "number" ? String(c.threshold) : "—";
   };
 
   const handleToggle = async (trigger: Trigger) => {
@@ -898,6 +929,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Name</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Campaign</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Condition</th>
+              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Value</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Fires</th>
               <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Active</th>
             </tr>
@@ -905,7 +937,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
           <tbody className="divide-y divide-zinc-800/60">
             {triggers.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-zinc-600 text-sm">No triggers.</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-zinc-600 text-sm">No triggers.</td>
               </tr>
             )}
             {triggers.map(t => (
@@ -913,6 +945,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
                 <td className="px-4 py-3 text-zinc-300 font-medium">{t.name}</td>
                 <td className="px-4 py-3 text-zinc-500 text-xs">{t.campaigns?.title ?? t.campaign_id.slice(0, 8)}</td>
                 <td className="px-4 py-3 text-zinc-500 text-xs font-mono">{t.condition_type}</td>
+                <td className="px-4 py-3 text-zinc-300 text-xs font-mono">{triggerValueLabel(t)}</td>
                 <td className="px-4 py-3 text-zinc-500 text-xs font-mono">{t.event_type}</td>
                 <td className="px-4 py-3">
                   <button
@@ -2868,6 +2901,33 @@ const CATEGORY_LABELS: Record<string, string> = {
   moderation: "Moderation",
 };
 
+const METERS_TO_FEET = 3.28084;
+
+// Unit shown next to each non-proximity setting's input (proximity rows get their own
+// meters/feet split below instead). Omitted keys are plain counts/scores — no unit shown.
+const UNIT_LABELS: Record<string, string> = {
+  claim_before_window_minutes: "min",
+  claim_after_window_minutes_low: "min",
+  claim_after_window_minutes_medium: "min",
+  claim_after_window_minutes_high: "min",
+  claim_reclaim_cooldown_minutes: "min",
+  cleanup_event_grace_minutes_before: "min",
+  cleanup_event_grace_minutes_after: "min",
+  cleanup_event_late_submission_hours: "hr",
+  hotspot_event_duration_hours: "hr",
+  threshold_reached_event_duration_hours: "hr",
+  time_elapsed_default_hours: "hr",
+  time_elapsed_event_duration_hours_default: "hr",
+  claim_challenge_multiplier: "×",
+  hotspot_multiplier: "×",
+  small_bag_value: "pts",
+  large_bag_value: "pts",
+  pound_value: "pts",
+  trash_report_value: "pts",
+  trash_war_solarpunk_credit: "pts",
+  threshold_reached_default: "pts",
+};
+
 function SettingsTab({ settings, setSettings }: {
   settings: GameSetting[];
   setSettings: (s: GameSetting[]) => void;
@@ -2918,24 +2978,73 @@ function SettingsTab({ settings, setSettings }: {
       {Object.entries(grouped).map(([category, rows]) => (
         <div key={category} className="space-y-3">
           <h2 className="text-sm font-semibold text-zinc-300">{CATEGORY_LABELS[category] ?? category}</h2>
+          {(category === "points" || category === "multipliers") && (
+            <p className="text-xs text-amber-400/80 -mt-1.5">
+              Changing a value here only affects new submissions going forward. Existing bag/pound cleanup
+              contributions keep the point value they were awarded at submission time — there is no way to
+              retroactively re-price them, and &ldquo;Recompute all balances&rdquo; does not cover them. The one
+              exception is trash report value, which is calculated live and is fully covered by recompute.
+            </p>
+          )}
           <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
             {rows.map(setting => {
               const dirty = drafts[setting.key] !== String(setting.value);
+              const isProximity = setting.category === "proximity";
+              const isSolarpunkTieIn = setting.key === "trash_war_solarpunk_credit";
+              const metersDraft = Number(drafts[setting.key]);
+              const feetDraft = Number.isFinite(metersDraft) ? Math.round(metersDraft * METERS_TO_FEET) : NaN;
               return (
-                <div key={setting.key} className="flex items-center gap-4 px-4 py-3">
+                <div
+                  key={setting.key}
+                  className={`flex items-center gap-4 px-4 py-3 ${isSolarpunkTieIn ? "opacity-60 bg-zinc-900/20" : ""}`}
+                >
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-200 font-medium">{setting.label}</p>
+                    <p className={`font-medium flex items-center gap-2 ${isSolarpunkTieIn ? "text-xs text-zinc-400" : "text-sm text-zinc-200"}`}>
+                      {setting.label}
+                      {isSolarpunkTieIn && (
+                        <span className="text-[10px] font-normal uppercase tracking-wide text-zinc-500 border border-zinc-700 rounded px-1.5 py-0.5">
+                          Solarpunk tie-in
+                        </span>
+                      )}
+                    </p>
                     {setting.description && (
                       <p className="text-xs text-zinc-500 mt-0.5">{setting.description}</p>
                     )}
                   </div>
-                  <input
-                    type="number"
-                    step="any"
-                    className="w-28 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm text-right focus:outline-none focus:border-zinc-500"
-                    value={drafts[setting.key] ?? ""}
-                    onChange={e => setDrafts({ ...drafts, [setting.key]: e.target.value })}
-                  />
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      step="any"
+                      className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm text-right focus:outline-none focus:border-zinc-500"
+                      value={drafts[setting.key] ?? ""}
+                      onChange={e => setDrafts({ ...drafts, [setting.key]: e.target.value })}
+                    />
+                    {isProximity ? (
+                      <span className="text-xs text-zinc-500">m</span>
+                    ) : UNIT_LABELS[setting.key] ? (
+                      <span className="text-xs text-zinc-500">{UNIT_LABELS[setting.key]}</span>
+                    ) : null}
+                    {isProximity && (
+                      <>
+                        <input
+                          type="number"
+                          step="any"
+                          className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm text-right focus:outline-none focus:border-zinc-500"
+                          value={Number.isNaN(feetDraft) ? "" : feetDraft}
+                          onChange={e => {
+                            const feet = Number(e.target.value);
+                            setDrafts({
+                              ...drafts,
+                              [setting.key]: e.target.value === "" || Number.isNaN(feet)
+                                ? ""
+                                : (feet / METERS_TO_FEET).toFixed(2),
+                            });
+                          }}
+                        />
+                        <span className="text-xs text-zinc-500">ft</span>
+                      </>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleSave(setting)}
                     disabled={!dirty || savingKey === setting.key}
@@ -2982,7 +3091,18 @@ export default function AdminPanel({
   currentUserId: string;
   initialSettings: GameSetting[];
 }) {
-  const [tab, setTab] = useState<Tab>("campaigns");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [tab, setTabState] = useState<Tab>(
+    tabParam && (TAB_VALUES as readonly string[]).includes(tabParam) ? (tabParam as Tab) : "campaigns"
+  );
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", t);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const sortedCampaigns = useMemo(() => sortCampaignsByStatus(campaigns), [campaigns]);
   const activeCampaigns = useMemo(() => sortedCampaigns.filter(c => c.status === "active"), [sortedCampaigns]);
@@ -3046,7 +3166,7 @@ export default function AdminPanel({
       </div>
 
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
-        {(["campaigns", "triggers", "events", "partners", "groups", "leaderboard", "settings"] as Tab[]).map(t => (
+        {TAB_VALUES.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}

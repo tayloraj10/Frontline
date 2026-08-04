@@ -21,6 +21,7 @@ import {
 import { searchUsers, type UserSearchResult } from "@/lib/users";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
+import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 
 const inputCls =
   "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -903,8 +904,17 @@ function OrganizerLogButton({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const bagPoints = (Number(smallBags) || 0) * SMALL_BAG_VALUE + (Number(largeBags) || 0) * LARGE_BAG_VALUE;
-  const poundPoints = (Number(pounds) || 0) * POUND_VALUE;
+  const { values: pointValues, loading: pointValuesLoading } = useGameSettings([
+    "small_bag_value",
+    "large_bag_value",
+    "pound_value",
+  ] as const);
+  const bagValuesReady = pointValues.small_bag_value !== undefined && pointValues.large_bag_value !== undefined;
+  const poundValueReady = pointValues.pound_value !== undefined;
+  const bagPoints = bagValuesReady
+    ? (Number(smallBags) || 0) * pointValues.small_bag_value! + (Number(largeBags) || 0) * pointValues.large_bag_value!
+    : 0;
+  const poundPoints = poundValueReady ? (Number(pounds) || 0) * pointValues.pound_value! : 0;
   const hasNegative = (Number(smallBags) || 0) < 0 || (Number(largeBags) || 0) < 0 || (Number(pounds) || 0) < 0;
 
   const submit = async () => {
@@ -996,9 +1006,11 @@ function OrganizerLogButton({
             >
               <p className="text-xs font-semibold text-zinc-200">By bags</p>
               <p className="text-[10px] text-zinc-500">
-                {smallBags || 0}×{SMALL_BAG_VALUE} + {largeBags || 0}×{LARGE_BAG_VALUE}
+                {smallBags || 0}×<SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> + {largeBags || 0}×<SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} />
               </p>
-              <p className="text-sm font-bold text-emerald-400 mt-0.5">{bagPoints.toLocaleString()} pts</p>
+              <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "— pts"}
+              </p>
             </button>
             <button
               onClick={() => setScoringMethod("pounds")}
@@ -1010,9 +1022,11 @@ function OrganizerLogButton({
             >
               <p className="text-xs font-semibold text-zinc-200">By pounds</p>
               <p className="text-[10px] text-zinc-500">
-                {pounds || 0}×{POUND_VALUE}
+                {pounds || 0}×<SettingValue value={pointValues.pound_value} loading={pointValuesLoading} />
               </p>
-              <p className="text-sm font-bold text-emerald-400 mt-0.5">{poundPoints.toLocaleString()} pts</p>
+              <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "— pts"}
+              </p>
             </button>
           </div>
         </div>
@@ -1038,9 +1052,6 @@ function OrganizerLogButton({
 }
 
 // Mirrors backend/app/services/contribution_scoring.py — keep these in sync.
-const SMALL_BAG_VALUE = 1;
-const LARGE_BAG_VALUE = 3;
-const POUND_VALUE = 0.5;
 
 // Points are awarded in whole/half increments server-side — mirror that here so the
 // preview matches what actually gets recorded.
@@ -1097,8 +1108,17 @@ function LogTeamTotalForm({
     (r) => r.status === "going" && (pool === "going" || r.checked_in_at) && !r.has_individual_contribution
   );
 
-  const bagPoints = (Number(smallBags) || 0) * SMALL_BAG_VALUE + (Number(largeBags) || 0) * LARGE_BAG_VALUE;
-  const poundPoints = (Number(pounds) || 0) * POUND_VALUE;
+  const { values: pointValues, loading: pointValuesLoading } = useGameSettings([
+    "small_bag_value",
+    "large_bag_value",
+    "pound_value",
+  ] as const);
+  const bagValuesReady = pointValues.small_bag_value !== undefined && pointValues.large_bag_value !== undefined;
+  const poundValueReady = pointValues.pound_value !== undefined;
+  const bagPoints = bagValuesReady
+    ? (Number(smallBags) || 0) * pointValues.small_bag_value! + (Number(largeBags) || 0) * pointValues.large_bag_value!
+    : 0;
+  const poundPoints = poundValueReady ? (Number(pounds) || 0) * pointValues.pound_value! : 0;
   const totalPoints = scoringMethod === "pounds" ? poundPoints : bagPoints;
   const perAttendee = candidates.length > 0 ? roundHalf(totalPoints / candidates.length) : 0;
   const hasNegative =
@@ -1250,9 +1270,11 @@ function LogTeamTotalForm({
           >
             <p className="text-xs font-semibold text-zinc-200">By bags</p>
             <p className="text-[10px] text-zinc-500">
-              {smallBags || 0}×{SMALL_BAG_VALUE} + {largeBags || 0}×{LARGE_BAG_VALUE}
+              {smallBags || 0}×<SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> + {largeBags || 0}×<SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} />
             </p>
-            <p className="text-sm font-bold text-emerald-400 mt-0.5">{bagPoints.toLocaleString()} pts</p>
+            <p className="text-sm font-bold text-emerald-400 mt-0.5">
+              {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "— pts"}
+            </p>
           </button>
           <button
             onClick={() => setScoringMethod("pounds")}
@@ -1264,14 +1286,19 @@ function LogTeamTotalForm({
           >
             <p className="text-xs font-semibold text-zinc-200">By pounds</p>
             <p className="text-[10px] text-zinc-500">
-              {pounds || 0}×{POUND_VALUE}
+              {pounds || 0}×<SettingValue value={pointValues.pound_value} loading={pointValuesLoading} />
             </p>
-            <p className="text-sm font-bold text-emerald-400 mt-0.5">{poundPoints.toLocaleString()} pts</p>
+            <p className="text-sm font-bold text-emerald-400 mt-0.5">
+              {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "— pts"}
+            </p>
           </button>
         </div>
         <p className="text-xs text-zinc-400">
-          Total: <span className="font-semibold text-zinc-100">{totalPoints.toLocaleString()} pts</span>
-          {candidates.length > 0 && (
+          Total:{" "}
+          <span className="font-semibold text-zinc-100">
+            {(scoringMethod === "pounds" ? poundValueReady : bagValuesReady) ? `${totalPoints.toLocaleString()} pts` : "— pts"}
+          </span>
+          {candidates.length > 0 && (scoringMethod === "pounds" ? poundValueReady : bagValuesReady) && (
             <>
               {" "}
               · ~<span className="font-semibold text-zinc-100">{perAttendee.toLocaleString(undefined, { maximumFractionDigits: 1 })} pts</span> each across {candidates.length} attendee{candidates.length === 1 ? "" : "s"}

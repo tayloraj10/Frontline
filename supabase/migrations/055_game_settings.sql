@@ -49,7 +49,10 @@ INSERT INTO game_settings (key, value, category, label, description) VALUES
 
 -- Make the "1 point per submitted report" rule (previously a hardcoded literal) read the
 -- trash_report_value setting instead, so admin edits take effect on new reports without a
--- deploy. Recreated from migration 024_user_points.sql with the literal replaced.
+-- deploy. Recreated from migration 050_campaign_spendable_points.sql (the most recent prior
+-- version, which added the counts_toward_spendable_points block) with both literal `1`s
+-- replaced by the setting lookup — the spendable_points half must be preserved here or this
+-- CREATE OR REPLACE silently reverts reports to never crediting spendable_points at all.
 CREATE OR REPLACE FUNCTION sync_profile_points_from_report()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -61,11 +64,23 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.submitted_by_user_id IS NOT NULL THEN
       UPDATE profiles SET points = points + v_value WHERE id = NEW.submitted_by_user_id;
+
+      IF EXISTS (
+        SELECT 1 FROM campaigns WHERE id = NEW.campaign_id AND counts_toward_spendable_points
+      ) THEN
+        UPDATE profiles SET spendable_points = spendable_points + v_value WHERE id = NEW.submitted_by_user_id;
+      END IF;
     END IF;
     RETURN NEW;
   ELSIF TG_OP = 'DELETE' THEN
     IF OLD.submitted_by_user_id IS NOT NULL THEN
       UPDATE profiles SET points = points - v_value WHERE id = OLD.submitted_by_user_id;
+
+      IF EXISTS (
+        SELECT 1 FROM campaigns WHERE id = OLD.campaign_id AND counts_toward_spendable_points
+      ) THEN
+        UPDATE profiles SET spendable_points = spendable_points - v_value WHERE id = OLD.submitted_by_user_id;
+      END IF;
     END IF;
     RETURN OLD;
   END IF;

@@ -142,11 +142,46 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
     )
 
     # Check report_count triggers for this campaign/geo_unit
+    hotspot_triggered = False
     if geo_unit_id:
-        await _check_report_triggers(payload.campaign_id, geo_unit_id, db)
+        hotspot_triggered = await _check_report_triggers(payload.campaign_id, geo_unit_id, db)
 
     await db.commit()
-    return {"geo_unit_id": geo_unit_id, "status": "submitted"}
+    return {"geo_unit_id": geo_unit_id, "status": "submitted", "hotspot_triggered": hotspot_triggered}
+
+
+@router.get("/campaign/{campaign_id}/pending-challenge-completion")
+async def get_pending_challenge_completion(campaign_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
+    """A claim challenge resolves the report (POST .../claim/after-photo) before the user logs
+    the actual cleanup contribution that earns points and the challenge bonus — if they cancel or
+    exit out of that Log Cleanup step, the report drops off the open-reports list entirely with
+    no way back in. Surface it here so the frontend can offer to resume it."""
+    result = await db.execute(
+        text("""
+            SELECT pr.id, pr.geo_unit_id, ST_Y(pr.location::geometry) AS latitude, ST_X(pr.location::geometry) AS longitude,
+                   pr.image_urls, gu.unit_type
+            FROM problem_reports pr
+            LEFT JOIN geo_units gu ON gu.id = pr.geo_unit_id
+            WHERE pr.campaign_id = :campaign_id
+              AND pr.status = 'addressed'
+              AND pr.resolved_by_user_id = :user_id
+              AND pr.resolved_by_cleanup_id IS NULL
+            ORDER BY pr.resolved_at DESC
+            LIMIT 1
+        """),
+        {"campaign_id": str(campaign_id), "user_id": str(user_id)},
+    )
+    row = result.fetchone()
+    if not row:
+        return None
+    return {
+        "id": str(row.id),
+        "geo_unit_id": str(row.geo_unit_id) if row.geo_unit_id else None,
+        "latitude": row.latitude,
+        "longitude": row.longitude,
+        "photo_urls": row.image_urls or [],
+        "unit_type": row.unit_type,
+    }
 
 
 @router.get("/campaign/{campaign_id}")
@@ -520,7 +555,7 @@ async def flag_problem_report(report_id: UUID, payload: FlagReportRequest, db: A
     return {"flag_count": flag_count, "auto_hidden": auto_hidden}
 
 
-async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncSession):
+async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncSession) -> bool:
     count_result = await db.execute(
         text("""
             SELECT COUNT(*) FROM problem_reports
@@ -540,6 +575,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
         {"campaign_id": str(campaign_id)},
     )
 
+    triggered = False
     for trigger in triggers.fetchall():
         threshold = (trigger.condition_config or {}).get("threshold", settings.get("report_count_threshold_default", 5))
         if report_count < threshold:
@@ -582,3 +618,6 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
                 "duration_hours": duration_hours,
             },
         )
+        triggered = True
+
+    return triggered

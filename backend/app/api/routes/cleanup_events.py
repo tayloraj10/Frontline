@@ -20,10 +20,16 @@ router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
 # alternative to a single point, usable by individuals, groups, and group events.
 routes_router = APIRouter(prefix="/cleanup-routes", tags=["cleanup-routes"])
 
-# How early/late a check-in may be relative to the event's own schedule. Proximity is
-# now the admin-editable `cleanup_event_proximity_meters` game_settings row instead.
-CLEANUP_EVENT_GRACE_MINUTES_BEFORE = 30
-CLEANUP_EVENT_GRACE_MINUTES_AFTER = 120
+# How early/late a check-in may be relative to the event's own schedule. Sourced from the
+# admin-editable `cleanup_event_grace_minutes_before`/`_after` game_settings rows (fallbacks
+# below are only used if those rows are somehow missing). Proximity is likewise the
+# admin-editable `cleanup_event_proximity_meters` game_settings row.
+CLEANUP_EVENT_GRACE_MINUTES_BEFORE_FALLBACK = 30
+CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK = 120
+
+# How long after an event's window closes a submission still counts as "on time" rather
+# than late. Sourced from the admin-editable `cleanup_event_late_submission_hours` row.
+CLEANUP_EVENT_LATE_SUBMISSION_HOURS_FALLBACK = 2
 
 # Excludes visually ambiguous characters (0/O, 1/I/L) since join codes are read off a
 # phone screen or shouted across a parking lot.
@@ -350,13 +356,15 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
     # scheduled_start if no end was given, plus the same after-event grace period) rather
     # than the simpler group-page is_past — a marker shouldn't grey out while attendees
     # can still check in. Markers disappear entirely a day after that.
+    settings = await get_game_settings(db)
+    grace_after = settings.get("cleanup_event_grace_minutes_after", CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK)
     result = await db.execute(
-        text(f"""
+        text("""
             SELECT c.id, c.title, c.description, c.scheduled_start, c.scheduled_end,
                    c.status, c.image_urls, c.logging_mode,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    g.id AS group_id, g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url,
-                   (COALESCE(c.scheduled_end, c.scheduled_start) + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' < NOW()) AS is_past,
+                   (COALESCE(c.scheduled_end, c.scheduled_start) + (:grace_after * INTERVAL '1 minute') < NOW()) AS is_past,
                    COALESCE(bags.total_small_bags, 0) AS total_small_bags,
                    COALESCE(bags.total_large_bags, 0) AS total_large_bags,
                    COALESCE(cohosts.cohost_groups, '[]'::json) AS cohost_groups
@@ -383,11 +391,11 @@ async def list_campaign_cleanup_events(campaign_id: UUID, db: AsyncSession = Dep
               AND c.location IS NOT NULL
               AND (
                 COALESCE(c.scheduled_end, c.scheduled_start) IS NULL
-                OR COALESCE(c.scheduled_end, c.scheduled_start) + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' + INTERVAL '1 day' > NOW()
+                OR COALESCE(c.scheduled_end, c.scheduled_start) + (:grace_after * INTERVAL '1 minute') + INTERVAL '1 day' > NOW()
               )
             ORDER BY c.scheduled_start ASC NULLS LAST
         """),
-        {"campaign_id": str(campaign_id)},
+        {"campaign_id": str(campaign_id), "grace_after": grace_after},
     )
     rows = result.fetchall()
     return [
@@ -421,8 +429,10 @@ async def list_group_cleanup_events(group_id: UUID, db: AsyncSession = Depends(g
     upcoming and past/cancelled events (the latter for the "Event History" section).
     is_past is computed in SQL against NOW() so it's correct regardless of server
     timezone handling."""
+    settings = await get_game_settings(db)
+    grace_after = settings.get("cleanup_event_grace_minutes_after", CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK)
     result = await db.execute(
-        text(f"""
+        text("""
             SELECT c.id, c.title, c.description, c.scheduled_start, c.scheduled_end,
                    c.status, c.image_urls, c.max_attendees,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
@@ -431,7 +441,7 @@ async def list_group_cleanup_events(group_id: UUID, db: AsyncSession = Depends(g
                    (c.scheduled_start IS NOT NULL
                         AND c.scheduled_start < NOW()
                         AND COALESCE(c.scheduled_end, c.scheduled_start)
-                            + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' >= NOW()) AS is_ongoing,
+                            + (:grace_after * INTERVAL '1 minute') >= NOW()) AS is_ongoing,
                    (SELECT COUNT(*) FROM cleanup_rsvps r WHERE r.cleanup_id = c.id AND r.status = 'going') AS going_count,
                    (c.group_id != :group_id) AS is_cohosted
             FROM cleanups c
@@ -441,7 +451,7 @@ async def list_group_cleanup_events(group_id: UUID, db: AsyncSession = Depends(g
               AND c.location IS NOT NULL
             ORDER BY c.scheduled_start ASC NULLS LAST
         """),
-        {"group_id": str(group_id)},
+        {"group_id": str(group_id), "grace_after": grace_after},
     )
     rows = result.fetchall()
 
@@ -573,9 +583,12 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     )
     all_photos.extend(r.photo_url for r in event_photos_result.fetchall())
 
-    # A submission counts as "late" once it lands more than 24h after the event's
-    # window closes — unrestricted (submissions are never blocked), just flagged.
-    late_cutoff = (row.scheduled_end or row.scheduled_start) + timedelta(hours=24) \
+    # A submission counts as "late" once it lands more than cleanup_event_late_submission_hours
+    # after the event's window closes — unrestricted (submissions are never blocked), just flagged.
+    late_submission_hours = settings.get(
+        "cleanup_event_late_submission_hours", CLEANUP_EVENT_LATE_SUBMISSION_HOURS_FALLBACK
+    )
+    late_cutoff = (row.scheduled_end or row.scheduled_start) + timedelta(hours=late_submission_hours) \
         if (row.scheduled_end or row.scheduled_start) else None
 
     viewer_rsvp = None
@@ -620,12 +633,16 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     total_pounds = sum(v["pounds"] for v in bags_by_user.values()) + float(row.metrics_pounds or 0)
 
     check_in_window_start = (
-        row.scheduled_start - timedelta(minutes=CLEANUP_EVENT_GRACE_MINUTES_BEFORE)
+        row.scheduled_start - timedelta(
+            minutes=settings.get("cleanup_event_grace_minutes_before", CLEANUP_EVENT_GRACE_MINUTES_BEFORE_FALLBACK)
+        )
         if row.scheduled_start else None
     )
     window_end_base = row.scheduled_end or row.scheduled_start
     check_in_window_end = (
-        window_end_base + timedelta(minutes=CLEANUP_EVENT_GRACE_MINUTES_AFTER)
+        window_end_base + timedelta(
+            minutes=settings.get("cleanup_event_grace_minutes_after", CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK)
+        )
         if window_end_base else None
     )
 
@@ -925,9 +942,12 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
     # The check-in window applies to both paths — join code only exempts the caller
     # from the proximity check (it's the paper-signup/GPS-unreliable fallback), not
     # from checking in at the right time.
-    window_start = event.scheduled_start - timedelta(minutes=CLEANUP_EVENT_GRACE_MINUTES_BEFORE) if event.scheduled_start else None
+    settings = await get_game_settings(db)
+    grace_before = settings.get("cleanup_event_grace_minutes_before", CLEANUP_EVENT_GRACE_MINUTES_BEFORE_FALLBACK)
+    grace_after = settings.get("cleanup_event_grace_minutes_after", CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK)
+    window_start = event.scheduled_start - timedelta(minutes=grace_before) if event.scheduled_start else None
     window_end_base = event.scheduled_end or event.scheduled_start
-    window_end = window_end_base + timedelta(minutes=CLEANUP_EVENT_GRACE_MINUTES_AFTER) if window_end_base else None
+    window_end = window_end_base + timedelta(minutes=grace_after) if window_end_base else None
 
     now_result = await db.execute(text("SELECT now()"))
     now = now_result.scalar()
@@ -935,7 +955,6 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
         raise HTTPException(status_code=403, detail="Check-in is only available around the event's check-in window")
 
     if not payload.join_code:
-        settings = await get_game_settings(db)
         prox_result = await db.execute(
             text("""
                 SELECT ST_DWithin(
@@ -1442,8 +1461,9 @@ async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Dep
     the id is still present in that events list, so a route left behind here silently
     renders forever as if it were a plain ad-hoc route instead of disappearing."""
     settings = await get_game_settings(db)
+    grace_after = settings.get("cleanup_event_grace_minutes_after", CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK)
     result = await db.execute(
-        text(f"""
+        text("""
             SELECT
                 c.id, ST_AsGeoJSON(c.route)::json AS route,
                 c.group_id, g.name AS group_name, g.image_url AS group_logo_url,
@@ -1462,14 +1482,18 @@ async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Dep
                     AND (
                         COALESCE(c.scheduled_end, c.scheduled_start) IS NULL
                         OR COALESCE(c.scheduled_end, c.scheduled_start)
-                            + INTERVAL '{CLEANUP_EVENT_GRACE_MINUTES_AFTER} minutes' + INTERVAL '1 day' > NOW()
+                            + (:grace_after * INTERVAL '1 minute') + INTERVAL '1 day' > NOW()
                     )
                 )
               )
             ORDER BY c.created_at DESC
             LIMIT 500
         """),
-        {"campaign_id": str(campaign_id), "radius": settings.get("cleanup_event_proximity_meters", 150.0)},
+        {
+            "campaign_id": str(campaign_id),
+            "radius": settings.get("cleanup_event_proximity_meters", 150.0),
+            "grace_after": grace_after,
+        },
     )
     return [
         {

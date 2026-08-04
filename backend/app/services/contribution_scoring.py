@@ -64,6 +64,7 @@ async def record_contribution(
     else:
         effective_value = value or settings.get("civic_action_value", 1)
 
+    hotspot_multiplier = 1.0
     if apply_multiplier and geo_unit_id:
         multiplier_result = await db.execute(
             text("""
@@ -79,12 +80,12 @@ async def record_contribution(
         )
         multiplier_row = multiplier_result.fetchone()
         if multiplier_row:
-            multiplier = float((multiplier_row[0] or {}).get("multiplier", settings.get("hotspot_multiplier", 1)))
-            effective_value = effective_value * multiplier
+            hotspot_multiplier = float((multiplier_row[0] or {}).get("multiplier", settings.get("hotspot_multiplier", 1)))
 
-    # "Claim-a-report" challenge-mode bonus: applied on top of any active campaign-wide
-    # multiplier, since it rewards the individual claim rather than the geo unit.
-    effective_value = effective_value * challenge_multiplier
+    # The claim-challenge bonus and an active hotspot multiplier don't stack — take
+    # whichever is larger so a claimed report inside a hotspot still earns a bonus,
+    # but never both multiplied together.
+    effective_value = effective_value * max(hotspot_multiplier, challenge_multiplier)
 
     insert_params = {
         "campaign_id": str(campaign_id),
