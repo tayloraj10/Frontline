@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/contributions", tags=["contributions"])
 
@@ -51,14 +52,6 @@ async def _get_or_create_h3_geo_unit(db: AsyncSession, lat: float, lng: float, r
         {"h3_index": h3_index, "wkt": wkt},
     )
     return new_result.scalar()
-
-
-TRASH_WAR_SOLARPUNK_CREDIT = 8
-
-# Max distance a cleanup submission may be from a reported hotspot to claim it as resolved.
-# UK postcode-district reports use a round metric value; everything else uses a round imperial value.
-HOTSPOT_PROXIMITY_METERS_UK = 100.0
-HOTSPOT_PROXIMITY_METERS_US = 91.44  # 300 ft
 
 
 class ContributionRequest(BaseModel):
@@ -113,6 +106,7 @@ async def get_nearby_hotspot(
     Find the closest open problem report within cleanup-claim range of the given point, if any.
     Used to offer the user a choice to claim it as resolved when logging a cleanup nearby.
     """
+    settings = await get_game_settings(db)
     result = await db.execute(
         text("""
             SELECT
@@ -137,8 +131,8 @@ async def get_nearby_hotspot(
             "campaign_id": str(campaign_id),
             "lat": lat,
             "lng": lng,
-            "threshold_uk": HOTSPOT_PROXIMITY_METERS_UK,
-            "threshold_us": HOTSPOT_PROXIMITY_METERS_US,
+            "threshold_uk": settings.get("hotspot_proximity_meters_uk", 100.0),
+            "threshold_us": settings.get("hotspot_proximity_meters_us", 91.44),
         },
     )
     row = result.fetchone()
@@ -169,6 +163,7 @@ async def submit_contribution(
     from app.api.routes.events import _evaluate_triggers
     from app.services.contribution_scoring import record_contribution
 
+    settings = await get_game_settings(db)
     has_location = payload.latitude is not None and payload.longitude is not None
     geo_unit_id = None
     location_verified = False
@@ -312,8 +307,8 @@ async def submit_contribution(
                 "campaign_id": str(payload.campaign_id),
                 "lon": payload.longitude,
                 "lat": payload.latitude,
-                "threshold_uk": HOTSPOT_PROXIMITY_METERS_UK,
-                "threshold_us": HOTSPOT_PROXIMITY_METERS_US,
+                "threshold_uk": settings.get("hotspot_proximity_meters_uk", 100.0),
+                "threshold_us": settings.get("hotspot_proximity_meters_us", 91.44),
             },
         )
         resolved_row = resolved_report.fetchone()
@@ -344,8 +339,6 @@ async def submit_contribution(
     # Challenge-mode completion: the report was already resolved by POST
     # /problem-reports/{id}/claim/after-photo (which verified the claim/timers); this just
     # links the resulting cleanup contribution to it and applies the challenge bonus.
-    from app.api.routes.problem_reports import CLAIM_CHALLENGE_MULTIPLIER
-
     challenge_bonus_applied = False
     if payload.contribution_type == "cleanup" and payload.claimed_report_id:
         claimed_report = await db.execute(
@@ -387,7 +380,7 @@ async def submit_contribution(
         notes=payload.notes,
         location_verified=location_verified,
         apply_multiplier=payload.cleanup_event_id is None,
-        challenge_multiplier=CLAIM_CHALLENGE_MULTIPLIER if challenge_bonus_applied else 1.0,
+        challenge_multiplier=settings.get("claim_challenge_multiplier", 1.5) if challenge_bonus_applied else 1.0,
         cleanup_event_id=str(payload.cleanup_event_id) if payload.cleanup_event_id else None,
     )
 
@@ -441,7 +434,7 @@ async def submit_contribution(
                 geo_unit_id=solarpunk_geo_unit_id,
                 cleanup_id=None,
                 contribution_type="solarpunk_hex_credit",
-                value=TRASH_WAR_SOLARPUNK_CREDIT,
+                value=settings.get("trash_war_solarpunk_credit", 8),
                 latitude=payload.latitude,
                 longitude=payload.longitude,
                 notes="trash_war_cleanup_credit",
@@ -702,6 +695,7 @@ async def process_contribution(payload: ContributionRequest, db: AsyncSession = 
         raise HTTPException(status_code=422, detail="Location does not fall within any campaign geo unit")
 
     geo_unit_id = geo_unit_row[0]
+    settings = await get_game_settings(db)
 
     proximity_check = await db.execute(
         text("""
@@ -731,7 +725,7 @@ async def process_contribution(payload: ContributionRequest, db: AsyncSession = 
             "geo_unit_id": str(geo_unit_id),
             "user_id": str(payload.user_id),
             "group_id": claimed_by_group,
-            "value": payload.value or 1,
+            "value": payload.value or settings.get("civic_action_value", 1),
         },
     )
     await db.execute(

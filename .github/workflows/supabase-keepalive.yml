@@ -1,8 +1,10 @@
 name: Supabase Keepalive
 
 on:
-  schedule:
-    - cron: '0 0 * * 0,3'
+  # Disabled: not needed on Supabase Pro (no free-tier auto-pause). Re-add the
+  # schedule below to resume, or run manually via workflow_dispatch.
+  # schedule:
+  #   - cron: '0 0 * * 0,3'
   workflow_dispatch:
 
 jobs:

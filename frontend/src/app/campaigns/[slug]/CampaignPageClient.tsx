@@ -11,6 +11,8 @@ import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import { listCampaignCleanupRoutes, type CampaignCleanupRoute, type RouteLineString } from "@/lib/cleanupRoutes";
+import { useGameSettings } from "@/lib/gameSettings";
+import { formatPoints } from "@/lib/formatPoints";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -218,13 +220,14 @@ interface Coords {
   longitude: number;
 }
 
-// Mirrors CLEANUP_EVENT_PROXIMITY_METERS/CLEANUP_EVENT_GRACE_MINUTES_BEFORE/_AFTER in
-// backend/app/api/routes/cleanup_events.py — the client-side geofence prompt uses the
-// same thresholds as the server-side check-in validation so the prompt and the actual
-// check-in window agree.
-const CLEANUP_EVENT_PROXIMITY_METERS = 150.0;
-const CLEANUP_EVENT_GRACE_MINUTES_BEFORE = 30;
-const CLEANUP_EVENT_GRACE_MINUTES_AFTER = 120;
+// Mirrors the cleanup_event_grace_minutes_before/_after and cleanup_event_proximity_meters
+// game_settings rows consumed server-side in backend/app/api/routes/cleanup_events.py — the
+// client-side geofence prompt uses the same thresholds as the server-side check-in validation
+// so the prompt and the actual check-in window agree. These constants are fallbacks only, used
+// until the live values load via useGameSettings below; the DB rows are the source of truth.
+const CLEANUP_EVENT_PROXIMITY_METERS_FALLBACK = 150.0;
+const CLEANUP_EVENT_GRACE_MINUTES_BEFORE_FALLBACK = 30;
+const CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK = 120;
 const EARTH_RADIUS_METERS = 6371000;
 
 function distanceMeters(a: Coords, b: { lat: number; lng: number }): number {
@@ -237,12 +240,17 @@ function distanceMeters(a: Coords, b: { lat: number; lng: number }): number {
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(h));
 }
 
-function isWithinCleanupEventWindow(event: MapCleanupEvent, now: Date): boolean {
+function isWithinCleanupEventWindow(
+  event: MapCleanupEvent,
+  now: Date,
+  graceMinutesBefore: number,
+  graceMinutesAfter: number,
+): boolean {
   if (!event.scheduled_start) return false;
   const start = new Date(event.scheduled_start);
-  const windowStart = new Date(start.getTime() - CLEANUP_EVENT_GRACE_MINUTES_BEFORE * 60000);
+  const windowStart = new Date(start.getTime() - graceMinutesBefore * 60000);
   const endBase = event.scheduled_end ? new Date(event.scheduled_end) : start;
-  const windowEnd = new Date(endBase.getTime() + CLEANUP_EVENT_GRACE_MINUTES_AFTER * 60000);
+  const windowEnd = new Date(endBase.getTime() + graceMinutesAfter * 60000);
   return now >= windowStart && now <= windowEnd;
 }
 
@@ -368,7 +376,7 @@ function LeaderboardRow({
       <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
       <div className="text-right shrink-0">
         <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-          {Math.round(entry.total_value).toLocaleString()} {unit}
+          {formatPoints(entry.total_value)} {unit}
         </div>
         {breakdownParts.map((part) => (
           <div key={part} className="text-[11px] text-zinc-600 tabular-nums">
@@ -469,7 +477,7 @@ function StatsPanel({
   contributionCount: number;
   bagMetrics: { small: number; large: number; pounds: number };
 }) {
-  const totalValue = Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0));
+  const totalValue = claims.reduce((s, c) => s + (c.total_value ?? 0), 0);
   const claimedLabel =
     campaignType === "territory" ? "Territories claimed" :
     campaignType === "choropleth" ? "States claimed" :
@@ -574,9 +582,8 @@ function StatsPanel({
 }
 
 function displayUnit(value: number, unit: string): string {
-  const n = Math.round(value);
-  if (n === 1) return `1 ${unit.replace(/s$/, "")}`;
-  return `${n.toLocaleString()} ${unit.endsWith("s") ? unit : unit + "s"}`;
+  if (value === 1) return `1 ${unit.replace(/s$/, "")}`;
+  return `${formatPoints(value)} ${unit.endsWith("s") ? unit : unit + "s"}`;
 }
 
 function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { items: ActivityItem[]; unit: string; emptyMessage?: string }) {
@@ -677,6 +684,17 @@ export default function CampaignPageClient({
   const [placedPinCoords, setPlacedPinCoords] = useState<Coords | null>(null);
   const [newContribution, setNewContribution] = useState<NewContribution | null>(null);
   const [newReport, setNewReport] = useState<NewReport | null>(null);
+  const { values: cleanupEventSettings } = useGameSettings([
+    "cleanup_event_proximity_meters",
+    "cleanup_event_grace_minutes_before",
+    "cleanup_event_grace_minutes_after",
+  ] as const);
+  const cleanupEventProximityMeters =
+    cleanupEventSettings.cleanup_event_proximity_meters ?? CLEANUP_EVENT_PROXIMITY_METERS_FALLBACK;
+  const cleanupEventGraceMinutesBefore =
+    cleanupEventSettings.cleanup_event_grace_minutes_before ?? CLEANUP_EVENT_GRACE_MINUTES_BEFORE_FALLBACK;
+  const cleanupEventGraceMinutesAfter =
+    cleanupEventSettings.cleanup_event_grace_minutes_after ?? CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK;
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [locationError, setLocationError] = useState<number | null>(null);
   // The map's GeolocateControl is the single geolocation source for the page (see
@@ -716,11 +734,11 @@ export default function CampaignPageClient({
     return (
       cleanupEvents.find(
         (event) =>
-          isWithinCleanupEventWindow(event, now) &&
-          distanceMeters(userLocation, event) <= CLEANUP_EVENT_PROXIMITY_METERS,
+          isWithinCleanupEventWindow(event, now, cleanupEventGraceMinutesBefore, cleanupEventGraceMinutesAfter) &&
+          distanceMeters(userLocation, event) <= cleanupEventProximityMeters,
       ) ?? null
     );
-  }, [userLocation, cleanupEvents]);
+  }, [userLocation, cleanupEvents, cleanupEventGraceMinutesBefore, cleanupEventGraceMinutesAfter, cleanupEventProximityMeters]);
 
   const nearbyCleanupEvent = useMemo(() => {
     if (!nearbyCleanupEventRaw || dismissedCleanupEventIds.has(nearbyCleanupEventRaw.id)) return null;
@@ -748,6 +766,44 @@ export default function CampaignPageClient({
       .then((routes) => { if (!cancelled) setCleanupRoutesList(routes); })
       .catch(() => {});
     return () => { cancelled = true; };
+  }, [campaign.id]);
+
+  // Hotspot events (and any other trigger-driven campaign_events) are inserted server-side
+  // once a report-count/score threshold is crossed — without this subscription the map/chip
+  // UI only picked up new events on the next full page load, since activeEventsList otherwise
+  // only changes via the admin's own CreateTimedEventButton callback.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`campaign-events:${campaign.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "campaign_events", filter: `campaign_id=eq.${campaign.id}` },
+        (payload) => {
+          const event = payload.new as CampaignEvent;
+          if (event.status !== "active") return;
+          setActiveEventsList((prev) => (prev.some((e) => e.id === event.id) ? prev : [event, ...prev]));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "campaign_events", filter: `campaign_id=eq.${campaign.id}` },
+        (payload) => {
+          const event = payload.new as CampaignEvent;
+          setActiveEventsList((prev) =>
+            event.status === "active"
+              ? prev.some((e) => e.id === event.id)
+                ? prev.map((e) => (e.id === event.id ? event : e))
+                : [event, ...prev]
+              : prev.filter((e) => e.id !== event.id),
+          );
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [campaign.id]);
 
   const handleRouteAdded = (route: { id: string; route: RouteLineString }) => {
@@ -902,7 +958,7 @@ export default function CampaignPageClient({
   const showEventsChip = activeEventsList.length > 0 && !isHexBloom;
   const statsButtonActive = !openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive;
   const bloomTotal = isHexBloom
-    ? Math.round(claims.reduce((s, c) => s + (c.total_value ?? 0), 0))
+    ? claims.reduce((s, c) => s + (c.total_value ?? 0), 0)
     : 0;
   const nextMilestoneIdx = BLOOM_MILESTONES.findIndex((m) => bloomTotal < m.threshold);
   const nextMilestone = nextMilestoneIdx >= 0 ? BLOOM_MILESTONES[nextMilestoneIdx] : null;
@@ -1172,7 +1228,7 @@ export default function CampaignPageClient({
               <div className="flex items-baseline justify-between mb-1">
                 <span className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">World Bloom</span>
                 <span className="text-[10px] text-emerald-400/80 tabular-nums font-mono">
-                  {bloomTotal.toLocaleString()} pts
+                  {formatPoints(bloomTotal)} pts
                 </span>
               </div>
               <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-1">
@@ -1187,7 +1243,7 @@ export default function CampaignPageClient({
                 </span>
                 {nextMilestone && (
                   <span className="text-[10px] text-zinc-600 tabular-nums font-mono">
-                    {(nextMilestone.threshold - bloomTotal).toLocaleString()} to go
+                    {formatPoints(nextMilestone.threshold - bloomTotal)} to go
                   </span>
                 )}
               </div>

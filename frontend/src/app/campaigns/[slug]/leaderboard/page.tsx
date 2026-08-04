@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatPoints } from "@/lib/formatPoints";
 import CampaignTabNav from "../CampaignTabNav";
 import type { Database } from "@/types/database";
 
@@ -68,7 +69,7 @@ function LeaderboardTable({
             <div className="flex items-center gap-4 shrink-0 text-right">
               <div className="hidden sm:block text-right">
                 <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-                  {Math.round(entry.total_value).toLocaleString()}
+                  {formatPoints(entry.total_value)}
                 </div>
                 <div className="text-xs text-zinc-600">{unit}</div>
               </div>

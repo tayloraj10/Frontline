@@ -77,7 +77,6 @@ const getCampaignPageData = unstable_cache(
       { count: contribCount },
       lbRes,
       { data: actContribsData },
-      problemReportsRes,
       eventCentroidsRes,
       { data: bagMetricsData },
     ] = await Promise.all([
@@ -92,17 +91,12 @@ const getCampaignPageData = unstable_cache(
         .order("submitted_at", { ascending: false })
         .limit(20),
       campaign.campaign_type === "territory"
-        ? fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`, { cache: "no-store" }).catch(() => null)
-        : Promise.resolve(null),
-      campaign.campaign_type === "territory"
         ? fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/centroids`, { cache: "no-store" }).catch(() => null)
         : Promise.resolve(null),
       campaign.campaign_type === "territory"
         ? supabase.from("cleanups").select("metrics_small_bags, metrics_large_bags, metrics_pounds").eq("campaign_id", campaign.id)
         : Promise.resolve({ data: [] as { metrics_small_bags: number | null; metrics_large_bags: number | null; metrics_pounds: number | null }[] }),
     ]);
-
-    const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
 
     const eventCentroidList: EventCentroid[] = eventCentroidsRes?.ok ? await eventCentroidsRes.json() : [];
     const eventCentroids: Record<string, { lat: number; lng: number }> = Object.fromEntries(
@@ -180,7 +174,6 @@ const getCampaignPageData = unstable_cache(
       events,
       contribCount: contribCount ?? 0,
       actContribs: actContribsData ?? [],
-      problemReports,
       eventCentroids,
       eventGeoUnitIds,
       partnerBusinesses,
@@ -208,13 +201,22 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   ]);
 
   if (!pageData) notFound();
-  const { campaign, claims, events, contribCount, actContribs, problemReports, eventCentroids, eventGeoUnitIds, partnerBusinesses, lbRaw, bagMetrics } = pageData;
+  const { campaign, claims, events, contribCount, actContribs, eventCentroids, eventGeoUnitIds, partnerBusinesses, lbRaw, bagMetrics } = pageData;
 
   // Fetched uncached (unlike the rest of this page's data, which is batched behind a
   // 20s unstable_cache) so a just-created event shows up immediately instead of waiting
   // out the cache window — mirrors how groups/[slug]/page.tsx fetches its events list.
   const cleanupEventsRes = await fetch(`${fastapiUrl}/api/cleanup-events/campaign/${campaign.id}`, { cache: "no-store" }).catch(() => null);
   const cleanupEvents: MapCleanupEvent[] = cleanupEventsRes?.ok ? await cleanupEventsRes.json() : [];
+
+  // Also fetched uncached, same reason: problem_reports mutate constantly via the
+  // claim flow (claim/before-photo/after-photo/release), and serving a claim off a
+  // stale 20s-cached snapshot was causing the just-claimed report to appear reverted
+  // to "open" or to vanish entirely on the very next page data refresh.
+  const problemReportsRes = campaign.campaign_type === "territory"
+    ? await fetch(`${fastapiUrl}/api/problem-reports/campaign/${campaign.id}`, { cache: "no-store" }).catch(() => null)
+    : null;
+  const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
 
   const [{ data: membershipData }, { data: adminProfile }] = await Promise.all([
     user

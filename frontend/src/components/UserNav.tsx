@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { syncUserPoints, useUserPoints } from "@/lib/userPoints";
+import { formatPoints } from "@/lib/formatPoints";
 import type { User } from "@supabase/supabase-js";
 
 export default function UserNav({
@@ -20,6 +22,17 @@ export default function UserNav({
   const supabase = createClient();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // AppHeader (a Server Component) fetches these props once per server render; hydrate the
+  // shared client-side store from them so award-granting flows elsewhere in the tree can
+  // push instant updates here without a page refresh. Re-synced whenever the props change
+  // (e.g. a fresh navigation) so a stale optimistic bump never outlives a real refetch.
+  useEffect(() => {
+    if (user) syncUserPoints(points, spendablePoints);
+  }, [user, points, spendablePoints]);
+  const live = useUserPoints();
+  const displayPoints = live?.points ?? points;
+  const displaySpendablePoints = live?.spendablePoints ?? spendablePoints;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -55,9 +68,9 @@ export default function UserNav({
   const formatCompact = (value: number) =>
     value >= 1000
       ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1).replace(/\.0$/, "")}k`
-      : Math.round(value).toLocaleString();
+      : formatPoints(value);
 
-  const compactPoints = formatCompact(spendablePoints);
+  const compactPoints = formatCompact(displaySpendablePoints);
 
   return (
     <div className="relative" ref={ref}>
@@ -88,7 +101,7 @@ export default function UserNav({
               title="Points available to redeem for partner offers. Goes down when you redeem something."
             >
               <span className="text-emerald-400 font-bold text-sm leading-none tabular-nums">
-                {Math.round(spendablePoints).toLocaleString()}
+                {formatPoints(displaySpendablePoints)}
               </span>
               <span className="text-emerald-500/70 text-[10px] font-semibold uppercase tracking-wide leading-none">
                 Spendable
@@ -99,7 +112,7 @@ export default function UserNav({
               title="Total points you've ever earned. Counts toward the leaderboard and never goes down, even when you redeem offers."
             >
               <span className="text-zinc-300 font-bold text-sm leading-none tabular-nums">
-                {Math.round(points).toLocaleString()}
+                {formatPoints(displayPoints)}
               </span>
               <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wide leading-none">
                 Lifetime

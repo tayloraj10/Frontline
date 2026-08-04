@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { formatPoints } from "@/lib/formatPoints";
 import type { Database } from "@/types/database";
 
 type Profile = Pick<
@@ -63,7 +64,7 @@ export default async function GlobalLeaderboardPage() {
                 </Link>
                 <div className="text-right shrink-0">
                   <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-                    {Math.round(p.points ?? 0).toLocaleString()}
+                    {formatPoints(p.points ?? 0)}
                   </div>
                   <div className="text-xs text-zinc-600">pts</div>
                 </div>

@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { useGameSettings, SettingValue } from "@/lib/gameSettings";
+import { refreshUserPoints } from "@/lib/userPoints";
+import { formatPoints } from "@/lib/formatPoints";
 import { createCleanupEvent } from "@/lib/cleanupEvents";
 import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString } from "@/lib/cleanupRoutes";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
@@ -25,16 +29,12 @@ interface Coords {
   longitude: number;
 }
 
-// Large (~kitchen trash bag, 13-gal) holds ~3x the volume of small (~grocery bag).
-const LARGE_BAG_VALUE = 3;
-const SMALL_BAG_VALUE = 1;
-
 // Matches the hex bloom wave duration in CampaignMap.tsx (1.3s) plus a short buffer,
 // so the success modal doesn't cover the map before the animation finishes.
 const BLOOM_ANIMATION_MS = 1500;
 
-function cleanupValue(smallBags: number, largeBags: number): number {
-  return smallBags * SMALL_BAG_VALUE + largeBags * LARGE_BAG_VALUE;
+function cleanupValue(smallBags: number, largeBags: number, smallBagValue: number, largeBagValue: number): number {
+  return smallBags * smallBagValue + largeBags * largeBagValue;
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -280,9 +280,6 @@ interface ClickedReport {
 
 const METERS_TO_FEET = 3.28084;
 const CLAIM_RADIUS_EARTH_METERS = 6371000;
-// Mirrors CLAIM_PROXIMITY_METERS_UK/US in backend/app/api/routes/problem_reports.py.
-const CLAIM_PROXIMITY_METERS_UK = 100.0;
-const CLAIM_PROXIMITY_METERS_US = 91.44;
 
 function formatHotspotDistance(distanceM: number, unitType: string | null): string {
   return unitType === "uk_postcode_district"
@@ -300,8 +297,8 @@ function claimDistanceMeters(a: Coords, lat: number, lng: number): number {
   return 2 * CLAIM_RADIUS_EARTH_METERS * Math.asin(Math.sqrt(h));
 }
 
-function claimRadiusMeters(unitType: string | null): number {
-  return unitType === "uk_postcode_district" ? CLAIM_PROXIMITY_METERS_UK : CLAIM_PROXIMITY_METERS_US;
+function claimRadiusMeters(unitType: string | null, ukMeters: number, usMeters: number): number {
+  return unitType === "uk_postcode_district" ? ukMeters : usMeters;
 }
 
 // ─── GPS hook ────────────────────────────────────────────────────────────────
@@ -657,6 +654,14 @@ function ContributeModal({
 
   const config = MODAL_CONFIG[campaignContributionType] ?? MODAL_CONFIG.cleanup;
 
+  const { values: gameSettings, loading: settingsLoading } = useGameSettings([
+    "small_bag_value",
+    "large_bag_value",
+    "claim_challenge_multiplier",
+    "trash_war_solarpunk_credit",
+  ] as const);
+  const bagValuesReady = gameSettings.small_bag_value !== undefined && gameSettings.large_bag_value !== undefined;
+
   const [fromSolarpunk] = useState(() => {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.search).get("ref") === "solarpunk";
@@ -752,8 +757,14 @@ function ContributeModal({
   const effectiveMultiplier = effectiveEventId ? null : isRouteMode ? selectedRouteMultiplier : activeMultiplier;
 
   const submitCoords = overrideCoords ?? gps.coords;
-  const baseValue = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 0;
-  const finalValue = baseValue * (effectiveMultiplier?.multiplier ?? 1);
+  const baseValue = isCleanup && bagValuesReady
+    ? cleanupValue(smallBagsNum, largeBagsNum, gameSettings.small_bag_value!, gameSettings.large_bag_value!)
+    : 0;
+  // Mirrors record_contribution: the claim-challenge bonus and an active hotspot
+  // multiplier don't stack — take whichever is larger, not their product.
+  const challengeMultiplier = isCleanup && claimedReportId ? gameSettings.claim_challenge_multiplier ?? 1 : 1;
+  const combinedMultiplier = Math.max(effectiveMultiplier?.multiplier ?? 1, challengeMultiplier);
+  const finalValue = baseValue * combinedMultiplier;
 
   // Flash the territory-value number whenever a hotspot bonus kicks it up, so the
   // extra points are legible as an event, not just a bigger static number.
@@ -823,6 +834,7 @@ function ContributeModal({
 
   const canSubmit = (() => {
     if (submitting) return false;
+    if (isCleanup && !bagValuesReady) return false;
     if (isRouteMode) {
       if (!route || !selectedRouteGeoUnitId) return false;
     } else if ((isCleanup || isPhoto) && !submitCoords) return false;
@@ -847,7 +859,11 @@ function ContributeModal({
       const newlyUploadedUrls = photos.length > 0 ? await Promise.all(photos.map((p) => uploadToR2(p))) : [];
       const photoUrls = [...existingPhotoUrls, ...newlyUploadedUrls];
 
-      const value = isCleanup ? cleanupValue(smallBagsNum, largeBagsNum) : 1;
+      // canSubmit already requires bagValuesReady for cleanups, so these are guaranteed
+      // defined by the time handleSubmit can run.
+      const value = isCleanup
+        ? cleanupValue(smallBagsNum, largeBagsNum, gameSettings.small_bag_value!, gameSettings.large_bag_value!)
+        : 1;
       const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
 
       const body: Record<string, unknown> = {
@@ -902,6 +918,10 @@ function ContributeModal({
       );
       setHotspotCleared(Boolean(data.hotspot_cleared));
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
+      // Re-read the authoritative balance (rather than computing the delta client-side,
+      // which would need to duplicate the trigger's multiplier/hotspot/event-mode logic)
+      // so the header badge updates instantly instead of waiting for a page refresh.
+      refreshUserPoints(userId);
     } catch {
       setError("Submission failed. Please try again.");
     } finally {
@@ -930,17 +950,21 @@ function ContributeModal({
             {result === "success" ? config.successClaimed : config.successUnclaimed}
           </p>
           {isCleanup && claimedReportId && (
-            <p className="text-sm text-violet-300 font-semibold text-center">
-              🎯 Challenge bonus: 1.5× score applied!
+            <p className={`text-sm font-semibold text-center ${challengeMultiplier >= (appliedMultiplier?.multiplier ?? 1) ? "text-violet-300" : "text-violet-500/50 line-through"}`}>
+              🎯 Challenge bonus: <SettingValue value={gameSettings.claim_challenge_multiplier} loading={settingsLoading} />× score
+              {challengeMultiplier >= (appliedMultiplier?.multiplier ?? 1) ? " applied!" : " (not applied — hotspot bonus was bigger)"}
             </p>
           )}
           {isCleanup && appliedMultiplier && (
             <p
-              className={`text-sm text-orange-300 font-semibold text-center transition-all duration-500 ${celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"
+              className={`text-sm font-semibold text-center transition-all duration-500 ${appliedMultiplier.multiplier > challengeMultiplier
+                  ? `text-orange-300 ${celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"}`
+                  : "text-orange-500/50 line-through"
                 }`}
             >
               <span className="inline-block animate-bounce">🔥</span>{" "}
-              +{appliedMultiplier.multiplier}× hotspot bonus applied!
+              +{appliedMultiplier.multiplier}× hotspot bonus
+              {appliedMultiplier.multiplier > challengeMultiplier ? " applied!" : claimedReportId ? " (not applied — challenge bonus was bigger)" : " applied!"}
             </p>
           )}
           {isCleanup && hotspotCleared && (
@@ -951,7 +975,7 @@ function ContributeModal({
           )}
           {isCleanup && fromSolarpunk && (
             <>
-              <p className="text-xs text-lime-400 text-center">+8 Solarpunk bloom points earned 🌱</p>
+              <p className="text-xs text-lime-400 text-center">+<SettingValue value={gameSettings.trash_war_solarpunk_credit} loading={settingsLoading} /> Solarpunk bloom points earned 🌱</p>
               <Link
                 href="/campaigns/solarpunk"
                 className="mt-1 text-sm text-lime-400 hover:text-lime-300 font-medium"
@@ -977,9 +1001,26 @@ function ContributeModal({
       <div className="flex flex-col gap-4">
 
         {isCleanup && claimedReportId && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
-            <span className="text-base shrink-0">🎯</span>
-            <span>Challenge complete — this cleanup earns a <span className="font-bold text-violet-200">1.5×</span> score bonus.</span>
+          <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
+            <div className="flex items-center gap-2">
+              <span className="text-base shrink-0">🎯</span>
+              <span>Challenge complete — {effectiveMultiplier ? "two bonuses are eligible" : "this cleanup earns a score bonus"}:</span>
+            </div>
+            <div className="flex flex-col gap-1 pl-6">
+              <span className={challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "font-bold text-violet-200" : "text-violet-400/60 line-through"}>
+                {gameSettings.claim_challenge_multiplier ?? challengeMultiplier}× challenge bonus
+                {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) && " (applied)"}
+              </span>
+              {effectiveMultiplier && (
+                <span className={effectiveMultiplier.multiplier > challengeMultiplier ? "font-bold text-orange-300" : "text-orange-400/50 line-through"}>
+                  {effectiveMultiplier.multiplier}× hotspot bonus
+                  {effectiveMultiplier.multiplier > challengeMultiplier && " (applied)"}
+                </span>
+              )}
+            </div>
+            {effectiveMultiplier && (
+              <span className="pl-6 text-violet-400/70">Only the larger bonus applies — they don&apos;t stack.</span>
+            )}
           </div>
         )}
 
@@ -1270,19 +1311,27 @@ function ContributeModal({
             </div>
             <p className="mt-2 text-xs text-zinc-500">
               Total points:{" "}
-              {effectiveMultiplier && (
-                <span className="line-through text-zinc-600 mr-1.5">{baseValue.toFixed(0)}</span>
-              )}
-              <span
-                className={`text-lg font-bold inline-block transition-transform duration-300 ${effectiveMultiplier ? "text-orange-400" : "text-emerald-400"
-                  } ${valueFlash ? "scale-125" : "scale-100"}`}
-              >
-                {finalValue.toFixed(0)}
-              </span>
-              {effectiveMultiplier ? (
-                <span className="ml-1 text-orange-400/80">({effectiveMultiplier.multiplier}× hotspot multiplier applied)</span>
+              {!bagValuesReady ? (
+                <SettingValue value={undefined} loading={settingsLoading} />
               ) : (
-                <span className="ml-1 text-zinc-600">(large bags count {LARGE_BAG_VALUE}x)</span>
+                <>
+                  {combinedMultiplier > 1 && (
+                    <span className="line-through text-zinc-600 mr-1.5">{formatPoints(baseValue)}</span>
+                  )}
+                  <span
+                    className={`text-lg font-bold inline-block transition-transform duration-300 ${combinedMultiplier > 1 ? "text-orange-400" : "text-emerald-400"
+                      } ${valueFlash ? "scale-125" : "scale-100"}`}
+                  >
+                    {formatPoints(finalValue)}
+                  </span>
+                  {combinedMultiplier > 1 ? (
+                    <span className="ml-1 text-orange-400/80">
+                      ({combinedMultiplier}× {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "challenge" : "hotspot"} multiplier applied)
+                    </span>
+                  ) : (
+                    <span className="ml-1 text-zinc-600">(large bags count {gameSettings.large_bag_value!}x)</span>
+                  )}
+                </>
               )}
             </p>
             <div className="mt-3">
@@ -1476,7 +1525,9 @@ function ReportModal({
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [hotspotTriggered, setHotspotTriggered] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { values: gameSettings, loading: settingsLoading } = useGameSettings(["trash_report_value"] as const);
 
   useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1515,8 +1566,11 @@ function ReportModal({
         },
       );
       if (!res.ok) throw new Error(await res.text());
+      const result = await res.json();
       onReportSubmitted?.(submitCoords.latitude, submitCoords.longitude, severity, photoUrl);
+      setHotspotTriggered(!!result.hotspot_triggered);
       setDone(true);
+      refreshUserPoints(userId);
     } catch {
       setError("Report failed. Please try again.");
     } finally {
@@ -1528,9 +1582,11 @@ function ReportModal({
     return (
       <ModalShell onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
-          <span className="text-4xl">📍</span>
+          <span className="text-4xl">{hotspotTriggered ? "🔥" : "📍"}</span>
           <p className="text-zinc-100 font-semibold text-center">
-            Report submitted! If enough reports come in, a Hotspot will spawn.
+            {hotspotTriggered
+              ? "Report submitted! Your report just pushed this area over the threshold — a Hotspot has spawned!"
+              : "Report submitted! If enough reports come in, a Hotspot will spawn."}
           </p>
           <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">
             Close
@@ -1613,6 +1669,15 @@ function ReportModal({
           <p className="mt-1.5 text-xs text-zinc-500">{SEVERITY_DESCRIPTIONS[severity]}</p>
         </div>
 
+        <p className="text-xs text-zinc-500">
+          Points earned:{" "}
+          {gameSettings.trash_report_value === undefined ? (
+            <SettingValue value={undefined} loading={settingsLoading} />
+          ) : (
+            <span className="text-lg font-bold text-emerald-400">{formatPoints(gameSettings.trash_report_value)}</span>
+          )}
+        </p>
+
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
         <div className="flex gap-2 pt-1">
@@ -1646,27 +1711,21 @@ function ReportModal({
 
 // ─── Claim-a-report challenge mode ────────────────────────────────────────────
 
-// Display-only mirror of CLAIM_BEFORE_WINDOW_MINUTES / CLAIM_AFTER_WINDOW_MINUTES in
-// backend/app/api/routes/problem_reports.py — the server is authoritative on the actual
-// deadlines, these are just used to show the time limits before a user commits to a claim.
-const CLAIM_BEFORE_WINDOW_MINUTES = 30;
-const CLAIM_AFTER_WINDOW_MINUTES: Record<string, number> = { low: 20, medium: 30, high: 45 };
-// Mirrors FLAG_AUTO_HIDE_THRESHOLD in backend/app/api/routes/problem_reports.py.
-const FLAG_AUTO_HIDE_THRESHOLD = 3;
-function claimAfterWindowMinutes(severity: string): number {
-  return CLAIM_AFTER_WINDOW_MINUTES[severity] ?? CLAIM_AFTER_WINDOW_MINUTES.medium;
+function claimAfterWindowMinutes(severity: string, windows: Record<string, number>): number {
+  return windows[severity] ?? windows.medium;
 }
 
-// Shown under the severity picker on report creation. Kept in sync with
-// CLAIM_AFTER_WINDOW_MINUTES above — pick the tier that matches how long the clean-up
-// will actually take, since that's the window a claimant gets to submit an after photo.
+// Shown under the severity picker on report creation. Pick the tier that matches how
+// long the clean-up will actually take, since that's the window a claimant gets to
+// submit an after photo (windows come from the claim_after_window_minutes_* settings).
 const SEVERITY_DESCRIPTIONS: Record<"low" | "medium" | "high", string> = {
-  low: "A few scattered items — a quick grab-and-go. 20 min to clean up once claimed.",
-  medium: "A noticeable pile or small dump site. 30 min to clean up once claimed.",
-  high: "A large dump, bulky items, or hazardous material. 45 min to clean up once claimed.",
+  low: "A few scattered items — a quick grab-and-go.",
+  medium: "A noticeable pile or small dump site.",
+  high: "A large dump, bulky items, or hazardous material.",
 };
-function severityDescription(severity: string): string {
-  return SEVERITY_DESCRIPTIONS[severity as "low" | "medium" | "high"] ?? SEVERITY_DESCRIPTIONS.medium;
+function severityDescription(severity: string, afterWindow: number): string {
+  const base = SEVERITY_DESCRIPTIONS[severity as "low" | "medium" | "high"] ?? SEVERITY_DESCRIPTIONS.medium;
+  return `${base} ${afterWindow} min to clean up once claimed.`;
 }
 
 const SEVERITY_META: Record<string, { label: string; icon: string; classes: string }> = {
@@ -1723,6 +1782,34 @@ function ClaimReportModal({
   const [localReport, setLocalReport] = useState(report);
   useEffect(() => setLocalReport(report), [report]);
 
+  const { values: gameSettings, loading: settingsLoading } = useGameSettings([
+    "claim_proximity_meters_uk",
+    "claim_proximity_meters_us",
+    "claim_before_window_minutes",
+    "claim_after_window_minutes_low",
+    "claim_after_window_minutes_medium",
+    "claim_after_window_minutes_high",
+    "claim_challenge_multiplier",
+    "flag_auto_hide_threshold",
+  ] as const);
+  const proximityReady = gameSettings.claim_proximity_meters_uk !== undefined && gameSettings.claim_proximity_meters_us !== undefined;
+  // Gates the unclaimed "open" offer screen below — every one of these numbers is part of
+  // the deal the user is agreeing to (windows, radius, bonus), so don't show that screen
+  // with any of them missing or defaulted.
+  const claimSettingsReady =
+    proximityReady &&
+    gameSettings.claim_before_window_minutes !== undefined &&
+    gameSettings.claim_after_window_minutes_low !== undefined &&
+    gameSettings.claim_after_window_minutes_medium !== undefined &&
+    gameSettings.claim_after_window_minutes_high !== undefined &&
+    gameSettings.claim_challenge_multiplier !== undefined &&
+    gameSettings.flag_auto_hide_threshold !== undefined;
+  const afterWindowMinutesBySeverity = {
+    low: gameSettings.claim_after_window_minutes_low,
+    medium: gameSettings.claim_after_window_minutes_medium,
+    high: gameSettings.claim_after_window_minutes_high,
+  } as Record<"low" | "medium" | "high", number>;
+
   useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [submitting, setSubmitting] = useState(false);
@@ -1753,9 +1840,11 @@ function ClaimReportModal({
   // Mirrors the backend's ST_DWithin check in _assert_within_claim_radius — gating the
   // photo upload client-side too so users don't waste an upload on a submission the
   // server will reject anyway.
-  const radiusMeters = claimRadiusMeters(localReport.unit_type);
+  const radiusMeters = proximityReady
+    ? claimRadiusMeters(localReport.unit_type, gameSettings.claim_proximity_meters_uk!, gameSettings.claim_proximity_meters_us!)
+    : null;
   const distanceToReport = gps.coords ? claimDistanceMeters(gps.coords, localReport.latitude, localReport.longitude) : null;
-  const withinClaimRadius = distanceToReport !== null && distanceToReport <= radiusMeters;
+  const withinClaimRadius = radiusMeters !== null && distanceToReport !== null && distanceToReport <= radiusMeters;
 
   // The backend only reverts an expired claim to "open" when it's touched by a later
   // request (check-on-read, not a cron job) — so if the user just sits on this modal
@@ -1996,7 +2085,11 @@ function ClaimReportModal({
           onClick={handleFlag}
           disabled={flagState === "submitting"}
           className="text-xs text-zinc-500 hover:text-red-400 underline disabled:opacity-40"
-          title={`If ${FLAG_AUTO_HIDE_THRESHOLD} people flag this report as inaccurate, it will be automatically removed from the map.`}
+          title={
+            gameSettings.flag_auto_hide_threshold !== undefined
+              ? `If ${gameSettings.flag_auto_hide_threshold} people flag this report as inaccurate, it will be automatically removed from the map.`
+              : undefined
+          }
         >
           {flagState === "submitting" ? "Flagging…" : "🚩 Report this as inaccurate"}
         </button>
@@ -2004,9 +2097,13 @@ function ClaimReportModal({
       {localReport.flag_count > 0 && (
         <p
           className="text-xs text-zinc-600 mt-1"
-          title={`If ${FLAG_AUTO_HIDE_THRESHOLD} people flag this report as inaccurate, it will be automatically removed from the map.`}
+          title={
+            gameSettings.flag_auto_hide_threshold !== undefined
+              ? `If ${gameSettings.flag_auto_hide_threshold} people flag this report as inaccurate, it will be automatically removed from the map.`
+              : undefined
+          }
         >
-          {localReport.flag_count} of {FLAG_AUTO_HIDE_THRESHOLD} flags needed to remove this report
+          {localReport.flag_count} of <SettingValue value={gameSettings.flag_auto_hide_threshold} loading={settingsLoading} /> flags needed to remove this report
         </p>
       )}
       {flagError && <p className="text-red-400 text-xs mt-1">{flagError}</p>}
@@ -2018,7 +2115,7 @@ function ClaimReportModal({
       <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">🎯</span>
-          <p className="text-zinc-100 text-sm text-center">Sign in to claim this report and earn a 1.5× challenge bonus.</p>
+          <p className="text-zinc-100 text-sm text-center">Sign in to claim this report and earn a <SettingValue value={gameSettings.claim_challenge_multiplier} loading={settingsLoading} />× challenge bonus.</p>
           <Link
             href={`/login?next=${pathname}`}
             className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold text-center transition-colors"
@@ -2075,27 +2172,42 @@ function ClaimReportModal({
     );
   }
 
-  // Unclaimed — offer the claim action.
+  // Unclaimed — offer the claim action. Every number on this screen (windows, radius,
+  // bonus) is part of the deal the user is agreeing to, so don't offer the claim at all
+  // until they're all loaded — a stale/default number here could talk someone into a
+  // time-boxed challenge on terms that don't match what the server will actually enforce.
+  if (localReport.status === "open" && !claimSettingsReady) {
+    return (
+      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-8">
+          <span className="w-6 h-6 border-2 border-zinc-600 border-t-violet-500 rounded-full animate-spin" />
+          <p className="text-xs text-zinc-500">
+            {settingsLoading ? "Loading challenge settings…" : "Couldn't load challenge settings — try again."}
+          </p>
+        </div>
+      </ModalShell>
+    );
+  }
   if (localReport.status === "open") {
-    const afterWindow = claimAfterWindowMinutes(localReport.severity);
+    const afterWindow = claimAfterWindowMinutes(localReport.severity, afterWindowMinutesBySeverity);
     return (
       <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
         <div className="flex flex-col gap-4">
           {severityBadge}
-          <p className="-mt-3 text-xs text-zinc-500">{severityDescription(localReport.severity)}</p>
+          <p className="-mt-3 text-xs text-zinc-500">{severityDescription(localReport.severity, afterWindow)}</p>
           {reportPhotoBlock}
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
             <span className="text-base shrink-0">🎯</span>
             <span>
               Claim it to start the challenge: arrive with a before photo, then clean it up for an after photo.
-              Complete both in time for a <span className="font-bold text-violet-200">1.5×</span> score bonus.
+              Complete both in time for a <span className="font-bold text-violet-200">{gameSettings.claim_challenge_multiplier!}×</span> score bonus.
             </span>
           </div>
           <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900/60 text-xs text-zinc-300">
             <div className="flex items-center gap-2">
               <span className="shrink-0">⏱️</span>
               <span>
-                Arrive & submit before photo: <span className="font-semibold text-zinc-100">{CLAIM_BEFORE_WINDOW_MINUTES} min</span>
+                Arrive & submit before photo: <span className="font-semibold text-zinc-100">{gameSettings.claim_before_window_minutes!} min</span>
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -2152,9 +2264,11 @@ function ClaimReportModal({
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
               <span className="text-base shrink-0">📍</span>
               <span>
-                {distanceToReport === null
-                  ? "Waiting for your location to confirm you're at the report…"
-                  : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
+                {radiusMeters === null
+                  ? "Loading claim settings…"
+                  : distanceToReport === null
+                    ? "Waiting for your location to confirm you're at the report…"
+                    : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
               </span>
             </div>
           )}
@@ -2247,9 +2361,11 @@ function ClaimReportModal({
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
             <span className="text-base shrink-0">📍</span>
             <span>
-              {distanceToReport === null
-                ? "Waiting for your location to confirm you're at the report…"
-                : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
+              {radiusMeters === null
+                ? "Loading claim settings…"
+                : distanceToReport === null
+                  ? "Waiting for your location to confirm you're at the report…"
+                  : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
             </span>
           </div>
         )}
@@ -2298,9 +2414,18 @@ function ClaimReportModal({
           <button
             onClick={handleAfterPhoto}
             disabled={!photo || submitting || afterCountdown.expired || !withinClaimRadius}
-            className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors leading-tight"
           >
-            {submitting ? "Submitting…" : "Submit after photo (1.5× bonus)"}
+            {submitting ? (
+              "Submitting…"
+            ) : (
+              <span className="flex flex-col items-center">
+                <span>Submit after photo</span>
+                <span className="text-[11px] font-normal opacity-90">
+                  (<SettingValue value={gameSettings.claim_challenge_multiplier} loading={settingsLoading} />× bonus)
+                </span>
+              </span>
+            )}
           </button>
         </div>
         <button
@@ -3425,6 +3550,31 @@ export default function ContributionPanel({
   const prevPinPickerActiveRef = useRef(false);
   const prevRoutePickerActiveRef = useRef(false);
 
+  // If a claim challenge's Log Cleanup step gets canceled/dismissed, the report was already
+  // marked resolved server-side by the after-photo step (before the cleanup contribution is
+  // actually logged), so it drops off the open-reports list with no way back in. Poll for it
+  // here so we can offer to resume finishing the log.
+  const [pendingChallengeCompletion, setPendingChallengeCompletion] = useState<{
+    id: string;
+    latitude: number;
+    longitude: number;
+    photo_urls: string[];
+    unit_type: string | null;
+  } | null>(null);
+  const refreshPendingChallengeCompletion = useCallback(() => {
+    if (!userId) {
+      setPendingChallengeCompletion(null);
+      return;
+    }
+    fetch(
+      `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/campaign/${campaignId}/pending-challenge-completion?user_id=${userId}`,
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setPendingChallengeCompletion)
+      .catch(() => {});
+  }, [campaignId, userId]);
+  useEffect(() => { refreshPendingChallengeCompletion(); }, [refreshPendingChallengeCompletion]);
+
   // A pin click on the map hands us a report; jump straight into the claim modal.
   useEffect(() => {
     if (!clickedReport) return;
@@ -3524,6 +3674,24 @@ export default function ContributionPanel({
 
   return (
     <>
+      {pendingChallengeCompletion && mode !== "contribute" && (
+        <button
+          onClick={() => {
+            setClaimedReportIdForContribute(pendingChallengeCompletion.id);
+            setClaimedPhotoUrlsForContribute(pendingChallengeCompletion.photo_urls);
+            setContributeOverrideCoords({
+              latitude: pendingChallengeCompletion.latitude,
+              longitude: pendingChallengeCompletion.longitude,
+            });
+            setMode("contribute");
+            gps.capture();
+          }}
+          className="absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-800/60 bg-amber-950/80 text-amber-200 text-xs font-medium backdrop-blur-sm shadow-lg transition-colors hover:bg-amber-900/80"
+        >
+          <span className="text-sm">🎯</span>
+          <span>Finish logging your hotspot cleanup to earn points</span>
+        </button>
+      )}
       {myActiveClaimReport && mode !== "claim" && (
         <ActiveClaimBadge
           claim={myActiveClaimReport}
@@ -3696,7 +3864,14 @@ export default function ContributionPanel({
               onEnterPinPicker={handleEnterPinPickerForContribute}
               onEnterRoutePicker={handleEnterRoutePickerForContribute}
               routeOverride={contributeRouteOverride}
-              onClose={() => { setMode(null); setContributeOverrideCoords(null); setContributeRouteOverride(null); setClaimedReportIdForContribute(null); setClaimedPhotoUrlsForContribute([]); }}
+              onClose={() => {
+                setMode(null);
+                setContributeOverrideCoords(null);
+                setContributeRouteOverride(null);
+                setClaimedReportIdForContribute(null);
+                setClaimedPhotoUrlsForContribute([]);
+                refreshPendingChallengeCompletion();
+              }}
               onContributionSubmitted={onContributionSubmitted}
               activeMapStyle={activeMapStyle}
               nearbyEvent={nearbyCleanupEvent ?? null}

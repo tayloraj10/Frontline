@@ -7,12 +7,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import gsap from "gsap";
 import { cellToBoundary } from "h3-js";
 import { createClient } from "@/lib/supabase/client";
+import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import type { Database } from "@/types/database";
 import type { ClaimLabel } from "./CampaignMapWrapper";
 import type { ProblemReports, ProblemReportMapData } from "@/app/campaigns/[slug]/CampaignPageClient";
 import type { Feature, Point } from "geojson";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { getCleanupRoute, type CampaignCleanupRoute } from "@/lib/cleanupRoutes";
+import { formatPoints } from "@/lib/formatPoints";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -41,15 +43,13 @@ const NORTH_AMERICA_EUROPE_BOUNDS: maplibregl.LngLatBoundsLike = [
 
 // Mirrors HOTSPOT_PROXIMITY_METERS_UK/US in backend/app/api/routes/contributions.py — the max
 // distance a cleanup submission may be from a reported hotspot to claim it as resolved.
-const REPORT_CLAIM_RADIUS_METERS_UK = 100;
-const REPORT_CLAIM_RADIUS_METERS_US = 91.44; // 300 ft
+// These mirror the game_settings defaults and are used only until the live values load via
+// useGameSettings (mapGameSettingsRef below) — the DB row is the source of truth.
+const REPORT_CLAIM_RADIUS_METERS_UK_FALLBACK = 100;
+const REPORT_CLAIM_RADIUS_METERS_US_FALLBACK = 91.44; // 300 ft
 const EARTH_RADIUS_METERS = 6371000;
-// Mirrors FLAG_AUTO_HIDE_THRESHOLD in backend/app/api/routes/problem_reports.py.
-const FLAG_AUTO_HIDE_THRESHOLD = 3;
-
-// Mirrors CLEANUP_EVENT_PROXIMITY_METERS in backend/app/api/routes/cleanup_events.py — the
-// check-in radius shown as a circle around each group cleanup event, same for every event.
-const CLEANUP_EVENT_RADIUS_METERS = 150;
+const FLAG_AUTO_HIDE_THRESHOLD_FALLBACK = 3;
+const CLEANUP_EVENT_RADIUS_METERS_FALLBACK = 150;
 
 const ROUTE_LOOP_CLOSE_METERS = 20;
 
@@ -795,6 +795,11 @@ function TerritoryPanel({
   const [cleanupPhotos, setCleanupPhotos] = useState<string[]>([]);
   const [showPointsInfo, setShowPointsInfo] = useState(false);
   const [bagTotals, setBagTotals] = useState({ small: 0, large: 0 });
+  const { values: pointValues, loading: pointValuesLoading } = useGameSettings([
+    "small_bag_value",
+    "large_bag_value",
+    "pound_value",
+  ] as const);
 
   useEffect(() => {
     const supabase = createClient();
@@ -1112,10 +1117,12 @@ function TerritoryPanel({
             <button onClick={() => setShowPointsInfo(false)} className="text-lg leading-none text-zinc-600 hover:text-zinc-300">×</button>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            The ranking total is measured in points, not a literal bag count. Small bags are worth 1 point,
-            large bags are worth 3 points, and pound-based cleanups convert at 0.5 points per pound. The
-            &quot;bags picked up&quot; line below it is the actual physical bag count (small + large), the
-            real-world impact this campaign is about, so the two numbers won&apos;t always match.
+            The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
+            <SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> point{pointValues.small_bag_value !== 1 ? "s" : ""}, large bags are
+            worth <SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> points, and pound-based cleanups convert at{" "}
+            <SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> points per pound. The &quot;bags picked up&quot; line below it is the
+            actual physical bag count (small + large), the real-world impact this campaign is about, so the
+            two numbers won&apos;t always match.
           </p>
         </div>
       </div>
@@ -1257,7 +1264,7 @@ function HexPanel({
         <div className="flex items-baseline justify-between mb-1.5">
           <span className="text-xs text-zinc-500">Bloom Score</span>
           <span className="text-sm font-bold text-zinc-200 tabular-nums">
-            {Math.round(entry.bloom_score).toLocaleString()}
+            {formatPoints(entry.bloom_score)}
             {nextThreshold !== null ? ` / ${nextThreshold.toLocaleString()}` : " ✓ Max"}
           </span>
         </div>
@@ -1507,6 +1514,15 @@ export default function CampaignMap({
   });
   const eventMarkerIsHotspotRef = useRef<boolean[]>([]);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
+
+  const { values: mapGameSettings } = useGameSettings([
+    "claim_proximity_meters_uk",
+    "claim_proximity_meters_us",
+    "cleanup_event_proximity_meters",
+    "flag_auto_hide_threshold",
+  ] as const);
+  const mapGameSettingsRef = useRef(mapGameSettings);
+  mapGameSettingsRef.current = mapGameSettings;
 
   const claimsRef = useRef(claims);
   const activeEventsRef = useRef(activeEvents);
@@ -1860,7 +1876,13 @@ export default function CampaignMap({
           type: "Feature",
           geometry: {
             type: "Polygon",
-            coordinates: [circlePolygon(event.lat, event.lng, CLEANUP_EVENT_RADIUS_METERS)],
+            coordinates: [
+              circlePolygon(
+                event.lat,
+                event.lng,
+                mapGameSettingsRef.current.cleanup_event_proximity_meters ?? CLEANUP_EVENT_RADIUS_METERS_FALLBACK,
+              ),
+            ],
           },
           properties: {},
         })),
@@ -1914,7 +1936,9 @@ export default function CampaignMap({
               circlePolygon(
                 report.latitude,
                 report.longitude,
-                report.unit_type === "uk_postcode_district" ? REPORT_CLAIM_RADIUS_METERS_UK : REPORT_CLAIM_RADIUS_METERS_US,
+                report.unit_type === "uk_postcode_district"
+                  ? mapGameSettingsRef.current.claim_proximity_meters_uk ?? REPORT_CLAIM_RADIUS_METERS_UK_FALLBACK
+                  : mapGameSettingsRef.current.claim_proximity_meters_us ?? REPORT_CLAIM_RADIUS_METERS_US_FALLBACK,
               ),
             ],
           },
@@ -3358,7 +3382,7 @@ export default function CampaignMap({
           bloom_stage?: number; bloom_score?: number; seed_source?: string | null;
         };
         const stage = props.bloom_stage ?? 1;
-        const score = Math.round(props.bloom_score ?? 0);
+        const score = props.bloom_score ?? 0;
         const color = BLOOM_STAGE_COLORS[stage];
         const label = BLOOM_STAGE_LABELS[stage];
         hoverDiv.style.display = "block";
@@ -3366,7 +3390,7 @@ export default function CampaignMap({
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
           `<div style="font-weight:700;font-size:12px;color:${color}">Stage ${stage} — ${label}</div>` +
-          `<div style="color:#a1a1aa;font-size:11px;margin-top:3px">${score.toLocaleString()} bloom pts</div>` +
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:3px">${formatPoints(score)} bloom pts</div>` +
           (props.seed_source ? `<div style="color:#52525b;font-size:10px;margin-top:2px">🌍 pre-seeded</div>` : "");
       };
       const hideHexTooltip = () => {
@@ -3477,12 +3501,45 @@ export default function CampaignMap({
     }
   }, [claims]);
 
-  // Sync event-area highlight via feature-state when active events or their areas change
+  // Sync event-area highlight and marker pins when active events or their areas change.
+  // updateEventMarkers previously only ran once from setupCustomLayers (initial load/style
+  // swap), so a new event arriving later — e.g. a hotspot spawned via realtime — highlighted
+  // the zip's fill but never got a flame pin. Its centroid also needs to come from the backend:
+  // eventCentroids is only computed server-side at page load, and the live querySourceFeatures
+  // fallback silently skips the marker if that vector tile isn't loaded at the current viewport.
   useEffect(() => {
-    if (map.current?.isStyleLoaded()) {
-      applyEventAreaHighlights(map.current, activeEvents, eventGeoUnitIds ?? {});
+    if (!map.current?.isStyleLoaded()) return;
+
+    applyEventAreaHighlights(map.current, activeEvents, eventGeoUnitIds ?? {});
+
+    const missingAreaIds = activeEvents
+      .flatMap((event) => eventGeoUnitIdsRef.current[event.id] ?? (event.geo_unit_id ? [event.geo_unit_id] : []))
+      .filter((id) => !eventCentroidsRef.current[id]);
+
+    if (missingAreaIds.length === 0) {
+      updateEventMarkers(activeEvents);
+      return;
     }
-  }, [activeEvents, eventGeoUnitIds]);
+
+    let cancelled = false;
+    fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/events/campaign/${campaign.id}/centroids`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list: { geo_unit_id: string; lat: number; lng: number }[]) => {
+        if (cancelled) return;
+        eventCentroidsRef.current = {
+          ...eventCentroidsRef.current,
+          ...Object.fromEntries(list.map((c) => [c.geo_unit_id, { lat: c.lat, lng: c.lng }])),
+        };
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) updateEventMarkers(activeEvents);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeEvents, eventGeoUnitIds, updateEventMarkers, campaign.id]);
 
   // Focus coords: fly to a deep-linked location (e.g. from an event page "log your cleanup" link)
   useEffect(() => {
@@ -3703,7 +3760,10 @@ export default function CampaignMap({
       reports: nextReports,
       counts_by_geo_unit: problemReportsRef.current?.counts_by_geo_unit ?? {},
       threshold: problemReportsRef.current?.threshold ?? null,
-      flag_auto_hide_threshold: problemReportsRef.current?.flag_auto_hide_threshold ?? FLAG_AUTO_HIDE_THRESHOLD,
+      flag_auto_hide_threshold:
+        problemReportsRef.current?.flag_auto_hide_threshold ??
+        mapGameSettingsRef.current.flag_auto_hide_threshold ??
+        FLAG_AUTO_HIDE_THRESHOLD_FALLBACK,
     };
     problemReportsRef.current = nextData;
     setLiveReports(nextData);

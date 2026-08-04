@@ -14,11 +14,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Server-side source of truth for cleanup scoring — the client's `value` field is
-# ignored for cleanup contributions so a direct API call can't spoof points.
-SMALL_BAG_VALUE = 1
-LARGE_BAG_VALUE = 3
-POUND_VALUE = 0.5
+from app.services.game_settings import get_game_settings
 
 
 @dataclass
@@ -51,10 +47,13 @@ async def record_contribution(
     allow_explicit_value: bool = False,
 ) -> RecordedContribution:
     has_location = latitude is not None and longitude is not None
+    settings = await get_game_settings(db)
 
     if contribution_type == "cleanup":
         if small_bags is not None or large_bags is not None:
-            effective_value = (small_bags or 0) * SMALL_BAG_VALUE + (large_bags or 0) * LARGE_BAG_VALUE
+            effective_value = (small_bags or 0) * settings.get("small_bag_value", 1) + (
+                large_bags or 0
+            ) * settings.get("large_bag_value", 3)
         elif allow_explicit_value:
             # Only trusted internal callers (e.g. log-team-total's pre-computed split
             # share) may set `value` directly for a cleanup contribution — user-facing
@@ -63,8 +62,9 @@ async def record_contribution(
         else:
             effective_value = 0
     else:
-        effective_value = value or 1
+        effective_value = value or settings.get("civic_action_value", 1)
 
+    hotspot_multiplier = 1.0
     if apply_multiplier and geo_unit_id:
         multiplier_result = await db.execute(
             text("""
@@ -80,12 +80,12 @@ async def record_contribution(
         )
         multiplier_row = multiplier_result.fetchone()
         if multiplier_row:
-            multiplier = float((multiplier_row[0] or {}).get("multiplier", 1))
-            effective_value = effective_value * multiplier
+            hotspot_multiplier = float((multiplier_row[0] or {}).get("multiplier", settings.get("hotspot_multiplier", 1)))
 
-    # "Claim-a-report" challenge-mode bonus: applied on top of any active campaign-wide
-    # multiplier, since it rewards the individual claim rather than the geo unit.
-    effective_value = effective_value * challenge_multiplier
+    # The claim-challenge bonus and an active hotspot multiplier don't stack — take
+    # whichever is larger so a claimed report inside a hotspot still earns a bonus,
+    # but never both multiplied together.
+    effective_value = effective_value * max(hotspot_multiplier, challenge_multiplier)
 
     insert_params = {
         "campaign_id": str(campaign_id),
