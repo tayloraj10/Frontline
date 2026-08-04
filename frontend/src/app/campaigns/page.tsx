@@ -5,6 +5,7 @@ import { createPublicClient } from "@/lib/supabase/public";
 import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS, CAMPAIGN_SLUG_ORDER } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 import OnboardingModalClient from "@/components/OnboardingModalClient";
+import OtherCampaignRow from "@/components/OtherCampaignRow";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 
@@ -45,7 +46,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
 
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {/* Badges + live indicator row */}
+          {/* Badges row */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${cfg.bg} ${cfg.border} ${cfg.color}`}>
               <span>{cfg.icon}</span>
@@ -63,10 +64,6 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
                   : "US only"}
               </span>
             )}
-            <span className="ml-auto flex items-center gap-1 text-[10px] font-bold tracking-widest text-emerald-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              LIVE
-            </span>
           </div>
 
           <h2 className="text-lg font-bold leading-snug text-zinc-100 group-hover:text-white">
@@ -88,10 +85,16 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
           )}
         </div>
 
-        {/* Arrow */}
-        <span className="mt-0.5 flex-shrink-0 text-xl text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300">
-          →
-        </span>
+        {/* Live indicator + arrow, always grouped together regardless of badge wrap */}
+        <div className="flex flex-shrink-0 flex-col items-end gap-2">
+          <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest text-emerald-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            LIVE
+          </span>
+          <span className="text-xl text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300">
+            →
+          </span>
+        </div>
       </div>
     </Link>
   );
@@ -118,13 +121,13 @@ export default async function CampaignsPage() {
     return aOrder - bOrder;
   });
 
-  const gridCampaigns = campaigns.slice(0, 4);
-  const extraCampaigns = campaigns.slice(4);
+  const featuredCampaign = campaigns.find((c) => c.slug === "trash-war") ?? null;
+  const otherCampaigns = campaigns.filter((c) => c.slug !== "trash-war");
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10 w-full">
       {user && <OnboardingModalClient campaigns={campaigns} />}
-      <div className={user && contribCount !== null ? "mb-6" : "mb-10"}>
+      <div className="mb-8">
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
           Active Campaigns
         </h1>
@@ -132,18 +135,6 @@ export default async function CampaignsPage() {
           {campaigns.length} mission{campaigns.length !== 1 ? "s" : ""} running —{" "}
           pick your fight.
         </p>
-        {user && contribCount !== null && (
-          <div className="mt-6 flex justify-center gap-4 sm:gap-6">
-            <div className="flex-1 max-w-[160px] rounded-2xl border border-emerald-800/40 bg-emerald-950/20 px-4 py-4 text-center">
-              <div className="text-2xl sm:text-3xl font-black text-emerald-400 tabular-nums">{campaigns.length}</div>
-              <div className="text-xs text-zinc-500 mt-1 tracking-wide">active campaigns</div>
-            </div>
-            <div className="flex-1 max-w-[160px] rounded-2xl border border-emerald-800/40 bg-emerald-950/20 px-4 py-4 text-center">
-              <div className="text-2xl sm:text-3xl font-black text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
-              <div className="text-xs text-zinc-500 mt-1 tracking-wide">contributions logged</div>
-            </div>
-          </div>
-        )}
       </div>
 
       {campaigns.length === 0 ? (
@@ -154,23 +145,34 @@ export default async function CampaignsPage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {gridCampaigns.map((campaign, i) => {
-              const isLastOdd = i === gridCampaigns.length - 1 && gridCampaigns.length % 2 === 1;
-              return isLastOdd ? (
-                <div key={campaign.id} className="sm:col-span-2 sm:max-w-[calc(50%-8px)] sm:mx-auto w-full">
-                  <CampaignCard campaign={campaign} />
+          {featuredCampaign && (
+            <div className="mx-auto mt-6 max-w-xl">
+              <CampaignCard campaign={featuredCampaign} />
+              {user && contribCount !== null && (
+                <div className="mt-4 flex justify-center gap-3">
+                  <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
+                    <div className="text-lg font-bold text-emerald-400 tabular-nums">{campaigns.length}</div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">active campaigns</div>
+                  </div>
+                  <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
+                    <div className="text-lg font-bold text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">contributions logged</div>
+                  </div>
                 </div>
-              ) : (
-                <CampaignCard key={campaign.id} campaign={campaign} />
-              );
-            })}
-          </div>
-          {extraCampaigns.length > 0 && (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {extraCampaigns.map((campaign) => (
-                <CampaignCard key={campaign.id} campaign={campaign} />
-              ))}
+              )}
+            </div>
+          )}
+
+          {otherCampaigns.length > 0 && (
+            <div className={featuredCampaign ? "mt-10" : ""}>
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-600">
+                Other campaigns
+              </h2>
+              <div className="grid items-start gap-2 sm:grid-cols-2">
+                {otherCampaigns.map((campaign) => (
+                  <OtherCampaignRow key={campaign.id} campaign={campaign} />
+                ))}
+              </div>
             </div>
           )}
         </>
