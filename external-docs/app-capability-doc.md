@@ -115,6 +115,7 @@ Site admins implicitly inherit every group-admin and business-admin capability a
 - **Business self-service for multiple admins per business** doesn't exist — currently admin-only via `BusinessAdminsManager`.
 - **No redemption-history detail for business owners** — dashboard shows only a raw redemption count per offer, not who/when.
 - **Legal re-acceptance gate is built but switched off** (`LEGAL_GATE_ENABLED = false`).
+- **NYC borough outline overlay is built but switched off** — `nyc_borough` geo units (5 boroughs, trimmed of small Jamaica Bay / Pelham Bay islets) load and serve fine via `/tiles/nyc-boroughs/{z}/{x}/{y}.mvt`, and `CampaignMap.tsx` has the source/layer code ready (commented out, ~line 2245) drawing a flat gold line per borough. Intended future use: visual anchor that NYC is the app's focus area, plus a per-borough stats layer (color-coded via a `match` on the borough's `display_name`/`unit_id` instead of flat gold) — not yet built. **`nyc_borough` has only been seeded in local dev** (via `POST /admin/geo-units/nyc_borough/reload`); it still needs to be loaded into the prod DB before this can ship.
 
 ---
 

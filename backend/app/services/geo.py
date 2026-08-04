@@ -16,6 +16,8 @@ RAW_UK_POSTCODE_FILE = DATA_DIR / "uk_postcode_districts.kml"
 SIMPLIFIED_UK_POSTCODE_FILE = DATA_DIR / "uk_postcode_districts.geojson"
 RAW_NYC_NEIGHBORHOODS_FILE = DATA_DIR / "nyc_neighborhoods_raw.geojson"
 SIMPLIFIED_NYC_NEIGHBORHOODS_FILE = DATA_DIR / "nyc_neighborhoods.geojson"
+RAW_NYC_BOROUGHS_FILE = DATA_DIR / "nyc_boroughs_raw.geojson"
+SIMPLIFIED_NYC_BOROUGHS_FILE = DATA_DIR / "nyc_boroughs.geojson"
 
 _KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
@@ -229,6 +231,66 @@ def simplify_nyc_neighborhoods(
 
         unit_id = props.get("nta2020")
         display_name = props.get("ntaname")
+        geometry = feat.get("geometry")
+        if not unit_id or not display_name or not geometry:
+            skipped += 1
+            continue
+
+        try:
+            geom = shape(geometry).simplify(tolerance, preserve_topology=True)
+
+            if geom.is_empty:
+                skipped += 1
+                continue
+
+            if isinstance(geom, Polygon):
+                geom = MultiPolygon([geom])
+            elif not isinstance(geom, MultiPolygon):
+                skipped += 1
+                continue
+
+            features.append({
+                "type": "Feature",
+                "properties": {"unit_id": unit_id, "display_name": display_name},
+                "geometry": _truncate_coords(mapping(geom), precision),
+            })
+
+        except Exception:
+            skipped += 1
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump({"type": "FeatureCollection", "features": features}, f, separators=(",", ":"))
+
+    return SimplifyResult(
+        input_size_mb=input_path.stat().st_size / (1024 * 1024),
+        output_size_mb=output_path.stat().st_size / (1024 * 1024),
+        feature_count=len(features),
+        skipped_count=skipped,
+    )
+
+
+def simplify_nyc_boroughs(
+    input_path: Path = RAW_NYC_BOROUGHS_FILE,
+    output_path: Path = SIMPLIFIED_NYC_BOROUGHS_FILE,
+    tolerance: float = 0.0001,
+    precision: int = 5,
+) -> SimplifyResult:
+    """
+    NYC Open Data's "Borough Boundaries" dataset (shoreline-clipped, 5 features —
+    one per borough). Used both for its own toggleable layer and, dissolved, as
+    the single gold outline around the whole city.
+    """
+    with open(input_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    features = []
+    skipped = 0
+
+    for feat in data.get("features", []):
+        props = feat.get("properties") or {}
+        unit_id = props.get("borocode")
+        display_name = props.get("boroname")
         geometry = feat.get("geometry")
         if not unit_id or not display_name or not geometry:
             skipped += 1

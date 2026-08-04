@@ -28,6 +28,12 @@ const UK_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-8.65, 49.85],
   [1.87, 60.9],
 ];
+// Full extent of all 5 NYC boroughs (Manhattan, Brooklyn, Queens, the Bronx, Staten
+// Island), including the Rockaways and Staten Island's southern/western edges.
+const NYC_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-74.26, 40.49],
+  [-73.68, 40.92],
+];
 const WORLD_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-170, -58],
   [179, 80],
@@ -1377,6 +1383,14 @@ const UK_FLAG_SVG =
   `<path d="M8 0V11M0 5.5H16" stroke="#fff" stroke-width="3.6"/>` +
   `<path d="M8 0V11M0 5.5H16" stroke="#CF142B" stroke-width="1.6"/>` +
   `</svg>`;
+// Statue of Liberty icon for the "zoom to NYC" shortcut — a skyline reads as
+// "generic city" to most people, but the Statue of Liberty is recognized as NYC
+// specifically worldwide. A raster/SVG silhouette turns to mud at the ~16px size
+// the flag buttons use; the 🗽 emoji glyph (not a flag sequence, so unlike US_FLAG/
+// UK_FLAG it renders fine via Segoe UI Emoji on Windows) stays crisp and readable
+// at any size since it's drawn by the OS emoji font, not scaled art.
+const NYC_STATUE_ICON_SVG =
+  `<div style="font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center">🗽</div>`;
 
 // Zoom-to-region shortcut buttons (flag icon) — one control per region so
 // they can each be conditionally added/omitted per campaign type.
@@ -2227,6 +2241,31 @@ export default function CampaignMap({
           "line-opacity": 0.9,
         },
       });
+
+      // Per-borough boundaries — turned off for now (see app-capability-doc.md).
+      // Data (nyc_borough geo_units + /tiles/nyc-boroughs endpoint) stays live;
+      // this is intended to come back as the visual anchor for "NYC is the focus
+      // area" plus a future per-borough stats layer, at which point the line-color
+      // can switch from flat gold to a `match` on the borough's display_name/unit_id.
+      //
+      // m.addSource("nyc-boroughs", {
+      //   type: "vector",
+      //   tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/nyc-boroughs/{z}/{x}/{y}.mvt`],
+      //   minzoom: 0,
+      //   maxzoom: 14,
+      // });
+      //
+      // m.addLayer({
+      //   id: "nyc-outline-border",
+      //   type: "line",
+      //   source: "nyc-boroughs",
+      //   "source-layer": "nyc_boroughs",
+      //   paint: {
+      //     "line-color": "#facc15",
+      //     "line-width": 2,
+      //     "line-opacity": 0.85,
+      //   },
+      // });
     } catch {
       // NYC neighborhoods overlay is non-critical — map still works without it
     }
@@ -3151,6 +3190,10 @@ export default function CampaignMap({
     );
     map.current.addControl(
       new ZoomToRegionControl(UK_BOUNDS, UK_FLAG_SVG, "Zoom to UK"),
+      "top-right",
+    );
+    map.current.addControl(
+      new ZoomToRegionControl(NYC_BOUNDS, NYC_STATUE_ICON_SVG, "Zoom to NYC"),
       "top-right",
     );
     map.current.addControl(
