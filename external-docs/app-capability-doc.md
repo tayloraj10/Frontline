@@ -6,7 +6,7 @@ Companion: a human-facing version of this doc (for onboarding/stakeholders, not 
 
 Status legend: no tag = fully working · **(Beta)** = shipped but flagged as still being tested in prod · *(stub)* = record/UI exists but the effect isn't implemented yet.
 
-Last updated: 2026-08-02.
+Last updated: 2026-08-03.
 
 ---
 
@@ -25,7 +25,7 @@ Last updated: 2026-08-02.
 ### Campaigns & Territory Gameplay
 - Browse the campaign map (`/campaigns/[slug]`): territory claims, active campaign events ("hotspots"), stats bar, individual + group leaderboard tabs, live activity feed, personal "Mine" tab.
 - Log a contribution: pin placement (GPS or manual), bag counts (small/large) and/or pounds and/or route-based cleanup, optional photo. Campaign type (territory / choropleth / heatmap / collage / hex_bloom) determines the specific stat units and form shown.
-- Claim territory for self or for a group they belong to (group selector in the contribution flow).
+- Claim territory for self or for a group they belong to (group selector in the contribution flow). **Territory claiming's map layer (claimed/contested/unclaimed outlines) is opt-in and off by default** — a separate, single-select "Geographic Stats" toggle group (Zip/Postcode, and on `trash-war` also Neighborhood/Borough) shows the same underlying activity metrics (points, bag counts, recent activity, photos) with no ownership/claimed-by/group-battle info, via `GET /api/geo-units/{geo_unit_id}/stats`. Claiming itself still works unchanged when the territory layer is manually toggled on.
 - **Route mode (Beta)** — trace an actual walked route on the map as a contribution; distinct from a hosted event's purely decorative planned route.
 - Report a trash "problem": pin, severity, optional photo.
 - **Claim-a-report challenge**: claim an open report (one active claim per user), submit a GPS-gated "before" photo within a countdown window, then a GPS-gated "after" photo within a second countdown, which auto-resolves the report and rolls straight into normal bag/pound contribution logging with both photos attached. Claims can be released voluntarily or expire back to "open."
@@ -115,7 +115,7 @@ Site admins implicitly inherit every group-admin and business-admin capability a
 - **Business self-service for multiple admins per business** doesn't exist — currently admin-only via `BusinessAdminsManager`.
 - **No redemption-history detail for business owners** — dashboard shows only a raw redemption count per offer, not who/when.
 - **Legal re-acceptance gate is built but switched off** (`LEGAL_GATE_ENABLED = false`).
-- **NYC borough outline overlay is built but switched off** — `nyc_borough` geo units (5 boroughs, trimmed of small Jamaica Bay / Pelham Bay islets) load and serve fine via `/tiles/nyc-boroughs/{z}/{x}/{y}.mvt`, and `CampaignMap.tsx` has the source/layer code ready (commented out, ~line 2245) drawing a flat gold line per borough. Intended future use: visual anchor that NYC is the app's focus area, plus a per-borough stats layer (color-coded via a `match` on the borough's `display_name`/`unit_id` instead of flat gold) — not yet built. **`nyc_borough` has only been seeded in local dev** (via `POST /admin/geo-units/nyc_borough/reload`); it still needs to be loaded into the prod DB before this can ship.
+- **NYC borough stats outline layer is built and toggleable in code, but non-functional in prod** — `nyc_borough` geo units (5 boroughs, trimmed of small Jamaica Bay / Pelham Bay islets) are only seeded in local dev (via `POST /admin/geo-units/nyc_borough/reload`), not the prod DB, so the Borough toggle (part of the new Geographic Stats group, `trash-war` only) will show an empty layer in prod until that data load happens. Zip/Postcode and Neighborhood stats toggles are unaffected (`nyc_neighborhood` and `zip`/`uk_postcode_district` geo units are already in prod).
 
 ---
 

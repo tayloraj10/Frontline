@@ -85,8 +85,8 @@ const MODAL_CONFIG: Record<string, {
 }> = {
   cleanup: {
     title: "Log Cleanup",
-    successClaimed: "Cleanup logged! Territory updated.",
-    successUnclaimed: "No territory claimed, but your cleanup was still recorded!",
+    successClaimed: "Cleanup logged!",
+    successUnclaimed: "Cleanup logged!",
   },
   photo: {
     title: "Submit Photo",

@@ -84,6 +84,16 @@ class NycNeighborhoodSeeder(Seeder):
                 WHERE geo_unit_id IN (SELECT id FROM geo_units WHERE unit_type = 'nyc_neighborhood')
             """)
         )
+        # ST_Touches alone under-counts adjacency: the map tile endpoint simplifies each
+        # neighborhood's geometry independently (tiles.py's _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE,
+        # 0.0001 degrees for NYC_NEIGHBORHOOD below z9), which can pull a shared border
+        # apart by a few meters on each side. Pairs that share a border pre-simplification
+        # but no longer exactly touch post-simplification were falling through ST_Touches,
+        # so the coloring algorithm didn't know to give them different colors even though
+        # they render as touching — the cause of the "two same-colored neighborhoods
+        # touching" reports. ST_DWithin with a tolerance a few times the simplify distance
+        # catches those near-touches too, at the cost of also (harmlessly) flagging a few
+        # neighborhoods as "adjacent" that render with a hairline gap between them.
         await db.execute(
             text("""
                 INSERT INTO geo_unit_adjacency (geo_unit_id, adjacent_geo_unit_id)
@@ -92,7 +102,7 @@ class NycNeighborhoodSeeder(Seeder):
                 JOIN geo_units b
                   ON a.unit_type = b.unit_type
                  AND a.id != b.id
-                 AND ST_Touches(a.geometry, b.geometry)
+                 AND ST_DWithin(a.geometry, b.geometry, 0.0003)
                 WHERE a.unit_type = 'nyc_neighborhood'
                 ON CONFLICT DO NOTHING
             """)
