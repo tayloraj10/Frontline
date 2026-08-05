@@ -976,7 +976,7 @@ function TerritoryPanel({
 
   return (
     <>
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
 
       {/* Header */}
@@ -984,7 +984,7 @@ function TerritoryPanel({
         <div className="flex items-start justify-between">
           <div>
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-              {variant === "stats" ? `${unitLabel} Stats` : "Territory"}
+              {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Claim`}
             </p>
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">
               {variant === "stats" ? displayName : `${unitLabel} ${displayName}`}
@@ -1279,7 +1279,7 @@ function StatePanel({
   const party = Math.abs(lean) < 0.15 ? "Swing" : isR ? "Republican" : "Democrat";
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -1377,7 +1377,7 @@ function HexPanel({
   }, [campaignId, entry.h3_index, refreshKey]);
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: stageColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -4535,7 +4535,7 @@ export default function CampaignMap({
                   onClick={onMobileStatsClick}
                   className="self-start px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
                 >
-                  📊 Activity
+                  📊 Stats
                 </button>
               )}
             </div>
@@ -4569,7 +4569,7 @@ export default function CampaignMap({
               onClick={onMobileStatsClick}
               className="self-start sm:hidden px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
             >
-              📊 Activity
+              📊 Stats
             </button>
           )}
           {(supportsZipSearch || supportsUkPostcodeSearch) && (
@@ -4795,7 +4795,7 @@ export default function CampaignMap({
                   (🎁 = active offer)
                 </span>
               </LegendToggle>
-              {/* De-emphasized (smaller, muted) rather than removed — territory claiming
+              {/* De-emphasized (smaller, muted) rather than removed — claiming
                   still works when turned on, but we no longer want to visually encourage
                   it now that the non-competitive Geographic Stats layers exist above. */}
               <LegendToggle
@@ -4807,15 +4807,15 @@ export default function CampaignMap({
                 }}
               >
                 <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500/50" />
-                <span className="text-zinc-500 text-[11px]">Territory claiming</span>
+                <span className="text-zinc-500 text-[11px]">Claiming</span>
               </LegendToggle>
               <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" />
-                <span className="text-zinc-500 text-[11px]">Group territory</span>
+                <span className="text-zinc-500 text-[11px]">Group claims</span>
               </LegendToggle>
               <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
-                <span className="text-zinc-500 text-[11px]">Individual territory</span>
+                <span className="text-zinc-500 text-[11px]">Individual claims</span>
               </LegendToggle>
               <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm border border-[#a1a1aa]/60 bg-transparent" />

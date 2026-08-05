@@ -1187,7 +1187,7 @@ function ContributeModal({
                 {loadingIntersecting ? (
                   <p className="text-xs text-zinc-500">Finding zips along your route…</p>
                 ) : intersectingUnits.length === 0 ? (
-                  <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within campaign territory.</p>
+                  <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within the campaign area.</p>
                 ) : (
                   <div>
                     <p className="text-xs text-zinc-500 mb-1.5">Credit which zip?</p>
@@ -1398,7 +1398,7 @@ function ContributeModal({
                       className="w-full h-full object-cover cursor-zoom-in"
                       onClick={() => setLightboxIndex(i)}
                     />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       🔍
                     </span>
                     <button
@@ -1418,7 +1418,7 @@ function ContributeModal({
                       className="w-full h-full object-cover cursor-zoom-in"
                       onClick={() => setLightboxIndex(existingPhotoUrls.length + i)}
                     />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       🔍
                     </span>
                     <button
@@ -2062,7 +2062,7 @@ function ClaimReportModal({
       onClick={() => setReportPhotoLightboxOpen(true)}
     >
       <img src={localReport.photo_url} alt="Reported trash" className="w-full h-full object-cover" />
-      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         🔍 Enlarge
       </span>
     </div>
@@ -2286,7 +2286,7 @@ function ClaimReportModal({
                         className="w-full h-full object-cover cursor-zoom-in"
                         onClick={() => setLightboxOpen(true)}
                       />
-                      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         🔍 Enlarge
                       </span>
                       <button
@@ -2383,7 +2383,7 @@ function ClaimReportModal({
                       className="w-full h-full object-cover cursor-zoom-in"
                       onClick={() => setLightboxOpen(true)}
                     />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       🔍 Enlarge
                     </span>
                     <button

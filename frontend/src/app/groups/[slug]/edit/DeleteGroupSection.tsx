@@ -44,7 +44,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
       <div className="border border-red-900/40 rounded-xl p-6 bg-red-950/10">
         <h2 className="text-sm font-semibold text-red-400 mb-1">Danger zone</h2>
         <p className="text-xs text-zinc-500 mb-4">
-          Permanently delete this group. Members, co-host links, territory claims, and leaderboard
+          Permanently delete this group. Members, co-host links, zip-code claims, and leaderboard
           standing are removed. Contributions and past events are kept but detached from the group.
         </p>
         <button

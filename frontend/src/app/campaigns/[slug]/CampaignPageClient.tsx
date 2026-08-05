@@ -157,7 +157,7 @@ export function CampaignStatBar({
           </>
         ) : (
           <>
-            <StatBarItem label="Territories claimed" value={tractsCount} />
+            <StatBarItem label="Zip codes cleaned" value={tractsCount} />
             <button
               type="button"
               onClick={() => setShowBagBreakdown((v) => !v)}
@@ -395,7 +395,7 @@ function territoryClaimedLabel(territoryTypes: string[] | null | undefined): str
   const units = new Set(territoryTypes ?? []);
   if (units.size === 1 && units.has("zip")) return "zip codes";
   if (units.size === 1 && units.has("uk_postcode_district")) return "postcodes";
-  return "territories";
+  return "areas";
 }
 
 function bagBreakdownParts(entry: { small_bags?: number | null; large_bags?: number | null; pounds?: number | null }): string[] {
@@ -479,7 +479,7 @@ function StatsPanel({
 }) {
   const totalValue = claims.reduce((s, c) => s + (c.total_value ?? 0), 0);
   const claimedLabel =
-    campaignType === "territory" ? "Territories claimed" :
+    campaignType === "territory" ? "Zip codes cleaned" :
     campaignType === "choropleth" ? "States claimed" :
     campaignType === "hex_bloom" ? "Hexes claimed" :
     "Areas claimed";
@@ -1010,7 +1010,7 @@ export default function CampaignPageClient({
         onGeolocateTrigger={(trigger) => { triggerGeolocateRef.current = trigger; }}
         onMobileStatsClick={
           statsButtonActive && (showEventsChip || (campaign.geo_unit?.includes("zip") ?? false))
-            ? () => togglePanel("leaderboard")
+            ? () => togglePanel("stats")
             : undefined
         }
       />
@@ -1113,10 +1113,10 @@ export default function CampaignPageClient({
           {/* Desktop: always top-right, clear of native map controls */}
           <div className="hidden sm:block absolute top-3 right-[3.25rem] z-20">
             <button
-              onClick={() => togglePanel("leaderboard")}
+              onClick={() => togglePanel("stats")}
               className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
             >
-              📊 Activity
+              📊 Stats
             </button>
           </div>
           {/* Mobile: next to the Events chip if it's showing (handled inside CampaignMap), otherwise
@@ -1125,10 +1125,10 @@ export default function CampaignPageClient({
           {!showEventsChip && !isHexBloom && !(campaign.geo_unit?.includes("zip") ?? false) && (
             <div className="sm:hidden absolute left-4 z-20 top-4">
               <button
-                onClick={() => togglePanel("leaderboard")}
+                onClick={() => togglePanel("stats")}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
               >
-                📊 Activity
+                📊 Stats
               </button>
             </div>
           )}
@@ -1251,10 +1251,10 @@ export default function CampaignPageClient({
             {statsButtonActive && (
               <div className="sm:hidden z-20 shrink-0">
                 <button
-                  onClick={() => togglePanel("leaderboard")}
+                  onClick={() => togglePanel("stats")}
                   className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
                 >
-                  📊 Activity
+                  📊 Stats
                 </button>
               </div>
             )}

@@ -182,7 +182,7 @@ export default async function LeaderboardPage({ params }: Props) {
     campaignData.campaign_type === "territory" ? "zip codes"
       : campaignData.campaign_type === "choropleth" ? "states"
         : campaignData.campaign_type === "hex_bloom" ? "hexes"
-          : "territories";
+          : "areas";
 
   return (
     <div className="flex flex-col flex-1">

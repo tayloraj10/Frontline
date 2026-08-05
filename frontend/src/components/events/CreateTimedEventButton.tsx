@@ -48,7 +48,7 @@ export default function CreateTimedEventButton({
           <button
             onClick={(e) => { e.stopPropagation(); setDismissed(true); }}
             title="Hide until next page refresh"
-            className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-[10px] leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-[10px] leading-none opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
           >
             ×
           </button>

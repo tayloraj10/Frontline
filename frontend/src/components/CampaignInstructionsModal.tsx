@@ -20,12 +20,12 @@ const INSTRUCTIONS: Record<string, CampaignInstructions> = {
   "trash-war": {
     icon: "🧹",
     title: "How Trash War works",
-    intro: "Clean up your neighborhood, claim territory, and compete for the top spot.",
+    intro: "Clean up your neighborhood, earn points, and compete for the top spot.",
     features: [
       {
         icon: "🧹",
         title: "Log a Cleanup",
-        body: "Collected trash? Log it with a bag count and photos to earn points and put your color on that zip code.",
+        body: "Collected trash? Log it with a bag count and photos to earn points toward the leaderboard.",
       },
       {
         icon: "🚩",
@@ -33,9 +33,9 @@ const INSTRUCTIONS: Record<string, CampaignInstructions> = {
         body: "See a dirty spot but can't clean it now? Drop a pin so someone else can find and clear it.",
       },
       {
-        icon: "🗺️",
-        title: "Claim Territory",
-        body: "Every zip code is colored by whoever's contributed the most there. Outwork the competition to flip it.",
+        icon: "📊",
+        title: "Geographic Stats",
+        body: "Toggle map layers to see where cleanup activity is concentrated by zip code, neighborhood, or borough.",
       },
       {
         icon: "⚡",
@@ -117,8 +117,15 @@ function storageKey(slug: string): string {
   return `frontline_instructions_seen_${slug}`;
 }
 
-export default function CampaignInstructionsModal({ slug }: { slug: string }) {
+export default function CampaignInstructionsModal({
+  slug,
+  description,
+}: {
+  slug: string;
+  description?: string | null;
+}) {
   const [open, setOpen] = useState(false);
+  const [descOpen, setDescOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const instructions = INSTRUCTIONS[slug];
 
@@ -129,7 +136,40 @@ export default function CampaignInstructionsModal({ slug }: { slug: string }) {
     }
   }, [slug, instructions]);
 
-  if (!instructions) return null;
+  if (!instructions) {
+    if (!description) return null;
+    return (
+      <>
+        <button
+          onClick={() => setOpen(true)}
+          title="About this campaign"
+          className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0"
+        >
+          i
+        </button>
+        {open && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)}>
+            <div
+              className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-5 overflow-y-auto">
+                <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
+              </div>
+              <div className="px-6 pb-5 shrink-0">
+                <button
+                  onClick={() => setOpen(false)}
+                  className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
 
   function close() {
     if (dontShowAgain) {
@@ -145,13 +185,45 @@ export default function CampaignInstructionsModal({ slug }: { slug: string }) {
 
   return (
     <>
-      <button
-        onClick={reopen}
-        title="How this campaign works"
-        className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0"
-      >
-        ?
-      </button>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={reopen}
+          title="How this campaign works"
+          className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0"
+        >
+          ?
+        </button>
+        {description && (
+          <button
+            onClick={() => setDescOpen(true)}
+            title="About this campaign"
+            className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0 sm:hidden"
+          >
+            i
+          </button>
+        )}
+      </div>
+
+      {description && descOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setDescOpen(false)}>
+          <div
+            className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-5 overflow-y-auto">
+              <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
+            </div>
+            <div className="px-6 pb-5 shrink-0">
+              <button
+                onClick={() => setDescOpen(false)}
+                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">

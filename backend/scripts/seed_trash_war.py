@@ -74,7 +74,7 @@ async def seed(zipfile: Path) -> None:
             TRASH_WAR_CAMPAIGN_ID,
             "trash-war",
             "Trash War",
-            "Claim territory by cleaning up trash. The group with the most bags cleaned in a ZIP code controls it.",
+            "Clean up trash in your neighborhood, earn points, and climb the leaderboard.",
             "territory",
             "cleanup",
             "zip",

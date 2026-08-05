@@ -334,34 +334,36 @@ export default async function CampaignPage({ params, searchParams }: Props) {
 
   return (
     <div className="flex flex-col flex-1">
-      <div className="px-4 sm:px-6 py-3 border-b border-zinc-800 bg-zinc-900/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link
             href="/campaigns"
             className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors shrink-0"
           >
-            ← Campaigns
+            <span aria-hidden>←</span> <span className="hidden sm:inline">Campaigns</span>
           </Link>
-          <span className="text-zinc-700 shrink-0">|</span>
-          <div className="min-w-0">
-            <h1 className="text-base font-bold text-zinc-100 truncate leading-tight">
+          <span className="text-zinc-700 shrink-0 hidden sm:inline">|</span>
+          <div className="min-w-0 flex items-baseline gap-2 sm:gap-3">
+            <h1 className="text-sm sm:text-base font-bold text-zinc-100 truncate leading-tight shrink-0">
               {campaign.title}
             </h1>
             {campaign.description && (
-              <p className="text-zinc-500 text-xs break-words">{campaign.description}</p>
+              <p className="hidden sm:block text-xs text-zinc-500 truncate leading-tight min-w-0">
+                {campaign.description}
+              </p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
-          <CampaignInstructionsModal slug={campaign.slug} />
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <CampaignInstructionsModal slug={campaign.slug} description={campaign.description} />
           {events.length > 0 && (
-            <span className="px-3 py-1 bg-red-900/40 border border-red-700/60 text-red-300 text-xs font-semibold rounded-full animate-pulse">
-              ⚡ {events.length} Event{events.length > 1 ? "s" : ""}
+            <span className="px-2 sm:px-3 py-0.5 sm:py-1 bg-red-900/40 border border-red-700/60 text-red-300 text-xs font-semibold rounded-full animate-pulse">
+              ⚡ {events.length}
             </span>
           )}
           <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border ${cfg.bg} ${cfg.border} ${cfg.color}`}
+            className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border ${cfg.bg} ${cfg.border} ${cfg.color}`}
           >
             {cfg.icon}
             <span>{cfg.label ?? campaign.campaign_type}</span>
@@ -382,7 +384,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
       />
 
       {campaign.campaign_type === "heatmap" && (
-        <div className="px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/60 flex items-center gap-2 flex-wrap">
+        <div className="hidden sm:flex px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/60 items-center gap-2 flex-wrap">
           <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider shrink-0">What counts:</span>
           {[
             "Rage-bait accounts",

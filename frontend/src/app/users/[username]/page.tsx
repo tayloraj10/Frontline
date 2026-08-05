@@ -173,11 +173,11 @@ export default async function UserProfilePage({ params }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
           { label: "Points", value: formatPoints(profile.points ?? 0) },
           { label: "Contributions", value: (contribCount ?? 0).toLocaleString() },
-          { label: "Territories claimed", value: totalTractsCount.toLocaleString() },
+          { label: "Zip codes claimed", value: totalTractsCount.toLocaleString() },
           { label: "Groups", value: (membersData?.length ?? 0).toLocaleString() },
         ].map(({ label, value }) => (
           <div
@@ -201,7 +201,7 @@ export default async function UserProfilePage({ params }: Props) {
               const campaign = campaignsById.get(campaignId);
               if (!campaign) return null;
               const unit = CAMPAIGN_UNIT[campaign.campaign_type] ?? "pts";
-              const claimedLabel = CAMPAIGN_CLAIMED_LABEL[campaign.campaign_type] ?? "territories";
+              const claimedLabel = CAMPAIGN_CLAIMED_LABEL[campaign.campaign_type] ?? "areas";
               return (
                 <li key={campaignId} className="px-5 py-3 flex items-center gap-3">
                   <Link

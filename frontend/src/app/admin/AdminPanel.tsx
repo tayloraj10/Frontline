@@ -112,6 +112,18 @@ export type GameSetting = {
 const TAB_VALUES = ["campaigns", "triggers", "events", "partners", "groups", "leaderboard", "settings"] as const;
 type Tab = (typeof TAB_VALUES)[number];
 
+const TAB_ICON: Record<Tab, string> = {
+  campaigns: "🏁",
+  triggers: "⚡",
+  events: "🎉",
+  partners: "🤝",
+  groups: "👥",
+  leaderboard: "🏆",
+  settings: "⚙️",
+};
+const MOBILE_PRIMARY_TABS: Tab[] = ["campaigns", "events", "groups", "partners"];
+const MOBILE_OVERFLOW_TABS: Tab[] = ["triggers", "leaderboard", "settings"];
+
 function toSlug(name: string) {
   return name.toLowerCase().trim()
     .replace(/[^a-z0-9\s-]/g, "")
@@ -416,16 +428,16 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       {showCreate && (
         <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Campaign</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Title</label>
               <input className={inputCls} value={title} onChange={e => handleTitleChange(e.target.value)} required placeholder="Campaign name" />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Slug</label>
               <input className={inputCls} value={slug} onChange={e => { setSlug(toSlug(e.target.value)); setSlugEdited(true); }} required placeholder="campaign-slug" />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Description</label>
               <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
             </div>
@@ -477,32 +489,23 @@ function CampaignsTab({ campaigns, setCampaigns }: {
         </form>
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-zinc-800 bg-zinc-900/40">
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Campaign</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Type</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Status</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Spendable points</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-800/60">
-            {campaigns.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-zinc-600 text-sm">No campaigns.</td>
-              </tr>
-            )}
+      {campaigns.length === 0 ? (
+        <div className="border border-zinc-800 rounded-xl px-4 py-8 text-center text-zinc-600 text-sm">No campaigns.</div>
+      ) : (
+        <>
+          <div className="sm:hidden space-y-2">
             {campaigns.map(c => (
-              <tr key={c.id} className="hover:bg-zinc-900/20">
-                <td className="px-4 py-3">
-                  <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 font-medium transition-colors">
-                    {c.title}
-                  </Link>
-                  <p className="text-xs text-zinc-600 mt-0.5">/{c.slug} · {c.contribution_type}</p>
-                </td>
-                <td className="px-4 py-3"><TypeBadge type={c.campaign_type} /></td>
-                <td className="px-4 py-3">
+              <div key={c.id} className="border border-zinc-800 rounded-xl p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 font-medium transition-colors">
+                      {c.title}
+                    </Link>
+                    <p className="text-xs text-zinc-600 mt-0.5">/{c.slug} · {c.contribution_type}</p>
+                  </div>
+                  <TypeBadge type={c.campaign_type} />
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/60">
                   <select
                     value={c.status}
                     onChange={e => handleStatusChange(c.id, e.target.value)}
@@ -513,8 +516,6 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                     <option value="paused">paused</option>
                     <option value="completed">completed</option>
                   </select>
-                </td>
-                <td className="px-4 py-3">
                   <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
                     <input
                       type="checkbox"
@@ -524,12 +525,60 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                     />
                     {c.counts_toward_spendable_points ? "Counts" : "Doesn't count"}
                   </label>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 bg-zinc-900/40">
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Campaign</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Type</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Status</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Spendable points</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {campaigns.map(c => (
+                  <tr key={c.id} className="hover:bg-zinc-900/20">
+                    <td className="px-4 py-3">
+                      <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 font-medium transition-colors">
+                        {c.title}
+                      </Link>
+                      <p className="text-xs text-zinc-600 mt-0.5">/{c.slug} · {c.contribution_type}</p>
+                    </td>
+                    <td className="px-4 py-3"><TypeBadge type={c.campaign_type} /></td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={c.status}
+                        onChange={e => handleStatusChange(c.id, e.target.value)}
+                        className="bg-transparent text-xs text-zinc-400 border-0 outline-none cursor-pointer"
+                      >
+                        <option value="draft">draft</option>
+                        <option value="active">active</option>
+                        <option value="paused">paused</option>
+                        <option value="completed">completed</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="accent-sky-500"
+                          checked={c.counts_toward_spendable_points}
+                          onChange={e => openSpendableToggle(c, e.target.checked)}
+                        />
+                        {c.counts_toward_spendable_points ? "Counts" : "Doesn't count"}
+                      </label>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {(spendableLoading || spendableImpact || spendableError) && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -562,7 +611,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                 {spendableImpact.users.length === 0 ? (
                   <p className="text-xs text-zinc-600">No users would be affected — everyone's spendable balance already matches what it would be.</p>
                 ) : (
-                  <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                  <div className="border border-zinc-800 rounded-lg overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-zinc-800 bg-zinc-900/60">
@@ -666,7 +715,8 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                   </p>
                 )}
                 {recomputeImpact.users.length > 0 && (
-                  <table className="w-full text-xs mb-4">
+                  <div className="overflow-x-auto mb-4">
+                  <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-zinc-800">
                         <th className="text-left px-3 py-2 text-zinc-500 font-medium">User</th>
@@ -711,6 +761,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                         })}
                     </tbody>
                   </table>
+                  </div>
                 )}
                 <div className="flex gap-2 justify-end">
                   <button
@@ -860,14 +911,14 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
       {showCreate && (
         <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Trigger</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Campaign</label>
               <select className={inputCls} value={campaignId} onChange={e => setCampaignId(e.target.value)} required>
                 {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Name</label>
               <input className={inputCls} value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Report threshold boss spawn" />
             </div>
@@ -898,11 +949,11 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
                 </div>
               )}
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Condition config (JSON)</label>
               <textarea className={`${inputCls} resize-none font-mono text-xs`} rows={5} value={conditionConfigRaw} onChange={e => setConditionConfigRaw(e.target.value)} />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-1">
               <label className="text-xs text-zinc-500">Effect config (JSON)</label>
               <textarea className={`${inputCls} resize-none font-mono text-xs`} rows={3} value={effectConfigRaw} onChange={e => setEffectConfigRaw(e.target.value)} />
             </div>
@@ -922,45 +973,68 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
         </form>
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-zinc-800 bg-zinc-900/40">
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Name</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Campaign</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Condition</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Value</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Fires</th>
-              <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Active</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-800/60">
-            {triggers.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-600 text-sm">No triggers.</td>
-              </tr>
-            )}
+      {triggers.length === 0 ? (
+        <div className="border border-zinc-800 rounded-xl px-4 py-8 text-center text-zinc-600 text-sm">No triggers.</div>
+      ) : (
+        <>
+          <div className="sm:hidden space-y-2">
             {triggers.map(t => (
-              <tr key={t.id} className="hover:bg-zinc-900/20">
-                <td className="px-4 py-3 text-zinc-300 font-medium">{t.name}</td>
-                <td className="px-4 py-3 text-zinc-500 text-xs">{t.campaigns?.title ?? t.campaign_id.slice(0, 8)}</td>
-                <td className="px-4 py-3 text-zinc-500 text-xs font-mono">{t.condition_type}</td>
-                <td className="px-4 py-3 text-zinc-300 text-xs font-mono">{triggerValueLabel(t)}</td>
-                <td className="px-4 py-3 text-zinc-500 text-xs font-mono">{t.event_type}</td>
-                <td className="px-4 py-3">
+              <div key={t.id} className="border border-zinc-800 rounded-xl p-4 space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-zinc-300 font-medium text-sm">{t.name}</p>
                   <button
                     onClick={() => handleToggle(t)}
-                    className={`relative w-9 h-5 rounded-full transition-colors ${t.is_active ? "bg-emerald-600" : "bg-zinc-700"}`}
+                    className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${t.is_active ? "bg-emerald-600" : "bg-zinc-700"}`}
                     aria-label={t.is_active ? "Deactivate" : "Activate"}
                   >
                     <span className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all duration-150 ${t.is_active ? "left-5" : "left-1"}`} />
                   </button>
-                </td>
-              </tr>
+                </div>
+                <p className="text-xs text-zinc-500">{t.campaigns?.title ?? t.campaign_id.slice(0, 8)}</p>
+                <div className="flex items-center gap-3 text-xs font-mono text-zinc-500">
+                  <span>{t.condition_type}</span>
+                  <span className="text-zinc-300">{triggerValueLabel(t)}</span>
+                  <span>{t.event_type}</span>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 bg-zinc-900/40">
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Name</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Campaign</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Condition</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Value</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Fires</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Active</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {triggers.map(t => (
+                  <tr key={t.id} className="hover:bg-zinc-900/20">
+                    <td className="px-4 py-3 text-zinc-300 font-medium">{t.name}</td>
+                    <td className="px-4 py-3 text-zinc-500 text-xs">{t.campaigns?.title ?? t.campaign_id.slice(0, 8)}</td>
+                    <td className="px-4 py-3 text-zinc-500 text-xs font-mono">{t.condition_type}</td>
+                    <td className="px-4 py-3 text-zinc-300 text-xs font-mono">{triggerValueLabel(t)}</td>
+                    <td className="px-4 py-3 text-zinc-500 text-xs font-mono">{t.event_type}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => handleToggle(t)}
+                        className={`relative w-9 h-5 rounded-full transition-colors ${t.is_active ? "bg-emerald-600" : "bg-zinc-700"}`}
+                        aria-label={t.is_active ? "Deactivate" : "Activate"}
+                      >
+                        <span className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all duration-150 ${t.is_active ? "left-5" : "left-1"}`} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1244,18 +1318,18 @@ function EventsTab({ campaigns, events, setEvents }: {
             })()
           ) : (
             <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2 space-y-1">
                   <label className="text-xs text-zinc-500">Campaign</label>
                   <select className={inputCls} value={campaignId} onChange={e => setCampaignId(e.target.value)} required>
                     {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                   </select>
                 </div>
-                <div className="col-span-2 space-y-1">
+                <div className="sm:col-span-2 space-y-1">
                   <label className="text-xs text-zinc-500">Title</label>
                   <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Weekend Cleanup Blitz" />
                 </div>
-                <div className="col-span-2 space-y-1">
+                <div className="sm:col-span-2 space-y-1">
                   <label className="text-xs text-zinc-500">Description</label>
                   <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
                 </div>
@@ -1269,7 +1343,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                   <label className="text-xs text-zinc-500">Duration (hours)</label>
                   <input type="number" min={0} className={inputCls} value={durationHours} onChange={e => setDurationHours(e.target.value)} placeholder="Blank = indefinite" />
                 </div>
-                <div className="col-span-2 space-y-1">
+                <div className="sm:col-span-2 space-y-1">
                   <label className="text-xs text-zinc-500">Geo unit ID</label>
                   <input
                     className={inputCls}
@@ -1282,7 +1356,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                     placeholder="Optional — e.g. a zip code"
                   />
                 </div>
-                <div className="col-span-2 space-y-1">
+                <div className="sm:col-span-2 space-y-1">
                   <label className="text-xs text-zinc-500">Event image</label>
                   <div className="flex items-center gap-4">
                     <button
@@ -1297,7 +1371,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                           {EVENT_ICON[eventType] ?? "⚡"}
                         </span>
                       )}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1406,12 +1480,12 @@ function EventsTab({ campaigns, events, setEvents }: {
               const hasMultiplier = getMultiplier(e.effect_config) !== null;
               return (
                 <form onSubmit={ev => handleEditSubmit(ev, e)} className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2 space-y-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2 space-y-1">
                       <label className="text-xs text-zinc-500">Title</label>
                       <input className={inputCls} value={editTitle} onChange={ev => setEditTitle(ev.target.value)} required />
                     </div>
-                    <div className="col-span-2 space-y-1">
+                    <div className="sm:col-span-2 space-y-1">
                       <label className="text-xs text-zinc-500">Description</label>
                       <textarea className={`${inputCls} resize-none`} rows={2} value={editDescription} onChange={ev => setEditDescription(ev.target.value)} placeholder="Optional" />
                     </div>
@@ -1435,7 +1509,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                         Indefinite
                       </label>
                     </div>
-                    <div className="col-span-2 space-y-1">
+                    <div className="sm:col-span-2 space-y-1">
                       <label className="text-xs text-zinc-500">Event image</label>
                       <div className="flex items-center gap-4">
                         <button
@@ -1452,7 +1526,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                               {EVENT_ICON[e.event_type] ?? "⚡"}
                             </span>
                           )}
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="absolute inset-0 bg-black/50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center justify-center">
                             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1516,7 +1590,7 @@ function CleanupEventWipeTool() {
     if (!id) return;
     if (!confirm(
       "This deletes every contribution logged for this cleanup event (individual and group-total), " +
-      "removes/recomputes the territory claim for its zip, deletes its group-log audit history, and " +
+      "removes/recomputes the zip claim, deletes its group-log audit history, and " +
       "resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone. Continue?"
     )) return;
 
@@ -1529,7 +1603,7 @@ function CleanupEventWipeTool() {
       if (!res.ok) throw new Error(data.detail ?? "Failed");
       setResult(
         `✓ Deleted ${data.contributions_deleted} contribution(s), ` +
-        `${data.territory_claims_deleted} territory claim(s) removed, ` +
+        `${data.territory_claims_deleted} zip claim(s) removed, ` +
         `${data.territory_claims_updated} recomputed, ` +
         `${data.team_total_logs_deleted} group-log record(s) removed.`
       );
@@ -1547,7 +1621,7 @@ function CleanupEventWipeTool() {
       <p className="text-xs text-zinc-500 leading-relaxed">
         Use this to undo bad logging on a cleanup event — e.g. an individual log made before
         "log group total" existed, followed by a group-total run that didn't cover everyone.
-        Wipes all contributions, the territory claim, and group-log history for the event so
+        Wipes all contributions, the zip claim, and group-log history for the event so
         it can be re-logged from scratch. Does not delete the event itself or its RSVPs.
       </p>
       <div className="flex items-center gap-2">
@@ -2034,11 +2108,11 @@ function BusinessCard({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-200">{business.name}</p>
+            <p className="text-sm font-semibold text-zinc-200 truncate">{business.name}</p>
             <p className="text-xs text-zinc-600">{businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end shrink-0">
           {isPending && (
             <span
               role="button"
@@ -2398,13 +2472,13 @@ function GroupCard({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-200">{group.name}</p>
-            <p className="text-xs text-zinc-600">
+            <p className="text-sm font-semibold text-zinc-200 truncate">{group.name}</p>
+            <p className="text-xs text-zinc-600 truncate">
               {group.applicant?.display_name ?? group.applicant?.username ?? "Unknown applicant"}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end shrink-0">
           {isPending && (
             <>
               <span
@@ -2491,7 +2565,7 @@ function GroupCard({
 
           {group.description && <p className="text-sm text-zinc-400">{group.description}</p>}
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-zinc-500">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-zinc-500">
             <p>
               <span className="text-zinc-600">Applicant: </span>
               {group.applicant?.display_name ?? group.applicant?.username ?? "Unknown"}
@@ -2502,7 +2576,7 @@ function GroupCard({
               {new Date(group.created_at).toLocaleDateString()}
             </p>
             {group.categories && group.categories.length > 0 && (
-              <p className="col-span-2">
+              <p className="sm:col-span-2">
                 <span className="text-zinc-600">Categories: </span>
                 {group.categories.join(", ")}
               </p>
@@ -2842,45 +2916,71 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       {entries.length > 0 && (
-        <div className="overflow-x-auto border border-zinc-800 rounded-xl">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-zinc-500 border-b border-zinc-800">
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">User</th>
-                <th className="px-3 py-2 text-right">Value</th>
-                <th className="px-3 py-2 text-right">Small bags</th>
-                <th className="px-3 py-2 text-right">Large bags</th>
-                <th className="px-3 py-2 text-right">Submissions</th>
-                <th className="px-3 py-2 text-right">Photos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry, i) => (
-                <tr key={entry.user_id} className="border-b border-zinc-800/60 hover:bg-zinc-900/40">
-                  <td className="px-3 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
-                      className="text-emerald-400 hover:underline"
-                    >
-                      {entry.display_name || entry.username || entry.user_id}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-zinc-100">{entry.total_value}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.small_bags}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.large_bags}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.contribution_count}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    <span className={entry.photo_count === 0 ? "text-red-400 font-semibold" : "text-zinc-400"}>
-                      {entry.photo_count}
-                    </span>
-                  </td>
+        <>
+          <div className="sm:hidden space-y-2">
+            {entries.map((entry, i) => (
+              <div key={entry.user_id} className="border border-zinc-800 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-zinc-500 text-xs tabular-nums shrink-0">#{i + 1}</span>
+                  <Link
+                    href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
+                    className="text-emerald-400 hover:underline text-sm truncate"
+                  >
+                    {entry.display_name || entry.username || entry.user_id}
+                  </Link>
+                  <span className="tabular-nums font-semibold text-zinc-100 text-sm shrink-0">{entry.total_value}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs text-zinc-400 tabular-nums pt-1 border-t border-zinc-800/60">
+                  <span>{entry.small_bags} small</span>
+                  <span>{entry.large_bags} large</span>
+                  <span>{entry.contribution_count} subs</span>
+                  <span className={entry.photo_count === 0 ? "text-red-400 font-semibold" : "text-zinc-400"}>
+                    {entry.photo_count} photos
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block overflow-x-auto border border-zinc-800 rounded-xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">User</th>
+                  <th className="px-3 py-2 text-right">Value</th>
+                  <th className="px-3 py-2 text-right">Small bags</th>
+                  <th className="px-3 py-2 text-right">Large bags</th>
+                  <th className="px-3 py-2 text-right">Submissions</th>
+                  <th className="px-3 py-2 text-right">Photos</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {entries.map((entry, i) => (
+                  <tr key={entry.user_id} className="border-b border-zinc-800/60 hover:bg-zinc-900/40">
+                    <td className="px-3 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
+                        className="text-emerald-400 hover:underline"
+                      >
+                        {entry.display_name || entry.username || entry.user_id}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-zinc-100">{entry.total_value}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.small_bags}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.large_bags}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{entry.contribution_count}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      <span className={entry.photo_count === 0 ? "text-red-400 font-semibold" : "text-zinc-400"}>
+                        {entry.photo_count}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {!loading && entries.length === 0 && !error && (
@@ -3103,6 +3203,17 @@ export default function AdminPanel({
     params.set("tab", t);
     router.replace(`?${params.toString()}`, { scroll: false });
   };
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const mobileMoreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (mobileMoreRef.current && !mobileMoreRef.current.contains(e.target as Node)) {
+        setMobileMoreOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const sortedCampaigns = useMemo(() => sortCampaignsByStatus(campaigns), [campaigns]);
   const activeCampaigns = useMemo(() => sortedCampaigns.filter(c => c.status === "active"), [sortedCampaigns]);
@@ -3141,9 +3252,15 @@ export default function AdminPanel({
   };
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
+          <Link
+            href="/"
+            className="sm:hidden inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-1"
+          >
+            <span aria-hidden>←</span> Back to app
+          </Link>
           <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
           <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
         </div>
@@ -3165,7 +3282,7 @@ export default function AdminPanel({
         )}
       </div>
 
-      <div className="flex gap-1 mb-6 border-b border-zinc-800">
+      <div className="hidden sm:flex gap-1 mb-6 border-b border-zinc-800">
         {TAB_VALUES.map(t => (
           <button
             key={t}
@@ -3190,6 +3307,58 @@ export default function AdminPanel({
           </button>
         ))}
       </div>
+
+      <nav className="sm:hidden fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm pb-safe">
+        <div className="flex items-stretch">
+          {MOBILE_PRIMARY_TABS.map(t => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setMobileMoreOpen(false); }}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[48px] text-[11px] font-medium capitalize transition-colors relative ${
+                tab === t ? "text-emerald-400" : "text-zinc-500"
+              }`}
+            >
+              <span className="text-lg leading-none">{TAB_ICON[t]}</span>
+              <span>{t}</span>
+              {t === "events" && events.filter(e => e.status === "active").length > 0 && (
+                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-red-500" />
+              )}
+              {t === "groups" && groups.filter(g => g.status === "pending").length > 0 && (
+                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-amber-500" />
+              )}
+            </button>
+          ))}
+          <div className="relative flex-1" ref={mobileMoreRef}>
+            <button
+              onClick={() => setMobileMoreOpen(o => !o)}
+              aria-label="More admin tabs"
+              aria-expanded={mobileMoreOpen}
+              className={`w-full h-full flex flex-col items-center justify-center gap-0.5 py-2 min-h-[48px] text-[11px] font-medium transition-colors ${
+                mobileMoreOpen || MOBILE_OVERFLOW_TABS.includes(tab) ? "text-emerald-400" : "text-zinc-500"
+              }`}
+            >
+              <span className="text-lg leading-none">⋯</span>
+              <span>More</span>
+            </button>
+            {mobileMoreOpen && (
+              <div className="absolute bottom-full right-0 mb-2 w-48 max-w-[calc(100vw-1rem)] bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl py-1 text-sm">
+                {MOBILE_OVERFLOW_TABS.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => { setTab(t); setMobileMoreOpen(false); }}
+                    className={`w-full text-left block px-4 py-2.5 min-h-[44px] flex items-center gap-2 capitalize transition-colors hover:bg-zinc-800 ${
+                      tab === t ? "text-emerald-400" : "text-zinc-300"
+                    }`}
+                  >
+                    <span>{TAB_ICON[t]}</span>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </nav>
 
       {tab === "campaigns" && <CampaignsTab campaigns={sortedCampaigns} setCampaigns={setCampaigns} />}
       {tab === "triggers" && <TriggersTab campaigns={activeCampaigns} triggers={triggers} setTriggers={setTriggers} hotspotMultiplier={hotspotMultiplier} />}
