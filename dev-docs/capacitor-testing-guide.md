@@ -23,15 +23,32 @@ The Android emulator can't reach your machine via `localhost` — `localhost` in
 
 ```
 cd frontend
-npm run dev                                          # in one terminal, leave it running
-CAP_DEV_SERVER=http://10.0.2.2:3000 npx cap sync android   # in another terminal
-npx cap open android
+npm run dev   # in one terminal, leave it running
 ```
-Then Run in Android Studio. This also auto-enables cleartext (plain http) for that build, since `next dev` isn't https — production builds stay https-only.
+Then in another terminal, set the env var (syntax depends on your shell — this repo's dev tooling on Windows runs in PowerShell or Git Bash, both shown below) and sync:
 
-**To switch back to prod:** just re-run `npx cap sync android` with no `CAP_DEV_SERVER` set.
+**PowerShell:**
+```
+$env:CAP_DEV_SERVER = "http://10.0.2.2:3000"
+npx cap sync android
+```
 
-**Physical device instead of emulator:** replace `10.0.2.2` with your machine's LAN IP, e.g. `CAP_DEV_SERVER=http://192.168.1.23:3000`. Both devices need to be on the same network.
+**Git Bash / macOS / Linux:**
+```
+CAP_DEV_SERVER=http://10.0.2.2:3000 npx cap sync android
+```
+
+**cmd.exe:**
+```
+set CAP_DEV_SERVER=http://10.0.2.2:3000
+npx cap sync android
+```
+
+Then `npx cap open android` and Run in Android Studio. This also auto-enables cleartext (plain http) for that build, since `next dev` isn't https — production builds stay https-only.
+
+**To switch back to prod:** open a fresh terminal (so the env var isn't set) and re-run `npx cap sync android`, or explicitly clear it first (PowerShell: `Remove-Item Env:CAP_DEV_SERVER`; cmd.exe: `set CAP_DEV_SERVER=`).
+
+**Physical device instead of emulator:** replace `10.0.2.2` with your machine's LAN IP, e.g. `http://192.168.1.23:3000`. Both devices need to be on the same network.
 
 ## Testing native-only changes (icon, splash, status bar)
 
