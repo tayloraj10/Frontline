@@ -18,12 +18,13 @@ export default async function AppHeader() {
   let isBusinessOnly = false;
   let points = 0;
   let spendablePoints = 0;
+  let avatarUrl: string | null = null;
   if (user) {
     const [{ data: profile }, { data: businessAdminRows }] = await Promise.all([
       supabase
         .schema("public")
         .from("profiles")
-        .select("is_admin, points, spendable_points, is_business_only")
+        .select("is_admin, points, spendable_points, is_business_only, avatar_url")
         .eq("id", user.id)
         .single(),
       supabase
@@ -36,6 +37,7 @@ export default async function AppHeader() {
     isAdmin = profile?.is_admin ?? false;
     points = profile?.points ?? 0;
     spendablePoints = profile?.spendable_points ?? 0;
+    avatarUrl = profile?.avatar_url ?? null;
     isBusinessAdmin = (businessAdminRows?.length ?? 0) > 0;
     isBusinessOnly = profile?.is_business_only ?? false;
   }
@@ -78,7 +80,7 @@ export default async function AppHeader() {
         <div className="flex items-center gap-2">
           <SupportButton />
           {user && <NotificationBellWrapper userId={user.id} />}
-          <UserNav user={user} points={points} spendablePoints={spendablePoints} />
+          <UserNav user={user} points={points} spendablePoints={spendablePoints} avatarUrl={avatarUrl} />
         </div>
       </div>
     </header>

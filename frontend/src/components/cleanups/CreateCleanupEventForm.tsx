@@ -9,7 +9,7 @@ import RoutePicker from "@/components/map/RoutePicker";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
 
-const inputCls = "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import BackButton from "@/components/ui/BackButton";
 import Lightbox from "@/components/Lightbox";
 
 type Submission = {
@@ -62,7 +62,7 @@ export default function VerificationClient({
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-10 w-full">
-      <Link href="/admin" className="text-sm text-zinc-500 hover:text-zinc-300">&larr; Back to admin</Link>
+      <BackButton href="/admin" label="Back to admin" />
 
       <div className="mt-4 mb-6">
         <h1 className="text-2xl font-black text-zinc-100">{displayName}</h1>

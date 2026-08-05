@@ -15,6 +15,7 @@ import type { Feature, Point } from "geojson";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { getCleanupRoute, type CampaignCleanupRoute } from "@/lib/cleanupRoutes";
 import { formatPoints } from "@/lib/formatPoints";
+import IconButton from "@/components/ui/IconButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -999,7 +1000,7 @@ function TerritoryPanel({
                 {isContested ? "Contested" : "Claimed"}
               </span>
             )}
-            <button onClick={onClose} className="text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+            <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
           </div>
         </div>
 
@@ -1242,7 +1243,7 @@ function TerritoryPanel({
         >
           <div className="flex items-start justify-between mb-2">
             <p className="text-sm font-semibold text-zinc-100">What are points?</p>
-            <button onClick={() => setShowPointsInfo(false)} className="text-lg leading-none text-zinc-600 hover:text-zinc-300">×</button>
+            <IconButton onClick={() => setShowPointsInfo(false)} size="sm" className="-mr-1.5 -mt-1 text-lg leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
             The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
@@ -1288,7 +1289,7 @@ function StatePanel({
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
             <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
           </div>
-          <button onClick={onClose} className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1385,7 +1386,7 @@ function HexPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
             <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
           </div>
-          <button onClick={onClose} className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -4840,12 +4841,13 @@ export default function CampaignMap({
               alt="Contribution photo"
               className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
             />
-            <button
+            <IconButton
               onClick={() => setSelectedPhoto(null)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 text-lg leading-none"
+              aria-label="Close"
             >
               ×
-            </button>
+            </IconButton>
           </div>
         </div>
       )}
@@ -4859,12 +4861,13 @@ export default function CampaignMap({
             className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
+            <IconButton
               onClick={() => setSelectedBusiness(null)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              aria-label="Close"
             >
               ×
-            </button>
+            </IconButton>
             <div className="flex items-center gap-3 mb-3">
               {selectedBusiness.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -4935,12 +4938,13 @@ export default function CampaignMap({
             className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
+            <IconButton
               onClick={() => setSelectedCleanupEvent(null)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              aria-label="Close"
             >
               <span className="-translate-y-[2px]">×</span>
-            </button>
+            </IconButton>
             <div className="flex items-center gap-3 mb-3">
               {(selectedCleanupEvent.group_logo_url || selectedCleanupEvent.cohost_groups?.some((g) => g.group_logo_url)) && (
                 <div className="flex items-center -space-x-2 shrink-0">
@@ -5067,12 +5071,13 @@ export default function CampaignMap({
               className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
               onClick={(e) => e.stopPropagation()}
             >
-              <button
+              <IconButton
                 onClick={() => setSelectedEvent(null)}
-                className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+                aria-label="Close"
               >
                 ×
-              </button>
+              </IconButton>
               <div className="flex items-center gap-3 mb-3">
                 {selectedEvent.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element

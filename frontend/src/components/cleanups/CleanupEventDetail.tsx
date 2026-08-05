@@ -21,10 +21,11 @@ import {
 import { searchUsers, type UserSearchResult } from "@/lib/users";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
+import Avatar from "@/components/ui/Avatar";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 
 const inputCls =
-  "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+  "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;
@@ -567,10 +568,19 @@ export default function CleanupEventDetail({
                 <li key={r.user_id} className="px-4 py-2.5 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-400 shrink-0">
-                        {(r.display_name ?? r.username ?? "?")[0].toUpperCase()}
-                      </div>
-                      <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
+                      <Avatar
+                        avatarUrl={r.avatar_url}
+                        name={r.display_name ?? r.username ?? "?"}
+                        username={r.username}
+                        size="xs"
+                      />
+                      {r.username ? (
+                        <Link href={`/users/${r.username}`} className="text-sm text-zinc-200 truncate hover:text-zinc-100 transition-colors">
+                          {r.display_name ?? r.username}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-zinc-200 truncate">{r.display_name ?? "Unknown"}</span>
+                      )}
                       <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
                     </div>
                     <div className="shrink-0 flex items-center gap-2">

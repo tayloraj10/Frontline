@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { acceptLegal } from "@/app/legal/actions";
+import BackButton from "@/components/ui/BackButton";
 import TermsContent from "@/components/legal/TermsContent";
 import PrivacyContent from "@/components/legal/PrivacyContent";
 import { CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION, formatLegalVersion } from "@/lib/legal";
@@ -66,12 +67,7 @@ export default function LegalAcceptForm({
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm px-6 py-10">
         <div className="w-full max-w-2xl max-h-full flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-800 shrink-0">
-            <button
-              onClick={() => setView("list")}
-              className="text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
-            >
-              ← Back
-            </button>
+            <BackButton onClick={() => setView("list")} label="Back" className="-ml-2" />
             <div>
               <h2 className="text-zinc-100 font-semibold leading-tight">{DOC_LABEL[doc]}</h2>
               <p className="text-zinc-500 text-xs">

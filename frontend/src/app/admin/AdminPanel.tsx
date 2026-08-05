@@ -10,6 +10,7 @@ import AddressAutocomplete from "./AddressAutocomplete";
 import TimedEventForm from "@/components/events/TimedEventForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
+import BackButton from "@/components/ui/BackButton";
 import { updateEvent } from "@/lib/events";
 import { deleteGroup } from "@/lib/groups";
 import type { Json, Database } from "@/types/database";
@@ -216,7 +217,7 @@ const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = 
   timed_event:    { desc: "Admin-created timed bonus event over one or more areas (effect_config is always {\"type\": \"score_multiplier\", \"multiplier\": N}). Never auto-triggered — created manually here or from the campaign page. Fully implemented.", implemented: true },
 };
 
-const inputCls = "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 // ─── Campaigns Tab ────────────────────────────────────────────────────────────
 
@@ -3255,12 +3256,7 @@ export default function AdminPanel({
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <Link
-            href="/"
-            className="sm:hidden inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-1"
-          >
-            <span aria-hidden>←</span> Back to app
-          </Link>
+          <BackButton href="/" label="Back to app" className="sm:hidden mb-1 text-xs" />
           <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
           <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
         </div>

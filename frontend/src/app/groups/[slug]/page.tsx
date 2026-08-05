@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
+import BackButton from "@/components/ui/BackButton";
 import type { Database } from "@/types/database";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
@@ -39,9 +40,7 @@ export default async function GroupProfilePage({ params }: Props) {
     return (
       <main className="max-w-lg mx-auto px-6 py-16 w-full text-center">
         <div className="mb-2 text-left">
-          <Link href="/groups" className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
-            ← Groups
-          </Link>
+          <BackButton href="/groups" label="Groups" />
         </div>
         <p className="text-5xl mb-4">{isPending ? "⏳" : "🚫"}</p>
         <h1 className="text-2xl font-black text-zinc-100 mb-2">{group.name}</h1>
@@ -86,9 +85,7 @@ export default async function GroupProfilePage({ params }: Props) {
   return (
     <main className="max-w-3xl mx-auto px-6 py-10 w-full">
       <div className="mb-2">
-        <Link href="/groups" className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
-          ← Groups
-        </Link>
+        <BackButton href="/groups" label="Groups" />
       </div>
 
       <div className="mt-6 mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

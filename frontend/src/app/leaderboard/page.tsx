@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { formatPoints } from "@/lib/formatPoints";
+import Avatar from "@/components/ui/Avatar";
 import type { Database } from "@/types/database";
 
 type Profile = Pick<
@@ -134,15 +135,7 @@ export default async function GlobalLeaderboardPage() {
                   href={`/users/${p.username}`}
                   className="flex items-center gap-2.5 flex-1 min-w-0"
                 >
-                  <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
-                    {p.avatar_url ? (
-                      <img src={p.avatar_url} alt={p.display_name ?? p.username} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-xs font-bold text-zinc-400">
-                        {(p.display_name ?? p.username)[0].toUpperCase()}
-                      </span>
-                    )}
-                  </div>
+                  <Avatar avatarUrl={p.avatar_url} name={p.display_name ?? p.username} size="sm" />
                   <span className="text-sm text-zinc-200 truncate font-medium hover:text-zinc-100 transition-colors">
                     {p.display_name ?? p.username}
                   </span>

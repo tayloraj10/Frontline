@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import EventAreaMapPicker, { type SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createTimedEvent, type CreatedEvent } from "@/lib/events";
 
-const inputCls = "w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 export interface TimedEventFormCampaign {
   id: string;

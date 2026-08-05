@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -9,6 +8,7 @@ import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 import type { MapBusiness, MapCleanupEvent } from "@/components/map/CampaignMap";
 import CampaignInstructionsModal from "@/components/CampaignInstructionsModal";
+import BackButton from "@/components/ui/BackButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -256,8 +256,8 @@ export default async function CampaignPage({ params, searchParams }: Props) {
 
   const [{ data: profilesData }, { data: groupsData }] = await Promise.all([
     allUserIds.length > 0
-      ? supabase.schema("public").from("profiles").select("id, username, display_name").in("id", allUserIds)
-      : Promise.resolve({ data: [] as { id: string; username: string; display_name: string | null }[] }),
+      ? supabase.schema("public").from("profiles").select("id, username, display_name, avatar_url").in("id", allUserIds)
+      : Promise.resolve({ data: [] as { id: string; username: string; display_name: string | null; avatar_url: string | null }[] }),
     allGroupIds.length > 0
       ? supabase.from("groups").select("id, name, slug, image_url").in("id", allGroupIds)
       : Promise.resolve({ data: [] as { id: string; name: string; slug: string; image_url: string | null }[] }),
@@ -288,10 +288,15 @@ export default async function CampaignPage({ params, searchParams }: Props) {
 
   // Enriched leaderboard
   const leaderboard = {
-    users: lbRaw.users.map((u): LeaderboardEntry => ({
-      ...u,
-      name: (() => { const p = profilesById.get(u.entity_id); return p ? (p.display_name ?? p.username) : "Unknown"; })(),
-    })),
+    users: lbRaw.users.map((u): LeaderboardEntry => {
+      const p = profilesById.get(u.entity_id);
+      return {
+        ...u,
+        name: p ? (p.display_name ?? p.username) : "Unknown",
+        username: p?.username ?? null,
+        avatar_url: p?.avatar_url ?? null,
+      };
+    }),
     groups: lbRaw.groups.map((g): LeaderboardEntry => ({
       ...g,
       name: groupsById.get(g.entity_id)?.name ?? "Unknown Group",
@@ -336,12 +341,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
     <div className="flex flex-col flex-1">
       <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Link
-            href="/campaigns"
-            className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors shrink-0"
-          >
-            <span aria-hidden>←</span> <span className="hidden sm:inline">Campaigns</span>
-          </Link>
+          <BackButton href="/campaigns" label="Campaigns" labelClassName="hidden sm:inline" />
           <span className="text-zinc-700 shrink-0 hidden sm:inline">|</span>
           <div className="min-w-0 flex items-baseline gap-2 sm:gap-3">
             <h1 className="text-sm sm:text-base font-bold text-zinc-100 truncate leading-tight shrink-0">

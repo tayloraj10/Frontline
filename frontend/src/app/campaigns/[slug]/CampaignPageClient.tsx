@@ -13,6 +13,7 @@ import type { Database } from "@/types/database";
 import { listCampaignCleanupRoutes, type CampaignCleanupRoute, type RouteLineString } from "@/lib/cleanupRoutes";
 import { useGameSettings } from "@/lib/gameSettings";
 import { formatPoints } from "@/lib/formatPoints";
+import Avatar from "@/components/ui/Avatar";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -161,12 +162,18 @@ export function CampaignStatBar({
             <button
               type="button"
               onClick={() => setShowBagBreakdown((v) => !v)}
-              className="flex items-baseline gap-1 sm:gap-1.5 shrink-0 sm:pointer-events-none"
+              className="relative flex items-baseline gap-1 sm:gap-1.5 shrink-0 rounded-lg sm:pointer-events-none active:bg-zinc-800/60 sm:active:bg-transparent transition-colors before:content-[''] before:absolute before:-inset-y-2.5 before:-inset-x-1.5 sm:before:content-none"
             >
               <span className="text-sm font-bold tabular-nums text-zinc-100">{displayStatValue(totalBagCount)}</span>
               <span className="text-xs text-zinc-500 flex items-center gap-0.5">
                 Total bags
-                <span className="sm:hidden text-zinc-500 text-sm leading-none">{showBagBreakdown ? "▴" : "▾"}</span>
+                <svg
+                  className={`sm:hidden w-3.5 h-3.5 text-zinc-500 transition-transform ${showBagBreakdown ? "rotate-180" : ""}`}
+                  viewBox="0 0 12 12"
+                  fill="none"
+                >
+                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </span>
             </button>
             <StatBarItem label="Small bags" value={displayStatValue(smallBags)} hiddenOnMobile />
@@ -264,6 +271,8 @@ export interface LeaderboardEntry {
   small_bags?: number;
   large_bags?: number;
   pounds?: number;
+  username?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface ActivityItem {
@@ -361,19 +370,26 @@ function LeaderboardRow({
     null;
   const breakdownParts = bagBreakdownParts(entry);
 
+  const avatarNode =
+    variant === "group" ? (
+      <div className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 bg-emerald-900/40 border-emerald-700/60 text-emerald-400">
+        {(entry.name || "?")[0].toUpperCase()}
+      </div>
+    ) : (
+      <Avatar avatarUrl={entry.avatar_url} name={entry.name || "?"} username={entry.username} size="xs" />
+    );
+
   return (
     <li className="px-4 py-2.5 flex items-center gap-2.5">
       <RankBadge rank={rank} />
-      <div
-        className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 ${
-          variant === "group"
-            ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-400"
-            : "bg-zinc-800 border-zinc-700 text-zinc-400"
-        }`}
-      >
-        {(entry.name || "?")[0].toUpperCase()}
-      </div>
-      <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
+      {avatarNode}
+      {variant === "user" && entry.username ? (
+        <Link href={`/users/${entry.username}`} className="flex-1 min-w-0 text-xs text-zinc-200 break-words hover:text-zinc-100 transition-colors">
+          {entry.name}
+        </Link>
+      ) : (
+        <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
+      )}
       <div className="text-right shrink-0">
         <div className="text-xs font-semibold text-zinc-300 tabular-nums">
           {formatPoints(entry.total_value)} {unit}
