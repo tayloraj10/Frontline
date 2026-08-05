@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import AppHeader from "@/components/AppHeader";
 import LegalGate from "@/components/LegalGate";
+import NativeAppBridge from "@/components/NativeAppBridge";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${geist.variable} dark h-full antialiased`}>
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
+        <NativeAppBridge />
         <AppHeader />
         <div className="flex flex-col flex-1 min-h-0 overflow-y-auto pb-16 sm:pb-0">{children}</div>
         <LegalGate />
