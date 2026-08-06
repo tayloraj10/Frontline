@@ -6,13 +6,17 @@
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
-      "args": ["app.main:app", "--reload", "--reload-dir", "app", "--port", "8000"],
+      "args": ["app.main:app", "--reload", "--reload-dir", "app", "--port", "8000", "--host", "0.0.0.0"],
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/backend/.env",
       "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
       "jinja": true
     },
     {
+      // scripts/dev.mjs auto-detects the host's LAN IP and sets NEXT_PUBLIC_SUPABASE_URL /
+      // NEXT_PUBLIC_FASTAPI_URL / CAP_DEV_SERVER from it, then (re)syncs the Android project
+      // only when that IP changes. Works for browser (localhost:3000) and the Android
+      // emulator/a physical device from the same process — see capacitor-testing-guide.md.
       "name": "Frontend: Next.js",
       "type": "node-terminal",
       "request": "launch",

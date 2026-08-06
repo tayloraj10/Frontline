@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# scripts/dev.mjs LAN IP cache
+/.lan-ip-cache
+
 # production
 /build
 

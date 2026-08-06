@@ -5,8 +5,8 @@ Reference companion to `capacitor-scoping-2026-08-04.md` (architecture/decisions
 ## Quick facts
 
 - The app is a **remote-URL wrapper**: the native WebView loads a URL over the network at runtime. It does not bundle your web code into the APK/IPA.
-- Whatever `capacitor.config.ts` says `server.url` is gets baked into the native project when you run `npx cap sync`. Changing `capacitor.config.ts` alone does **nothing** to an already-built app — you must re-sync and rebuild.
-- Default (no env var set) points at production: `https://www.frontlinemaps.com`.
+- Default (no local dev server running) points at production: `https://www.frontlinemaps.com`.
+- `frontend/scripts/dev.mjs` (run via `npm run dev`, e.g. the "Frontend: Next.js" launch config) auto-detects your machine's LAN IP and handles everything below for you — for local dev you usually don't need to think about any of it.
 
 ## Running against production (default)
 
@@ -15,52 +15,41 @@ cd frontend
 npx cap sync android   # or ios
 npx cap open android   # or ios
 ```
-Then hit Run in Android Studio / Xcode. This shows whatever is actually live on frontlinemaps.com right now — **not** your local branch, even if you have uncommitted or unmerged work.
+Then hit Run in Android Studio / Xcode. Shows whatever is live on frontlinemaps.com right now, not your local branch.
 
-## Running against your local branch instead
+## Running against your local branch
 
-The Android emulator can't reach your machine via `localhost` — `localhost` inside the emulator means the emulator itself. Use `10.0.2.2`, the emulator's special alias for the host machine's `localhost`. A physical device needs your machine's actual LAN IP instead (e.g. `192.168.1.23`) since `10.0.2.2` only works inside the emulator.
+Just start the "Full Stack" launch config (or `npm run dev` in `frontend/`) like normal — no env vars to set by hand. `scripts/dev.mjs`:
 
+- Detects your LAN IP and points `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_FASTAPI_URL`, and `CAP_DEV_SERVER` at it, for both the browser and the emulator/a physical device.
+- Re-syncs the Android project (`npx cap sync android`) automatically, but only when your LAN IP has actually changed since last run.
+- Clears `frontend/.next` automatically when the IP changes, so you never hit stale-cached env values.
+
+Then:
 ```
 cd frontend
-npm run dev   # in one terminal, leave it running
+npx cap open android
 ```
-Then in another terminal, set the env var (syntax depends on your shell — this repo's dev tooling on Windows runs in PowerShell or Git Bash, both shown below) and sync:
+and hit Run in Android Studio. Browser testing (`http://localhost:3000`) and emulator/device testing both work from this same running process — no separate config needed.
 
-**PowerShell:**
-```
-$env:CAP_DEV_SERVER = "http://10.0.2.2:3000"
-npx cap sync android
-```
+**Physical device:** same flow, no changes needed — it already uses your LAN IP, and a device on the same network can reach it exactly like the emulator can.
 
-**Git Bash / macOS / Linux:**
-```
-CAP_DEV_SERVER=http://10.0.2.2:3000 npx cap sync android
-```
+**FastAPI CORS:** the backend allows any private LAN IP on port 3000 in development (see `backend/app/core/config.py`'s `cors_origin_regex`), so this isn't something you need to configure either.
 
-**cmd.exe:**
-```
-set CAP_DEV_SERVER=http://10.0.2.2:3000
-npx cap sync android
-```
-
-Then `npx cap open android` and Run in Android Studio. This also auto-enables cleartext (plain http) for that build, since `next dev` isn't https — production builds stay https-only.
-
-**To switch back to prod:** open a fresh terminal (so the env var isn't set) and re-run `npx cap sync android`, or explicitly clear it first (PowerShell: `Remove-Item Env:CAP_DEV_SERVER`; cmd.exe: `set CAP_DEV_SERVER=`).
-
-**Physical device instead of emulator:** replace `10.0.2.2` with your machine's LAN IP, e.g. `http://192.168.1.23:3000`. Both devices need to be on the same network.
+**Google OAuth over a LAN IP:** Supabase's redirect allow-list (`supabase/config.toml`) only matches exact URLs, so OAuth-return testing against a LAN IP may need that file updated manually if you hit it — known limitation, not automated.
 
 ## Testing native-only changes (icon, splash, status bar)
 
 These are baked into the native project as actual asset files (`android/app/src/main/res/...`, `ios/App/App/Assets.xcassets/...`) — regenerating them or syncing does **not** hot-reload. You have to reinstall the app:
 
-- Just hit the green ▶ Run button again in Android Studio/Xcode — it rebuilds and reinstalls, and the new splash/icon shows on the next cold launch.
-- If it still looks stale after that, `Build > Clean Project` then Run again clears any Gradle cache weirdness.
-- `Build > Clean Project` alone does **not** re-sync `capacitor.config.ts` changes (see above) — that always needs `npx cap sync`.
+- Hit Run again in Android Studio/Xcode — rebuilds and reinstalls, new splash/icon shows on next cold launch.
+- If it still looks stale, `Build > Clean Project` then Run again.
+- If the app itself looks broken/stuck after a native or config change (black screen, frozen UI) and a clean rebuild doesn't fix it, fully **uninstall the app from the emulator/device first**, then Run again — a rebuild alone doesn't clear stale installed app/WebView state.
 
-## Common gotcha checklist when something looks "stale" or "wrong"
+## Common gotcha checklist
 
 1. Did you mean to see prod or your local branch? Check `android/app/src/main/assets/capacitor.config.json` — its `server.url` is the actual source of truth for what the last build will load.
-2. Changed `capacitor.config.ts`? You need `npx cap sync <platform>` before it takes effect.
+2. Changed `capacitor.config.ts`? You need `npx cap sync <platform>` before it takes effect (`scripts/dev.mjs` does this for you when your LAN IP changes, not on every run).
 3. Changed a native asset (icon/splash)? You need a rebuild + reinstall (Run again), not just a WebView refresh.
-4. Testing OAuth (Google login)? It opens in the system browser, not the WebView — this is intentional (see scoping doc), not a bug.
+4. Testing OAuth (Google login)? It opens in the system browser, not the WebView — intentional, not a bug.
+5. Something looks stuck/wrong after switching networks or configs and a rebuild doesn't fix it? Try a full uninstall + reinstall (see above) before digging further.
