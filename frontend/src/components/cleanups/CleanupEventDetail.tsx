@@ -23,6 +23,7 @@ import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
 import Avatar from "@/components/ui/Avatar";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
+import ShareButton from "@/components/ShareButton";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -331,25 +332,28 @@ export default function CleanupEventDetail({
               Beta
             </span>
           </div>
-          {event.is_organizer && (
-            <div className="flex items-center gap-2 shrink-0 pt-1">
-              <Link
-                href={`/groups/${event.group_slug}/events/${event.id}/edit`}
-                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                Edit
-              </Link>
-              {!isCancelled && (
-                <button
-                  onClick={handleCancelEvent}
-                  disabled={cancelLoading}
-                  className="text-xs text-zinc-500 hover:text-red-400 transition-colors disabled:opacity-40"
+          <div className="flex items-center gap-3 shrink-0 pt-1">
+            <ShareButton content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
+            {event.is_organizer && (
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/groups/${event.group_slug}/events/${event.id}/edit`}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
-                  {cancelLoading ? "Cancelling…" : "Cancel event"}
-                </button>
-              )}
-            </div>
-          )}
+                  Edit
+                </Link>
+                {!isCancelled && (
+                  <button
+                    onClick={handleCancelEvent}
+                    disabled={cancelLoading}
+                    className="text-xs text-zinc-500 hover:text-red-400 transition-colors disabled:opacity-40"
+                  >
+                    {cancelLoading ? "Cancelling…" : "Cancel event"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="mt-1.5">
           {event.logging_mode === "organizer_total" ? (
