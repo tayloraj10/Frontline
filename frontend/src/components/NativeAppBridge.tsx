@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { isNativePlatform } from "@/lib/capacitor";
+import { createClient } from "@/lib/supabase/client";
+import { registerDeviceToken } from "@/lib/pushNotifications";
 
 // Mounted once in the root layout. No-ops entirely on web — everything here
 // only matters inside the Capacitor-wrapped iOS/Android build.
@@ -10,12 +12,15 @@ export default function NativeAppBridge() {
     if (!isNativePlatform()) return;
 
     let removeUrlListener: (() => void) | undefined;
+    let removePushListeners: (() => void) | undefined;
+    let removeAuthListener: (() => void) | undefined;
 
     (async () => {
-      const [{ App }, { Browser }, { StatusBar, Style }] = await Promise.all([
+      const [{ App }, { Browser }, { StatusBar, Style }, { Capacitor }] = await Promise.all([
         import("@capacitor/app"),
         import("@capacitor/browser"),
         import("@capacitor/status-bar"),
+        import("@capacitor/core"),
       ]);
 
       // Google's OAuth screen can't be shown inside the app's embedded WebView
@@ -34,9 +39,56 @@ export default function NativeAppBridge() {
 
       await StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
       await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+
+      const platform = Capacitor.getPlatform() === "ios" ? "ios" : "android";
+      const { PushNotifications } = await import("@capacitor/push-notifications");
+
+      // The 'registration' event only fires once PushNotifications.register()
+      // resolves, with no way to pass data through it — so the user id it
+      // should be registered against has to be handed off via this closure var.
+      let pendingUserId: string | null = null;
+
+      const registrationSub = await PushNotifications.addListener("registration", (token) => {
+        if (!pendingUserId) return;
+        registerDeviceToken(pendingUserId, token.value, platform).catch(() => {});
+      });
+
+      const tapSub = await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+        const url = action.notification.data?.url;
+        if (typeof url === "string") window.location.href = url;
+      });
+
+      removePushListeners = () => {
+        registrationSub.remove();
+        tapSub.remove();
+      };
+
+      const registerForPush = async (userId: string) => {
+        const perms = await PushNotifications.checkPermissions();
+        let status = perms.receive;
+        if (status === "prompt" || status === "prompt-with-rationale") {
+          status = (await PushNotifications.requestPermissions()).receive;
+        }
+        if (status !== "granted") return;
+        pendingUserId = userId;
+        await PushNotifications.register();
+      };
+
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) registerForPush(userData.user.id).catch(() => {});
+
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "SIGNED_IN" && session?.user) registerForPush(session.user.id).catch(() => {});
+      });
+      removeAuthListener = () => authListener.subscription.unsubscribe();
     })();
 
-    return () => removeUrlListener?.();
+    return () => {
+      removeUrlListener?.();
+      removePushListeners?.();
+      removeAuthListener?.();
+    };
   }, []);
 
   return null;
