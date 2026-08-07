@@ -44,19 +44,19 @@ Recommend sending **all** platforms through Firebase Cloud Messaging (FCM). FCM 
 
 ## Work breakdown
 
-1. [ ] **Resolve architecture question above** (Edge Function vs. backend-owned inserts) before scaffolding anything.
-2. [ ] **Firebase project setup**: create project, enable FCM, get server key / service account credentials.
-3. [ ] **`device_tokens` table + backend upsert endpoint**: migration + a small FastAPI route, called from the client on login and app-foreground.
+1. [x] **Resolve architecture question above**: going with option 2, Supabase Edge Function off `user_notifications` INSERT.
+2. [x] **Firebase project setup**: project created (`frontline-498904`), `google-services.json` in place for Android, APNs Authentication Key generated (Apple Developer personal account, Team ID `4PF46V9GR7`) and uploaded to Firebase Cloud Messaging. Admin SDK service account JSON stored as a Supabase secret (dashboard → Edge Functions → Secrets), not committed.
+3. [x] **`device_tokens` table + backend upsert endpoint**: `supabase/migrations/061_device_tokens.sql` + `POST /api/device-tokens/register` (`backend/app/api/routes/device_tokens.py`), upserts by token (unique per device, reassigns `user_id` on account switch).
 4. [ ] **Client plugin wiring**: install `@capacitor/push-notifications`, permission request + token registration in `NativeAppBridge.tsx` (or a new sibling module, TBD), tap-to-deep-link handling.
-5. [ ] **Push-send integration**: whichever path is chosen above, wire the actual FCM HTTP v1 call for the two DB-trigger notification types and (if choosing option 1 or 3) the two backend-direct-insert types.
-6. [ ] **APNs key upload into Firebase**: blocked on Apple Developer account decision; Android can ship without this.
+5. [ ] **Push-send integration**: Supabase Edge Function triggered off `user_notifications` INSERT, calling FCM's HTTP v1 API using the stored service-account secret.
+6. [x] **APNs key upload into Firebase**: done 2026-08-07.
 7. [ ] **Manual test pass**: Android device receiving a push while app is backgrounded/killed, tap-to-open routing to the right page.
 8. [ ] **iOS test pass**: needs the Mac + `ios/` platform to exist first (see `ios-setup-2026-08-06.md`) — this item is blocked on iOS scaffolding, which hasn't started.
 
 ## Hard blockers
 
-- **Apple Developer account decision** (personal vs. LLC/nonprofit) — same blocker as OAuth's `apple-app-site-association`, now also blocks APNs-via-Firebase. Android/FCM push is fully unblocked and can ship independently.
-- **`ios/` platform doesn't exist yet** — iOS push testing is blocked on that scaffolding work happening on the Mac first, same as the share sheet and everything else iOS-specific.
+- ~~**Apple Developer account decision**~~ — resolved 2026-08-07, proceeding on personal accounts. APNs key generated and uploaded to Firebase.
+- **`ios/` platform doesn't exist yet** — iOS push testing is blocked on that scaffolding work happening on the Mac first, same as the share sheet and everything else iOS-specific. `GoogleService-Info.plist` is saved at `frontend/pending-ios-assets/` for when that happens.
 
 ## Explicitly deferred
 
