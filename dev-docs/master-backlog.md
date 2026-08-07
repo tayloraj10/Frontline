@@ -19,6 +19,7 @@ Single source of truth for "what's left, across everything." Each item links to 
 - [ ] **Store listings** — screenshots, description copy, privacy policy URL, age rating, permissions justification. Not started. → `capacitor-scoping-2026-08-04.md`, `android-release-checklist.md`, `ios-release-checklist.md`
 - [ ] **Build + submit** — TestFlight (Mac) and Android Internal Testing track, then review submission. Not started. → `capacitor-scoping-2026-08-04.md`, `android-release-checklist.md`, `ios-release-checklist.md`
 - [ ] **React Native rewrite** — deferred until after Capacitor version ships. → `dev-plan-2026-08-03-mobile-first.md` (item 10)
+- [x] **Drop "US & UK only" from the Trash War campaign card** — done (UI-only hide in `campaigns/page.tsx`, badge just doesn't render for `trash-war`; `geo_scope` data left untouched since the campaign is still genuinely US/UK-only). On `phase2/capacitor-scoping`, ships with that branch.
 
 ## Naming / branding
 

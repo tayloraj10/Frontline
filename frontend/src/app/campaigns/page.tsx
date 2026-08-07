@@ -57,7 +57,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
                 {CONTRIBUTION_LABELS[campaign.contribution_type] ?? campaign.contribution_type}
               </span>
             )}
-            {(campaign.geo_scope as { scope?: string; countries?: string[] } | null)?.scope === "nationwide" && (
+            {campaign.slug !== "trash-war" && (campaign.geo_scope as { scope?: string; countries?: string[] } | null)?.scope === "nationwide" && (
               <span className="rounded-full border border-red-700/50 bg-red-900/20 px-2.5 py-1 text-xs font-semibold text-red-400">
                 {(campaign.geo_scope as { countries?: string[] }).countries?.length
                   ? `${(campaign.geo_scope as { countries?: string[] }).countries!.join(" & ")} only`
