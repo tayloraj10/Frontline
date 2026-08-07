@@ -137,6 +137,67 @@ async def get_nyc_neighborhoods_adjacency(db: AsyncSession = Depends(get_db)):
     return _nyc_adjacency_cache
 
 
+@router.get("/nyc-boroughs/{z}/{x}/{y}.mvt")
+async def get_nyc_boroughs_tile(
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-borough polygons (5 features) — for future borough-level features/layers."""
+    cache_key = ("nyc_boroughs", z, x, y)
+    if cache_key in _tile_cache:
+        return Response(
+            content=_tile_cache[cache_key],
+            media_type="application/x-protobuf",
+            headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+        )
+
+    result = await db.execute(
+        text("""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y) AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    g.id::text AS geo_unit_id,
+                    g.unit_id AS unit_id,
+                    COALESCE(g.display_name, g.unit_id) AS display_name,
+                    ST_AsMVTGeom(
+                        ST_Transform(g.geometry, 3857),
+                        bounds.geom_3857,
+                        4096, 8, true
+                    ) AS geom
+                FROM geo_units g
+                CROSS JOIN bounds
+                WHERE g.unit_type = 'nyc_borough'
+                  AND g.geometry && bounds.geom_4326
+                  AND ST_Intersects(g.geometry, bounds.geom_4326)
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'nyc_boroughs', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y},
+    )
+
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        evict = list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]
+        for k in evict:
+            _tile_cache.pop(k, None)
+    _tile_cache[cache_key] = tile_bytes
+
+    return Response(
+        content=tile_bytes,
+        media_type="application/x-protobuf",
+        headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+    )
+
+
 # Registered ahead of the generic /{campaign_id}/{z}/{x}/{y}.mvt route below: both
 # have the same four-segment shape, and a literal "nyc-neighborhoods" prefix would
 # otherwise be swallowed by that route first and fail UUID validation on campaign_id.

@@ -1,7 +1,7 @@
 # Frontline — What You Can Do in the App
 
 *A plain-language guide for three kinds of users: everyday participants, partner businesses, and admins.*
-*Updated August 2, 2026*
+*Updated August 3, 2026*
 
 ---
 
@@ -11,7 +11,7 @@
 You can create an account with email and password, or sign in instantly with Google. Once you're in, you can set up your profile with a display name, a short bio, and a profile photo. You can also manage your account security — change your password, change your email (unless you signed up through Google, in which case that's handled on Google's side), or permanently delete your account if you ever want to leave.
 
 ### Joining the action
-Every campaign — like our flagship Trash War — plays out on a live map. You can browse the map, see who's claimed which territory, and jump in by logging a contribution: drop a pin, log the bags or pounds you collected, snap a photo, and it's added to the board. If you're part of a group, you can claim territory on the group's behalf instead of your own.
+Every campaign — like our flagship Trash War — plays out on a live map. You can browse the map and jump in by logging a contribution: drop a pin, log the bags or pounds you collected, snap a photo, and it's added to the board. If you're part of a group, you can claim territory on the group's behalf instead of your own — territory claiming is an optional layer you switch on from the map legend, not something shown by default. If you'd rather just see activity without any claiming/competition angle, you can instead switch on a stats view (by zip code, neighborhood, or borough) showing points, cleanup counts, and recent activity for that area.
 
 You can also report a problem you spot — trash that needs cleaning up — by dropping a pin with a photo. Other users can then "claim" that report as a personal challenge: submit a before photo, do the cleanup, submit an after photo, and it automatically turns into a logged contribution.
 

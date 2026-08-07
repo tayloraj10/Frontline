@@ -28,6 +28,12 @@ const UK_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-8.65, 49.85],
   [1.87, 60.9],
 ];
+// Full extent of all 5 NYC boroughs (Manhattan, Brooklyn, Queens, the Bronx, Staten
+// Island), including the Rockaways and Staten Island's southern/western edges.
+const NYC_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-74.26, 40.49],
+  [-73.68, 40.92],
+];
 const WORLD_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-170, -58],
   [179, 80],
@@ -203,6 +209,7 @@ interface SelectedZip {
   geoUnitId: string;
   displayName: string;
   unitLabel: string;
+  variant?: "territory" | "stats";
 }
 
 interface HexBloomEntry {
@@ -225,12 +232,13 @@ const BLOOM_STAGE_COLORS = ["#3d4a5c", "#2a3d50", "#1f3a18", "#2d5c24", "#3d7a2e
 const BLOOM_THRESHOLDS = [null, 0, 50, 200, 600, 1500];
 
 // Fixed, visually distinct palette for the NYC neighborhoods overlay. Sized well above the
-// observed max adjacency degree (~6) both so greedy coloring never runs out of options and
+// observed max adjacency degree (~6-8) both so greedy coloring never runs out of options and
 // so the mosaic reads as varied rather than repetitive across ~200 neighborhoods.
 const NYC_NEIGHBORHOOD_PALETTE = [
   "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e",
   "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
   "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#78716c",
+  "#fb923c", "#4ade80", "#38bdf8", "#c084fc",
 ];
 
 // Greedy graph coloring: visits neighborhoods in a randomized order (so the resulting
@@ -487,6 +495,9 @@ type LayerToggleState = {
   showGroupEvents: boolean;
   showMapEvents: boolean;
   showPartners: boolean;
+  showZipStats: boolean;
+  showNeighborhoodStats: boolean;
+  showBoroughStats: boolean;
 };
 
 // Persists the legend's layer-visibility toggles across page visits (per browser,
@@ -510,9 +521,9 @@ function readStoredToggles(): Partial<LayerToggleState> {
   return cachedStoredToggles ?? {};
 }
 
-function storedToggle(key: keyof LayerToggleState): boolean {
+function storedToggle(key: keyof LayerToggleState, defaultValue = true): boolean {
   const value = readStoredToggles()[key];
-  return typeof value === "boolean" ? value : true;
+  return typeof value === "boolean" ? value : defaultValue;
 }
 
 // Case expression resolving to 1/0 per-feature based on which territory category
@@ -528,6 +539,18 @@ function territoryCategoryFactor(t: LayerToggleState): unknown {
     ["==", ["coalesce", ["feature-state", "claim_is_group"], false], true], t.showGroupTerritory ? 1 : 0,
     t.showIndividualTerritory ? 1 : 0,
   ];
+}
+
+// MapLibre's layer-bound mouse events (hover/click) fire based on rendered
+// geometry regardless of paint opacity, so a feature hidden via
+// territoryFillOpacityExpr (opacity 0) is still hoverable/clickable unless
+// callers separately check this before showing a tooltip or opening a panel.
+function territoryFeatureToggledOn(
+  state: { claim_owned?: boolean; claim_is_group?: boolean },
+  t: LayerToggleState,
+): boolean {
+  if (!state.claim_owned) return t.showUnclaimedTerritory;
+  return state.claim_is_group ? t.showGroupTerritory : t.showIndividualTerritory;
 }
 
 function territoryFillOpacityExpr(t: LayerToggleState): unknown {
@@ -599,6 +622,12 @@ function applyLayerVisibility(m: maplibregl.Map, t: LayerToggleState): void {
   setVis("cleanup-event-radius-line", t.showEventRadius && t.showGroupEvents);
   setVis("cleanup-routes-buffer-fill", t.showEventRadius && t.showGroupEvents);
   setVis("cleanup-routes-buffer-line", t.showEventRadius && t.showGroupEvents);
+  setVis("zip-stats-fill", t.showZipStats);
+  setVis("zip-stats-outline", t.showZipStats);
+  setVis("nyc-neighborhoods-stats-fill", t.showNeighborhoodStats);
+  setVis("nyc-neighborhoods-stats-outline", t.showNeighborhoodStats);
+  setVis("nyc-boroughs-stats-fill", t.showBoroughStats);
+  setVis("nyc-boroughs-stats-outline", t.showBoroughStats);
 
   if (m.getLayer("territory-event-highlight")) {
     m.setPaintProperty("territory-event-highlight", "line-opacity", territoryEventHighlightOpacityExpr(t) as never);
@@ -767,6 +796,15 @@ type ContribRow = {
   cleanups: { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
 };
 
+type StatsDisplayRow = {
+  name: string;
+  groupName: string | null;
+  points: number;
+  submittedAt: string | null;
+  smallBags: number;
+  largeBags: number;
+};
+
 function TerritoryPanel({
   geoUnitId,
   displayName,
@@ -778,6 +816,8 @@ function TerritoryPanel({
   reportPhotos,
   onClose,
   onPhotoSelect,
+  variant = "territory",
+  campaignId,
 }: {
   geoUnitId: string;
   displayName: string;
@@ -789,12 +829,18 @@ function TerritoryPanel({
   reportPhotos: string[];
   onClose: () => void;
   onPhotoSelect: (url: string) => void;
+  variant?: "territory" | "stats";
+  campaignId?: string;
 }) {
   const [contribs, setContribs] = useState<ContribRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [cleanupPhotos, setCleanupPhotos] = useState<string[]>([]);
   const [showPointsInfo, setShowPointsInfo] = useState(false);
   const [bagTotals, setBagTotals] = useState({ small: 0, large: 0 });
+  const [statsTotalPoints, setStatsTotalPoints] = useState(0);
+  const [statsRecent, setStatsRecent] = useState<StatsDisplayRow[]>([]);
+  const [statsReportCount, setStatsReportCount] = useState(0);
+  const [statsTotalReportCount, setStatsTotalReportCount] = useState(0);
   const { values: pointValues, loading: pointValuesLoading } = useGameSettings([
     "small_bag_value",
     "large_bag_value",
@@ -802,6 +848,39 @@ function TerritoryPanel({
   ] as const);
 
   useEffect(() => {
+    if (variant === "stats") {
+      setLoading(true);
+      fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/geo-units/${geoUnitId}/stats?campaign_id=${campaignId ?? ""}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data) return;
+          setStatsTotalPoints(data.total_points ?? 0);
+          setBagTotals(data.bag_totals ?? { small: 0, large: 0 });
+          setStatsReportCount(data.open_report_count ?? 0);
+          setStatsTotalReportCount(data.total_report_count ?? 0);
+          setCleanupPhotos(data.cleanup_photos ?? []);
+          setStatsRecent(
+            (data.recent_contributions ?? []).map((r: {
+              value: number | null;
+              submitted_at: string | null;
+              group_name: string | null;
+              contributor_name: string;
+              small_bags: number;
+              large_bags: number;
+            }) => ({
+              name: r.contributor_name,
+              groupName: r.group_name,
+              points: r.value ?? 1,
+              submittedAt: r.submitted_at,
+              smallBags: r.small_bags,
+              largeBags: r.large_bags,
+            })),
+          );
+        })
+        .finally(() => setLoading(false));
+      return;
+    }
+
     const supabase = createClient();
     (supabase
       .from("contributions")
@@ -851,11 +930,12 @@ function TerritoryPanel({
         );
         setBagTotals(totals);
       });
-  }, [geoUnitId]);
+  }, [geoUnitId, variant, campaignId]);
 
   const holdingGroupId = claim?.claimed_by_group ?? null;
 
   const groupBreakdown = useMemo(() => {
+    if (variant === "stats") return [];
     const map = new Map<string, { name: string; points: number }>();
     for (const c of contribs) {
       if (!c.group_id) continue;
@@ -868,7 +948,7 @@ function TerritoryPanel({
     return Array.from(map.entries())
       .map(([id, v]) => ({ id, ...v }))
       .sort((a, b) => b.points - a.points);
-  }, [contribs]);
+  }, [contribs, variant]);
 
   const groupColors = useMemo(() => {
     const colors: Record<string, string> = {};
@@ -880,16 +960,19 @@ function TerritoryPanel({
     return colors;
   }, [groupBreakdown, holdingGroupId]);
 
-  const totalPoints = claim?.total_value ?? 0;
+  const totalPoints = variant === "stats" ? statsTotalPoints : (claim?.total_value ?? 0);
   const totalBagCount = bagTotals.small + bagTotals.large;
-  const isContested = groupBreakdown.length > 1;
-  const isClaimed = !!(claim?.claimed_by_group || claim?.claimed_by_user);
+  const isContested = variant === "territory" && groupBreakdown.length > 1;
+  const isClaimed = variant === "territory" && !!(claim?.claimed_by_group || claim?.claimed_by_user);
   const maxGroupPoints = groupBreakdown[0]?.points ?? 1;
   const isGroup = claimLabel?.isGroup ?? false;
+  const hasStats = variant === "stats" ? (statsTotalPoints > 0 || totalBagCount > 0 || statsTotalReportCount > 0) : isClaimed;
 
-  const accentHex = isClaimed
-    ? (holdingGroupId ? (groupColors[holdingGroupId] ?? GROUP_PALETTE[0]) : "#3b82f6")
-    : "#3f3f46";
+  const accentHex = variant === "stats"
+    ? "#3b82f6"
+    : isClaimed
+      ? (holdingGroupId ? (groupColors[holdingGroupId] ?? GROUP_PALETTE[0]) : "#3b82f6")
+      : "#3f3f46";
 
   return (
     <>
@@ -900,8 +983,12 @@ function TerritoryPanel({
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
           <div>
-            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Territory</p>
-            <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{unitLabel} {displayName}</p>
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+              {variant === "stats" ? `${unitLabel} Stats` : "Territory"}
+            </p>
+            <p className="text-xl font-black leading-none tracking-tight text-zinc-100">
+              {variant === "stats" ? displayName : `${unitLabel} ${displayName}`}
+            </p>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {isClaimed && (
@@ -917,28 +1004,30 @@ function TerritoryPanel({
         </div>
 
         <div className="mt-2.5">
-          {claimLabel ? (
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm">{isGroup ? "👥" : "👤"}</span>
-              {isGroup && claimLabel.groupSlug ? (
-                <Link
-                  href={`/groups/${claimLabel.groupSlug}`}
-                  className="truncate text-sm font-semibold hover:underline"
-                  style={{ color: accentHex }}
-                >
-                  {claimLabel.name}
-                </Link>
-              ) : (
-                <span className="truncate text-sm font-semibold" style={{ color: accentHex }}>
-                  {claimLabel.name}
-                </span>
-              )}
-              <span className="ml-auto text-[10px] text-zinc-600 shrink-0">holds</span>
-            </div>
-          ) : (
-            <span className="text-sm text-zinc-600">Unclaimed</span>
+          {variant === "territory" && (
+            claimLabel ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">{isGroup ? "👥" : "👤"}</span>
+                {isGroup && claimLabel.groupSlug ? (
+                  <Link
+                    href={`/groups/${claimLabel.groupSlug}`}
+                    className="truncate text-sm font-semibold hover:underline"
+                    style={{ color: accentHex }}
+                  >
+                    {claimLabel.name}
+                  </Link>
+                ) : (
+                  <span className="truncate text-sm font-semibold" style={{ color: accentHex }}>
+                    {claimLabel.name}
+                  </span>
+                )}
+                <span className="ml-auto text-[10px] text-zinc-600 shrink-0">holds</span>
+              </div>
+            ) : (
+              <span className="text-sm text-zinc-600">Unclaimed</span>
+            )
           )}
-          {isClaimed && (
+          {hasStats && (
             <>
               <p className="mt-0.5 text-xs text-zinc-500 flex items-center gap-1">
                 {totalPoints} point{totalPoints !== 1 ? "s" : ""} total in {unitLabel}
@@ -956,6 +1045,14 @@ function TerritoryPanel({
                   {totalBagCount} bag{totalBagCount !== 1 ? "s" : ""} picked up
                   {bagTotals.small > 0 && bagTotals.large > 0 && (
                     <span> ({bagTotals.small} small, {bagTotals.large} large)</span>
+                  )}
+                </p>
+              )}
+              {variant === "stats" && statsTotalReportCount > 0 && (
+                <p className="text-[11px] text-zinc-600">
+                  🚮 {statsTotalReportCount} trash report{statsTotalReportCount !== 1 ? "s" : ""}
+                  {statsReportCount > 0 && (
+                    <span className="text-orange-400"> ({statsReportCount} open)</span>
                   )}
                 </p>
               )}
@@ -1063,6 +1160,37 @@ function TerritoryPanel({
           <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Activity</p>
           {loading ? (
             <p className="text-xs text-zinc-700">Loading…</p>
+          ) : variant === "stats" ? (
+            statsRecent.length === 0 ? (
+              <p className="text-xs text-zinc-700">No cleanups logged yet</p>
+            ) : (
+              <div className="space-y-1.5">
+                {statsRecent.slice(0, 7).map((r, i) => {
+                  const hasBagSplit = r.smallBags > 0 || r.largeBags > 0;
+                  return (
+                    <div key={i} className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 shrink-0" />
+                        <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{r.name}</span>
+                        <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{r.points} pts</span>
+                        <span className="text-xs text-zinc-600 shrink-0">
+                          {r.submittedAt
+                            ? new Date(r.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                            : ""}
+                        </span>
+                      </div>
+                      {(r.groupName || hasBagSplit) && (
+                        <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">
+                          {r.groupName}
+                          {r.groupName && hasBagSplit ? " · " : ""}
+                          {hasBagSplit && `${r.smallBags} small, ${r.largeBags} large`}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )
           ) : contribs.length === 0 ? (
             <p className="text-xs text-zinc-700">No cleanups logged yet</p>
           ) : (
@@ -1377,6 +1505,14 @@ const UK_FLAG_SVG =
   `<path d="M8 0V11M0 5.5H16" stroke="#fff" stroke-width="3.6"/>` +
   `<path d="M8 0V11M0 5.5H16" stroke="#CF142B" stroke-width="1.6"/>` +
   `</svg>`;
+// Statue of Liberty icon for the "zoom to NYC" shortcut — a skyline reads as
+// "generic city" to most people, but the Statue of Liberty is recognized as NYC
+// specifically worldwide. A raster/SVG silhouette turns to mud at the ~16px size
+// the flag buttons use; the 🗽 emoji glyph (not a flag sequence, so unlike US_FLAG/
+// UK_FLAG it renders fine via Segoe UI Emoji on Windows) stays crisp and readable
+// at any size since it's drawn by the OS emoji font, not scaled art.
+const NYC_STATUE_ICON_SVG =
+  `<div style="font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center">🗽</div>`;
 
 // Zoom-to-region shortcut buttons (flag icon) — one control per region so
 // they can each be conditionally added/omitted per campaign type.
@@ -1484,9 +1620,15 @@ export default function CampaignMap({
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
-  const [showUnclaimedTerritory, setShowUnclaimedTerritory] = useState(() => storedToggle("showUnclaimedTerritory"));
-  const [showGroupTerritory, setShowGroupTerritory] = useState(() => storedToggle("showGroupTerritory"));
-  const [showIndividualTerritory, setShowIndividualTerritory] = useState(() => storedToggle("showIndividualTerritory"));
+  // Safety net alongside the per-handler setLegendOpen(false) calls below: guarantees the
+  // Layers menu closes whenever a stats/territory panel opens no matter which code path
+  // set selectedZip, instead of relying on every future click handler to remember to do it.
+  useEffect(() => {
+    if (selectedZip) setLegendOpen(false);
+  }, [selectedZip]);
+  const [showUnclaimedTerritory, setShowUnclaimedTerritoryRaw] = useState(() => storedToggle("showUnclaimedTerritory", false));
+  const [showGroupTerritory, setShowGroupTerritoryRaw] = useState(() => storedToggle("showGroupTerritory", false));
+  const [showIndividualTerritory, setShowIndividualTerritoryRaw] = useState(() => storedToggle("showIndividualTerritory", false));
   const [showCleanupDots, setShowCleanupDots] = useState(() => storedToggle("showCleanupDots"));
   const [showGroupEventDots, setShowGroupEventDots] = useState(() => storedToggle("showGroupEventDots"));
   const [showReports, setShowReports] = useState(() => storedToggle("showReports"));
@@ -1497,6 +1639,52 @@ export default function CampaignMap({
   const [showGroupEvents, setShowGroupEvents] = useState(() => storedToggle("showGroupEvents"));
   const [showMapEvents, setShowMapEvents] = useState(() => storedToggle("showMapEvents"));
   const [showPartners, setShowPartners] = useState(() => storedToggle("showPartners"));
+  // Drives the "Zip"/"Postcode" segmented-control label — reflects whichever region
+  // (US vs UK) the map is currently centered over, not the campaign's static geo_unit
+  // config, so a campaign spanning both regions relabels as the user pans around.
+  const [isUkViewport, setIsUkViewport] = useState(false);
+  const [showZipStats, setShowZipStatsRaw] = useState(() => storedToggle("showZipStats", false));
+  const [showNeighborhoodStats, setShowNeighborhoodStatsRaw] = useState(() => storedToggle("showNeighborhoodStats", false));
+  const [showBoroughStats, setShowBoroughStatsRaw] = useState(() => storedToggle("showBoroughStats", false));
+  // The territory layer (claim/contested/unclaimed) and the three geographic-stats
+  // layers (zip/neighborhood/borough) are visually incompatible outlines/fills over
+  // the same geo units, so at most one of the four can be on at once — turning any
+  // one on clears the other three, even though they live in separate UI controls
+  // (segmented control vs. Legend) by design.
+  const clearTerritoryToggles = () => {
+    setShowUnclaimedTerritoryRaw(false);
+    setShowGroupTerritoryRaw(false);
+    setShowIndividualTerritoryRaw(false);
+  };
+  const clearStatsToggles = () => {
+    setShowZipStatsRaw(false);
+    setShowNeighborhoodStatsRaw(false);
+    setShowBoroughStatsRaw(false);
+  };
+  const setShowUnclaimedTerritory = (show: boolean) => {
+    setShowUnclaimedTerritoryRaw(show);
+    if (show) clearStatsToggles();
+  };
+  const setShowGroupTerritory = (show: boolean) => {
+    setShowGroupTerritoryRaw(show);
+    if (show) clearStatsToggles();
+  };
+  const setShowIndividualTerritory = (show: boolean) => {
+    setShowIndividualTerritoryRaw(show);
+    if (show) clearStatsToggles();
+  };
+  const setShowZipStats = (show: boolean) => {
+    setShowZipStatsRaw(show);
+    if (show) { setShowNeighborhoodStatsRaw(false); setShowBoroughStatsRaw(false); clearTerritoryToggles(); }
+  };
+  const setShowNeighborhoodStats = (show: boolean) => {
+    setShowNeighborhoodStatsRaw(show);
+    if (show) { setShowZipStatsRaw(false); setShowBoroughStatsRaw(false); clearTerritoryToggles(); }
+  };
+  const setShowBoroughStats = (show: boolean) => {
+    setShowBoroughStatsRaw(show);
+    if (show) { setShowZipStatsRaw(false); setShowNeighborhoodStatsRaw(false); clearTerritoryToggles(); }
+  };
   const layerToggleRef = useRef<LayerToggleState>({
     showUnclaimedTerritory,
     showGroupTerritory,
@@ -1511,6 +1699,9 @@ export default function CampaignMap({
     showGroupEvents,
     showMapEvents,
     showPartners,
+    showZipStats,
+    showNeighborhoodStats,
+    showBoroughStats,
   });
   const eventMarkerIsHotspotRef = useRef<boolean[]>([]);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
@@ -2227,6 +2418,94 @@ export default function CampaignMap({
           "line-opacity": 0.9,
         },
       });
+
+      // Geographic stats layer for the neighborhood level — separate from the
+      // mosaic fill/border pair above (which is the admin-only overlay, gated
+      // independently); this one is gated by the Geographic Stats "Neighborhood"
+      // toggle and click-driven, like the zip/borough layers. Reuses the same
+      // per-neighborhood mosaic coloring (fillColorExpr) so the two overlays read
+      // consistently when someone has seen both.
+      m.addLayer({
+        id: "nyc-neighborhoods-stats-fill",
+        type: "fill",
+        source: "nyc-neighborhoods",
+        "source-layer": "nyc_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "fill-color": fillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.4,
+            0.22,
+          ],
+        },
+      });
+      m.addLayer({
+        id: "nyc-neighborhoods-stats-outline",
+        type: "line",
+        source: "nyc-neighborhoods",
+        "source-layer": "nyc_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "line-color": fillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "line-width": 1.5,
+          "line-opacity": 0.9,
+        },
+      });
+
+      // Per-borough boundaries, re-enabled as the Geographic Stats "Borough" outline
+      // layer (see [[project_nyc_borough_outline_deferred]]). unit_id is always one of
+      // the 5 fixed borough codes, so a plain categorical match (no graph-coloring
+      // needed, unlike the ~200-neighborhood mosaic above) gives each borough a
+      // stable, distinct color purely as a visual reference — no ownership/leader
+      // framing attached.
+      const boroughFillColorExpr = [
+        "match", ["get", "unit_id"],
+        "1", "#22c55e", // Manhattan (green)
+        "2", "#ef4444", // Bronx (red)
+        "3", "#06b6d4", // Brooklyn (cyan)
+        "4", "#a855f7", // Queens (purple)
+        "5", "#f97316", // Staten Island (orange — Staten Island Ferry)
+        "#a1a1aa",
+      ];
+
+      m.addSource("nyc-boroughs", {
+        type: "vector",
+        tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/nyc-boroughs/{z}/{x}/{y}.mvt`],
+        minzoom: 0,
+        maxzoom: 14,
+        promoteId: "geo_unit_id",
+      });
+
+      m.addLayer({
+        id: "nyc-boroughs-stats-fill",
+        type: "fill",
+        source: "nyc-boroughs",
+        "source-layer": "nyc_boroughs",
+        layout: { visibility: layerToggleRef.current.showBoroughStats ? "visible" : "none" },
+        paint: {
+          "fill-color": boroughFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.45,
+            0.25,
+          ],
+        },
+      });
+      m.addLayer({
+        id: "nyc-boroughs-stats-outline",
+        type: "line",
+        source: "nyc-boroughs",
+        "source-layer": "nyc_boroughs",
+        layout: { visibility: layerToggleRef.current.showBoroughStats ? "visible" : "none" },
+        paint: {
+          "line-color": boroughFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "line-width": 2,
+          "line-opacity": 0.9,
+        },
+      });
     } catch {
       // NYC neighborhoods overlay is non-critical — map still works without it
     }
@@ -2526,6 +2805,37 @@ export default function CampaignMap({
             ["coalesce", ["feature-state", "border_opacity"], 0.85],
           ],
         ],
+      },
+    });
+
+    m.addLayer({
+      id: "zip-stats-fill",
+      type: "fill",
+      source: "territory",
+      "source-layer": "territories",
+      layout: { visibility: layerToggleRef.current.showZipStats ? "visible" : "none" },
+      paint: {
+        // Effectively invisible — exists only to give hover/click a full-polygon hit
+        // area instead of the few-pixel-wide tolerance around zip-stats-outline's line.
+        "fill-color": "#38bdf8",
+        "fill-opacity": 0.01,
+      },
+    });
+
+    // Plain static outline — a points-earned glow/thickness encoding was tried here
+    // and pulled for cost/benefit (the line-blur glow layer was expensive to render
+    // across ~200 simultaneous zip borders for a minor visual upgrade); revisit later
+    // with a cheaper encoding (e.g. fill-color intensity) if this gets picked back up.
+    m.addLayer({
+      id: "zip-stats-outline",
+      type: "line",
+      source: "territory",
+      "source-layer": "territories",
+      layout: { visibility: layerToggleRef.current.showZipStats ? "visible" : "none" },
+      paint: {
+        "line-color": "#38bdf8",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 1, 13, 2.5],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.45, 13, 1],
       },
     });
 
@@ -2908,6 +3218,9 @@ export default function CampaignMap({
       showGroupEvents,
       showMapEvents,
       showPartners,
+      showZipStats,
+      showNeighborhoodStats,
+      showBoroughStats,
     };
     if (typeof window !== "undefined") {
       try {
@@ -2955,6 +3268,9 @@ export default function CampaignMap({
     showGroupEvents,
     showMapEvents,
     showPartners,
+    showZipStats,
+    showNeighborhoodStats,
+    showBoroughStats,
   ]);
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
@@ -3000,6 +3316,16 @@ export default function CampaignMap({
     // Matches the "sm" Tailwind breakpoint used for the rest of the mobile-specific
     // chrome in this component (see the `sm:hidden` overlays below).
     const isMobileViewport = window.innerWidth < 640;
+
+    // Live (not snapshotted) touch-input check for hover-tooltip gating below. Unlike
+    // isMobileViewport above (captured once at map-init time, fine for one-time layout
+    // decisions), this is re-evaluated on every hover event because a stale width
+    // snapshot can be wrong by the time a user actually taps — e.g. mobile browser
+    // chrome/toolbars still settling, or a tablet/foldable wider than 640px that's still
+    // touch-primary. pointer:coarse directly detects "this input is a touch tap, not a
+    // mouse hover" regardless of viewport width.
+    const isTouchViewport = () =>
+      window.matchMedia?.("(pointer: coarse)").matches || window.innerWidth < 640;
 
     const initialBounds: maplibregl.LngLatBoundsLike = isHexBloom
       ? (isMobileViewport ? WORLD_BOUNDS : NORTH_AMERICA_EUROPE_BOUNDS)
@@ -3154,12 +3480,34 @@ export default function CampaignMap({
       "top-right",
     );
     map.current.addControl(
+      new ZoomToRegionControl(NYC_BOUNDS, NYC_STATUE_ICON_SVG, "Zoom to NYC"),
+      "top-right",
+    );
+    map.current.addControl(
+      // Standard bottom-right placement — the custom Layers button (see the
+      // `bottom-12 right-4` overlay below) is bumped up above this control's
+      // height so the two no longer overlap.
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
 
     const ro = new ResizeObserver(() => map.current?.resize());
     ro.observe(mapContainer.current);
+
+    // UK_BOUNDS is a simple lng/lat box (no wraparound/dateline concerns for this
+    // region), so a plain rectangle containment check against the map's current
+    // center is enough to decide US vs UK labeling as the viewport moves.
+    const ukBoundsBox = UK_BOUNDS as [[number, number], [number, number]];
+    const updateIsUkViewport = () => {
+      const c = map.current?.getCenter();
+      if (!c) return;
+      setIsUkViewport(
+        c.lng >= ukBoundsBox[0][0] && c.lng <= ukBoundsBox[1][0] &&
+        c.lat >= ukBoundsBox[0][1] && c.lat <= ukBoundsBox[1][1],
+      );
+    };
+    updateIsUkViewport();
+    map.current.on("moveend", updateIsUkViewport);
 
     // Watch "idle" only once per load/style-swap rather than for the map's whole
     // lifetime — the report-radius pulse animation repaints continuously, which
@@ -3275,11 +3623,24 @@ export default function CampaignMap({
 
       map.current.on("mousemove", "territory-fill", (e) => {
         if (!map.current || !e.features?.[0] || pinPickerActiveRef.current) return;
+        const hoverState = e.features[0].state as { claim_owned?: boolean; claim_is_group?: boolean };
+        if (!territoryFeatureToggledOn(hoverState, layerToggleRef.current)) {
+          map.current.getCanvas().style.cursor = "";
+          hoverDiv.style.display = "none";
+          if (lastHoveredId !== null) {
+            map.current.setFeatureState(
+              { source: "territory", sourceLayer: "territories", id: lastHoveredId },
+              { hover: false },
+            );
+            lastHoveredId = null;
+          }
+          return;
+        }
         map.current.getCanvas().style.cursor = "pointer";
         // On mobile there's no hover-out equivalent (touch never fires mouseleave), so this
         // tooltip would stay stuck open and overlap the territory-info panel opened by the
         // click handler below. Mobile has its own click-to-open info window, so skip it there.
-        if (isMobileViewport) return;
+        if (isTouchViewport()) return;
         hoverDiv.style.display = "block";
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
@@ -3370,10 +3731,149 @@ export default function CampaignMap({
         }
 
         if (pinPickerActiveRef.current) return;
+        const clickState = feature.state as { claim_owned?: boolean; claim_is_group?: boolean };
+        if (!territoryFeatureToggledOn(clickState, layerToggleRef.current)) return;
         const displayName = props.display_name ?? geoUnitId;
         const unitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
-        setSelectedZip({ geoUnitId, displayName, unitLabel });
+        hoverDiv.style.display = "none";
+        setSelectedZip({ geoUnitId, displayName, unitLabel, variant: "territory" });
+        setLegendOpen(false);
       });
+
+      for (const layerId of ["zip-stats-fill", "zip-stats-outline"]) {
+        map.current.on("click", layerId, (e) => {
+          if (!e.features?.[0] || routePickerActiveRef.current || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+          const feature = e.features[0];
+          const props = feature.properties as { display_name?: string; geo_unit_id?: string; unit_type?: string };
+          const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+          const displayName = props.display_name ?? geoUnitId;
+          const unitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
+          hoverDiv.style.display = "none";
+          setSelectedZip({ geoUnitId, displayName, unitLabel, variant: "stats" });
+          setLegendOpen(false);
+        });
+      }
+
+      for (const layerId of ["nyc-neighborhoods-stats-fill", "nyc-neighborhoods-stats-outline"]) {
+        map.current.on("click", layerId, (e) => {
+          if (!e.features?.[0] || routePickerActiveRef.current || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+          const feature = e.features[0];
+          const props = feature.properties as { display_name?: string; geo_unit_id?: string };
+          const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+          const displayName = props.display_name ?? geoUnitId;
+          hoverDiv.style.display = "none";
+          setSelectedZip({ geoUnitId, displayName, unitLabel: "Neighborhood", variant: "stats" });
+          setLegendOpen(false);
+        });
+      }
+
+      for (const layerId of ["nyc-boroughs-stats-fill", "nyc-boroughs-stats-outline"]) {
+        map.current.on("click", layerId, (e) => {
+          if (!e.features?.[0] || routePickerActiveRef.current || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+          const feature = e.features[0];
+          const props = feature.properties as { display_name?: string; geo_unit_id?: string };
+          const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+          const displayName = props.display_name ?? geoUnitId;
+          hoverDiv.style.display = "none";
+          setSelectedZip({ geoUnitId, displayName, unitLabel: "Borough", variant: "stats" });
+          setLegendOpen(false);
+        });
+      }
+
+      // Hover tooltips + highlight for the three Geographic Stats layers: area name +
+      // a quick "total points" stat pulled from the same endpoint the click-through
+      // stats panel uses, cached per geo_unit_id so continuous mousemove doesn't
+      // refetch, plus a feature-state hover highlight matching territory-fill's
+      // pattern. On mobile there's no real hover state (only tap), so both the
+      // tooltip and the highlight are skipped there — touch devices already get the
+      // full stats panel on tap via the click handlers above, and a stuck highlight/
+      // tooltip from a touch that never fires mouseleave would otherwise compete
+      // with that panel.
+      const STATS_LAYER_SOURCE: Record<string, { source: string; sourceLayer: string }> = {
+        "zip-stats-fill": { source: "territory", sourceLayer: "territories" },
+        "zip-stats-outline": { source: "territory", sourceLayer: "territories" },
+        "nyc-neighborhoods-stats-fill": { source: "nyc-neighborhoods", sourceLayer: "nyc_neighborhoods" },
+        "nyc-neighborhoods-stats-outline": { source: "nyc-neighborhoods", sourceLayer: "nyc_neighborhoods" },
+        "nyc-boroughs-stats-fill": { source: "nyc-boroughs", sourceLayer: "nyc_boroughs" },
+        "nyc-boroughs-stats-outline": { source: "nyc-boroughs", sourceLayer: "nyc_boroughs" },
+      };
+      const statsHoverIdBySourceRef = { current: new Map<string, string | number>() };
+      const clearStatsHover = (source: string, sourceLayer: string) => {
+        const prevId = statsHoverIdBySourceRef.current.get(source);
+        if (prevId !== undefined && map.current) {
+          map.current.setFeatureState({ source, sourceLayer, id: prevId }, { hover: false });
+        }
+        statsHoverIdBySourceRef.current.delete(source);
+      };
+      const statsTooltipHoverIdRef = { current: null as string | null };
+      const statsTooltipNameRef = { current: "" };
+      const statsPointsCacheRef = { current: new Map<string, number>() };
+      const statsLoadingRef = { current: new Set<string>() };
+      const renderStatsTooltip = (geoUnitId: string, displayName: string) => {
+        const pts = statsPointsCacheRef.current.get(geoUnitId);
+        const statLine = pts === undefined
+          ? `<div style="color:#71717a;font-size:11px;margin-top:2px">Loading…</div>`
+          : `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">${formatPoints(pts)} pts</div>`;
+        hoverDiv.innerHTML =
+          `<div style="font-weight:700;font-size:12px;color:#f4f4f5">${displayName}</div>${statLine}`;
+      };
+      const fetchStatsQuickStat = (geoUnitId: string) => {
+        if (statsPointsCacheRef.current.has(geoUnitId) || statsLoadingRef.current.has(geoUnitId)) return;
+        statsLoadingRef.current.add(geoUnitId);
+        fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/geo-units/${geoUnitId}/stats?campaign_id=${campaign.id}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => statsPointsCacheRef.current.set(geoUnitId, data?.total_points ?? 0))
+          .catch(() => statsPointsCacheRef.current.set(geoUnitId, 0))
+          .finally(() => {
+            statsLoadingRef.current.delete(geoUnitId);
+            if (statsTooltipHoverIdRef.current === geoUnitId && hoverDiv.style.display === "block") {
+              renderStatsTooltip(geoUnitId, statsTooltipNameRef.current);
+            }
+          });
+      };
+      const showStatsTooltip = (
+        e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] },
+      ) => {
+        if (!e.features?.[0] || pinPickerActiveRef.current || areaPickerActiveRef.current || routePickerActiveRef.current) return;
+        if (map.current) map.current.getCanvas().style.cursor = "pointer";
+        if (isTouchViewport()) return;
+        const feature = e.features[0];
+        const layerCfg = STATS_LAYER_SOURCE[feature.layer.id];
+        if (layerCfg && map.current) {
+          const featId = feature.id ?? null;
+          const prevId = statsHoverIdBySourceRef.current.get(layerCfg.source);
+          if (featId !== null && featId !== prevId) {
+            if (prevId !== undefined) {
+              map.current.setFeatureState({ source: layerCfg.source, sourceLayer: layerCfg.sourceLayer, id: prevId }, { hover: false });
+            }
+            map.current.setFeatureState({ source: layerCfg.source, sourceLayer: layerCfg.sourceLayer, id: featId }, { hover: true });
+            statsHoverIdBySourceRef.current.set(layerCfg.source, featId);
+          }
+        }
+        const props = feature.properties as { display_name?: string; geo_unit_id?: string };
+        const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+        const displayName = props.display_name ?? geoUnitId;
+        statsTooltipHoverIdRef.current = geoUnitId;
+        statsTooltipNameRef.current = displayName;
+        hoverDiv.style.display = "block";
+        hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
+        hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
+        renderStatsTooltip(geoUnitId, displayName);
+        fetchStatsQuickStat(geoUnitId);
+      };
+      const hideStatsTooltip = () => {
+        if (map.current) map.current.getCanvas().style.cursor = "";
+        statsTooltipHoverIdRef.current = null;
+        hoverDiv.style.display = "none";
+      };
+      for (const layerId of Object.keys(STATS_LAYER_SOURCE)) {
+        const cfg = STATS_LAYER_SOURCE[layerId];
+        map.current.on("mousemove", layerId, showStatsTooltip);
+        map.current.on("mouseleave", layerId, () => {
+          hideStatsTooltip();
+          clearStatsHover(cfg.source, cfg.sourceLayer);
+        });
+      }
 
       // Hex bloom hover + click — shared handler for both dormant and active layers
       const showHexTooltip = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
@@ -3906,11 +4406,13 @@ export default function CampaignMap({
             geoUnitId={selectedZip.geoUnitId}
             displayName={selectedZip.displayName}
             unitLabel={selectedZip.unitLabel}
-            claim={liveClaims[selectedZip.geoUnitId] ?? claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
-            claimLabel={claimLabelsRef.current[selectedZip.geoUnitId] ?? null}
-            reportCount={liveReports?.counts_by_geo_unit[selectedZip.geoUnitId] ?? 0}
-            reportThreshold={liveReports?.threshold ?? null}
-            reportPhotos={(liveReports?.reports ?? []).filter(r => r.geo_unit_id === selectedZip.geoUnitId && r.photo_url).map(r => r.photo_url!)}
+            variant={selectedZip.variant ?? "territory"}
+            campaignId={campaign.id}
+            claim={selectedZip.variant === "stats" ? null : liveClaims[selectedZip.geoUnitId] ?? claimsRef.current.find((c) => c.geo_unit_id === selectedZip.geoUnitId) ?? null}
+            claimLabel={selectedZip.variant === "stats" ? null : claimLabelsRef.current[selectedZip.geoUnitId] ?? null}
+            reportCount={selectedZip.variant === "stats" ? 0 : liveReports?.counts_by_geo_unit[selectedZip.geoUnitId] ?? 0}
+            reportThreshold={selectedZip.variant === "stats" ? null : liveReports?.threshold ?? null}
+            reportPhotos={selectedZip.variant === "stats" ? [] : (liveReports?.reports ?? []).filter(r => r.geo_unit_id === selectedZip.geoUnitId && r.photo_url).map(r => r.photo_url!)}
             onClose={() => setSelectedZip(null)}
             onPhotoSelect={setSelectedPhoto}
           />
@@ -4114,15 +4616,86 @@ export default function CampaignMap({
       )}
 
       {!pinPickerActive && !areaPickerActive && !routePickerActive && !isCollage && (
-        <div className="absolute bottom-14 right-4 z-10 flex flex-col items-start gap-1 sm:gap-1.5 text-xs">
+        // Single anchored menu on the right: replaces two independently-stacked
+        // controls (a full-width Geo Stats bar + a separate Legend button) that used
+        // to overlap each other and the left-side ContributionPanel controls on
+        // narrow viewports. Collapsed, this is one small button; expanded, it's a
+        // fixed-width panel that grows upward, matching common map-app "Layers" menus.
+        <div className={`absolute bottom-12 z-10 flex flex-col items-end gap-1 sm:gap-1.5 text-xs max-w-[min(88vw,16rem)] ${legendOpen ? "right-14" : "right-4"}`}>
           <button
             onClick={() => setLegendOpen((v) => !v)}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-900/80 rounded backdrop-blur-sm text-sm font-medium text-zinc-200 hover:bg-zinc-800/80"
+            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg text-sm font-medium text-zinc-200 hover:bg-zinc-800/80"
           >
-            <span>Legend</span>
+            <span>🗺️ Layers</span>
             <span className="text-zinc-500">{legendOpen ? "▾" : "▸"}</span>
+            {!legendOpen && (showZipStats || showNeighborhoodStats || showBoroughStats) && (
+              // At-a-glance indicator of which Geographic Stats layer is active without
+              // having to open the panel — one letter is enough since the three are
+              // mutually exclusive (single-select), so at most one can ever be lit.
+              <span
+                title={`${showZipStats ? (isUkViewport ? "Postcodes" : "Zip codes") : showNeighborhoodStats ? "Neighborhood" : "Borough"} stats layer is on`}
+                className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-emerald-950 text-[9px] font-bold leading-none shadow"
+              >
+                {showZipStats ? "Z" : showNeighborhoodStats ? "N" : "B"}
+              </span>
+            )}
           </button>
-          {legendOpen && (isChoropleth ? (
+          {legendOpen && (
+            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-1 sm:gap-1.5 p-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg">
+              {!isChoropleth && !isHeatmap && !isHexBloom && (
+                <>
+                  <p className="px-1 pt-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Geographic Stats</p>
+                  <div className="flex flex-col gap-1">
+                    {([
+                      { id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes", nycOnly: false },
+                      ...(campaign.slug === "trash-war" ? [
+                        { id: "neighborhood", label: "Neighborhood", nycOnly: true },
+                        { id: "borough", label: "Borough", nycOnly: true },
+                      ] as const : []),
+                    ] as const).map((opt) => {
+                      const active = opt.id === "zip" ? showZipStats : opt.id === "neighborhood" ? showNeighborhoodStats : showBoroughStats;
+                      const setActive = opt.id === "zip" ? setShowZipStats : opt.id === "neighborhood" ? setShowNeighborhoodStats : setShowBoroughStats;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => setActive(!active)}
+                          title={opt.nycOnly ? "Currently only shows data for NYC" : undefined}
+                          aria-pressed={active}
+                          className={`group flex items-center justify-between gap-2 px-2.5 py-1.5 font-medium rounded-md border cursor-pointer transition-all active:scale-[0.98] ${
+                            active
+                              ? "bg-emerald-600 border-emerald-400 text-white shadow-sm shadow-emerald-900/40"
+                              : "bg-zinc-800/60 border-zinc-700/70 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 hover:shadow-sm"
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className={`flex items-center justify-center w-3.5 h-3.5 rounded-full flex-shrink-0 text-[9px] leading-none transition-colors ${
+                                active
+                                  ? "bg-white text-emerald-600"
+                                  : "bg-zinc-900/60 text-transparent border border-zinc-600 group-hover:border-zinc-400"
+                              }`}
+                            >
+                              ✓
+                            </span>
+                            {opt.label}
+                          </span>
+                          {opt.nycOnly && (
+                            <span
+                              className={`text-[9px] font-semibold px-1 py-px rounded ${
+                                active ? "bg-emerald-800/60 text-emerald-100" : "bg-zinc-700/60 text-zinc-400"
+                              }`}
+                            >
+                              NYC
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="my-0.5 border-t border-zinc-800" />
+                </>
+              )}
+              {(isChoropleth ? (
             <>
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
                 <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
@@ -4158,29 +4731,6 @@ export default function CampaignMap({
             </>
           ) : (
             <>
-              <LegendToggle
-                checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
-                onChange={(show) => {
-                  setShowGroupTerritory(show);
-                  setShowIndividualTerritory(show);
-                  setShowUnclaimedTerritory(show);
-                }}
-              >
-                <span className="w-3 h-3 rounded-sm bg-zinc-500/70" />
-                <span className="text-zinc-300 font-medium">Territory</span>
-              </LegendToggle>
-              <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
-                <span className="w-3 h-3 rounded-sm bg-emerald-500/70" />
-                <span className="text-zinc-300">Group territory</span>
-              </LegendToggle>
-              <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
-                <span className="w-3 h-3 rounded-sm bg-blue-500/70" />
-                <span className="text-zinc-300">Individual territory</span>
-              </LegendToggle>
-              <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
-                <span className="w-3 h-3 rounded-sm border border-[#a1a1aa] bg-transparent" />
-                <span className="text-zinc-300">Unclaimed</span>
-              </LegendToggle>
               <LegendToggle checked={showCleanupDots} onChange={setShowCleanupDots}>
                 <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
                 <span className="text-zinc-300">Cleanup logged</span>
@@ -4245,8 +4795,36 @@ export default function CampaignMap({
                   (🎁 = active offer)
                 </span>
               </LegendToggle>
+              {/* De-emphasized (smaller, muted) rather than removed — territory claiming
+                  still works when turned on, but we no longer want to visually encourage
+                  it now that the non-competitive Geographic Stats layers exist above. */}
+              <LegendToggle
+                checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
+                onChange={(show) => {
+                  setShowGroupTerritory(show);
+                  setShowIndividualTerritory(show);
+                  setShowUnclaimedTerritory(show);
+                }}
+              >
+                <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500/50" />
+                <span className="text-zinc-500 text-[11px]">Territory claiming</span>
+              </LegendToggle>
+              <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" />
+                <span className="text-zinc-500 text-[11px]">Group territory</span>
+              </LegendToggle>
+              <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
+                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
+                <span className="text-zinc-500 text-[11px]">Individual territory</span>
+              </LegendToggle>
+              <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
+                <span className="w-2.5 h-2.5 rounded-sm border border-[#a1a1aa]/60 bg-transparent" />
+                <span className="text-zinc-500 text-[11px]">Unclaimed</span>
+              </LegendToggle>
             </>
           ))}
+            </div>
+          )}
         </div>
       )}
 

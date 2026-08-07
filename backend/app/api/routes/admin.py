@@ -115,6 +115,37 @@ async def simplify_nyc_neighborhoods(tolerance: float = 0.0001, precision: int =
     }
 
 
+@router.post("/simplify-nyc-boroughs")
+async def simplify_nyc_boroughs(tolerance: float = 0.0001, precision: int = 5):
+    """
+    Convert and simplify backend/data/nyc_boroughs_raw.geojson →
+    backend/data/nyc_boroughs.geojson. CPU-bound; takes under a second (5 features).
+    Run this before POST /admin/geo-units/nyc_borough/reload.
+    """
+    if not geo.RAW_NYC_BOROUGHS_FILE.exists():
+        raise HTTPException(
+            404,
+            f"Source file not found: {geo.RAW_NYC_BOROUGHS_FILE}. "
+            "Copy the NYC Open Data Borough Boundaries GeoJSON export to backend/data/.",
+        )
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            partial(geo.simplify_nyc_boroughs, tolerance=tolerance, precision=precision),
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Simplification failed: {exc}")
+
+    return {
+        "input_size_mb": round(result.input_size_mb, 1),
+        "output_size_mb": round(result.output_size_mb, 1),
+        "feature_count": result.feature_count,
+        "skipped_count": result.skipped_count,
+    }
+
+
 @router.post("/seed")
 async def run_all_seeds(wipe: bool = False, db: AsyncSession = Depends(get_db)):
     """Run all registered seeders with their default params. Pass wipe=true to wipe each seeder's data before re-seeding."""
