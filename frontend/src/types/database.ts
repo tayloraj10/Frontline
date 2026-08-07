@@ -247,6 +247,8 @@ export interface Database {
           campaign_slug: string | null;
           read: boolean;
           created_at: string;
+          push_eligible: boolean;
+          offer_id: string | null;
         };
         Insert: {
           id?: string;
@@ -258,6 +260,8 @@ export interface Database {
           campaign_slug?: string | null;
           read?: boolean;
           created_at?: string;
+          push_eligible?: boolean;
+          offer_id?: string | null;
         };
         Update: Partial<{
           type: string;
@@ -266,6 +270,8 @@ export interface Database {
           campaign_id: string | null;
           campaign_slug: string | null;
           read: boolean;
+          push_eligible: boolean;
+          offer_id: string | null;
         }>;
       };
       problem_reports: {

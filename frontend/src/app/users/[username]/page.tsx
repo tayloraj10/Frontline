@@ -69,6 +69,16 @@ export default async function UserProfilePage({ params }: Props) {
       .eq("claimed_by_user", profile.id),
   ]);
 
+  const { data: achievementsData } = isOwn
+    ? await supabase
+        .from("user_notifications")
+        .select("id, type, title, body, created_at")
+        .eq("user_id", profile.id)
+        .in("type", ["milestone", "offer_eligible"])
+        .order("created_at", { ascending: false })
+        .limit(25)
+    : { data: [] };
+
   // Aggregate campaign participation from contributions + territory_claims
   const campaignStats = new Map<
     string,
@@ -250,6 +260,29 @@ export default async function UserProfilePage({ params }: Props) {
                 </li>
               );
             })}
+          </ul>
+        </div>
+      )}
+
+      {/* Achievements */}
+      {isOwn && (achievementsData ?? []).length > 0 && (
+        <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+          <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
+            <span className="text-sm font-semibold text-zinc-300">Achievements</span>
+          </div>
+          <ul className="divide-y divide-zinc-800/60">
+            {(achievementsData ?? []).map((a) => (
+              <li key={a.id} className="px-5 py-3 flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">{a.type === "offer_eligible" ? "🎁" : "🏆"}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-zinc-200 font-medium leading-snug">{a.title}</p>
+                  {a.body && <p className="text-xs text-zinc-500 mt-0.5">{a.body}</p>}
+                  <p className="text-xs text-zinc-600 mt-1">
+                    {new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
       )}
