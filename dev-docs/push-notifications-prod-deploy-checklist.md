@@ -33,14 +33,28 @@ Custom placeholder GUCs (`app.settings.*`) require real Postgres superuser to se
    ```
    Takes effect immediately — no restart or reconnect needed, unlike the old GUC approach.
 
-## Local setup / after any db reset
+## Local setup (new repo clone, or after any `supabase db reset`)
 
-Local Vault secrets don't survive `supabase db reset` (see tradeoff above). Repopulate with:
-```sql
-select vault.create_secret('http://127.0.0.1:54321/functions/v1/send-push', 'push_function_url');
-select vault.create_secret('<local service_role key from `supabase status`>', 'push_service_role_key');
+Neither of the two pieces below is in git — a fresh clone has zero push-notification config until you do this. Both also need repeating any time local Vault secrets get wiped (a `supabase db reset` clears them, same as any other table's data).
+
+**1. Get the Firebase service-account JSON.** This is a shared credential for the whole `frontline-498904` Firebase project, not something each dev generates independently — ask whoever has Firebase console access (Project Settings → Service Accounts) for the existing key file, or have them generate a new one for you there (Firebase allows multiple active keys, so a new key doesn't invalidate anyone else's). Do not commit this file or paste its contents into a tracked file.
+
+**2. Create `supabase/functions/.env`** (already covered by the repo's `.env*` gitignore rule) with the JSON compacted onto one line as a single env var:
 ```
-The Firebase secret also needs to exist locally for the Edge Function itself to send (separately from the trigger secrets above) — e.g. via a local `supabase/functions/.env` with `FIREBASE_SERVICE_ACCOUNT_JSON=<the service account JSON>`, not committed.
+FIREBASE_SERVICE_ACCOUNT_JSON='<paste the entire downloaded JSON file's contents here, as-is>'
+```
+`supabase functions serve` picks this file up automatically — no extra flag needed. This only feeds the Edge Function itself; it's unrelated to the two Vault secrets below.
+
+**3. Start the local Supabase stack** if it isn't already running: `supabase start`. Get your local `service_role` key from its output (or `supabase status`) — it's the `SERVICE_ROLE_KEY` field, different from the anon key.
+
+**4. Populate the two Vault secrets** that arm the DB trigger (run against the local DB, `postgresql://postgres:postgres@127.0.0.1:54322/postgres` by default):
+```sql
+select vault.create_secret('http://kong:8000/functions/v1/send-push', 'push_function_url');
+select vault.create_secret('<local service_role key from step 3>', 'push_service_role_key');
+```
+`push_function_url` must use `kong:8000` (the Kong gateway's Docker network alias), **not** `127.0.0.1:54321`. The trigger's `net.http_post` call runs from *inside* the `supabase_db` container, where `127.0.0.1` refers to that container itself — `kong:8000` is reachable from there, `127.0.0.1:54321` is not (connection refused), even though the latter works fine when curled from the host. These are unrelated to Firebase — they're what let the Postgres trigger call the Edge Function at all. Both are required; the trigger no-ops silently if either is missing (check with `select name from vault.decrypted_secrets;`).
+
+**5. Verify it end-to-end** without needing a real emulator/device: run `supabase functions serve --no-verify-jwt`, insert a test row into `user_notifications` for a real user, insert a matching fake row into `device_tokens` for that user, then `curl -X POST http://127.0.0.1:54321/functions/v1/send-push -d '{"notification_id":"<the id>"}'`. A fake token gets rejected by FCM and pruned automatically (`{"sent":0}` is the *correct* result for a fake token, not a failure — it means the Firebase secret parsed and the call actually reached FCM). Clean up both test rows afterward.
 
 ## Still blocked regardless of the above
 

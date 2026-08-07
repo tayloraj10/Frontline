@@ -63,6 +63,41 @@ Recommend sending **all** platforms through Firebase Cloud Messaging (FCM). FCM 
 - ~~**Apple Developer account decision**~~ — resolved 2026-08-07, proceeding on personal accounts. APNs key generated and uploaded to Firebase.
 - **`ios/` platform doesn't exist yet** — iOS push testing is blocked on that scaffolding work happening on the Mac first, same as the share sheet and everything else iOS-specific. `GoogleService-Info.plist` is saved at `frontend/pending-ios-assets/` for when that happens.
 
+## Push eligibility per notification type (decided 2026-08-07)
+
+Reviewed all 6 types against one question: is the user already in the app when this fires? Only three types happen independently of the recipient's own foreground session, so only those still send a real push:
+
+- **Push-eligible**: `event` (admin/system-spawned campaign events, e.g. boss events), `points_adjusted` (admin action from outside that user's session), `claim_expired` (background decay / admin pulling a report).
+- **Inbox-only, no push**: `tract_claimed` (already `false` since 063), `milestone` and `offer_eligible` (both fire from the same trigger as the user's own real-time action — submitting a contribution/cleanup, or a points change they just caused — so the app is guaranteed open; the in-app `AchievementModal`/bell already covers it, a push would be redundant). `065_milestone_offer_no_push.sql` sets `push_eligible = false` explicitly on all milestone and offer_eligible insert paths (points ladder, per-campaign contribution-count ladder, bag/pound ladders, both offer_eligible insert paths).
+
+## Milestone ladders (reviewed 2026-08-07)
+
+All defined in `063_notification_push_eligible_and_achievements.sql`, all `push_eligible = true` by default (only `tract_claimed`/"leader" notifications are explicitly `push_eligible = false`, inbox-only — deliberate, since leadership can flip often and would be noisy as a push):
+
+1. **Lifetime points** (`profiles.points`, global, not per-campaign): 100 / 500 / 1000 / 2500 / 5000 / 10000. Crossing-range check (`OLD < t AND NEW >= t`), correctly handles admin adjustments moving points down then back up.
+2. **Per-campaign cleanup contribution count** (`contributions`, `contribution_type = 'cleanup'`): 5 / 10 / 25 / 50 / 100. Uses exact-equality (`new_count = t`) rather than a crossing-range check — fine for normal one-row-at-a-time submissions, but would silently skip a rung if a count ever jumped by more than 1 in one trigger evaluation (e.g. a bulk backfill/seed inserting several rows in a way that skips the per-row trigger).
+3. **Per-campaign cleanup bags** (`cleanups.metrics_small_bags + metrics_large_bags`, summed): 10 / 25 / 50 / 100. Crossing-range check, correctly fires multiple rungs at once if one submission jumps past several.
+4. **Per-campaign cleanup pounds** (`cleanups.metrics_pounds`, summed): 100 / 500 / 1000 lbs. Same crossing-range logic as bags.
+
+**Headroom issue found during testing**: testuser hit 302 bags in `trash-war` from test submissions — past every rung of ladder #3 (caps at 100), so no further bag milestone will ever fire for them in that campaign again, while the points ladder (#1) still has four rungs left (500 → 10000) and the contribution-count ladder (#2) caps at 100 same as bags. If real users rack up bag counts or contribution counts this fast, ladders #2 and #3 top out too low relative to #1. Not fixed yet — recommended fix is extending both ladders (e.g. bags → add 250/500/1000; contribution count → add 250/500) to mirror the points ladder's headroom, but holding off until real (non-test) usage data shows whether this actually matters at scale.
+
+## Foreground push display (Android) — not a bug, a gap
+
+Confirmed 2026-08-07 via a real device test (5-cleanup milestone): the webhook chain worked end-to-end — `net._http_response` showed FCM accepted the send (`{"sent":1}`) — but nothing appeared in the Android notification tray. Root cause: `NativeAppBridge.tsx` registers `registration` and `pushNotificationActionPerformed` (tap-to-open) listeners only, no `pushNotificationReceived` listener. FCM's Android SDK auto-displays a tray notification for "notification"-payload messages (which `send-push/index.ts` sends) **only when the app is backgrounded/killed**; in the foreground, Android suppresses the auto-display and hands the payload to app JS instead, which currently does nothing with it. So a push fired while the app is open (as it was here) is delivered successfully but invisible unless you background the app first.
+
+**Not scheduled to fix** — if foreground tray banners are wanted for engagement, it needs a `pushNotificationReceived` listener that manually fires a local notification via `@capacitor/local-notifications` (new dependency, new code path). To verify a push actually reaching the tray today: background the app (don't kill it) or lock the screen, then trigger a milestone.
+
+## Backlog: social milestone pushes (not started)
+
+Today all three milestone triggers (`063_notification_push_eligible_and_achievements.sql`) only notify the user who caused the crossing — nobody else. Idea: notify *other* users when someone hits a milestone, as an engagement/re-open driver ("someone near you just hit 100 points" style). Raised 2026-08-07, deliberately not built yet — needs design decisions before any migration work:
+
+- **Scope**: broadcast to literally everyone, to users active in the same campaign/geo unit, or to some future friends/group relation (doesn't exist yet)?
+- **Volume/noise**: the existing per-campaign contribution-count and bag/pound thresholds fire fairly often per active user; fanning all of those out to every other user would be spammy. Likely needs a separate, coarser "broadcast-worthy" threshold tier (e.g. only the top milestone in each ladder — 100 points, 100 bags — not every rung), decoupled from the personal thresholds that already exist.
+- **Push vs. inbox-only**: probably want this inbox-eligible broadly but push-eligible only for the rarer "big" tier, to avoid push fatigue — same `push_eligible` column already supports this per-row.
+- **Fan-out mechanism**: a per-user milestone insert is one row; a social broadcast is N rows (one per recipient) or a different notification shape entirely (e.g. a feed-style "activity" item that isn't per-recipient at all). Needs its own schema thinking, not a bolt-on to `user_notifications` as-is.
+
+Not scheduled; revisit when there's bandwidth to design it properly rather than backfilling it into the existing trigger functions.
+
 ## Explicitly deferred
 
 - Per-notification-type user preferences (mute campaign events but keep territory alerts, etc.) — ship with "on for everything user_notifications already covers," revisit later if users ask.
