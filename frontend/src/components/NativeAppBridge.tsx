@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { isNativePlatform } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { registerDeviceToken } from "@/lib/pushNotifications";
+import { installNativeGeolocationPolyfill } from "@/lib/nativeGeolocationPolyfill";
 
 // Mounted once in the root layout. No-ops entirely on web — everything here
 // only matters inside the Capacitor-wrapped iOS/Android build.
@@ -39,6 +40,7 @@ export default function NativeAppBridge() {
 
       await StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
       await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+      await installNativeGeolocationPolyfill().catch(() => {});
 
       const platform = Capacitor.getPlatform() === "ios" ? "ios" : "android";
       const { PushNotifications } = await import("@capacitor/push-notifications");

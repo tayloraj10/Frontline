@@ -50,4 +50,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Android 13+ requires explicit runtime permission for push notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Backs the @capacitor/geolocation plugin (see NativeAppBridge.tsx) — the
+         WebView's browser navigator.geolocation API doesn't work over the plain-http
+         CAP_DEV_SERVER origin since it isn't a secure context, so native GPS is used
+         instead when running inside the app. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 </manifest>
