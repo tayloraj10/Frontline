@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import BackButton from "@/components/ui/BackButton";
 import GroupEditForm from "./GroupEditForm";
 import MemberManager from "./MemberManager";
 import DeleteGroupSection from "./DeleteGroupSection";
@@ -65,9 +65,7 @@ export default async function GroupEditPage({ params }: Props) {
   return (
     <main className="max-w-lg mx-auto px-6 py-10 w-full">
       <div className="mb-2">
-        <Link href={`/groups/${slug}`} className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
-          ← {groupData.name}
-        </Link>
+        <BackButton href={`/groups/${slug}`} label={groupData.name} />
       </div>
 
       <h1 className="text-xl font-black text-zinc-100 mt-6 mb-8">Edit group</h1>

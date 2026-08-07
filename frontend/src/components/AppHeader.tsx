@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import UserNav from "./UserNav";
 import NotificationBellWrapper from "./NotificationBellWrapper";
 import SupportButton from "./SupportButton";
-import MobileNavToggle from "./MobileNavToggle";
+import BottomTabBar from "./nav/BottomTabBar";
+import { buildNavLinks } from "@/lib/navLinks";
 import { version as appVersion } from "../../package.json";
 
 export default async function AppHeader() {
@@ -17,12 +18,13 @@ export default async function AppHeader() {
   let isBusinessOnly = false;
   let points = 0;
   let spendablePoints = 0;
+  let avatarUrl: string | null = null;
   if (user) {
     const [{ data: profile }, { data: businessAdminRows }] = await Promise.all([
       supabase
         .schema("public")
         .from("profiles")
-        .select("is_admin, points, spendable_points, is_business_only")
+        .select("is_admin, points, spendable_points, is_business_only, avatar_url")
         .eq("id", user.id)
         .single(),
       supabase
@@ -35,31 +37,18 @@ export default async function AppHeader() {
     isAdmin = profile?.is_admin ?? false;
     points = profile?.points ?? 0;
     spendablePoints = profile?.spendable_points ?? 0;
+    avatarUrl = profile?.avatar_url ?? null;
     isBusinessAdmin = (businessAdminRows?.length ?? 0) > 0;
     isBusinessOnly = profile?.is_business_only ?? false;
   }
 
-  const navLinks = isBusinessOnly
-    ? [
-        { href: "/partners/dashboard", label: "Manage Business" },
-        { href: "/partners", label: "Partners" },
-        { href: "/campaigns", label: "Explore Frontline" },
-        ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
-      ]
-    : [
-        { href: "/campaigns", label: "Campaigns" },
-        { href: "/leaderboard", label: "Leaderboard" },
-        { href: "/partners", label: "Partners" },
-        { href: "/groups", label: "Groups" },
-        ...(isBusinessAdmin ? [{ href: "/partners/dashboard", label: "Manage Business" }] : []),
-        ...(isAdmin ? [{ href: "/admin", label: "Admin", highlight: true }] : []),
-      ];
+  const navLinks = buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin });
 
   return (
+    <>
     <header className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
-          <MobileNavToggle links={navLinks} />
           <Link
             href="/"
             className="flex items-center gap-2 font-black text-base tracking-widest min-w-0"
@@ -91,9 +80,11 @@ export default async function AppHeader() {
         <div className="flex items-center gap-2">
           <SupportButton />
           {user && <NotificationBellWrapper userId={user.id} />}
-          <UserNav user={user} points={points} spendablePoints={spendablePoints} />
+          <UserNav user={user} points={points} spendablePoints={spendablePoints} avatarUrl={avatarUrl} />
         </div>
       </div>
     </header>
+    <BottomTabBar links={navLinks} />
+    </>
   );
 }

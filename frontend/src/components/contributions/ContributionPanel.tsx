@@ -13,6 +13,7 @@ import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import Lightbox from "@/components/Lightbox";
+import IconButton from "@/components/ui/IconButton";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -1025,7 +1026,7 @@ function ContributeModal({
         )}
 
         {isCleanup && nearbyEvent && nearbyEvent.logging_mode === "organizer_total" ? (
-          <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-300 cursor-pointer">
+          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-300 cursor-pointer">
             <input
               type="checkbox"
               checked={useNearbyEvent}
@@ -1042,7 +1043,7 @@ function ContributeModal({
             </span>
           </label>
         ) : isCleanup && nearbyEvent && (
-          <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
+          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
             <input
               type="checkbox"
               checked={useNearbyEvent}
@@ -1085,7 +1086,7 @@ function ContributeModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="@handle or account name"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+              className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
             />
           </div>
         )}
@@ -1187,7 +1188,7 @@ function ContributeModal({
                 {loadingIntersecting ? (
                   <p className="text-xs text-zinc-500">Finding zips along your route…</p>
                 ) : intersectingUnits.length === 0 ? (
-                  <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within campaign territory.</p>
+                  <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within the campaign area.</p>
                 ) : (
                   <div>
                     <p className="text-xs text-zinc-500 mb-1.5">Credit which zip?</p>
@@ -1218,7 +1219,7 @@ function ContributeModal({
         )}
 
         {isCleanup && nearbyReport && (
-          <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300 cursor-pointer">
+          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300 cursor-pointer">
             <input
               type="checkbox"
               checked={resolveHotspot}
@@ -1299,14 +1300,14 @@ function ContributeModal({
                 min={0}
                 value={smallBags}
                 onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+                className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
               />
               <input
                 type="number"
                 min={0}
                 value={largeBags}
                 onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+                className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
               />
             </div>
             <p className="mt-2 text-xs text-zinc-500">
@@ -1345,7 +1346,7 @@ function ContributeModal({
                 value={pounds}
                 onChange={(e) => setPounds(e.target.value)}
                 placeholder="e.g. 25"
-                className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 ${isEventMode && !pounds.trim() ? "border-amber-600/60" : "border-zinc-700"
+                className={`w-full min-h-11 bg-zinc-800 border rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 ${isEventMode && !pounds.trim() ? "border-amber-600/60" : "border-zinc-700"
                   }`}
               />
             </div>
@@ -1398,16 +1399,17 @@ function ContributeModal({
                       className="w-full h-full object-cover cursor-zoom-in"
                       onClick={() => setLightboxIndex(i)}
                     />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       🔍
                     </span>
-                    <button
-                      type="button"
+                    <IconButton
                       onClick={() => setExistingPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
+                      size="sm"
+                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      aria-label="Remove photo"
                     >
                       ×
-                    </button>
+                    </IconButton>
                   </div>
                 ))}
                 {photoPreviews.map((url, i) => (
@@ -1418,16 +1420,17 @@ function ContributeModal({
                       className="w-full h-full object-cover cursor-zoom-in"
                       onClick={() => setLightboxIndex(existingPhotoUrls.length + i)}
                     />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       🔍
                     </span>
-                    <button
-                      type="button"
+                    <IconButton
                       onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
+                      size="sm"
+                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      aria-label="Remove photo"
                     >
                       ×
-                    </button>
+                    </IconButton>
                   </div>
                 ))}
               </div>
@@ -1462,7 +1465,7 @@ function ContributeModal({
                       ? "e.g. Registered at county clerk office"
                       : "e.g. Attended city council meeting"
               }
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+              className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
             />
           </div>
         )}
@@ -1634,13 +1637,14 @@ function ReportModal({
             <div className="mt-2 flex flex-wrap gap-2">
               <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
                 <img src={photoPreview} alt="" className="w-full h-full object-cover" />
-                <button
-                  type="button"
+                <IconButton
                   onClick={() => setPhoto(null)}
-                  className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center bg-black/70 text-white text-[10px] leading-none rounded-bl"
+                  size="sm"
+                  className="absolute top-0 right-0 bg-black/70 text-white text-[10px] leading-none rounded-bl rounded-tr-lg"
+                  aria-label="Remove photo"
                 >
                   ×
-                </button>
+                </IconButton>
               </div>
             </div>
           )}
@@ -2062,7 +2066,7 @@ function ClaimReportModal({
       onClick={() => setReportPhotoLightboxOpen(true)}
     >
       <img src={localReport.photo_url} alt="Reported trash" className="w-full h-full object-cover" />
-      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         🔍 Enlarge
       </span>
     </div>
@@ -2286,16 +2290,17 @@ function ClaimReportModal({
                         className="w-full h-full object-cover cursor-zoom-in"
                         onClick={() => setLightboxOpen(true)}
                       />
-                      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         🔍 Enlarge
                       </span>
-                      <button
-                        type="button"
+                      <IconButton
                         onClick={() => setPhoto(null)}
-                        className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
+                        size="sm"
+                        className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                        aria-label="Remove photo"
                       >
                         ×
-                      </button>
+                      </IconButton>
                     </div>
                   </div>
                 )}
@@ -2383,16 +2388,17 @@ function ClaimReportModal({
                       className="w-full h-full object-cover cursor-zoom-in"
                       onClick={() => setLightboxOpen(true)}
                     />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       🔍 Enlarge
                     </span>
-                    <button
-                      type="button"
+                    <IconButton
                       onClick={() => setPhoto(null)}
-                      className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/70 text-white text-xs leading-none rounded-bl"
+                      size="sm"
+                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      aria-label="Remove photo"
                     >
                       ×
-                    </button>
+                    </IconButton>
                   </div>
                 </div>
               )}
@@ -2651,7 +2657,7 @@ function HostEventModal({
                 setGroupId(e.target.value);
                 setCohostGroupIds((prev) => prev.filter((id) => id !== e.target.value));
               }}
-              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+              className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
             >
               {adminGroups.map((g) => (
                 <option key={g.id} value={g.id}>{g.name}</option>
@@ -2675,7 +2681,7 @@ function HostEventModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Saturday shoreline cleanup"
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+            className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
           />
         </div>
 
@@ -2685,7 +2691,7 @@ function HostEventModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
+            className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
           />
         </div>
 
@@ -2695,7 +2701,7 @@ function HostEventModal({
             type="datetime-local"
             value={scheduledStart}
             onChange={(e) => setScheduledStart(e.target.value)}
-            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+            className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
           />
           <p className="mt-1 text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
         </div>
@@ -2707,7 +2713,7 @@ function HostEventModal({
             min={scheduledStart || undefined}
             onChange={(e) => setScheduledEnd(e.target.value)}
             aria-invalid={endBeforeStart}
-            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+            className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
           />
           {!scheduledEnd && (
             <p className="mt-1 text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
@@ -2724,7 +2730,7 @@ function HostEventModal({
           <select
             value={loggingMode}
             onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+            className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
           >
             <option value="organizer_total">Organizer logs team total (recommended)</option>
             <option value="individual">Attendees self-log individually</option>
@@ -2744,7 +2750,7 @@ function HostEventModal({
             value={maxAttendees}
             onChange={(e) => setMaxAttendees(e.target.value.replace(/^0+(?=\d)/, ""))}
             placeholder="No limit"
-            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+            className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
           />
         </div>
 
@@ -2755,7 +2761,7 @@ function HostEventModal({
             value={externalLink}
             onChange={(e) => setExternalLink(e.target.value)}
             placeholder="https://... (site, waiver form, sign-up sheet)"
-            className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+            className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
           />
         </div>
 
@@ -2781,7 +2787,7 @@ function HostEventModal({
                 <input
                   value={addressCity}
                   onChange={(e) => setAddressCity(e.target.value)}
-                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
                 />
               </div>
               <div>
@@ -2789,7 +2795,7 @@ function HostEventModal({
                 <input
                   value={addressState}
                   onChange={(e) => setAddressState(e.target.value)}
-                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
                 />
               </div>
               <div>
@@ -2797,7 +2803,7 @@ function HostEventModal({
                 <input
                   value={addressPostalCode}
                   onChange={(e) => setAddressPostalCode(e.target.value)}
-                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
                 />
               </div>
               <div>
@@ -2805,7 +2811,7 @@ function HostEventModal({
                 <input
                   value={addressCountry}
                   onChange={(e) => setAddressCountry(e.target.value)}
-                  className="w-full min-w-0 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
                 />
               </div>
             </div>
@@ -2902,13 +2908,14 @@ function HostEventModal({
             <div className="mt-2 flex flex-wrap gap-2">
               <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
                 <img src={imagePreview} alt="" className="w-full h-full object-cover" />
-                <button
-                  type="button"
+                <IconButton
                   onClick={() => setImageFile(null)}
-                  className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center bg-black/70 text-white text-[10px] leading-none rounded-bl"
+                  size="sm"
+                  className="absolute top-0 right-0 bg-black/70 text-white text-[10px] leading-none rounded-bl rounded-tr-lg"
+                  aria-label="Remove photo"
                 >
                   ×
-                </button>
+                </IconButton>
               </div>
             </div>
           )}
@@ -3107,7 +3114,7 @@ function SolarpunkActionModal({
                     key={a.key}
                     type="button"
                     onClick={() => setSelectedAction(a)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${selectedAction?.key === a.key
+                    className={`flex items-center justify-between min-h-11 px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${selectedAction?.key === a.key
                       ? "bg-lime-900/60 border-lime-600 text-lime-200"
                       : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                       }`}
@@ -3331,7 +3338,7 @@ function SolarpunkPhotoModal({
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             placeholder="Describe what makes this solarpunk…"
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+            className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
           />
         </div>
 
@@ -3414,7 +3421,7 @@ function AllActionsModal({
                     key={a.key}
                     href={a.link}
                     onClick={onClose}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 transition-colors"
+                    className="flex items-center gap-2 min-h-11 px-3 py-2 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 transition-colors"
                   >
                     <span className="text-base shrink-0">🗑️</span>
                     <span className="flex-1">{a.label}</span>
@@ -3489,9 +3496,9 @@ function ModalShell({
                   </span>
                 )}
               </div>
-              <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">
+              <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-zinc-500 hover:text-zinc-300 text-lg leading-none" aria-label="Close">
                 ×
-              </button>
+              </IconButton>
             </div>
           )}
           <div className={`overflow-y-auto ${title ? "px-5 pb-5" : "p-5"}`}>

@@ -15,6 +15,7 @@ export type CleanupEventRsvp = {
   user_id: string;
   username: string | null;
   display_name: string | null;
+  avatar_url: string | null;
   status: "going" | "maybe" | "cancelled";
   checked_in_at: string | null;
   is_organizer: boolean;

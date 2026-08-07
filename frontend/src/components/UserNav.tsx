@@ -12,10 +12,12 @@ export default function UserNav({
   user,
   points = 0,
   spendablePoints = 0,
+  avatarUrl = null,
 }: {
   user: User | null;
   points?: number;
   spendablePoints?: number;
+  avatarUrl?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -76,13 +78,18 @@ export default function UserNav({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors"
+        className="flex items-center gap-1.5 min-h-11 pl-1.5 pr-3 py-1 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors"
       >
-        <span className="hidden sm:flex items-center gap-1.5">
-          {displayName}
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold leading-none tabular-nums">
-            {compactPoints}
-          </span>
+        <span className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-xs font-bold text-zinc-400">{displayName[0]?.toUpperCase()}</span>
+          )}
+        </span>
+        <span className="hidden sm:inline">{displayName}</span>
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold leading-none tabular-nums">
+          {compactPoints}
         </span>
         <svg
           className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`}
@@ -123,28 +130,28 @@ export default function UserNav({
           <Link
             href="/profile"
             onClick={() => setOpen(false)}
-            className="block px-4 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+            className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
           >
             My profile
           </Link>
           <Link
             href="/settings/profile"
             onClick={() => setOpen(false)}
-            className="block px-4 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+            className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
           >
             Edit profile
           </Link>
           <Link
             href="/settings/account"
             onClick={() => setOpen(false)}
-            className="block px-4 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+            className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
           >
             Account settings
           </Link>
           <div className="border-t border-zinc-800 my-1" />
           <button
             onClick={handleSignOut}
-            className="w-full text-left px-4 py-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+            className="w-full flex items-center min-h-11 text-left px-4 py-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
           >
             Sign out
           </button>

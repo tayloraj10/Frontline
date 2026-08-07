@@ -4,6 +4,8 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import Lightbox from "@/components/Lightbox";
+import BackButton from "@/components/ui/BackButton";
+import Avatar from "@/components/ui/Avatar";
 import type { CleanupRouteDetailData } from "@/lib/cleanupRoutes";
 
 const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap"), {
@@ -39,16 +41,20 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
       />
 
       <div className="mt-4 flex items-center gap-3">
-        {route.submitted_by.avatar_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={route.submitted_by.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" />
-        ) : (
-          <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-sm text-zinc-400">
-            {submitterName[0]?.toUpperCase()}
-          </div>
-        )}
+        <Avatar
+          avatarUrl={route.submitted_by.avatar_url}
+          name={submitterName}
+          username={route.submitted_by.username}
+          size="md"
+        />
         <div>
-          <p className="text-sm text-zinc-200">{submitterName}</p>
+          {route.submitted_by.username ? (
+            <Link href={`/users/${route.submitted_by.username}`} className="text-sm text-zinc-200 hover:text-zinc-100 transition-colors">
+              {submitterName}
+            </Link>
+          ) : (
+            <p className="text-sm text-zinc-200">{submitterName}</p>
+          )}
           <p className="text-xs text-zinc-500">
             {formatDate(route.created_at)}
             {route.geo_unit_display_name && ` · ${route.geo_unit_display_name}`}
@@ -96,9 +102,7 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
 
       {route.campaign_slug && (
         <div className="mt-6">
-          <Link href={`/campaigns/${route.campaign_slug}`} className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
-            ← Back to {route.campaign_title ?? "campaign"}
-          </Link>
+          <BackButton href={`/campaigns/${route.campaign_slug}`} label={`Back to ${route.campaign_title ?? "campaign"}`} />
         </div>
       )}
 

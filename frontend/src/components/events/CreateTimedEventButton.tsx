@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import TimedEventForm, { type TimedEventAreaPicker } from "./TimedEventForm";
+import IconButton from "@/components/ui/IconButton";
 import type { CreatedEvent } from "@/lib/events";
 
 export default function CreateTimedEventButton({
@@ -45,13 +46,15 @@ export default function CreateTimedEventButton({
           >
             ✨ New Timed Event
           </button>
-          <button
+          <IconButton
             onClick={(e) => { e.stopPropagation(); setDismissed(true); }}
             title="Hide until next page refresh"
-            className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-[10px] leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Hide until next page refresh"
+            size="sm"
+            className="absolute -top-3 -right-3 bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-[10px] leading-none opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
           >
             ×
-          </button>
+          </IconButton>
         </div>
       )}
 
@@ -62,12 +65,13 @@ export default function CreateTimedEventButton({
         >
           <div className="relative max-w-lg w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-4 shadow-2xl max-h-[85vh] overflow-y-auto">
 
-            <button
+            <IconButton
               onClick={() => onOpenChange(false)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              aria-label="Close"
             >
               ×
-            </button>
+            </IconButton>
             <h3 className="text-lg font-semibold text-white mb-3">✨ New Timed Event</h3>
             <TimedEventForm
               key={formKey}

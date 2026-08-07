@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import BackButton from "@/components/ui/BackButton";
 import type { BrowseBusiness, BrowseOffer } from "../PartnersBrowseClient";
 import PartnerDetailClient from "./PartnerDetailClient";
 
@@ -60,9 +60,7 @@ export default async function PartnerDetailPage({
 
   return (
     <main className="max-w-3xl mx-auto px-6 py-10 w-full">
-      <Link href="/partners" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-        ← All partners
-      </Link>
+      <BackButton href="/partners" label="All partners" />
       <div className="mt-4">
         <PartnerDetailClient
           business={businessWithCampaign}

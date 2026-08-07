@@ -15,6 +15,7 @@ import type { Feature, Point } from "geojson";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { getCleanupRoute, type CampaignCleanupRoute } from "@/lib/cleanupRoutes";
 import { formatPoints } from "@/lib/formatPoints";
+import IconButton from "@/components/ui/IconButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -976,7 +977,7 @@ function TerritoryPanel({
 
   return (
     <>
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
 
       {/* Header */}
@@ -984,7 +985,7 @@ function TerritoryPanel({
         <div className="flex items-start justify-between">
           <div>
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-              {variant === "stats" ? `${unitLabel} Stats` : "Territory"}
+              {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Claim`}
             </p>
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">
               {variant === "stats" ? displayName : `${unitLabel} ${displayName}`}
@@ -999,7 +1000,7 @@ function TerritoryPanel({
                 {isContested ? "Contested" : "Claimed"}
               </span>
             )}
-            <button onClick={onClose} className="text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+            <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
           </div>
         </div>
 
@@ -1242,7 +1243,7 @@ function TerritoryPanel({
         >
           <div className="flex items-start justify-between mb-2">
             <p className="text-sm font-semibold text-zinc-100">What are points?</p>
-            <button onClick={() => setShowPointsInfo(false)} className="text-lg leading-none text-zinc-600 hover:text-zinc-300">×</button>
+            <IconButton onClick={() => setShowPointsInfo(false)} size="sm" className="-mr-1.5 -mt-1 text-lg leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
             The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
@@ -1279,7 +1280,7 @@ function StatePanel({
   const party = Math.abs(lean) < 0.15 ? "Swing" : isR ? "Republican" : "Democrat";
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -1288,7 +1289,7 @@ function StatePanel({
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
             <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
           </div>
-          <button onClick={onClose} className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1377,7 +1378,7 @@ function HexPanel({
   }, [campaignId, entry.h3_index, refreshKey]);
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 overflow-hidden rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: stageColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -1385,7 +1386,7 @@ function HexPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
             <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
           </div>
-          <button onClick={onClose} className="ml-2 mt-0.5 text-xl leading-none text-zinc-600 hover:text-zinc-300">×</button>
+          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -4535,7 +4536,7 @@ export default function CampaignMap({
                   onClick={onMobileStatsClick}
                   className="self-start px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
                 >
-                  📊 Activity
+                  📊 Stats
                 </button>
               )}
             </div>
@@ -4569,7 +4570,7 @@ export default function CampaignMap({
               onClick={onMobileStatsClick}
               className="self-start sm:hidden px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
             >
-              📊 Activity
+              📊 Stats
             </button>
           )}
           {(supportsZipSearch || supportsUkPostcodeSearch) && (
@@ -4795,7 +4796,7 @@ export default function CampaignMap({
                   (🎁 = active offer)
                 </span>
               </LegendToggle>
-              {/* De-emphasized (smaller, muted) rather than removed — territory claiming
+              {/* De-emphasized (smaller, muted) rather than removed — claiming
                   still works when turned on, but we no longer want to visually encourage
                   it now that the non-competitive Geographic Stats layers exist above. */}
               <LegendToggle
@@ -4807,15 +4808,15 @@ export default function CampaignMap({
                 }}
               >
                 <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500/50" />
-                <span className="text-zinc-500 text-[11px]">Territory claiming</span>
+                <span className="text-zinc-500 text-[11px]">Claiming</span>
               </LegendToggle>
               <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" />
-                <span className="text-zinc-500 text-[11px]">Group territory</span>
+                <span className="text-zinc-500 text-[11px]">Group claims</span>
               </LegendToggle>
               <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
-                <span className="text-zinc-500 text-[11px]">Individual territory</span>
+                <span className="text-zinc-500 text-[11px]">Individual claims</span>
               </LegendToggle>
               <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm border border-[#a1a1aa]/60 bg-transparent" />
@@ -4840,12 +4841,13 @@ export default function CampaignMap({
               alt="Contribution photo"
               className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
             />
-            <button
+            <IconButton
               onClick={() => setSelectedPhoto(null)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 text-lg leading-none"
+              aria-label="Close"
             >
               ×
-            </button>
+            </IconButton>
           </div>
         </div>
       )}
@@ -4859,12 +4861,13 @@ export default function CampaignMap({
             className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
+            <IconButton
               onClick={() => setSelectedBusiness(null)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              aria-label="Close"
             >
               ×
-            </button>
+            </IconButton>
             <div className="flex items-center gap-3 mb-3">
               {selectedBusiness.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -4935,12 +4938,13 @@ export default function CampaignMap({
             className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
+            <IconButton
               onClick={() => setSelectedCleanupEvent(null)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              aria-label="Close"
             >
               <span className="-translate-y-[2px]">×</span>
-            </button>
+            </IconButton>
             <div className="flex items-center gap-3 mb-3">
               {(selectedCleanupEvent.group_logo_url || selectedCleanupEvent.cohost_groups?.some((g) => g.group_logo_url)) && (
                 <div className="flex items-center -space-x-2 shrink-0">
@@ -5067,12 +5071,13 @@ export default function CampaignMap({
               className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
               onClick={(e) => e.stopPropagation()}
             >
-              <button
+              <IconButton
                 onClick={() => setSelectedEvent(null)}
-                className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+                aria-label="Close"
               >
                 ×
-              </button>
+              </IconButton>
               <div className="flex items-center gap-3 mb-3">
                 {selectedEvent.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element

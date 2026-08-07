@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback } from "react";
+import IconButton from "@/components/ui/IconButton";
 
 export default function Lightbox({
   images,
@@ -39,25 +40,25 @@ export default function Lightbox({
       className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <button
+      <IconButton
         onClick={onClose}
-        className="absolute top-4 right-4 text-zinc-300 hover:text-white text-2xl leading-none"
+        className="absolute top-3 right-3 text-zinc-300 hover:text-white text-2xl leading-none bg-black/40 hover:bg-black/60"
         aria-label="Close"
       >
         &times;
-      </button>
+      </IconButton>
 
       {images.length > 1 && (
-        <button
+        <IconButton
           onClick={(e) => {
             e.stopPropagation();
             goPrev();
           }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white text-3xl leading-none px-2"
+          className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white text-3xl leading-none bg-black/40 hover:bg-black/60"
           aria-label="Previous image"
         >
           &#8249;
-        </button>
+        </IconButton>
       )}
 
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -69,16 +70,16 @@ export default function Lightbox({
       />
 
       {images.length > 1 && (
-        <button
+        <IconButton
           onClick={(e) => {
             e.stopPropagation();
             goNext();
           }}
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white text-3xl leading-none px-2"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white text-3xl leading-none bg-black/40 hover:bg-black/60"
           aria-label="Next image"
         >
           &#8250;
-        </button>
+        </IconButton>
       )}
 
       {images.length > 1 && (

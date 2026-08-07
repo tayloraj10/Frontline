@@ -38,7 +38,7 @@ class CampaignSeeder(Seeder):
                      geo_unit, status, geo_scope, scoring_rules, win_condition)
                 VALUES (
                     :id, 'trash-war', 'Trash War',
-                    'Claim territory by cleaning up trash. The group with the most bags cleaned in a ZIP code or postcode district controls it.',
+                    'Clean up trash in your neighborhood, earn points, and climb the leaderboard.',
                     'territory', 'cleanup', ARRAY['zip', 'uk_postcode_district']::text[], 'active',
                     CAST(:geo_scope AS jsonb), CAST(:scoring_rules AS jsonb), CAST(:win_condition AS jsonb)
                 )

@@ -76,7 +76,7 @@ export default async function HomePage() {
       {/* Feature pills */}
       <div className="relative flex flex-wrap justify-center gap-2 max-w-md">
         {[
-          { icon: "🗺", label: "Territory control" },
+          { icon: "🗺", label: "Zip code control" },
           { icon: "📍", label: "Live maps" },
           { icon: "⚡", label: "Map events" },
           { icon: "👥", label: "Group competition" },

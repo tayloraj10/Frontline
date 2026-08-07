@@ -518,7 +518,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
 
     rsvp_result = await db.execute(
         text("""
-            SELECT r.user_id, p.username, p.display_name, r.status, r.checked_in_at, r.is_organizer
+            SELECT r.user_id, p.username, p.display_name, p.avatar_url, r.status, r.checked_in_at, r.is_organizer
             FROM cleanup_rsvps r
             JOIN profiles p ON p.id = r.user_id
             WHERE r.cleanup_id = :id
@@ -602,6 +602,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "user_id": str(r.user_id),
             "username": r.username,
             "display_name": r.display_name,
+            "avatar_url": r.avatar_url,
             "status": r.status,
             "checked_in_at": r.checked_in_at.isoformat() if r.checked_in_at else None,
             "is_organizer": r.is_organizer,

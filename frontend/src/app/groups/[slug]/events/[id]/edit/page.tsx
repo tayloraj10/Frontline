@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCleanupEvent } from "@/lib/cleanupEvents";
+import BackButton from "@/components/ui/BackButton";
 import CreateCleanupEventForm from "@/components/cleanups/CreateCleanupEventForm";
 
 interface Props {
@@ -38,9 +38,7 @@ export default async function EditCleanupEventPage({ params }: Props) {
   return (
     <main className="max-w-lg mx-auto px-6 py-10 w-full">
       <div className="mb-2">
-        <Link href={`/cleanup-events/${id}`} className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
-          ← {event.title}
-        </Link>
+        <BackButton href={`/cleanup-events/${id}`} label={event.title} />
       </div>
 
       <h1 className="text-xl font-black text-zinc-100 mt-6 mb-8 flex items-center gap-2">

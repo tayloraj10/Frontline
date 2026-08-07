@@ -15,7 +15,7 @@ export default function TermsContent() {
         <p>
           Frontline is a gamified collective action platform. Users join campaigns, log real-world
           contributions (e.g., litter cleanups, environmental actions), and compete on a live
-          territory map. The App is provided for free during the beta period.
+          map. The App is provided for free during the beta period.
         </p>
       </Section>
 
@@ -39,7 +39,7 @@ export default function TermsContent() {
 
       <Section title="5. Contributions and Gamification">
         <p>
-          Points and territory earned on the leaderboard have no real-world monetary value.
+          Points and standing earned on the leaderboard have no real-world monetary value.
           Separately, some campaigns let you earn spendable points that may be redeemed for
           offers from partner businesses; redemption is subject to the availability and terms of
           each partner offer, is not a cash equivalent, and cannot be cashed out. We may adjust

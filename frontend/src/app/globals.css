@@ -17,6 +17,43 @@ html, body {
   color: #f4f4f5;
 }
 
+/* Safe-area insets for notch/home-indicator spacing once wrapped in Capacitor.
+   Falls back to 0 in a plain browser (no notch), so these are safe to use everywhere. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Required tile-provider attribution must never render underneath our custom
+   floating map overlays (basemap switcher, Layers menu). */
+.maplibregl-ctrl-bottom-right {
+  z-index: 30;
+}
+
+/* MapLibre auto-forces the compact attribution control to its expanded
+   "-show" state (full "© MapTiler © OpenStreetMap contributors" text) on
+   narrow (mobile-width) containers, permanently eating a full-width strip of
+   the bottom of the map. That's what was crowding our bottom-anchored map
+   controls (ContributionPanel's button stack, the Layers menu) on mobile —
+   they can't sit any lower without going under that text. Keep it collapsed
+   to just the small info icon at all viewport widths instead; tapping it
+   still reveals the same required credit text, so attribution requirements
+   are unaffected. */
+.maplibregl-ctrl-attrib.maplibregl-compact-show:not([open]) {
+  padding: 2px 24px 2px 0;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show:not([open]) .maplibregl-ctrl-attrib-inner {
+  display: none;
+}
+
 /* MapLibre dark popup theme */
 .maplibregl-popup-content {
   background: #18181b !important;
