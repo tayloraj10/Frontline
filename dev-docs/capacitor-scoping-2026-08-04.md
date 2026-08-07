@@ -41,7 +41,7 @@ You have personal Apple Developer Program + Google Play Console accounts, but ar
 2. [x] **Capacitor install**: `@capacitor/core`, `@capacitor/cli`, `@capacitor/android`, `@capacitor/ios`, `@capacitor/browser`, `@capacitor/status-bar`, `@capacitor/app` installed. `capacitor.config.ts` points `server.url` at `https://www.frontlinemaps.com`.
 3. [~] **Native project scaffolding**: `frontend/android/` generated and committed. `frontend/ios/` **not started** — `npx cap add ios` has never been run, no `ios/` directory exists in the repo on any machine. iOS builds need the Mac laptop (confirmed available) — Xcode/CocoaPods/signing can't happen on Windows. See `ios-setup-2026-08-06.md` for the full step list to run once on the Mac.
 4. [~] **Icons/splash**: generated via `@capacitor/assets` from `frontend/src/app/icon-original.png` (copied to `frontend/resources/icon.png`). Full Android adaptive-icon/splash set and PWA icons (matched to the existing `public/manifest.webmanifest`, which was untracked until this commit) are in place. iOS AppIcon/Splash assets **not generated yet** — blocked on `ios/` existing at all (item 3); rerun `npx cap assets generate` once the ios platform is added.
-5. [x] **OAuth deep link**: done — `login/page.tsx` opens Google's consent screen via `@capacitor/browser` on native instead of the embedded WebView; `NativeAppBridge.tsx` catches the redirect back via `appUrlOpen` and hands it to the main WebView. Android intent-filter added (`AndroidManifest.xml`). Placeholder `.well-known/assetlinks.json` and `apple-app-site-association` routes added — **not functional yet**: assetlinks.json needs the Android release keystore's SHA-256 fingerprint (keystore doesn't exist yet), apple-app-site-association needs the real Apple Team ID (blocked on the personal-vs-org account decision). Until both are filled in, Google login will still work but will leave the user in the system browser after completing instead of auto-returning to the app — functional gap, not a broken flow.
+5. [~] **OAuth deep link**: done — `login/page.tsx` opens Google's consent screen via `@capacitor/browser` on native instead of the embedded WebView; `NativeAppBridge.tsx` catches the redirect back via `appUrlOpen` and hands it to the main WebView. Android intent-filter added (`AndroidManifest.xml`). `apple-app-site-association` now has the real Apple Team ID (`4PF46V9GR7`, resolved 2026-08-07 — proceeding on personal developer accounts) — Universal Links should verify once this deploys. `assetlinks.json` is still a placeholder: needs the Android release keystore's SHA-256 fingerprint, and the keystore doesn't exist yet. Until that's filled in, Google login still works but leaves Android users in the system browser after completing instead of auto-returning to the app.
 6. [~] **Push notifications**: scoped, not implemented. See `push-notifications-scoping-2026-08-06.md` — existing `user_notifications` table/triggers give this a trigger path for free; still needs device token storage, Firebase/FCM setup, the push-send integration itself, and client-side plugin wiring.
 7. [x] **Native share sheet**: done. `@capacitor/share` wired via `frontend/src/lib/share.ts` (native → Web Share API → clipboard fallback) and a reusable `ShareButton` component, on both the campaign map header (icon-button variant, matching the info/help buttons) and the cleanup event page (text-button variant).
 8. [~] **Safe-area / status bar handling**: `NativeAppBridge.tsx` sets `StatusBar` style/overlay on native launch. Broader mobile-first layout pass (item #8 in the main dev plan) still separate, not started here.
@@ -52,7 +52,7 @@ You have personal Apple Developer Program + Google Play Console accounts, but ar
 
 - ~~**App icon**~~ — done, generated 2026-08-04 from `icon-original.png`.
 - **Android release keystore** — needed both for signing and to fill in `assetlinks.json`'s SHA-256 fingerprint.
-- **Apple Team ID** — needs the personal-vs-LLC/nonprofit developer account decision resolved first.
+- ~~**Apple Team ID**~~ — resolved 2026-08-07, proceeding on personal developer accounts. Team ID `4PF46V9GR7` now in `apple-app-site-association`.
 
 ## What the account decision (personal vs. LLC/nonprofit) actually blocks
 
@@ -64,7 +64,7 @@ Not resolving this yet does **not** block:
 
 It does block:
 - Running on a **physical iOS device** (not simulator) — that needs a paid Apple Developer Program membership + provisioning profile tied to a specific Team ID.
-- Universal/App Links actually verifying (`apple-app-site-association`'s `PLACEHOLDER_TEAM_ID`) — until it's filled in, Google login still works, it just leaves the user in the system browser after finishing instead of auto-returning to the app.
+- ~~Universal/App Links actually verifying~~ — resolved 2026-08-07, real Team ID now in `apple-app-site-association`. Android's equivalent (`assetlinks.json`) still needs the release keystore fingerprint.
 - Final code-signed release builds and store submission (TestFlight, Play Console Internal Testing, and beyond).
 
 So this week's work (icons ✅, native scaffolding, OAuth fix, push notifications scoping, testing in emulator/simulator) can all proceed without it. It only becomes a hard blocker once we're ready to sign a release build or put the app on a physical iOS device.
