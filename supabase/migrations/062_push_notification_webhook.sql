@@ -3,16 +3,23 @@
 -- direct-inserts) gets a push for free without duplicating send logic per path.
 -- See dev-docs/push-notifications-scoping-2026-08-06.md, option 2.
 --
--- Requires app.settings.push_function_url and app.settings.service_role_key to
--- be set via ALTER DATABASE ... SET ... (not committed here — same handling as
--- the Firebase Admin SDK service account JSON, which is a Supabase secret, not
--- a migration). Silently no-ops until those are set, e.g. on a fresh local db.
+-- Reads the function URL + service_role key from Supabase Vault rather than
+-- app.settings GUCs — ALTER DATABASE ... SET on a custom placeholder GUC
+-- requires real Postgres superuser, which neither local nor hosted Supabase's
+-- "postgres" role has. Vault secrets ('push_function_url' / 'push_service_role_key')
+-- are populated by hand (see dev-docs/push-notifications-prod-deploy-checklist.md
+-- for the exact commands) — not part of this migration, since that would commit
+-- a secret. Silently no-ops until they're populated, e.g. right after a fresh
+-- db reset or a new dev's first local setup.
 CREATE OR REPLACE FUNCTION notify_push_on_user_notification()
 RETURNS TRIGGER AS $$
 DECLARE
-  function_url TEXT := current_setting('app.settings.push_function_url', true);
-  service_role_key TEXT := current_setting('app.settings.service_role_key', true);
+  function_url TEXT;
+  service_role_key TEXT;
 BEGIN
+  SELECT decrypted_secret INTO function_url FROM vault.decrypted_secrets WHERE name = 'push_function_url';
+  SELECT decrypted_secret INTO service_role_key FROM vault.decrypted_secrets WHERE name = 'push_service_role_key';
+
   IF function_url IS NULL OR service_role_key IS NULL THEN
     RETURN NEW;
   END IF;
