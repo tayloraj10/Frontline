@@ -105,7 +105,9 @@ export default function CleanupEventDetail({
   const [showJoinCodeField, setShowJoinCodeField] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
-  const [locationStatus, setLocationStatus] = useState<"checking" | "resolved" | "unavailable">("checking");
+  const [locationStatus, setLocationStatus] = useState<"checking" | "resolved" | "unavailable">(
+    typeof navigator !== "undefined" && !navigator.geolocation ? "unavailable" : "checking"
+  );
   const [cancelLoading, setCancelLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -115,10 +117,7 @@ export default function CleanupEventDetail({
   // range, without requiring the "Check in with my location" button click first.
   useEffect(() => {
     if (!userId || viewerCheckedInInitial) return;
-    if (!navigator.geolocation) {
-      setLocationStatus("unavailable");
-      return;
-    }
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setDistanceMeters(haversineMeters(pos.coords.latitude, pos.coords.longitude, event.lat, event.lng));
@@ -775,13 +774,10 @@ function AddAttendeeControl({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open || query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
+    if (!open || query.trim().length < 2) return;
     let cancelled = false;
-    setLoading(true);
     const timer = setTimeout(async () => {
+      setLoading(true);
       try {
         const found = await searchUsers(query.trim());
         if (!cancelled) setResults(found.filter((u) => !existingUserIds.includes(u.id)));
@@ -796,6 +792,8 @@ function AddAttendeeControl({
       clearTimeout(timer);
     };
   }, [open, query, existingUserIds]);
+
+  const visibleResults = query.trim().length < 2 ? [] : results;
 
   const select = async (u: UserSearchResult) => {
     setAdding(u.id);
@@ -834,12 +832,12 @@ function AddAttendeeControl({
         placeholder="Search by username..."
         className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-zinc-100 focus:outline-none focus:border-zinc-500 w-40"
       />
-      {(loading || results.length > 0 || error) && (
+      {(loading || visibleResults.length > 0 || error) && (
         <div className="absolute right-0 top-full mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-lg divide-y divide-zinc-800 max-h-48 overflow-y-auto z-10 shadow-lg">
           {loading && <p className="px-3 py-2 text-xs text-zinc-600">Searching…</p>}
           {error && <p className="px-3 py-2 text-xs text-red-400">{error}</p>}
           {!loading &&
-            results.map((u) => (
+            visibleResults.map((u) => (
               <button
                 key={u.id}
                 onMouseDown={(e) => e.preventDefault()}
