@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     if (tokensError) throw tokensError;
     if (!tokens?.length) return new Response(JSON.stringify({ sent: 0 }), { status: 200 });
 
-    const serviceAccount = JSON.parse(Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")!);
+    const serviceAccount = JSON.parse(Deno.env.get("FIREBASE_SERVICE_ACCOUNT")!);
     const accessToken = await getFcmAccessToken(serviceAccount);
     const deepLinkUrl = notification.campaign_slug
       ? `https://www.frontlinemaps.com/campaigns/${notification.campaign_slug}`

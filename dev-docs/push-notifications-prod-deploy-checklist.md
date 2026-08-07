@@ -16,7 +16,7 @@ Custom placeholder GUCs (`app.settings.*`) require real Postgres superuser to se
 
 ## Steps, in order
 
-1. **Confirm the Firebase secret name** in the Supabase dashboard (Edge Functions → Secrets, prod project `nvidlxyzyoxzalxbydvg`). `supabase/functions/send-push/index.ts` reads `Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")` — if the dashboard secret was saved under a different name, either rename it there or update the code to match.
+1. **Confirm the Firebase secret name** in the Supabase dashboard (Edge Functions → Secrets, prod project `nvidlxyzyoxzalxbydvg`). `supabase/functions/send-push/index.ts` reads `Deno.env.get("FIREBASE_SERVICE_ACCOUNT")` — confirmed 2026-08-07 this matches the dashboard secret name already in use.
 
 2. **Deploy the Edge Function**:
    ```
@@ -41,7 +41,7 @@ Neither of the two pieces below is in git — a fresh clone has zero push-notifi
 
 **2. Create `supabase/functions/.env`** (already covered by the repo's `.env*` gitignore rule) with the JSON compacted onto one line as a single env var:
 ```
-FIREBASE_SERVICE_ACCOUNT_JSON='<paste the entire downloaded JSON file's contents here, as-is>'
+FIREBASE_SERVICE_ACCOUNT='<paste the entire downloaded JSON file's contents here, as-is>'
 ```
 `supabase functions serve` picks this file up automatically — no extra flag needed. This only feeds the Edge Function itself; it's unrelated to the two Vault secrets below.
 
