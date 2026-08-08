@@ -28,7 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
         <NativeAppBridge />
         <AppHeader />
-        <div id="app-scroll-container" className="flex flex-col flex-1 min-h-0 overflow-y-auto pb-16 sm:pb-0">
+        <div
+          id="app-scroll-container"
+          className="flex flex-col flex-1 min-h-0 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0"
+        >
           <PullToRefresh />
           {children}
         </div>

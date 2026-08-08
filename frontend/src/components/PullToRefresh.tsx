@@ -24,6 +24,13 @@ export default function PullToRefresh() {
 
     const onTouchStart = (e: TouchEvent) => {
       if (container.scrollTop > 0) { startYRef.current = null; return; }
+      // Map panning also starts at scrollTop 0 since the map isn't part of
+      // the outer scroll flow — without this, dragging down on the map
+      // fires the pull-to-refresh gesture instead of panning it.
+      if ((e.target as Element)?.closest?.("[data-map-container]")) {
+        startYRef.current = null;
+        return;
+      }
       startYRef.current = e.touches[0].clientY;
     };
 
