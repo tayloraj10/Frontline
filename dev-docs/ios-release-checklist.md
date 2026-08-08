@@ -49,6 +49,7 @@ GitHub flagged `frontend/pending-ios-assets/GoogleService-Info.plist`'s API key 
 
 ```
 cd frontend
+npm run sync:ios-version   # syncs MARKETING_VERSION/CURRENT_PROJECT_VERSION from package.json
 npx cap sync ios
 npx cap open ios
 ```
@@ -73,7 +74,7 @@ npx cap open ios
 
 ## 10. Every release after the first
 
-- Version bump: `CFBundleShortVersionString` (marketing version, e.g. `1.1.0`) and `CFBundleVersion` (build number, must strictly increase per submission to App Store Connect, even across the same marketing version) in Xcode's target settings.
+- Version bump: bump `frontend/package.json`'s `version`, then run `npm run sync:ios-version` — it derives both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number, must strictly increase per submission, even across the same marketing version) from it, the same way `npm run build:android` derives Android's `versionName`/`versionCode`. Keeps web, iOS, and Android on one source of truth instead of hand-editing each platform separately.
 - Re-run `npx cap sync ios` after any Capacitor plugin change.
 - Re-archive and re-upload through the same TestFlight → submit flow each time; there's no separate "patch" fast path.
 
