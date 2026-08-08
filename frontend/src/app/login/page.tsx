@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -16,6 +16,12 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // setGoogleLoading(true) doesn't block a second tap until React re-renders
+  // and the button's disabled prop actually applies — a fast double-tap (or
+  // a tap that lands while the native account-chooser sheet is still
+  // animating in) can start a second concurrent sign-in, which corrupts the
+  // native SDK's in-flight result. This ref blocks re-entry synchronously.
+  const googleLoginInFlight = useRef(false);
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -47,6 +53,8 @@ function LoginForm() {
   }
 
   async function handleGoogleLogin() {
+    if (googleLoginInFlight.current) return;
+    googleLoginInFlight.current = true;
     setGoogleLoading(true);
     const supabase = createClient();
 
@@ -58,31 +66,35 @@ function LoginForm() {
     // So on native we skip the browser entirely and call Google's native
     // Sign-In SDK directly, then hand its ID token to Supabase.
     if (isNativePlatform()) {
-      const { SocialLogin } = await import("@capgo/capacitor-social-login");
-      await SocialLogin.initialize({
-        google: {
-          iOSClientId: "739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com",
-          iOSServerClientId: "739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com",
-          mode: "online",
-        },
-      });
-
-      const rawNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawNonce));
-      const nonceDigest = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-
       try {
+        const { SocialLogin } = await import("@capgo/capacitor-social-login");
+        await SocialLogin.initialize({
+          google: {
+            iOSClientId: "739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com",
+            iOSServerClientId: "739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com",
+            mode: "online",
+          },
+        });
+
+        const rawNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawNonce));
+        const nonceDigest = Array.from(new Uint8Array(digest))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
         const result = await SocialLogin.login({
           provider: "google",
-          options: { scopes: ["email", "profile"], nonce: nonceDigest },
+          // Without this, Google's SDK can silently restore a cached session
+          // on repeat logins instead of prompting again — the idToken it
+          // returns is signed against the previous attempt's nonce, which
+          // never matches the fresh one generated below.
+          options: { scopes: ["email", "profile"], nonce: nonceDigest, forcePrompt: true },
         });
         const idToken = "result" in result && "idToken" in result.result ? result.result.idToken : undefined;
         if (!idToken) {
-          setGoogleLoading(false);
+          setError("Google sign-in didn't return a token.");
           return;
         }
 
@@ -92,12 +104,15 @@ function LoginForm() {
           nonce: rawNonce,
         });
         if (error) {
-          setGoogleLoading(false);
+          setError(error.message);
           return;
         }
-      } catch {
-        setGoogleLoading(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Google sign-in failed.");
         return;
+      } finally {
+        googleLoginInFlight.current = false;
+        setGoogleLoading(false);
       }
 
       if (next && next.startsWith("/")) {
