@@ -30,3 +30,8 @@ backend/data/
 # out of anyone's PR history.
 backend/scripts/pull_prod_snapshot.sh
 
+# Android release signing key — never committed, losing it permanently blocks store updates
+*.jks
+*.keystore
+frontend/android/app/keystore.properties
+
