@@ -11,7 +11,7 @@ const PRODUCTION_URL = 'https://www.frontlinemaps.com';
 const devServerUrl = process.env.CAP_DEV_SERVER;
 
 const config: CapacitorConfig = {
-  appId: 'com.frontline.app',
+  appId: 'com.frontlinemaps.app',
   appName: 'Frontline',
   webDir: 'www',
   server: {

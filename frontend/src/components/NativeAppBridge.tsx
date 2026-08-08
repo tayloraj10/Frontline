@@ -57,9 +57,22 @@ export default function NativeAppBridge() {
       let pendingUserId: string | null = null;
       let pendingAccessToken: string | null = null;
 
-      const registrationSub = await PushNotifications.addListener("registration", (token) => {
-        if (!pendingUserId || !pendingAccessToken) return;
-        registerDeviceToken(pendingUserId, token.value, platform, pendingAccessToken).catch(() => {});
+      // On iOS, Capacitor's core plugin hands back the raw APNs device token,
+      // not an FCM token — but send-push (supabase/functions/send-push) only
+      // knows how to send through FCM's API. @capacitor-community/fcm wraps the
+      // native Firebase Messaging SDK to exchange that APNs token for a real FCM
+      // one; Android's core registration event already returns an FCM token
+      // directly; so only iOS needs the extra hop.
+      const registrationSub = await PushNotifications.addListener("registration", async (token) => {
+        const userId = pendingUserId;
+        const accessToken = pendingAccessToken;
+        if (!userId || !accessToken) return;
+        let value = token.value;
+        if (platform === "ios") {
+          const { FCM } = await import("@capacitor-community/fcm");
+          value = (await FCM.getToken()).token;
+        }
+        registerDeviceToken(userId, value, platform, accessToken).catch(() => {});
       });
 
       const tapSub = await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
