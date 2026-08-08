@@ -9,6 +9,7 @@ import type { Database } from "@/types/database";
 import type { MapBusiness, MapCleanupEvent } from "@/components/map/CampaignMap";
 import CampaignInstructionsModal from "@/components/CampaignInstructionsModal";
 import BackButton from "@/components/ui/BackButton";
+import ShareButton from "@/components/ShareButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -356,6 +357,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <ShareButton variant="icon" content={{ title: campaign.title, text: campaign.description ?? undefined }} />
           <CampaignInstructionsModal slug={campaign.slug} description={campaign.description} />
           {events.length > 0 && (
             <span className="px-2 sm:px-3 py-0.5 sm:py-1 bg-red-900/40 border border-red-700/60 text-red-300 text-xs font-semibold rounded-full animate-pulse">

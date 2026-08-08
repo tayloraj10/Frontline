@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import UserNav from "./UserNav";
 import NotificationBellWrapper from "./NotificationBellWrapper";
+import AchievementModalWrapper from "./AchievementModalWrapper";
 import SupportButton from "./SupportButton";
 import BottomTabBar from "./nav/BottomTabBar";
 import { buildNavLinks } from "@/lib/navLinks";
@@ -80,6 +81,7 @@ export default async function AppHeader() {
         <div className="flex items-center gap-2">
           <SupportButton />
           {user && <NotificationBellWrapper userId={user.id} />}
+          {user && <AchievementModalWrapper userId={user.id} />}
           <UserNav user={user} points={points} spendablePoints={spendablePoints} avatarUrl={avatarUrl} />
         </div>
       </div>

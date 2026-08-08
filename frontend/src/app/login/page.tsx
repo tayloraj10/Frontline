@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isNativePlatform } from "@/lib/capacitor";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -50,6 +51,25 @@ function LoginForm() {
     const supabase = createClient();
     const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
     if (next) callbackUrl.searchParams.set("next", next);
+
+    // Google blocks its OAuth consent screen from rendering inside embedded
+    // WebViews (including Capacitor's), so on native we open it in the
+    // system browser instead of letting this WebView navigate to it.
+    // NativeAppBridge catches the redirect back via Universal/App Links.
+    if (isNativePlatform()) {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: callbackUrl.toString(), skipBrowserRedirect: true },
+      });
+      if (error || !data.url) {
+        setGoogleLoading(false);
+        return;
+      }
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: data.url });
+      return;
+    }
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: callbackUrl.toString() },

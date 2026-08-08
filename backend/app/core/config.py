@@ -33,5 +33,14 @@ class Settings(BaseSettings):
     def cors_allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
+    @property
+    def cors_origin_regex(self) -> str | None:
+        # Dev-only: lets the Android emulator/a physical device hit the API at the
+        # host's LAN IP (which changes per network) without hardcoding it. Never
+        # enabled in production — see is_production gate below.
+        if self.is_production:
+            return None
+        return r"http://(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}:3000"
+
 
 settings = Settings()

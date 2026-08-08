@@ -67,7 +67,7 @@ This doc has two phases: a short cleanup phase (rename/hide campaigns, tiered ad
 
 ## 9. Capacitor wrapper — get iOS/Android apps into the stores fast
 
-- [ ] First mobile milestone. Wrap the existing Next.js frontend with Capacitor, get store-listing-ready builds for both iOS (App Store) and Android (Play Store). Needs: Capacitor setup, native project scaffolding, app icons/splash screens, store listings/screenshots, developer accounts (Apple Developer Program, Google Play Console) if not already set up, push-notification/deep-link behavior check if the app uses either.
+- [~] First mobile milestone. Wrap the existing Next.js frontend with Capacitor, get store-listing-ready builds for both iOS (App Store) and Android (Play Store). Scoped 2026-08-04 on branch `phase2/capacitor-scoping` — see `dev-docs/capacitor-scoping-2026-08-04.md` for full breakdown. Key decisions: remote-URL wrapper (WebView loads production site, no static export/OAuth rework — that's deferred to the item #10 rewrite), app name is "Frontline" not "Trash War" (item #4 rename is unrelated). Known blocker: Google OAuth sign-in must move off the embedded WebView (Google blocks it) via `@capacitor/browser` + deep link back into the app. Open before build starts: bundle ID, source app icon, and whether store accounts stay personal or move to an LLC/nonprofit.
 
 ## 10. React Native app (longer-term, nicer/more premium)
 

@@ -2,7 +2,7 @@ import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, admin_prod, cleanup_events, contributions, decay, events, geo_units, groups, health, leaderboard, partners, problem_reports, tiles, upload, users
+from app.api.routes import admin, admin_prod, cleanup_events, contributions, decay, device_tokens, events, geo_units, groups, health, leaderboard, partners, problem_reports, tiles, upload, users
 from app.core.config import settings
 
 if settings.sentry_dsn:
@@ -18,6 +18,7 @@ app = FastAPI(title="Frontline API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -37,6 +38,7 @@ app.include_router(cleanup_events.router, prefix="/api")
 app.include_router(cleanup_events.routes_router, prefix="/api")
 app.include_router(groups.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
+app.include_router(device_tokens.router, prefix="/api")
 app.include_router(admin_prod.router, prefix="/api")
 if not settings.is_production:
     app.include_router(admin.router, prefix="/api")
