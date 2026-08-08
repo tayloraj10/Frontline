@@ -55,6 +55,15 @@ async function getFcmAccessToken(serviceAccount: { client_email: string; private
 
 Deno.serve(async (req) => {
   try {
+    // Deployed with verifyJWT disabled since the caller is a Postgres trigger,
+    // not a Supabase Auth user — the trigger authenticates instead by sending
+    // the service_role key (from vault's 'push_service_role_key' secret, see
+    // 062_push_notification_webhook.sql) as a bearer token, checked here.
+    const expectedAuth = `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`;
+    if (req.headers.get("Authorization") !== expectedAuth) {
+      return new Response("unauthorized", { status: 401 });
+    }
+
     const { notification_id } = await req.json();
     if (!notification_id) return new Response("missing notification_id", { status: 400 });
 

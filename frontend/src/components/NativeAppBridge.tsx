@@ -32,7 +32,13 @@ export default function NativeAppBridge() {
       // hand the URL to the main WebView to continue the normal cookie-based
       // session flow.
       const sub = await App.addListener("appUrlOpen", ({ url }) => {
-        if (!url.startsWith("https://www.frontlinemaps.com")) return;
+        let origin: string;
+        try {
+          origin = new URL(url).origin;
+        } catch {
+          return;
+        }
+        if (origin !== "https://www.frontlinemaps.com") return;
         Browser.close().catch(() => {});
         window.location.href = url;
       });
@@ -49,10 +55,11 @@ export default function NativeAppBridge() {
       // resolves, with no way to pass data through it — so the user id it
       // should be registered against has to be handed off via this closure var.
       let pendingUserId: string | null = null;
+      let pendingAccessToken: string | null = null;
 
       const registrationSub = await PushNotifications.addListener("registration", (token) => {
-        if (!pendingUserId) return;
-        registerDeviceToken(pendingUserId, token.value, platform).catch(() => {});
+        if (!pendingUserId || !pendingAccessToken) return;
+        registerDeviceToken(pendingUserId, token.value, platform, pendingAccessToken).catch(() => {});
       });
 
       const tapSub = await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
@@ -65,7 +72,7 @@ export default function NativeAppBridge() {
         tapSub.remove();
       };
 
-      const registerForPush = async (userId: string) => {
+      const registerForPush = async (userId: string, accessToken: string) => {
         const perms = await PushNotifications.checkPermissions();
         let status = perms.receive;
         if (status === "prompt" || status === "prompt-with-rationale") {
@@ -73,15 +80,18 @@ export default function NativeAppBridge() {
         }
         if (status !== "granted") return;
         pendingUserId = userId;
+        pendingAccessToken = accessToken;
         await PushNotifications.register();
       };
 
       const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData.user) registerForPush(userData.user.id).catch(() => {});
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        registerForPush(sessionData.session.user.id, sessionData.session.access_token).catch(() => {});
+      }
 
       const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === "SIGNED_IN" && session?.user) registerForPush(session.user.id).catch(() => {});
+        if (event === "SIGNED_IN" && session) registerForPush(session.user.id, session.access_token).catch(() => {});
       });
       removeAuthListener = () => authListener.subscription.unsubscribe();
     })();
