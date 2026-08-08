@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { syncUserPoints, useUserPoints } from "@/lib/userPoints";
 import { formatPoints } from "@/lib/formatPoints";
+import { isNativePlatform } from "@/lib/capacitor";
 import type { User } from "@supabase/supabase-js";
 
 export default function UserNav({
@@ -48,6 +49,31 @@ export default function UserNav({
 
   const handleSignOut = async () => {
     setOpen(false);
+    // Signing out of Supabase doesn't touch Google's native SDK session on
+    // iOS — GIDSignIn caches it independently. Without also signing out here,
+    // the next native login silently reuses that cached session (rather than
+    // a full fresh consent), and the id_token it returns carries the old
+    // session's nonce, which no longer matches the new one we generate —
+    // Supabase then rejects it with "Nonces mismatch".
+    if (isNativePlatform()) {
+      try {
+        const { SocialLogin } = await import("@capgo/capacitor-social-login");
+        // logout() requires the provider to have been initialized in this
+        // app process — not guaranteed if the user was already signed in
+        // from a previous launch and never hit the native login flow.
+        await SocialLogin.initialize({
+          google: {
+            iOSClientId: "739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com",
+            iOSServerClientId: "739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com",
+            mode: "online",
+          },
+        });
+        await SocialLogin.logout({ provider: "google" });
+      } catch {
+        // Best-effort — a missing/failed native sign-out shouldn't block the
+        // Supabase sign-out below.
+      }
+    }
     await supabase.auth.signOut();
     router.push("/");
     router.refresh();
