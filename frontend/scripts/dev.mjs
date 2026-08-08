@@ -60,5 +60,18 @@ if (ipChanged && existsSync(path.join(frontendRoot, "android"))) {
   }
 }
 
+if (ipChanged && existsSync(path.join(frontendRoot, "ios"))) {
+  console.log(`[dev] Syncing Capacitor iOS project to ${capDevServer}...`);
+  const sync = spawnSync("npx", ["cap", "sync", "ios"], {
+    cwd: frontendRoot,
+    env,
+    stdio: "inherit",
+    shell: true,
+  });
+  if (sync.status !== 0) {
+    console.warn("[dev] cap sync ios failed — browser testing still works, but rebuild the iOS app before testing there.");
+  }
+}
+
 console.log(`[dev] Browser: http://localhost:3000   Emulator/device: ${capDevServer}`);
 spawn("npx", ["next", "dev"], { cwd: frontendRoot, env, stdio: "inherit", shell: true });
