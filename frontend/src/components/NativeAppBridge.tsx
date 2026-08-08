@@ -51,22 +51,19 @@ export default function NativeAppBridge() {
       clearTimeout(splashSafetyTimeout);
       hideSplash(SplashScreen);
 
-      // Google's OAuth screen can't be shown inside the app's embedded WebView
-      // (Google blocks embedded user agents), so login opens it in the system
-      // browser instead. Once Google/Supabase finish and redirect back to our
-      // production callback URL, that redirect arrives here as an app-open
-      // event (via Universal Links / App Links) — close the system browser and
-      // hand the URL to the main WebView to continue the normal cookie-based
-      // session flow.
-      const sub = await App.addListener("appUrlOpen", ({ url }) => {
-        let origin: string;
+      // Google sign-in now goes through the native SDK (see login/page.tsx),
+      // no browser or custom URL scheme involved. This listener just handles
+      // regular https deep links — push notification taps, shared campaign
+      // links, etc.
+      const sub = await App.addListener("appUrlOpen", async ({ url }) => {
+        let parsed: URL;
         try {
-          origin = new URL(url).origin;
+          parsed = new URL(url);
         } catch {
           return;
         }
-        if (origin !== "https://www.frontlinemaps.com") return;
-        Browser.close().catch(() => {});
+        if (parsed.origin !== "https://www.frontlinemaps.com") return;
+        await Browser.close().catch(() => {});
         window.location.href = url;
       });
       removeUrlListener = () => sub.remove();

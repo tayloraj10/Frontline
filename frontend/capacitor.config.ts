@@ -43,6 +43,20 @@ const config: CapacitorConfig = {
       // matching the fill color still left that stroke visible as a ring.
       backgroundColor: '#000000',
     },
+    // Native Google Sign-In SDK — replaces the old browser-redirect OAuth
+    // flow on iOS, which relied on SFSafariViewController following a
+    // redirect into a custom URL scheme. That doesn't happen reliably (a
+    // known iOS platform limitation), so this bypasses the browser entirely.
+    // iOSServerClientId is the Supabase/Web client, not the iOS one — it's
+    // what makes Google issue an ID token audienced to the client Supabase
+    // already trusts.
+    SocialLogin: {
+      google: {
+        iOSClientId: '739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com',
+        iOSServerClientId: '739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com',
+        mode: 'online',
+      },
+    },
   },
 };
 

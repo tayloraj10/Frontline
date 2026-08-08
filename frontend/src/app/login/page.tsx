@@ -49,27 +49,67 @@ function LoginForm() {
   async function handleGoogleLogin() {
     setGoogleLoading(true);
     const supabase = createClient();
-    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
-    if (next) callbackUrl.searchParams.set("next", next);
 
     // Google blocks its OAuth consent screen from rendering inside embedded
-    // WebViews (including Capacitor's), so on native we open it in the
-    // system browser instead of letting this WebView navigate to it.
-    // NativeAppBridge catches the redirect back via Universal/App Links.
+    // WebViews (including Capacitor's). The old fix opened it in the system
+    // browser instead, but SFSafariViewController (what @capacitor/browser
+    // uses on iOS) doesn't reliably follow the redirect back into a custom
+    // URL scheme — a known iOS platform limitation, not fixable via config.
+    // So on native we skip the browser entirely and call Google's native
+    // Sign-In SDK directly, then hand its ID token to Supabase.
     if (isNativePlatform()) {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: callbackUrl.toString(), skipBrowserRedirect: true },
+      const { SocialLogin } = await import("@capgo/capacitor-social-login");
+      await SocialLogin.initialize({
+        google: {
+          iOSClientId: "739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com",
+          iOSServerClientId: "739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com",
+          mode: "online",
+        },
       });
-      if (error || !data.url) {
+
+      const rawNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawNonce));
+      const nonceDigest = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      try {
+        const result = await SocialLogin.login({
+          provider: "google",
+          options: { scopes: ["email", "profile"], nonce: nonceDigest },
+        });
+        const idToken = "result" in result && "idToken" in result.result ? result.result.idToken : undefined;
+        if (!idToken) {
+          setGoogleLoading(false);
+          return;
+        }
+
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: "google",
+          token: idToken,
+          nonce: rawNonce,
+        });
+        if (error) {
+          setGoogleLoading(false);
+          return;
+        }
+      } catch {
         setGoogleLoading(false);
         return;
       }
-      const { Browser } = await import("@capacitor/browser");
-      await Browser.open({ url: data.url });
+
+      if (next && next.startsWith("/")) {
+        window.location.href = next;
+        return;
+      }
+      window.location.href = "/campaigns";
       return;
     }
 
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (next) callbackUrl.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: callbackUrl.toString() },
