@@ -9,7 +9,7 @@ export async function GET() {
       apps: [],
       details: [
         {
-          appID: "4PF46V9GR7.com.frontline.app",
+          appID: "4PF46V9GR7.com.frontlinemaps.app",
           paths: ["/auth/callback", "/auth/callback/*"],
         },
       ],

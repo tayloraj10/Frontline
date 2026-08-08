@@ -4,6 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { Camera } from "@capacitor/camera";
+import type { MediaResult } from "@capacitor/camera";
+import { isNativePlatform } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
@@ -460,6 +463,21 @@ function GpsIndicator({
 
 // ─── Camera capture ───────────────────────────────────────────────────────────
 
+// Native camera/gallery results come back as a webPath (or file uri as a
+// fallback) rather than a File, but uploadToR2 needs a real File, so fetch
+// it back through the WebView's registered scheme handler and re-wrap it.
+async function mediaResultToFile(result: MediaResult, index = 0): Promise<File> {
+  const src = result.webPath ?? result.uri;
+  if (!src) throw new Error("Photo capture returned no file");
+  const res = await fetch(src);
+  const blob = await res.blob();
+  const format = result.metadata?.format?.toLowerCase();
+  const ext = format === "png" ? "png" : "jpg";
+  return new File([blob], `photo-${Date.now()}-${index}.${ext}`, {
+    type: blob.type || (ext === "png" ? "image/png" : "image/jpeg"),
+  });
+}
+
 function CameraModal({
   onCapture,
   onClose,
@@ -563,19 +581,54 @@ function PhotoCaptureInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showCamera, setShowCamera] = useState(false);
 
+  // On native iOS/Android, use the Capacitor plugin for a real native camera
+  // and gallery picker — the getUserMedia/<input type=file> paths below are
+  // web-only fallbacks (WKWebView doesn't support getUserMedia, and routing
+  // through the plain file input's "Take Photo" action sheet option crashed
+  // the app before NSCameraUsageDescription was added to Info.plist).
+  const handleTakePhoto = async () => {
+    if (!isNativePlatform()) {
+      setShowCamera(true);
+      return;
+    }
+    try {
+      const result = await Camera.takePhoto({ quality: 90 });
+      onFilesSelected([await mediaResultToFile(result)]);
+    } catch {
+      // User cancelled the native camera sheet — nothing to do.
+    }
+  };
+
+  const handleChooseFromGallery = async () => {
+    if (!isNativePlatform()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const { results } = await Camera.chooseFromGallery({
+        allowMultipleSelection: multiple,
+        limit: multiple ? 0 : 1,
+      });
+      const files = await Promise.all(results.map((r, i) => mediaResultToFile(r, i)));
+      if (files.length) onFilesSelected(files);
+    } catch {
+      // User cancelled the native gallery picker — nothing to do.
+    }
+  };
+
   return (
     <>
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setShowCamera(true)}
+          onClick={handleTakePhoto}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
         >
           📷 Take Photo
         </button>
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={handleChooseFromGallery}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
         >
           🖼️ Choose from Gallery

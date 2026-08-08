@@ -10,6 +10,12 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/backend/.env",
       "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "osx": {
+        "python": "${workspaceFolder}/backend/.venv/bin/python"
+      },
+      "linux": {
+        "python": "${workspaceFolder}/backend/.venv/bin/python"
+      },
       "jinja": true
     },
     {

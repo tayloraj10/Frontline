@@ -23,10 +23,10 @@ const STEPS = [
     title: "How it works",
     body: null,
     bullets: [
-      { icon: "📍", text: "Log a contribution — cleanup bags, photos, voter registration, and more" },
-      { icon: "⚑", text: "Claim zip codes — your geo-unit gets your color on the map" },
-      { icon: "⚡", text: "Watch dynamic events unfold — hotspots, decay, cascading unlocks" },
-      { icon: "🏆", text: "Compete on leaderboards — individually or as a group" },
+      { icon: "📍", text: "Log a contribution: cleanup bags, photos, voter registration, and more" },
+      { icon: "🎯", text: "Contribute to zip codes to make progress visible on the map" },
+      { icon: "⚡", text: "Watch dynamic events unfold: hotspots, decay, cascading unlocks" },
+      { icon: "🏆", text: "Compete on leaderboards: individually or as a group" },
     ],
   },
   {

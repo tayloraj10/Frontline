@@ -4392,7 +4392,7 @@ export default function CampaignMap({
 
   return (
     <div className="relative flex flex-col flex-1 min-h-[500px]">
-      <div ref={mapContainer} className="flex-1 w-full" />
+      <div ref={mapContainer} data-map-container className="flex-1 w-full" />
 
       {selectedZip && !pinPickerActive && !areaPickerActive && !routePickerActive && (
         isChoropleth ? (
