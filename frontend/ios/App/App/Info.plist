@@ -26,6 +26,12 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Frontline uses your location to show nearby activity and data.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Frontline uses your camera to photograph cleanups and trash reports.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Frontline lets you attach existing photos to cleanups and trash reports.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Frontline can save photos you take to your library.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Only exempts local/private-network addresses (e.g. the LAN dev

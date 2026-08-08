@@ -1,5 +1,5 @@
 {
-  "originHash" : "dfa5f7f03ce726538acca948bb23f98de9b207985516d4c4971aa60a2dc241f4",
+  "originHash" : "ba4605d5cdf8b28fd3a2d6ede31a099ef1f77a0eeb3bd78ccbe9f4daa73231b3",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -98,6 +98,15 @@
       "state" : {
         "revision" : "040d087ac2267d2ddd4cca36c757d1c6a05fdbfe",
         "version" : "101.0.0"
+      }
+    },
+    {
+      "identity" : "ion-ios-camera",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ionic-team/ion-ios-camera.git",
+      "state" : {
+        "revision" : "9068b2cc9584bfa118c185b8032bbebb3a4a2174",
+        "version" : "1.0.5"
       }
     },
     {
