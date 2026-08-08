@@ -6,6 +6,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "next build",
     "build:android": "node scripts/build-android.mjs",
+    "sync:ios-version": "node scripts/sync-ios-version.mjs",
     "start": "next start",
     "lint": "eslint"
   },
