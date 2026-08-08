@@ -14,6 +14,10 @@ const config: CapacitorConfig = {
   appId: 'com.frontlinemaps.app',
   appName: 'Frontline',
   webDir: 'www',
+  // Lets the server tell native app requests apart from real mobile-web
+  // visitors (e.g. to scope pinch-zoom-disabling viewport settings to the
+  // app only) — see generateViewport() in src/app/layout.tsx.
+  appendUserAgent: 'FrontlineNativeApp',
   server: {
     url: devServerUrl || PRODUCTION_URL,
     // Google's OAuth consent screen must NOT be treated as an in-app allowed
