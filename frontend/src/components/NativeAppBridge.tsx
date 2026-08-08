@@ -51,15 +51,10 @@ export default function NativeAppBridge() {
       clearTimeout(splashSafetyTimeout);
       hideSplash(SplashScreen);
 
-      // Google's OAuth screen can't be shown inside the app's embedded WebView
-      // (Google blocks embedded user agents), so login opens it in the system
-      // browser instead. The redirect back uses our custom URL scheme
-      // (com.frontlinemaps.app://auth/callback) rather than a Universal Link,
-      // since Universal Links only reliably fire on a user tap and not on the
-      // automatic redirect chain Google/Supabase do after consent — a custom
-      // scheme always triggers this appUrlOpen event. Regular https deep
-      // links (push notification taps, shared campaign links, etc.) still
-      // come through here too, so both forms are handled.
+      // Google sign-in now goes through the native SDK (see login/page.tsx),
+      // no browser or custom URL scheme involved. This listener just handles
+      // regular https deep links — push notification taps, shared campaign
+      // links, etc.
       const sub = await App.addListener("appUrlOpen", async ({ url }) => {
         let parsed: URL;
         try {
@@ -67,13 +62,9 @@ export default function NativeAppBridge() {
         } catch {
           return;
         }
-        const isProdLink = parsed.origin === "https://www.frontlinemaps.com";
-        const isAuthCallbackScheme =
-          parsed.protocol === "com.frontlinemaps.app:" && parsed.host === "auth" && parsed.pathname === "/callback";
-        if (!isProdLink && !isAuthCallbackScheme) return;
+        if (parsed.origin !== "https://www.frontlinemaps.com") return;
         await Browser.close().catch(() => {});
-        const targetUrl = isAuthCallbackScheme ? `https://www.frontlinemaps.com/auth/callback${parsed.search}` : url;
-        window.location.href = targetUrl;
+        window.location.href = url;
       });
       removeUrlListener = () => sub.remove();
 
