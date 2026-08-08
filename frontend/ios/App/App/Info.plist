@@ -36,6 +36,17 @@
 	<string>Frontline can save photos you take to your library.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.frontlinemaps.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.frontlinemaps.app</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Only exempts local/private-network addresses (e.g. the LAN dev

@@ -53,21 +53,27 @@ export default function NativeAppBridge() {
 
       // Google's OAuth screen can't be shown inside the app's embedded WebView
       // (Google blocks embedded user agents), so login opens it in the system
-      // browser instead. Once Google/Supabase finish and redirect back to our
-      // production callback URL, that redirect arrives here as an app-open
-      // event (via Universal Links / App Links) — close the system browser and
-      // hand the URL to the main WebView to continue the normal cookie-based
-      // session flow.
-      const sub = await App.addListener("appUrlOpen", ({ url }) => {
-        let origin: string;
+      // browser instead. The redirect back uses our custom URL scheme
+      // (com.frontlinemaps.app://auth/callback) rather than a Universal Link,
+      // since Universal Links only reliably fire on a user tap and not on the
+      // automatic redirect chain Google/Supabase do after consent — a custom
+      // scheme always triggers this appUrlOpen event. Regular https deep
+      // links (push notification taps, shared campaign links, etc.) still
+      // come through here too, so both forms are handled.
+      const sub = await App.addListener("appUrlOpen", async ({ url }) => {
+        let parsed: URL;
         try {
-          origin = new URL(url).origin;
+          parsed = new URL(url);
         } catch {
           return;
         }
-        if (origin !== "https://www.frontlinemaps.com") return;
-        Browser.close().catch(() => {});
-        window.location.href = url;
+        const isProdLink = parsed.origin === "https://www.frontlinemaps.com";
+        const isAuthCallbackScheme =
+          parsed.protocol === "com.frontlinemaps.app:" && parsed.host === "auth" && parsed.pathname === "/callback";
+        if (!isProdLink && !isAuthCallbackScheme) return;
+        await Browser.close().catch(() => {});
+        const targetUrl = isAuthCallbackScheme ? `https://www.frontlinemaps.com/auth/callback${parsed.search}` : url;
+        window.location.href = targetUrl;
       });
       removeUrlListener = () => sub.remove();
 

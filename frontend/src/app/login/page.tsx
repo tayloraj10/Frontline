@@ -49,17 +49,21 @@ function LoginForm() {
   async function handleGoogleLogin() {
     setGoogleLoading(true);
     const supabase = createClient();
-    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
-    if (next) callbackUrl.searchParams.set("next", next);
 
     // Google blocks its OAuth consent screen from rendering inside embedded
     // WebViews (including Capacitor's), so on native we open it in the
     // system browser instead of letting this WebView navigate to it.
-    // NativeAppBridge catches the redirect back via Universal/App Links.
+    // Universal Links only reliably fire on a user tap, not on the automatic
+    // redirect chain Google/Supabase do after consent, so the return trip
+    // uses a custom URL scheme instead (always triggers app-open, unlike
+    // Universal Links) — NativeAppBridge catches it via appUrlOpen and
+    // forwards to the real https callback route to finish the session.
     if (isNativePlatform()) {
+      const nativeCallbackUrl = new URL("com.frontlinemaps.app://auth/callback");
+      if (next) nativeCallbackUrl.searchParams.set("next", next);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: callbackUrl.toString(), skipBrowserRedirect: true },
+        options: { redirectTo: nativeCallbackUrl.toString(), skipBrowserRedirect: true },
       });
       if (error || !data.url) {
         setGoogleLoading(false);
@@ -70,6 +74,8 @@ function LoginForm() {
       return;
     }
 
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (next) callbackUrl.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: callbackUrl.toString() },
