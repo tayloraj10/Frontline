@@ -74,7 +74,7 @@ npx cap open ios
 
 ## 10. Every release after the first
 
-- Version bump: bump `frontend/package.json`'s `version`, then run `npm run sync:ios-version` — it derives both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number, must strictly increase per submission, even across the same marketing version) from it, the same way `npm run build:android` derives Android's `versionName`/`versionCode`. Keeps web, iOS, and Android on one source of truth instead of hand-editing each platform separately.
+- Version bump: bump `frontend/package.json`'s `version`, then run `npm run sync:ios-version` — it sets `MARKETING_VERSION` from `package.json` (mirroring how `npm run build:android` derives Android's `versionName`) but `CURRENT_PROJECT_VERSION` (build number) is a separate auto-incrementing counter, not derived from the semver — it just reads whatever's currently in `project.pbxproj` and adds 1. This is intentional: Apple requires each upload's build number to strictly increase across *all* marketing versions, so deriving it from semver caused collisions on same-version rebuilds. Run this every time you're about to archive, even without a version bump.
 - Re-run `npx cap sync ios` after any Capacitor plugin change.
 - Re-archive and re-upload through the same TestFlight → submit flow each time; there's no separate "patch" fast path.
 
