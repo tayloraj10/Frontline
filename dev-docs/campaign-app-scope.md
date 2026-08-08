@@ -189,6 +189,17 @@ Deliberately not fixing this now (submissions stay honor-system, same as the res
 
 ---
 
+### Cleanup Pin Picker — ZIP-Lock Confusing/Outdated (Future Work)
+
+When logging a cleanup contribution, the drag pin (`CampaignMap.tsx`, pin-picker effect around line 4064) is constrained to stay within the same `geo_unit` (zip/postcode) as the user's starting GPS point, via `/api/contributions/{id}/geo-unit-at`. It's client-side only — nothing on the server rejects a submission based on it. The warning text always says "ZIP code"/"postcode" regardless of which geo layer (if any) the user has toggled on, which is confusing since [[territory capture]] is off by default now (see "Territory / geo stats" section) and the constraint was built for the old territory-claiming anti-gaming mechanic. Other pin-picker flows (`solarpunk_photo`, `report`, `host_event`) already pass `constrained=false` — only the `contribute` flow still locks it.
+
+Options considered, not yet decided:
+1. **Drop the lock entirely** — rely on GPS capture + photo evidence, same as the other unconstrained flows.
+2. **Swap zip-boundary for a distance radius** (reuse `cleanup_event_proximity_meters` or similar) — decouples from any geo layer, so the warning becomes layer-agnostic ("stay within Xm") instead of naming ZIP/postcode. Leaning toward this option.
+3. Keep zip-locking but only enforce/word it when the campaign's `geo_unit` is actually zip/postcode-based.
+
+---
+
 ### Campaign Create Form — Known Gaps
 
 #### Contribution types

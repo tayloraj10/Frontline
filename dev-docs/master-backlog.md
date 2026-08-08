@@ -40,6 +40,7 @@ Single source of truth for "what's left, across everything." Each item links to 
 - [ ] **Contested-zone alerts** — needs a margin-to-flip concept (currently only leader's `total_value` is stored, no runner-up), a `zone_contested` trigger, in-app-only notification surface. → `trash-war-feedback-backlog.md` (item 7), `project_trash_war_deferred` memory
 - [ ] **Geolocation shared-owner refactor** — unify `CampaignMap`'s `GeolocateControl` + `ContributionPanel`'s independent trigger into one shared hook/store. Deferred, ~1-2 sessions, fully manual QA burden. → `cleanup-events-dev-plan.md` (item 12), `project_geolocation_shared_owner_refactor` memory
 - [ ] **Group logo on captured territory** — deferred since territory-capture layer is going off by default; revisit if it becomes first-class again. → `cleanup-events-dev-plan.md` (item 11)
+- [ ] **Cleanup pin-picker ZIP-lock is confusing/outdated** — dragging the pin when logging a cleanup is constrained to the user's starting zip/postcode (leftover from territory-claim anti-gaming), and always says "ZIP code" regardless of which geo layer is visible. Client-side only, not server-enforced. Leaning toward replacing with a distance-radius check instead of a geo_unit boundary. → `campaign-app-scope.md`
 
 ## Campaign system / events
 
