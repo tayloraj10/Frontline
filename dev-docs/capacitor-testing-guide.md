@@ -54,6 +54,64 @@ Found via the camera bug (2026-08-08) — `getUserMedia`-based camera capture si
   - Side note: if Google Maps isn't installed, the universal link falls through to the Google Maps *website*, not Apple Maps — there's no Apple Maps fallback today. Would need explicit code (e.g. `maps://`/`maps.apple.com` fallback) if that's wanted.
 - **`navigator.clipboard.writeText()` copy buttons** (redemption code copy in `RedemptionConfirmationModal.tsx`, support email copy in `SupportButton.tsx`, admin partner-apply URL copy in `AdminPanel.tsx`) — no `@capacitor/clipboard` dependency exists as a fallback. Modern WKWebView likely supports this from a user gesture, but unverified. Note: manually selecting text and copying is the OS's native text selection and always works — it's not the same code path as these buttons, so it doesn't confirm this one way or the other. Test: redeem a partner offer and use its "copy code" button, or the support button's "copy email."
 
+## Getting logs off a real device (TestFlight/App Store Connect build)
+
+Needed this 2026-08-09 chasing a bug where the cleanup modal's "Take Photo"/"Choose from
+Gallery" buttons appeared to do nothing on a real iPhone running a TestFlight build (see
+"Cleanup modal photo silently failing to attach" below for the actual bug). Two different
+tools depending on what kind of log you need:
+
+- **Xcode Devices/Console** (native/Swift-level logs, crashes): plug the iPhone into a
+  Mac, Xcode → Window → Devices and Simulators → select the phone → "Open Console" (or
+  just build+run onto the device from Xcode and watch its console pane). This does
+  **not** show `console.log`/`console.error` calls from the app's JS — those run inside
+  the WKWebView's own JS context, invisible to the native log stream.
+- **Safari Web Inspector** (JS console/network — what you want for anything logged from
+  React/TS code): on the iPhone, Settings → Safari → Advanced → enable **Web Inspector**.
+  Plug the phone into a Mac, then on the Mac enable Safari's Develop menu (Safari →
+  Settings → Advanced → "Show Develop menu in menu bar") if it's not already there. Open
+  Safari → Develop → (phone's name) → the Frontline app's WebView shows up as an
+  inspectable target even though it's a native app, not a browser tab, because Capacitor
+  apps are just a WKWebView under the hood. Opens a normal DevTools window live-attached
+  to the running app — reproduce the bug and watch the console/network tabs.
+- A build has to actually contain the logging you want to see before either of these is
+  useful — a TestFlight build predates any code changes you've made locally until you
+  bump the build number and re-upload.
+
+## Cleanup modal photo silently failing to attach (found 2026-08-09)
+
+Reported: on a real iPhone testing a TestFlight build, tapping "Take Photo" or "Choose
+from Gallery" in the cleanup contribution modal would run the native picker to
+completion but the photo never appeared in the modal — no error, no thumbnail, nothing.
+
+Root cause found in `PhotoCaptureInput` in
+`frontend/src/components/contributions/ContributionPanel.tsx`: `handleTakePhoto` and
+`handleChooseFromGallery` wrapped both the native `Camera.takePhoto()`/
+`chooseFromGallery()` call *and* the follow-up `mediaResultToFile()` conversion (which
+`fetch()`s the plugin's returned `webPath` back into a `Blob`) in a single `catch {}`
+that assumed every failure meant "user cancelled the picker." A real failure partway
+through — e.g. the `fetch()` of the webPath — was swallowed identically to a genuine
+cancel, so nothing showed up and nothing was logged.
+
+Fixed by only treating Capacitor's actual cancellation rejection ("User cancelled photos
+app" — confirmed in `@capacitor/camera`'s iOS/Android source as the literal message used
+for both platforms) as silent; any other error now logs via `console.error` and shows a
+small inline "Couldn't add that photo — please try again." message under the buttons.
+
+**Still open:** what's actually throwing on the real device hasn't been confirmed yet —
+this fix makes the failure visible instead of fixing an unconfirmed root cause. Leading
+hypothesis going in: this app runs as a **remote-URL wrapper** (WebView loaded from
+`https://www.frontlinemaps.com`, not a bundled local page — see "Quick facts" above),
+so the plugin's `webPath` for a captured photo is served from a different scheme
+(`capacitor://localhost/...`) than the page's own origin, which needs the CORS-header
+allowance in `WKURLSchemeHandler` (Capacitor's `isUsingLiveReload` check) to make the
+cross-scheme `fetch()` succeed at all. That check is theoretically satisfied here
+(`server.url`'s scheme "https" differs from the local resource's "capacitor" scheme, so
+Capacitor's asset handler does add `Access-Control-Allow-Origin`), so this may turn out
+to be a red herring — but it's the first thing to rule in/out once real device console
+logs are in hand. Next step: reproduce on a build containing this fix, read the actual
+error via Safari Web Inspector (see above), and update this note with what it says.
+
 ## Common gotcha checklist
 
 1. Did you mean to see prod or your local branch? Check `android/app/src/main/assets/capacitor.config.json` — its `server.url` is the actual source of truth for what the last build will load.

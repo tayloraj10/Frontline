@@ -34,6 +34,13 @@ const config: CapacitorConfig = {
   // leave it stuck forever. Android doesn't use this plugin — its splash
   // is the separate native androidx.core.splashscreen mechanism — so this
   // has no effect there.
+  ios: {
+    // Capacitor only auto-enables Safari Web Inspector on Debug builds —
+    // Release builds (TestFlight, App Store) are non-inspectable by default.
+    // Requires the device to be physically connected and trusted, so this is
+    // safe to leave on rather than toggling it per debugging session.
+    webContentsDebuggingEnabled: true,
+  },
   plugins: {
     SplashScreen: {
       launchAutoHide: false,

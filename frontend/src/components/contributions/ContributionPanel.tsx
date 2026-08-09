@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Camera } from "@capacitor/camera";
 import type { MediaResult } from "@capacitor/camera";
+import { Filesystem } from "@capacitor/filesystem";
 import { isNativePlatform } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
@@ -464,19 +465,28 @@ function GpsIndicator({
 
 // ─── Camera capture ───────────────────────────────────────────────────────────
 
-// Native camera/gallery results come back as a webPath (or file uri as a
-// fallback) rather than a File, but uploadToR2 needs a real File, so fetch
-// it back through the WebView's registered scheme handler and re-wrap it.
+// Native camera/gallery results come back as a native file uri (and a
+// capacitor://localhost webPath alias of it), but uploadToR2 needs a real
+// File. This used to fetch() the webPath, which works fine while the WebView's
+// own page is served from a local/dev origin — but in production the page
+// loads from the real https://www.frontlinemaps.com origin, and WKWebView's
+// mixed-content policy blocks an HTTPS page from fetching a non-https
+// capacitor:// resource, silently breaking photo capture in TestFlight/App
+// Store builds only. Filesystem.readFile reads the bytes through the native
+// plugin bridge instead of a WebView network request, so it isn't subject to
+// that same-origin/mixed-content policy at all.
 async function mediaResultToFile(result: MediaResult, index = 0): Promise<File> {
-  const src = result.webPath ?? result.uri;
-  if (!src) throw new Error("Photo capture returned no file");
-  const res = await fetch(src);
-  const blob = await res.blob();
+  const path = result.uri ?? result.webPath;
+  if (!path) throw new Error("Photo capture returned no file");
   const format = result.metadata?.format?.toLowerCase();
   const ext = format === "png" ? "png" : "jpg";
-  return new File([blob], `photo-${Date.now()}-${index}.${ext}`, {
-    type: blob.type || (ext === "png" ? "image/png" : "image/jpeg"),
-  });
+  const type = ext === "png" ? "image/png" : "image/jpeg";
+  const { data } = await Filesystem.readFile({ path });
+  const base64 = typeof data === "string" ? data : await data.text();
+  const bytes = atob(base64);
+  const buffer = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+  return new File([buffer], `photo-${Date.now()}-${index}.${ext}`, { type });
 }
 
 function CameraModal({
@@ -572,6 +582,15 @@ function CameraModal({
   );
 }
 
+// Capacitor rejects with this exact message (iOS and Android both use it) when the user
+// dismisses the native camera/gallery sheet without picking anything — every other
+// rejection (permission denial, webPath→Blob conversion failure, etc.) is a real error
+// that must not be swallowed the same way, or a photo can silently fail to appear with
+// no feedback at all.
+function isUserCancellation(err: unknown): boolean {
+  return err instanceof Error && err.message === "User cancelled photos app";
+}
+
 function PhotoCaptureInput({
   multiple,
   onFilesSelected,
@@ -581,6 +600,7 @@ function PhotoCaptureInput({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   // On native iOS/Android, use the Capacitor plugin for a real native camera
   // and gallery picker — the getUserMedia/<input type=file> paths below are
@@ -592,11 +612,15 @@ function PhotoCaptureInput({
       setShowCamera(true);
       return;
     }
+    setCaptureError(null);
     try {
       const result = await Camera.takePhoto({ quality: 90 });
       onFilesSelected([await mediaResultToFile(result)]);
-    } catch {
-      // User cancelled the native camera sheet — nothing to do.
+    } catch (err) {
+      if (!isUserCancellation(err)) {
+        console.error("Camera.takePhoto failed", err);
+        setCaptureError("Couldn't add that photo — please try again.");
+      }
     }
   };
 
@@ -605,6 +629,7 @@ function PhotoCaptureInput({
       fileInputRef.current?.click();
       return;
     }
+    setCaptureError(null);
     try {
       const { results } = await Camera.chooseFromGallery({
         allowMultipleSelection: multiple,
@@ -612,8 +637,11 @@ function PhotoCaptureInput({
       });
       const files = await Promise.all(results.map((r, i) => mediaResultToFile(r, i)));
       if (files.length) onFilesSelected(files);
-    } catch {
-      // User cancelled the native gallery picker — nothing to do.
+    } catch (err) {
+      if (!isUserCancellation(err)) {
+        console.error("Camera.chooseFromGallery failed", err);
+        setCaptureError("Couldn't add that photo — please try again.");
+      }
     }
   };
 
@@ -635,6 +663,7 @@ function PhotoCaptureInput({
           🖼️ Choose from Gallery
         </button>
       </div>
+      {captureError && <p className="text-red-400 text-xs mt-1.5">{captureError}</p>}
       <input
         ref={fileInputRef}
         type="file"
@@ -1459,7 +1488,7 @@ function ContributeModal({
                     <IconButton
                       onClick={() => setExistingPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
                       size="sm"
-                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                       aria-label="Remove photo"
                     >
                       ×
@@ -1480,7 +1509,7 @@ function ContributeModal({
                     <IconButton
                       onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
                       size="sm"
-                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                       aria-label="Remove photo"
                     >
                       ×
@@ -1694,7 +1723,7 @@ function ReportModal({
                 <IconButton
                   onClick={() => setPhoto(null)}
                   size="sm"
-                  className="absolute top-0 right-0 bg-black/70 text-white text-[10px] leading-none rounded-bl rounded-tr-lg"
+                  className="absolute top-1 right-1 bg-black/70 text-white text-[10px] leading-none rounded-lg! w-6! h-6!"
                   aria-label="Remove photo"
                 >
                   ×
@@ -2350,7 +2379,7 @@ function ClaimReportModal({
                       <IconButton
                         onClick={() => setPhoto(null)}
                         size="sm"
-                        className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                        className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                         aria-label="Remove photo"
                       >
                         ×
@@ -2448,7 +2477,7 @@ function ClaimReportModal({
                     <IconButton
                       onClick={() => setPhoto(null)}
                       size="sm"
-                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                       aria-label="Remove photo"
                     >
                       ×
@@ -2965,7 +2994,7 @@ function HostEventModal({
                 <IconButton
                   onClick={() => setImageFile(null)}
                   size="sm"
-                  className="absolute top-0 right-0 bg-black/70 text-white text-[10px] leading-none rounded-bl rounded-tr-lg"
+                  className="absolute top-1 right-1 bg-black/70 text-white text-[10px] leading-none rounded-lg! w-6! h-6!"
                   aria-label="Remove photo"
                 >
                   ×
@@ -3780,9 +3809,9 @@ export default function ContributionPanel({
                     whileTap={{ scale: 0.9 }}
                     animate={{ rotate: logHostExpanded ? 45 : 0 }}
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-zinc-700 text-2xl backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-zinc-700 text-2xl backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                   >
-                    {logHostExpanded ? "✕" : btn.icon}
+                    {logHostExpanded ? "+" : btn.icon}
                   </motion.button>
                   <AnimatePresence>
                     {logHostExpanded && (
@@ -3797,7 +3826,7 @@ export default function ContributionPanel({
                           exit={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
                           transition={{ type: "spring", stiffness: 420, damping: 30 }}
                           whileTap={{ scale: 0.9 }}
-                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-zinc-700 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-zinc-700 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                         >
                           <span className="text-base leading-none">{btn.icon}</span>
                           <span className="text-[8px] leading-none text-zinc-300">Log</span>
@@ -3812,7 +3841,7 @@ export default function ContributionPanel({
                           exit={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
                           transition={{ type: "spring", stiffness: 420, damping: 30, delay: 0.03 }}
                           whileTap={{ scale: 0.9 }}
-                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-sky-800/60 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-sky-800/60 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                         >
                           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-zinc-900" />
                           <span className="text-base leading-none">📅</span>
