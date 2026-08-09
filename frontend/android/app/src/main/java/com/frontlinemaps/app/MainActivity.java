@@ -1,4 +1,4 @@
-package com.frontline.app;
+package com.frontlinemaps.app;
 
 import android.content.Intent;
 import android.util.Log;
