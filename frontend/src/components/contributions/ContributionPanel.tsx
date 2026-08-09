@@ -572,6 +572,15 @@ function CameraModal({
   );
 }
 
+// Capacitor rejects with this exact message (iOS and Android both use it) when the user
+// dismisses the native camera/gallery sheet without picking anything — every other
+// rejection (permission denial, webPath→Blob conversion failure, etc.) is a real error
+// that must not be swallowed the same way, or a photo can silently fail to appear with
+// no feedback at all.
+function isUserCancellation(err: unknown): boolean {
+  return err instanceof Error && err.message === "User cancelled photos app";
+}
+
 function PhotoCaptureInput({
   multiple,
   onFilesSelected,
@@ -581,6 +590,7 @@ function PhotoCaptureInput({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   // On native iOS/Android, use the Capacitor plugin for a real native camera
   // and gallery picker — the getUserMedia/<input type=file> paths below are
@@ -592,11 +602,15 @@ function PhotoCaptureInput({
       setShowCamera(true);
       return;
     }
+    setCaptureError(null);
     try {
       const result = await Camera.takePhoto({ quality: 90 });
       onFilesSelected([await mediaResultToFile(result)]);
-    } catch {
-      // User cancelled the native camera sheet — nothing to do.
+    } catch (err) {
+      if (!isUserCancellation(err)) {
+        console.error("Camera.takePhoto failed", err);
+        setCaptureError("Couldn't add that photo — please try again.");
+      }
     }
   };
 
@@ -605,6 +619,7 @@ function PhotoCaptureInput({
       fileInputRef.current?.click();
       return;
     }
+    setCaptureError(null);
     try {
       const { results } = await Camera.chooseFromGallery({
         allowMultipleSelection: multiple,
@@ -612,8 +627,11 @@ function PhotoCaptureInput({
       });
       const files = await Promise.all(results.map((r, i) => mediaResultToFile(r, i)));
       if (files.length) onFilesSelected(files);
-    } catch {
-      // User cancelled the native gallery picker — nothing to do.
+    } catch (err) {
+      if (!isUserCancellation(err)) {
+        console.error("Camera.chooseFromGallery failed", err);
+        setCaptureError("Couldn't add that photo — please try again.");
+      }
     }
   };
 
@@ -635,6 +653,7 @@ function PhotoCaptureInput({
           🖼️ Choose from Gallery
         </button>
       </div>
+      {captureError && <p className="text-red-400 text-xs mt-1.5">{captureError}</p>}
       <input
         ref={fileInputRef}
         type="file"
