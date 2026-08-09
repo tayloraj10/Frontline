@@ -73,6 +73,12 @@ function LoginForm() {
           google: {
             iOSClientId: "739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com",
             iOSServerClientId: "739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com",
+            // Android's Credential Manager doesn't use a per-platform client ID like
+            // iOS does — it identifies the app via package name + SHA-1 registered
+            // against the Android OAuth client in Cloud Console. webClientId is the
+            // *web*-type client (same one as iOSServerClientId above), used as the
+            // token audience Supabase verifies against.
+            webClientId: "739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com",
             mode: "online",
           },
         });
