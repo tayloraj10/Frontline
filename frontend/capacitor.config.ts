@@ -55,6 +55,10 @@ const config: CapacitorConfig = {
       google: {
         iOSClientId: '739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com',
         iOSServerClientId: '739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com',
+        // Android's Credential Manager has no per-platform client ID; it identifies
+        // the app via package name + SHA-1 registered on the Android OAuth client
+        // in Cloud Console. webClientId is the web-type client, used as token audience.
+        webClientId: '739267403997-e0b8jujgl51c8vpiiemhm4f8v78phfmm.apps.googleusercontent.com',
         mode: 'online',
       },
     },

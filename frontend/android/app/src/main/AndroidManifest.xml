@@ -25,8 +25,8 @@
               and login/page.tsx) so it reopens this app instead of staying in Chrome.
               android:autoVerify requires assetlinks.json at
               https://www.frontlinemaps.com/.well-known/assetlinks.json to list this
-              app's release-signing SHA-256 fingerprint — currently a placeholder there
-              until a release keystore exists, so this intent-filter won't verify yet.
+              app's release-signing SHA-256 fingerprint — live in prod as of 2026-08-08.
+              Verification is checked at install time, so test with a fresh install.
             -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -56,4 +56,9 @@
          instead when running inside the app. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Backs @capacitor/camera (see ContributionPanel.tsx's cleanup-photo capture).
+         READ_MEDIA_IMAGES replaces READ_EXTERNAL_STORAGE for gallery access on API 33+. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 </manifest>
