@@ -47,7 +47,7 @@ export default async function AppHeader() {
 
   return (
     <>
-    <header className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50 shadow-elevation-2">
+    <header className="pt-safe border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50 shadow-elevation-2">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
           <Link
