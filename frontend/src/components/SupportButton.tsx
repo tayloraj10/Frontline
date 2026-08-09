@@ -30,7 +30,7 @@ export default function SupportButton() {
     <div ref={ref} className="relative hidden sm:block">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-700/60 bg-zinc-800/40 hover:bg-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-medium"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-700/60 bg-zinc-800/40 hover:bg-zinc-800 hover:border-zinc-600 active:bg-zinc-800 active:border-zinc-600 active:scale-[0.97] text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-[background-color,border-color,color,transform] duration-150 text-xs font-medium touch-manipulation"
       >
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="shrink-0" aria-hidden="true">
           <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
@@ -46,10 +46,10 @@ export default function SupportButton() {
             <span className="text-xs text-zinc-300 select-all flex-1 truncate">{SUPPORT_EMAIL}</span>
             <button
               onClick={copy}
-              className={`text-xs shrink-0 border rounded px-2 py-0.5 transition-colors ${
+              className={`text-xs shrink-0 border rounded px-2 py-0.5 transition-[border-color,color,transform] duration-150 active:scale-[0.95] touch-manipulation ${
                 copied
                   ? "border-emerald-700 text-emerald-400"
-                  : "border-zinc-700 text-zinc-500 hover:text-zinc-200 hover:border-zinc-500"
+                  : "border-zinc-700 text-zinc-500 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500"
               }`}
             >
               {copied ? "copied!" : "copy"}

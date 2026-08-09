@@ -127,7 +127,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 shadow-elevation-2">
         <div>
           <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Group logo
@@ -136,7 +136,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 shadow-elevation-1 transition-[border-color,transform] duration-150 hover:border-zinc-500 active:scale-[0.95] touch-manipulation group shrink-0"
             >
               {logoPreview ? (
                 <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" />
@@ -175,7 +175,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
             required
             maxLength={80}
             placeholder="Riverside Cleanup Crew"
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors text-zinc-100 placeholder:text-zinc-600"
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600"
           />
         </div>
 
@@ -192,7 +192,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
               required
               maxLength={60}
               placeholder="riverside-cleanup"
-              className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-r-lg text-sm outline-none transition-colors text-zinc-100 placeholder:text-zinc-600"
+              className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-r-lg text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600"
             />
           </div>
         </div>
@@ -205,7 +205,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
             rows={3}
             maxLength={400}
             placeholder="Who you are and what you're about."
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors text-zinc-100 placeholder:text-zinc-600 resize-none"
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600 resize-none"
           />
         </div>
 
@@ -245,7 +245,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
         <button
           type="submit"
           disabled={loading || !name.trim() || !slug.trim()}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm"
+          className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 text-white font-semibold rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation text-sm"
         >
           {loading ? "Submitting…" : "Submit Group"}
         </button>

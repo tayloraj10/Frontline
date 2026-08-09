@@ -61,13 +61,13 @@ export default async function HomePage() {
       <div className="relative flex gap-3">
         <Link
           href="/campaigns"
-          className="px-7 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl transition-colors text-sm shadow-lg shadow-emerald-950/60"
+          className="px-7 py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white font-semibold rounded-xl transition-[background-color,transform] duration-150 text-sm shadow-lg shadow-emerald-950/60 touch-manipulation"
         >
           Browse Campaigns
         </Link>
         <Link
           href="/signup"
-          className="px-7 py-3 border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900 text-zinc-300 font-semibold rounded-xl transition-colors text-sm"
+          className="px-7 py-3 border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900 active:border-zinc-500 active:bg-zinc-900 active:scale-[0.97] text-zinc-300 font-semibold rounded-xl transition-[background-color,border-color,transform] duration-150 text-sm touch-manipulation"
         >
           Sign Up
         </Link>
@@ -93,8 +93,8 @@ export default async function HomePage() {
       </div>
 
       <div className="relative flex gap-4 text-xs text-zinc-600">
-        <Link href="/legal/terms" className="hover:text-zinc-400 transition-colors">Terms</Link>
-        <Link href="/legal/privacy" className="hover:text-zinc-400 transition-colors">Privacy</Link>
+        <Link href="/legal/terms" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Terms</Link>
+        <Link href="/legal/privacy" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Privacy</Link>
       </div>
     </main>
   );

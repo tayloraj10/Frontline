@@ -39,7 +39,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
     <Link
       key={campaign.id}
       href={`/campaigns/${campaign.slug}`}
-      className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40"
+      className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-[0.98] active:border-zinc-700 active:duration-100 touch-manipulation"
     >
       {/* Left accent border */}
       <div className={`absolute inset-y-0 left-0 w-[3px] rounded-l-2xl ${cfg.bar} opacity-50 transition-opacity duration-300 group-hover:opacity-100`} />

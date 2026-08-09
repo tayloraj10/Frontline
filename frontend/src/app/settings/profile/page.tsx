@@ -23,7 +23,7 @@ export default async function ProfileSettingsPage() {
         <p className="mt-1 text-sm text-zinc-500">@{profile.username}</p>
       </div>
 
-      <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/30">
+      <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/30 shadow-elevation-2">
         <ProfileEditForm
           userId={profile.id}
           username={profile.username}

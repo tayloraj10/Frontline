@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isNativePlatform } from "@/lib/capacitor";
+import { Card } from "@/components/ui/Card";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -135,7 +136,7 @@ function LoginForm() {
 
   return (
     <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
-      <div className="w-full max-w-sm space-y-6">
+      <Card elevation={2} padding="lg" className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold">Sign in to Frontline</h1>
           <p className="text-zinc-400 text-sm">Join the collective action</p>
@@ -144,7 +145,7 @@ function LoginForm() {
         <button
           onClick={handleGoogleLogin}
           disabled={googleLoading}
-          className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-medium text-gray-700 shadow-sm"
+          className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm font-medium text-gray-700"
         >
           {!googleLoading && (
             <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
@@ -172,7 +173,7 @@ function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
               placeholder="you@example.com"
             />
           </div>
@@ -180,7 +181,7 @@ function LoginForm() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label htmlFor="password" className="text-sm text-zinc-300">Password</label>
-              <Link href="/forgot-password" className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors">
+              <Link href="/forgot-password" className="text-xs text-zinc-500 hover:text-emerald-400 active:text-emerald-400 transition-colors duration-150">
                 Forgot password?
               </Link>
             </div>
@@ -190,7 +191,7 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
               placeholder="••••••••"
             />
           </div>
@@ -200,7 +201,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm"
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>
@@ -208,16 +209,16 @@ function LoginForm() {
 
         <p className="text-center text-zinc-400 text-sm">
           No account?{" "}
-          <Link href="/signup" className="text-emerald-400 hover:text-emerald-300">
+          <Link href="/signup" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             Sign up
           </Link>
         </p>
 
         <div className="flex justify-center gap-4 text-xs text-zinc-600">
-          <Link href="/legal/terms" className="hover:text-zinc-400 transition-colors">Terms</Link>
-          <Link href="/legal/privacy" className="hover:text-zinc-400 transition-colors">Privacy</Link>
+          <Link href="/legal/terms" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Terms</Link>
+          <Link href="/legal/privacy" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Privacy</Link>
         </div>
-      </div>
+      </Card>
     </main>
   );
 }

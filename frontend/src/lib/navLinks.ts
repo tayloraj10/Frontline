@@ -1,9 +1,8 @@
 export interface NavLink {
   href: string;
   label: string;
-  /** Short label + emoji icon for compact chrome (bottom tab bar / overflow menu). */
+  /** Short label for compact chrome (bottom tab bar / overflow menu). Icon is resolved by href in BottomTabBar. */
   shortLabel?: string;
-  icon?: string;
   highlight?: boolean;
 }
 
@@ -17,20 +16,20 @@ export interface BuildNavLinksArgs {
 export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin }: BuildNavLinksArgs): NavLink[] {
   return isBusinessOnly
     ? [
-        { href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business", icon: "🏪" },
-        { href: "/partners", label: "Partners", shortLabel: "Partners", icon: "🤝" },
-        { href: "/campaigns", label: "Explore Frontline", shortLabel: "Explore", icon: "🏁" },
-        ...(isAdmin ? [{ href: "/admin", label: "Admin", shortLabel: "Admin", icon: "🛠️", highlight: true }] : []),
+        { href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business" },
+        { href: "/partners", label: "Partners", shortLabel: "Partners" },
+        { href: "/campaigns", label: "Explore Frontline", shortLabel: "Explore" },
+        ...(isAdmin ? [{ href: "/admin", label: "Admin", shortLabel: "Admin", highlight: true }] : []),
       ]
     : [
-        { href: "/campaigns", label: "Campaigns", shortLabel: "Campaigns", icon: "🏁" },
-        { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard", icon: "🏆" },
-        { href: "/partners", label: "Partners", shortLabel: "Partners", icon: "🤝" },
-        { href: "/groups", label: "Groups", shortLabel: "Groups", icon: "👥" },
+        { href: "/campaigns", label: "Campaigns", shortLabel: "Campaigns" },
+        { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard" },
+        { href: "/partners", label: "Partners", shortLabel: "Partners" },
+        { href: "/groups", label: "Groups", shortLabel: "Groups" },
         ...(isBusinessAdmin
-          ? [{ href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business", icon: "🏪" }]
+          ? [{ href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business" }]
           : []),
-        ...(isAdmin ? [{ href: "/admin", label: "Admin", shortLabel: "Admin", icon: "🛠️", highlight: true }] : []),
+        ...(isAdmin ? [{ href: "/admin", label: "Admin", shortLabel: "Admin", highlight: true }] : []),
       ];
 }
 

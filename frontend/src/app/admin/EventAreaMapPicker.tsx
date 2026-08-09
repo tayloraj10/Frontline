@@ -196,7 +196,7 @@ export default function EventAreaMapPicker({
     <div>
       <div
         ref={containerRef}
-        className="w-full h-[280px] rounded-lg overflow-hidden border border-zinc-700/50"
+        className="w-full h-[280px] rounded-lg overflow-hidden border border-zinc-700/50 shadow-elevation-1"
       />
       <p className="text-xs text-zinc-400 mt-1">
         {mode === "single"

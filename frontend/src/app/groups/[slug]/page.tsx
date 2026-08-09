@@ -125,7 +125,7 @@ export default async function GroupProfilePage({ params }: Props) {
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="text-xs text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150"
                     >
                       {key === "website" ? url.replace(/^https?:\/\//, "") : label} ↗
                     </a>
@@ -140,7 +140,7 @@ export default async function GroupProfilePage({ params }: Props) {
           {isAdmin && (
             <Link
               href={`/groups/${slug}/events/new`}
-              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:text-zinc-200 hover:border-zinc-500 active:scale-[0.95] touch-manipulation"
             >
               New event
             </Link>
@@ -148,7 +148,7 @@ export default async function GroupProfilePage({ params }: Props) {
           {isAdmin && (
             <Link
               href={`/groups/${slug}/edit`}
-              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:text-zinc-200 hover:border-zinc-500 active:scale-[0.95] touch-manipulation"
             >
               Edit group
             </Link>
@@ -164,7 +164,7 @@ export default async function GroupProfilePage({ params }: Props) {
           {!user && (
             <Link
               href={`/login?next=/groups/${slug}`}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Sign In to Join
             </Link>
@@ -172,7 +172,7 @@ export default async function GroupProfilePage({ params }: Props) {
         </div>
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+      <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
             Upcoming Events <span className="text-zinc-500 font-normal">({upcomingEvents.length})</span>
@@ -192,7 +192,7 @@ export default async function GroupProfilePage({ params }: Props) {
               <li key={e.id}>
                 <Link
                   href={`/cleanup-events/${e.id}`}
-                  className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-zinc-900/40 transition-colors"
+                  className="px-5 py-3 flex items-center justify-between gap-3 transition-[background-color] duration-150 hover:bg-zinc-900/40 active:bg-zinc-900/60 touch-manipulation"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
@@ -222,7 +222,7 @@ export default async function GroupProfilePage({ params }: Props) {
         )}
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+      <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
             Event History <span className="text-zinc-500 font-normal">({pastEvents.length})</span>
@@ -242,7 +242,7 @@ export default async function GroupProfilePage({ params }: Props) {
               <li key={e.id}>
                 <Link
                   href={`/cleanup-events/${e.id}`}
-                  className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-zinc-900/40 transition-colors"
+                  className="px-5 py-3 flex items-center justify-between gap-3 transition-[background-color] duration-150 hover:bg-zinc-900/40 active:bg-zinc-900/60 touch-manipulation"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center opacity-70">
@@ -279,7 +279,7 @@ export default async function GroupProfilePage({ params }: Props) {
         )}
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden">
+      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-300">
             Members <span className="text-zinc-500 font-normal">({members.length})</span>

@@ -42,7 +42,7 @@ export default function Lightbox({
     >
       <IconButton
         onClick={onClose}
-        className="absolute top-3 right-3 text-zinc-300 hover:text-white text-2xl leading-none bg-black/40 hover:bg-black/60"
+        className="absolute top-3 right-3 text-zinc-300 hover:text-white active:text-white text-2xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
         aria-label="Close"
       >
         &times;
@@ -54,7 +54,7 @@ export default function Lightbox({
             e.stopPropagation();
             goPrev();
           }}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white text-3xl leading-none bg-black/40 hover:bg-black/60"
+          className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white active:text-white text-3xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
           aria-label="Previous image"
         >
           &#8249;
@@ -75,7 +75,7 @@ export default function Lightbox({
             e.stopPropagation();
             goNext();
           }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white text-3xl leading-none bg-black/40 hover:bg-black/60"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white active:text-white text-3xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
           aria-label="Next image"
         >
           &#8250;

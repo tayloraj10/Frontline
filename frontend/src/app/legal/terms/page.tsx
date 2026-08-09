@@ -18,11 +18,11 @@ export default function TermsPage() {
       <TermsContent />
 
       <div className="pt-4 border-t border-zinc-800 text-sm text-zinc-500">
-        <Link href="/legal/privacy" className="text-emerald-400 hover:text-emerald-300">
+        <Link href="/legal/privacy" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
           Privacy Policy
         </Link>
         {" · "}
-        <Link href="/" className="hover:text-zinc-300">
+        <Link href="/" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">
           Back to Frontline
         </Link>
       </div>

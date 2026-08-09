@@ -41,7 +41,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
 
   if (!confirming) {
     return (
-      <div className="border border-red-900/40 rounded-xl p-6 bg-red-950/10">
+      <div className="border border-red-900/40 rounded-xl p-6 bg-red-950/10 shadow-elevation-2">
         <h2 className="text-sm font-semibold text-red-400 mb-1">Danger zone</h2>
         <p className="text-xs text-zinc-500 mb-4">
           Permanently delete this group. Members, co-host links, zip-code claims, and leaderboard
@@ -50,7 +50,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="px-4 py-2 text-sm font-semibold text-red-400 border border-red-900/60 rounded-lg hover:bg-red-950/30 transition-colors"
+          className="px-4 py-2 text-sm font-semibold text-red-400 border border-red-900/60 rounded-lg shadow-elevation-1 hover:bg-red-950/30 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
         >
           Delete group
         </button>
@@ -70,7 +70,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
             <ul className="mt-2 space-y-1 list-disc list-inside">
               {blockingEvents.map((ev) => (
                 <li key={ev.id}>
-                  <Link href={`/cleanup-events/${ev.id}`} className="underline hover:text-red-300">
+                  <Link href={`/cleanup-events/${ev.id}`} className="underline hover:text-red-300 active:text-red-300 transition-colors duration-150">
                     {ev.title}
                   </Link>{" "}
                   &mdash; {new Date(ev.scheduled_start).toLocaleDateString()}
@@ -86,7 +86,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
         value={typedName}
         onChange={(e) => setTypedName(e.target.value)}
         placeholder={groupName}
-        className="w-full mb-4 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-red-700 transition-colors"
+        className="w-full mb-4 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 shadow-elevation-1 focus:outline-none focus:border-red-700 transition-colors"
       />
 
       <div className="flex items-center gap-3">
@@ -94,7 +94,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
           type="button"
           disabled={typedName !== groupName || deleting}
           onClick={handleDelete}
-          className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg shadow-elevation-2 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
         >
           {deleting ? "Deleting…" : "Permanently delete"}
         </button>
@@ -106,7 +106,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
             setError(null);
             setBlockingEvents(null);
           }}
-          className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.96] touch-manipulation"
         >
           Cancel
         </button>

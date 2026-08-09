@@ -122,7 +122,7 @@ export function OfferCard({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-lg p-4">
+    <div className="border border-zinc-800 rounded-lg p-4 shadow-elevation-1">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-sm font-semibold text-zinc-100">{offer.title}</h3>
@@ -135,7 +135,7 @@ export function OfferCard({
 
       <div className="mt-3 flex items-center gap-3 flex-wrap">
         {!userId ? (
-          <Link href="/login" className="text-xs text-emerald-400 hover:text-emerald-300">
+          <Link href="/login" className="text-xs text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             Log in to redeem
           </Link>
         ) : redemptions === null ? (
@@ -153,7 +153,7 @@ export function OfferCard({
                 usedAt: redemptions[0]?.used_at ?? null,
               })
             }
-            className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 underline underline-offset-2 transition-colors duration-150"
           >
             Redeemed{redemptions[0]?.code ? ` — code ${redemptions[0].code}` : ""}
           </button>
@@ -161,7 +161,7 @@ export function OfferCard({
           <button
             onClick={handleRedeem}
             disabled={!eligible || redeeming}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 text-white hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 text-white shadow-elevation-1 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 transition-[background-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
           >
             {redeeming ? "Redeeming…" : eligible ? "Redeem" : "Not enough points"}
           </button>
@@ -179,7 +179,7 @@ export function OfferCard({
                 usedAt: redemptions[0]?.used_at ?? null,
               })
             }
-            className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 underline underline-offset-2 transition-colors duration-150"
           >
             Last code: {redemptions[0].code}
           </button>
@@ -220,7 +220,7 @@ export default function PartnersBrowseClient({
       )}
 
       {businesses.map((business) => (
-        <div key={business.id} id={`business-${business.slug}`} className="border border-zinc-800 rounded-xl overflow-hidden">
+        <div key={business.id} id={`business-${business.slug}`} className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2">
           <div className="w-full px-4 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center gap-3">
             {business.logo_url && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -236,7 +236,7 @@ export default function PartnersBrowseClient({
             </div>
             <Link
               href={`/partners/${business.slug}`}
-              className="flex items-center gap-1 text-xs font-semibold text-emerald-950 shrink-0 px-3 py-1.5 rounded-lg bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 shadow-sm transition-colors"
+              className="flex items-center gap-1 text-xs font-semibold text-emerald-950 shrink-0 px-3 py-1.5 rounded-lg bg-emerald-400 shadow-elevation-1 hover:bg-emerald-300 active:bg-emerald-500 active:scale-[0.95] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Details
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

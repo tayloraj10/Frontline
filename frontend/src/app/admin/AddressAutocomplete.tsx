@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 transition-[border-color] duration-150 focus:outline-none focus:border-zinc-500";
 
 export type AddressSelection = {
   addressLine1: string;
@@ -135,13 +135,13 @@ export default function AddressAutocomplete({
         autoComplete="off"
       />
       {open && suggestions.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden shadow-lg max-h-60 overflow-y-auto">
+        <ul className="absolute z-10 mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden shadow-elevation-3 max-h-60 overflow-y-auto">
           {suggestions.map((s, i) => (
             <li key={i}>
               <button
                 type="button"
                 onClick={() => handleSelect(s.feature, s.label)}
-                className="w-full text-left px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800 transition-colors"
+                className="w-full text-left px-3 py-2 min-h-11 text-sm text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 transition-[background-color,transform] duration-150 active:scale-[0.98] touch-manipulation"
               >
                 {s.label}
               </button>

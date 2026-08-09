@@ -68,7 +68,7 @@ export default function CohostGroupPicker({
             {options.map((g) => (
               <label
                 key={g.id}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 cursor-pointer"
               >
                 <input
                   type="checkbox"

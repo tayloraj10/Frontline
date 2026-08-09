@@ -54,7 +54,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
         <button
           onClick={handleLeave}
           disabled={loading}
-          className="px-3 py-1.5 text-xs border border-zinc-700 hover:border-red-700 text-zinc-400 hover:text-red-400 rounded-lg transition-colors disabled:opacity-40"
+          className="px-3 py-1.5 text-xs border border-zinc-700 hover:border-red-700 active:border-red-700 active:scale-[0.96] disabled:active:scale-100 text-zinc-400 hover:text-red-400 active:text-red-400 rounded-lg transition-[border-color,color,transform] duration-150 disabled:opacity-40 touch-manipulation"
         >
           {loading ? "Leaving…" : "Leave Group"}
         </button>
@@ -62,7 +62,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
         <button
           onClick={handleJoin}
           disabled={loading}
-          className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors disabled:opacity-40"
+          className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.96] disabled:active:scale-100 text-white font-semibold rounded-lg transition-[background-color,transform] duration-150 disabled:opacity-40 touch-manipulation"
         >
           {loading ? "Joining…" : "Join Group"}
         </button>

@@ -32,6 +32,60 @@ html, body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+/* Elevation system — default Tailwind shadows are gray-based and read as muddy
+   smudges on our near-black (zinc-950) background, so these use pure black at
+   tuned opacity instead. Tiers roughly follow Material's elevation idea:
+   1 = resting cards/inputs, 2 = raised cards (stat tiles, pressed/hovered rows),
+   3 = floating chrome (FABs, floating map chips, sticky bars, sheets at rest),
+   4 = modals / fully-expanded overlays. */
+@utility shadow-elevation-1 {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+}
+@utility shadow-elevation-2 {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+@utility shadow-elevation-3 {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5), 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+@utility shadow-elevation-4 {
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Colored glow accents — reserved for gamified/celebratory elements (rank
+   badges, points pills, unlocks), not a generic hover effect. */
+@utility shadow-glow-emerald {
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15), 0 8px 24px -4px rgba(16, 185, 129, 0.35);
+}
+@utility shadow-glow-amber {
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.15), 0 8px 24px -4px rgba(245, 158, 11, 0.35);
+}
+@utility shadow-glow-sky {
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.15), 0 8px 24px -4px rgba(14, 165, 233, 0.35);
+}
+@utility shadow-glow-violet {
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.15), 0 8px 24px -4px rgba(139, 92, 246, 0.35);
+}
+@utility shadow-glow-rose {
+  box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.15), 0 8px 24px -4px rgba(244, 63, 94, 0.35);
+}
+
+/* One-shot entrance for mounted content (auth cards, popovers) — anything
+   interaction-driven (press/hover) is a Tailwind active:/hover: utility
+   instead, not a keyframe. */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@utility animate-pop-in {
+  animation: pop-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Required tile-provider attribution must never render underneath our custom
    floating map overlays (basemap switcher, Layers menu). */
 .maplibregl-ctrl-bottom-right {

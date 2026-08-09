@@ -18,11 +18,11 @@ export default function OtherCampaignRow({ campaign }: { campaign: Campaign }) {
   };
 
   return (
-    <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/40 transition-colors hover:border-zinc-700">
+    <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/40 shadow-elevation-1 transition-colors hover:border-zinc-700">
       <div className="flex items-center gap-1">
         <Link
           href={`/campaigns/${campaign.slug}`}
-          className="group flex min-w-0 flex-1 items-center gap-3 px-4 py-3"
+          className="group flex min-w-0 flex-1 items-center gap-3 px-4 py-3 active:bg-zinc-800/40 transition-colors duration-150 touch-manipulation"
         >
           <span className={`text-sm ${cfg.color}`}>{cfg.icon}</span>
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-400 group-hover:text-zinc-200">
@@ -67,7 +67,7 @@ export default function OtherCampaignRow({ campaign }: { campaign: Campaign }) {
           </div>
           <Link
             href={`/campaigns/${campaign.slug}`}
-            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150"
           >
             View campaign →
           </Link>

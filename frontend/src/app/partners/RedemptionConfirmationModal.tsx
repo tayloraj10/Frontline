@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 export type RedemptionProof = {
   redemptionId: string;
@@ -72,12 +73,19 @@ export default function RedemptionConfirmationModal({
 
   if (proof.usedAt) {
     return (
-      <div
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
         onClick={onClose}
       >
-        <div
-          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center space-y-4"
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: 8 }}
+          transition={{ type: "spring", stiffness: 400, damping: 32 }}
+          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center space-y-4 shadow-elevation-4"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="w-14 h-14 mx-auto rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -93,22 +101,29 @@ export default function RedemptionConfirmationModal({
           <p className="text-xs text-zinc-500">Honored {formatTimestamp(proof.usedAt)}</p>
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm rounded-lg font-medium transition-colors"
+            className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
           >
             Close
           </button>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     );
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
     >
-      <div
-        className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center space-y-4"
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: 8 }}
+        transition={{ type: "spring", stiffness: 400, damping: 32 }}
+        className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center space-y-4 shadow-elevation-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-14 h-14 mx-auto rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center">
@@ -126,7 +141,7 @@ export default function RedemptionConfirmationModal({
         {proof.code && (
           <button
             onClick={handleCopy}
-            className="w-full py-3 rounded-xl bg-zinc-950 border border-zinc-700 hover:border-zinc-500 transition-colors"
+            className="w-full py-3 rounded-xl bg-zinc-950 border border-zinc-700 shadow-elevation-1 transition-[border-color,transform] duration-150 hover:border-zinc-500 active:scale-[0.97] touch-manipulation"
           >
             <span className="block text-xl font-mono font-bold tracking-wider text-zinc-100">{proof.code}</span>
             <span className="block text-[10px] text-zinc-500 mt-1">{copied ? "Copied!" : "Tap to copy"}</span>
@@ -143,7 +158,7 @@ export default function RedemptionConfirmationModal({
           <button
             onClick={handleMarkUsed}
             disabled={marking}
-            className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-200 text-sm rounded-lg font-medium transition-colors"
+            className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:active:scale-100 text-zinc-200 text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
           >
             {marking ? "Marking…" : "Mark as used"}
           </button>
@@ -152,11 +167,11 @@ export default function RedemptionConfirmationModal({
 
         <button
           onClick={onClose}
-          className="w-full px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-sm rounded-lg font-medium transition-colors"
+          className="w-full px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
         >
           Done
         </button>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

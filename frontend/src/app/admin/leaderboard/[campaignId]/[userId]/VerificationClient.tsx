@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import BackButton from "@/components/ui/BackButton";
+import { Card } from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
 import Lightbox from "@/components/Lightbox";
 
 type Submission = {
@@ -61,11 +63,11 @@ export default function VerificationClient({
   const totalValue = submissions.reduce((sum, s) => sum + (s.value || 0), 0);
 
   return (
-    <main className="max-w-4xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 w-full">
       <BackButton href="/admin" label="Back to admin" />
 
-      <div className="mt-4 mb-6">
-        <h1 className="text-2xl font-black text-zinc-100">{displayName}</h1>
+      <div className="mt-4 mb-6 min-w-0">
+        <h1 className="text-xl sm:text-2xl font-black text-zinc-100 truncate">{displayName}</h1>
         <p className="text-sm text-zinc-500 mt-1">
           {submissions.length} submission{submissions.length === 1 ? "" : "s"} · {totalValue} total value
           {start && end && (
@@ -79,24 +81,26 @@ export default function VerificationClient({
 
       <div className="space-y-4">
         {submissions.map((s) => (
-          <div key={s.id} className="border border-zinc-800 rounded-xl p-4">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
+          <Card key={s.id} elevation={1} padding="md">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
               <div className="text-sm text-zinc-400">
                 {s.submitted_at ? new Date(s.submitted_at).toLocaleString() : "Unknown date"}
               </div>
-              <div className="text-sm font-semibold text-zinc-100">
+              <div className="flex items-center gap-2 flex-wrap text-sm font-semibold text-zinc-100">
                 Value: {s.value}
                 {!s.location_verified && (
-                  <span className="ml-2 text-xs font-normal text-amber-400">location unverified</span>
+                  <Badge variant="pending" className="font-normal">location unverified</Badge>
                 )}
               </div>
             </div>
-            <div className="mt-2 text-sm text-zinc-400">
-              {s.metrics_small_bags != null && <span className="mr-3">Small bags: {s.metrics_small_bags}</span>}
-              {s.metrics_large_bags != null && <span className="mr-3">Large bags: {s.metrics_large_bags}</span>}
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-400">
+              {s.metrics_small_bags != null && <span>Small bags: {s.metrics_small_bags}</span>}
+              {s.metrics_large_bags != null && <span>Large bags: {s.metrics_large_bags}</span>}
               {s.metrics_pounds != null && <span>Pounds: {s.metrics_pounds}</span>}
             </div>
-            {s.notes && <p className="mt-2 text-sm text-zinc-500 italic">&ldquo;{s.notes}&rdquo;</p>}
+            {s.notes && (
+              <p className="mt-2 text-sm text-zinc-500 italic break-words">&ldquo;{s.notes}&rdquo;</p>
+            )}
 
             {s.image_urls.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -106,7 +110,7 @@ export default function VerificationClient({
                     key={url}
                     src={url}
                     alt="Cleanup submission"
-                    className="h-24 w-24 object-cover rounded-lg cursor-pointer border border-zinc-800 hover:border-emerald-600 transition-colors"
+                    className="h-24 w-24 object-cover rounded-lg cursor-pointer border border-zinc-800 hover:border-emerald-600 active:border-emerald-500 active:scale-95 transition-[border-color,transform] duration-150 touch-manipulation shadow-elevation-1"
                     onClick={() => setLightbox({ images: s.image_urls, index: i })}
                   />
                 ))}
@@ -114,7 +118,7 @@ export default function VerificationClient({
             ) : (
               <p className="mt-3 text-sm text-red-400 font-semibold">No photos attached — cannot be verified visually.</p>
             )}
-          </div>
+          </Card>
         ))}
       </div>
 

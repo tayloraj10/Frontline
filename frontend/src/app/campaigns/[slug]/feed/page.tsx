@@ -80,7 +80,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <div className="border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
             <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
               <span className="text-sm font-semibold text-zinc-300">
                 Activity{" "}
@@ -111,9 +111,9 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
             <div className="mt-4 flex items-center justify-between">
               <Link
                 href={page > 1 ? `?page=${page - 1}` : "#"}
-                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
+                className={`px-4 py-2 text-sm rounded-lg border transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation ${
                   page > 1
-                    ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800"
                     : "border-zinc-800 text-zinc-700 cursor-not-allowed"
                 }`}
               >
@@ -124,9 +124,9 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
               </span>
               <Link
                 href={page < totalPages ? `?page=${page + 1}` : "#"}
-                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
+                className={`px-4 py-2 text-sm rounded-lg border transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation ${
                   page < totalPages
-                    ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800"
                     : "border-zinc-800 text-zinc-700 cursor-not-allowed"
                 }`}
               >

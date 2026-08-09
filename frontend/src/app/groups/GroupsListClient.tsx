@@ -42,16 +42,16 @@ export default function GroupsListClient({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search groups…"
-          className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors text-zinc-100 placeholder:text-zinc-600"
+          className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600"
         />
         {isLoggedIn && (
           <button
             type="button"
             onClick={() => setMineOnly((v) => !v)}
-            className={`shrink-0 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+            className={`shrink-0 px-3 py-2 rounded-lg text-sm font-semibold border shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
               mineOnly
                 ? "bg-emerald-600 border-emerald-500 text-white"
-                : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200"
             }`}
           >
             My Groups
@@ -77,7 +77,7 @@ export default function GroupsListClient({
               <Link
                 key={group.id}
                 href={`/groups/${group.slug}`}
-                className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40"
+                className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-elevation-3 active:scale-[0.98] active:translate-y-0 touch-manipulation"
               >
                 <div className="absolute inset-y-0 left-0 w-[3px] rounded-l-2xl bg-emerald-500 opacity-40 transition-opacity duration-300 group-hover:opacity-100" />
 

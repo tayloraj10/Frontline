@@ -175,7 +175,7 @@ export default function RoutePicker({
           type="button"
           onClick={undoLast}
           disabled={coordCount === 0}
-          className="px-3 py-2 text-xs font-medium bg-zinc-900/95 hover:bg-zinc-800 disabled:bg-zinc-900/50 disabled:text-zinc-600 border border-zinc-700 text-zinc-200 rounded-lg shadow-xl transition-colors"
+          className="px-3 py-2 text-xs font-medium bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.96] disabled:active:scale-100 disabled:bg-zinc-900/50 disabled:text-zinc-600 border border-zinc-700 text-zinc-200 rounded-lg shadow-xl transition-[background-color,transform] duration-150 touch-manipulation"
         >
           Undo
         </button>
@@ -183,7 +183,7 @@ export default function RoutePicker({
           type="button"
           onClick={clearAll}
           disabled={coordCount === 0}
-          className="px-3 py-2 text-xs font-medium bg-zinc-900/95 hover:bg-zinc-800 disabled:bg-zinc-900/50 disabled:text-zinc-600 border border-zinc-700 text-zinc-200 rounded-lg shadow-xl transition-colors"
+          className="px-3 py-2 text-xs font-medium bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.96] disabled:active:scale-100 disabled:bg-zinc-900/50 disabled:text-zinc-600 border border-zinc-700 text-zinc-200 rounded-lg shadow-xl transition-[background-color,transform] duration-150 touch-manipulation"
         >
           Clear
         </button>

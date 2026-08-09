@@ -50,7 +50,7 @@ export default function ShareButton({
       <button
         onClick={handleShare}
         title={copied ? "Link copied!" : "Share"}
-        className={`w-7 h-7 flex items-center justify-center rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0 ${className}`}
+        className={`w-7 h-7 flex items-center justify-center rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 active:text-zinc-200 active:bg-zinc-800 active:border-zinc-600 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation ${className}`}
       >
         <ShareGlyph />
       </button>
@@ -60,7 +60,7 @@ export default function ShareButton({
   return (
     <button
       onClick={handleShare}
-      className={`inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 transition-colors ${className}`}
+      className={`inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 ${className}`}
     >
       <ShareGlyph />
       {copied ? "Link copied!" : "Share"}

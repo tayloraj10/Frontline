@@ -364,9 +364,9 @@ function RouteMap({
               onClick={() => onStyleChange(s.id)}
               title={s.label}
               aria-label={s.label}
-              className={`w-6 h-6 flex items-center justify-center text-xs leading-none rounded transition-colors ${activeMapStyle === s.id
+              className={`w-6 h-6 flex items-center justify-center text-xs leading-none rounded transition-[background-color,opacity,transform] duration-150 active:scale-[0.9] touch-manipulation ${activeMapStyle === s.id
                 ? "bg-zinc-600"
-                : "opacity-60 hover:opacity-100 hover:bg-zinc-800"
+                : "opacity-60 hover:opacity-100 hover:bg-zinc-800 active:opacity-100 active:bg-zinc-800"
                 }`}
             >
               {s.icon}
@@ -378,7 +378,7 @@ function RouteMap({
         <button
           type="button"
           onClick={onToggleBuffer}
-          className="absolute bottom-2 left-2 px-2 py-1 text-xs font-medium rounded-md bg-zinc-900/90 border border-zinc-700/60 backdrop-blur-sm shadow-lg text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+          className="absolute bottom-2 left-2 px-2 py-1 text-xs font-medium rounded-md bg-zinc-900/90 border border-zinc-700/60 backdrop-blur-sm shadow-lg text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 active:text-zinc-100 active:bg-zinc-800 active:scale-[0.96] transition-[background-color,color,transform] duration-150 touch-manipulation"
         >
           {showBuffer ? "Hide zone" : "Show zone"}
         </button>
@@ -441,7 +441,7 @@ export default function RoutePreviewMap({
           type="button"
           onClick={() => setExpanded(true)}
           title="Enlarge for screenshot"
-          className="absolute bottom-2 right-2 w-8 h-8 rounded-md bg-black/60 hover:bg-black/80 text-white flex items-center justify-center text-sm transition-colors"
+          className="absolute bottom-2 right-2 w-8 h-8 rounded-md bg-black/60 hover:bg-black/80 active:bg-black/80 active:scale-[0.92] text-white flex items-center justify-center text-sm transition-[background-color,transform] duration-150 touch-manipulation"
         >
           ⛶
         </button>
@@ -451,7 +451,7 @@ export default function RoutePreviewMap({
           <button
             type="button"
             onClick={() => setExpanded(false)}
-            className="absolute top-4 right-4 text-white text-2xl leading-none hover:text-zinc-300"
+            className="absolute top-4 right-4 text-white text-2xl leading-none hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
             aria-label="Close"
           >
             ×

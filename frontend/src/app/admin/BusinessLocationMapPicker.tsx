@@ -101,7 +101,7 @@ export default function BusinessLocationMapPicker({
     <div>
       <div
         ref={containerRef}
-        className="w-full h-[220px] rounded-lg overflow-hidden border border-zinc-700/50"
+        className="w-full h-[220px] rounded-lg overflow-hidden border border-zinc-700/50 shadow-elevation-1"
       />
       <p className="text-xs text-zinc-400 mt-1">
         Click or drag the pin to set the {locationNoun} location.{" "}

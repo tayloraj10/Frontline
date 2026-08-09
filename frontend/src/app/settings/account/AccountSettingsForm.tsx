@@ -90,7 +90,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
               onChange={(e) => setNewEmail(e.target.value)}
               required
               placeholder="new@example.com"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
             />
             {emailMsg && (
               <p className={`text-xs ${emailMsg.ok ? "text-emerald-400" : "text-red-400"}`}>
@@ -100,7 +100,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
             <button
               type="submit"
               disabled={emailLoading}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg transition-colors"
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
             >
               {emailLoading ? "Sending…" : "Change email"}
             </button>
@@ -119,7 +119,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
               placeholder="Current password"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
             />
             <input
               type="password"
@@ -128,7 +128,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
               required
               minLength={8}
               placeholder="New password (min 8 chars)"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
             />
             {pwMsg && (
               <p className={`text-xs ${pwMsg.ok ? "text-emerald-400" : "text-red-400"}`}>
@@ -138,7 +138,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
             <button
               type="submit"
               disabled={pwLoading}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg transition-colors"
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
             >
               {pwLoading ? "Updating…" : "Update password"}
             </button>
@@ -156,7 +156,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
       )}
 
       {/* Danger zone */}
-      <section className="space-y-4 border border-red-900/40 rounded-xl p-5">
+      <section className="space-y-4 border border-red-900/40 rounded-xl p-5 shadow-elevation-2">
         <div>
           <h2 className="text-sm font-semibold text-red-400">Delete account</h2>
           <p className="text-xs text-zinc-500 mt-1">
@@ -172,14 +172,14 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
             value={deleteConfirm}
             onChange={(e) => setDeleteConfirm(e.target.value)}
             placeholder="delete my account"
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 focus:border-red-700 rounded-lg text-sm outline-none transition-colors"
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 focus:border-red-700 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
           />
         </div>
         {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
         <button
           onClick={handleDeleteAccount}
           disabled={deleteConfirm !== "delete my account" || isPending}
-          className="px-4 py-2 bg-red-900/30 hover:bg-red-900/60 border border-red-800/60 disabled:opacity-30 disabled:cursor-not-allowed text-red-400 text-sm font-medium rounded-lg transition-colors"
+          className="px-4 py-2 bg-red-900/30 hover:bg-red-900/60 border border-red-800/60 disabled:opacity-30 disabled:cursor-not-allowed text-red-400 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
         >
           {isPending ? "Deleting…" : "Delete my account"}
         </button>

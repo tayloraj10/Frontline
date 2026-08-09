@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 focus:outline-none focus:border-zinc-500";
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -191,7 +191,7 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
   const displayLogo = logoPreview ?? currentLogo;
 
   return (
-    <form onSubmit={handleSubmit} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
+    <form onSubmit={handleSubmit} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 shadow-elevation-2 space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">Logo</label>
@@ -199,7 +199,7 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 shadow-elevation-1 hover:border-zinc-500 transition-[border-color,transform] duration-150 active:scale-[0.95] touch-manipulation group shrink-0"
             >
               {displayLogo ? (
                 <img src={displayLogo} alt="Logo" className="w-full h-full object-cover" />
@@ -300,7 +300,7 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
         {SOCIAL_PLATFORMS.map((p) => (
           <div key={p.key} className="space-y-1">
             <label className="text-xs text-zinc-500">{p.label}</label>
-            <div className="flex items-center rounded-lg bg-zinc-900 border border-zinc-700 focus-within:border-zinc-500 transition-colors overflow-hidden">
+            <div className="flex items-center rounded-lg bg-zinc-900 border border-zinc-700 shadow-elevation-1 focus-within:border-zinc-500 transition-colors overflow-hidden">
               <span className="pl-3 text-sm text-zinc-500 select-none">{p.baseUrl.replace(/^https?:\/\//, "")}</span>
               <input
                 type="text"
@@ -322,10 +322,10 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
             {campaigns.map((c) => (
               <label
                 key={c.id}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation ${
                   campaignIds.has(c.id)
                     ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-300"
-                    : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                    : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600 active:border-zinc-600"
                 }`}
               >
                 <input type="checkbox" className="hidden" checked={campaignIds.has(c.id)} onChange={() => toggleCampaign(c.id)} />
@@ -341,12 +341,12 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
         <button
           type="submit"
           disabled={loading || !name.trim() || !slug.trim()}
-          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
         >
           {loading ? "Saving…" : submitLabel}
         </button>
         {onCancel && (
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.96] touch-manipulation">
             Cancel
           </button>
         )}

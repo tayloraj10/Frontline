@@ -108,7 +108,7 @@ export default function UserActivityList({
         const unit = CONTRIBUTION_UNIT[c.contribution_type] ?? "pts";
         return (
           <li key={c.id} className="px-5 py-3 flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs shrink-0 mt-0.5">
+            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-elevation-1">
               {icon}
             </div>
             <div className="flex-1 min-w-0">
@@ -131,7 +131,7 @@ export default function UserActivityList({
                     <span className="text-xs text-zinc-600">in</span>
                     <Link
                       href={`/campaigns/${campaign.slug}`}
-                      className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                      className="text-xs text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
                     >
                       {campaign.title}
                     </Link>
@@ -148,7 +148,7 @@ export default function UserActivityList({
                 <button
                   onClick={() => handleDelete(c.id)}
                   disabled={deleting === c.id}
-                  className="text-zinc-700 hover:text-red-400 transition-colors disabled:opacity-40"
+                  className="text-zinc-700 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40"
                   title="Delete contribution"
                 >
                   {deleting === c.id ? <span className="text-xs text-zinc-600">…</span> : <TrashIcon />}

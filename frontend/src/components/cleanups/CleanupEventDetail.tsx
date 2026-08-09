@@ -265,14 +265,14 @@ export default function CleanupEventDetail({
           href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
         >
           <span aria-hidden="true">🧭</span>
           Get directions
         </a>
         <Link
           href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
-          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
         >
           <span aria-hidden="true">📍</span>
           Show on map
@@ -304,7 +304,7 @@ export default function CleanupEventDetail({
               ))}
             </div>
           )}
-          <Link href={`/groups/${event.group_slug}`} className="text-sm text-sky-400 hover:text-sky-300">
+          <Link href={`/groups/${event.group_slug}`} className="text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
             {event.group_name}
           </Link>
           {event.cohost_groups.length > 0 && (
@@ -313,7 +313,7 @@ export default function CleanupEventDetail({
               {event.cohost_groups.map((g, i) => (
                 <span key={g.group_id}>
                   {i > 0 && ", "}
-                  <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300">
+                  <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
                     {g.group_name}
                   </Link>
                 </span>
@@ -337,7 +337,7 @@ export default function CleanupEventDetail({
               <div className="flex items-center gap-2">
                 <Link
                   href={`/groups/${event.group_slug}/events/${event.id}/edit`}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
                 >
                   Edit
                 </Link>
@@ -345,7 +345,7 @@ export default function CleanupEventDetail({
                   <button
                     onClick={handleCancelEvent}
                     disabled={cancelLoading}
-                    className="text-xs text-zinc-500 hover:text-red-400 transition-colors disabled:opacity-40"
+                    className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40 disabled:active:text-zinc-500"
                   >
                     {cancelLoading ? "Cancelling…" : "Cancel event"}
                   </button>
@@ -422,7 +422,7 @@ export default function CleanupEventDetail({
             href={event.external_link}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-sm text-sky-400 hover:text-sky-300 underline"
+            className="mt-2 inline-flex items-center gap-1 text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150 underline"
           >
             Event link ↗
           </a>
@@ -434,12 +434,12 @@ export default function CleanupEventDetail({
       {isCancelled ? null : !userId ? (
         <Link
           href={`/login?next=/cleanup-events/${event.id}`}
-          className="block text-center px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-sky-950 text-sm font-semibold rounded-lg transition-colors"
+          className="block text-center px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
         >
           Log in to RSVP
         </Link>
       ) : (
-        <div className="border border-zinc-800 rounded-xl p-4 space-y-3">
+        <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-zinc-300">
               {goingCount} going
@@ -473,7 +473,7 @@ export default function CleanupEventDetail({
                   className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 ${
                     viewerStatus === status
                       ? activeClasses
-                      : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
+                      : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500 active:scale-[0.97]"
                   }`}
                 >
                   {status === "going" ? "Going" : status === "maybe" ? "Maybe" : "Can't go"}
@@ -487,7 +487,7 @@ export default function CleanupEventDetail({
               <button
                 onClick={handleCheckInWithLocation}
                 disabled={checkInLoading}
-                className="w-full px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+                className="w-full px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 {checkInLoading ? "Checking in…" : "Check in with my location"}
               </button>
@@ -503,7 +503,7 @@ export default function CleanupEventDetail({
                   <button
                     onClick={handleCheckInWithCode}
                     disabled={checkInLoading || !joinCodeInput.trim()}
-                    className="px-3 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white rounded-lg transition-colors shrink-0"
+                    className="px-3 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation shrink-0"
                   >
                     Submit
                   </button>
@@ -511,7 +511,7 @@ export default function CleanupEventDetail({
               ) : (
                 <button
                   onClick={() => setShowJoinCodeField(true)}
-                  className="w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="w-full text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
                 >
                   Have a join code instead?
                 </button>
@@ -520,14 +520,14 @@ export default function CleanupEventDetail({
           )}
 
           {event.logging_mode === "organizer_total" ? (
-            <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg">
+            <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg shadow-elevation-1">
               <span aria-hidden="true">ℹ️</span>
               The organizer will log the event totals for everyone.
             </div>
           ) : (
             <Link
               href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-colors"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-[background-color,transform] duration-150 touch-manipulation"
             >
               <span aria-hidden="true">📍</span>
               Log your cleanup on the map
@@ -548,7 +548,7 @@ export default function CleanupEventDetail({
         <LogTeamTotalForm cleanupId={event.id} organizerUserId={userId!} rsvps={event.rsvps} onLogged={refresh} />
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden">
+      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
         <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
           <span className="text-sm font-semibold text-zinc-300">
             Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
@@ -578,7 +578,7 @@ export default function CleanupEventDetail({
                         size="xs"
                       />
                       {r.username ? (
-                        <Link href={`/users/${r.username}`} className="text-sm text-zinc-200 truncate hover:text-zinc-100 transition-colors">
+                        <Link href={`/users/${r.username}`} className="text-sm text-zinc-200 truncate hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
                           {r.display_name ?? r.username}
                         </Link>
                       ) : (
@@ -672,7 +672,7 @@ export default function CleanupEventDetail({
       </div>
 
       {(event.photos.length > 0 || (userId && !isCancelled)) && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden">
+        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
           <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
             <span className="text-sm font-semibold text-zinc-300">
               Photos <span className="text-zinc-500 font-normal">({event.photos.length})</span>
@@ -690,7 +690,7 @@ export default function CleanupEventDetail({
                   src={url}
                   alt=""
                   onClick={() => setLightboxIndex(i)}
-                  className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 transition-colors"
+                  className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation shadow-elevation-1"
                 />
               ))}
             </div>
@@ -740,7 +740,7 @@ function AddEventPhotoButton({
   return (
     <div className="flex items-center gap-2">
       {error && <span className="text-xs text-red-400">{error}</span>}
-      <label className="text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg px-3 py-1.5 cursor-pointer transition-colors">
+      <label className="text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] border border-zinc-700 rounded-lg px-3 py-1.5 cursor-pointer transition-[background-color,transform] duration-150 touch-manipulation">
         {loading ? "Uploading..." : "Add a photo"}
         <input
           type="file"
@@ -814,7 +814,7 @@ function AddAttendeeControl({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0"
+        className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0"
       >
         + Add attendee
       </button>
@@ -843,7 +843,7 @@ function AddAttendeeControl({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => select(u)}
                 disabled={adding === u.id}
-                className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 disabled:opacity-50 disabled:active:bg-transparent transition-colors duration-150"
               >
                 {u.display_name ?? u.username ?? "Unknown"}
                 {u.username && u.display_name && (
@@ -888,7 +888,7 @@ function OrganizerCheckInButton({
     <button
       onClick={submit}
       disabled={loading}
-      className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0 disabled:opacity-50"
+      className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0 disabled:opacity-50 disabled:active:text-zinc-500"
     >
       {loading ? "Checking in…" : "Check in"}
     </button>
@@ -959,7 +959,7 @@ function OrganizerLogButton({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0"
+        className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0"
       >
         Log for them
       </button>
@@ -1002,7 +1002,7 @@ function OrganizerLogButton({
             className={inputCls}
           />
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 mb-3">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 mb-3 shadow-elevation-1">
           <p className="text-[11px] text-zinc-600">
             Bags and pounds are two ways of estimating the same haul — pick which one determines points.
             Both are still saved for the event&apos;s record.
@@ -1013,7 +1013,7 @@ function OrganizerLogButton({
               className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
                 scoringMethod === "bags"
                   ? "border-emerald-600 bg-emerald-900/20"
-                  : "border-zinc-800 hover:border-zinc-600"
+                  : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
               }`}
             >
               <p className="text-xs font-semibold text-zinc-200">By bags</p>
@@ -1029,7 +1029,7 @@ function OrganizerLogButton({
               className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
                 scoringMethod === "pounds"
                   ? "border-emerald-600 bg-emerald-900/20"
-                  : "border-zinc-800 hover:border-zinc-600"
+                  : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
               }`}
             >
               <p className="text-xs font-semibold text-zinc-200">By pounds</p>
@@ -1047,13 +1047,13 @@ function OrganizerLogButton({
           <button
             onClick={submit}
             disabled={loading || hasNegative}
-            className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+            className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
           >
             {loading ? "Logging…" : "Log contribution"}
           </button>
           <button
             onClick={() => setOpen(false)}
-            className="px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
           >
             Cancel
           </button>
@@ -1188,7 +1188,7 @@ function LogTeamTotalForm({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-xl p-4 space-y-3">
+    <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
       <div>
         <p className="text-sm font-semibold text-zinc-300">Log team total</p>
         <p className="text-xs text-zinc-500 mt-0.5">
@@ -1197,7 +1197,7 @@ function LogTeamTotalForm({
       </div>
       <button
         onClick={() => setWarningOpen((v) => !v)}
-        className="w-full text-left text-[11px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2 hover:bg-amber-500/15 transition-colors"
+        className="w-full text-left text-[11px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2 hover:bg-amber-500/15 active:bg-amber-500/15 active:scale-[0.98] transition-[background-color,transform] duration-150 touch-manipulation"
       >
         {warningOpen ? (
           <>
@@ -1258,7 +1258,7 @@ function LogTeamTotalForm({
             className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
               pool === p
                 ? "bg-emerald-700 border-emerald-700 text-white"
-                : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
+                : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500 active:scale-[0.97]"
             }`}
           >
             {p === "checked_in" ? "Checked in" : "Everyone going"}
@@ -1266,7 +1266,7 @@ function LogTeamTotalForm({
         ))}
       </div>
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
         <p className="text-[11px] text-zinc-600">
           Bags and pounds are two ways of estimating the same haul — pick which one determines points for
           this submission. Both are still saved for the event&apos;s record.
@@ -1277,7 +1277,7 @@ function LogTeamTotalForm({
             className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
               scoringMethod === "bags"
                 ? "border-emerald-600 bg-emerald-900/20"
-                : "border-zinc-800 hover:border-zinc-600"
+                : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
             }`}
           >
             <p className="text-xs font-semibold text-zinc-200">By bags</p>
@@ -1293,7 +1293,7 @@ function LogTeamTotalForm({
             className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
               scoringMethod === "pounds"
                 ? "border-emerald-600 bg-emerald-900/20"
-                : "border-zinc-800 hover:border-zinc-600"
+                : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
             }`}
           >
             <p className="text-xs font-semibold text-zinc-200">By pounds</p>
@@ -1340,7 +1340,7 @@ function LogTeamTotalForm({
       <div>
         <button
           onClick={() => setLogsOpen((v) => !v)}
-          className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="text-xs text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
         >
           {logsOpen ? "Hide" : "Show"} log history{logs.length > 0 ? ` (${logs.length})` : ""}
         </button>
@@ -1396,7 +1396,7 @@ function LogTeamTotalForm({
 
       <button
         onClick={() => setAdvancedOpen((v) => !v)}
-        className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors"
+        className="text-[11px] text-zinc-600 hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150"
       >
         {advancedOpen ? "Hide advanced options" : "Advanced options"}
       </button>
@@ -1417,18 +1417,18 @@ function LogTeamTotalForm({
             <button
               onClick={applyToAll}
               disabled={applyAllValue.trim() === ""}
-              className="text-xs text-sky-400 hover:text-sky-300 disabled:opacity-40 disabled:hover:text-sky-400 transition-colors"
+              className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 disabled:opacity-40 disabled:hover:text-sky-400 disabled:active:text-sky-400 transition-colors duration-150"
             >
               Apply to all
             </button>
-            <button onClick={clearAll} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+            <button onClick={clearAll} className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">
               Clear (use auto split)
             </button>
           </div>
 
           <button
             onClick={() => setOverrideListOpen((v) => !v)}
-            className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors"
+            className="text-[11px] text-zinc-600 hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150"
           >
             {overrideListOpen
               ? "Hide individual values"
@@ -1466,7 +1466,7 @@ function LogTeamTotalForm({
       <button
         onClick={submit}
         disabled={loading || hasNegative || candidates.length === 0}
-        className="w-full mt-3 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+        className="w-full mt-3 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
       >
         {loading ? "Logging…" : candidates.length === 0 ? "No eligible attendees" : "Log team total"}
       </button>
@@ -1511,7 +1511,7 @@ function OrganizerRoleButton({
     <button
       onClick={toggle}
       disabled={loading}
-      className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0 disabled:opacity-40"
+      className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0 disabled:opacity-40 disabled:active:text-zinc-500"
     >
       {loading ? "…" : isOrganizer ? "Remove organizer" : "Make organizer"}
     </button>

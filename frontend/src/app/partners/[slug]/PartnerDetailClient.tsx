@@ -37,7 +37,7 @@ export default function PartnerDetailClient({
       <div className="flex items-start gap-4">
         {business.logo_url && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-xl object-cover shrink-0" />
+          <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-xl object-cover shrink-0 shadow-elevation-1" />
         )}
         <div className="min-w-0">
           <h1 className="text-2xl font-black text-zinc-100">{business.name}</h1>
@@ -64,7 +64,7 @@ export default function PartnerDetailClient({
             href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address ?? `${business.lat},${business.lng}`)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+            className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
           >
             <span aria-hidden="true">🧭</span>
             Get directions
@@ -73,7 +73,7 @@ export default function PartnerDetailClient({
             <Link
               key={c.slug}
               href={`/campaigns/${c.slug}?lat=${business.lat}&lng=${business.lng}`}
-              className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
+              className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
             >
               <span aria-hidden="true">📍</span>
               {(business.campaigns?.length ?? 0) > 1 ? `Show on map (${c.title})` : "Show on map"}
@@ -88,7 +88,7 @@ export default function PartnerDetailClient({
             href={business.website_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-400 hover:text-emerald-300"
+            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300"
           >
             Website
           </a>
@@ -99,7 +99,7 @@ export default function PartnerDetailClient({
             href={url as string}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-400 hover:text-emerald-300 capitalize"
+            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300 capitalize"
           >
             {platform}
           </a>

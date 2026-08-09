@@ -3,7 +3,10 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
+import { useClickOutside } from "@/hooks/useClickOutside";
+import { cn } from "@/lib/cn";
 import type { SelectedArea } from "./EventAreaMapPicker";
 import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
 import AddressAutocomplete from "./AddressAutocomplete";
@@ -11,6 +14,7 @@ import TimedEventForm from "@/components/events/TimedEventForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
+import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import { updateEvent } from "@/lib/events";
 import { deleteGroup } from "@/lib/groups";
 import type { Json, Database } from "@/types/database";
@@ -158,21 +162,22 @@ function sortCampaignsByStatus(campaigns: Campaign[]) {
   });
 }
 
+const STATUS_BADGE_VARIANT: Record<string, BadgeVariant> = {
+  active: "success",
+  approved: "success",
+  completed: "info",
+  pending: "pending",
+  paused: "pending",
+  draft: "neutral",
+  inactive: "neutral",
+  rejected: "error",
+};
+
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    active: "bg-emerald-900/60 text-emerald-400 border-emerald-800",
-    draft: "bg-zinc-800 text-zinc-400 border-zinc-700",
-    paused: "bg-yellow-900/60 text-yellow-400 border-yellow-800",
-    completed: "bg-blue-900/60 text-blue-400 border-blue-800",
-    pending: "bg-amber-900/60 text-amber-400 border-amber-800",
-    inactive: "bg-zinc-800 text-zinc-500 border-zinc-700",
-    approved: "bg-emerald-900/60 text-emerald-400 border-emerald-800",
-    rejected: "bg-red-900/60 text-red-400 border-red-800",
-  };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs border capitalize ${colors[status] ?? colors.draft}`}>
+    <Badge variant={STATUS_BADGE_VARIANT[status] ?? "neutral"} className="capitalize">
       {status}
-    </span>
+    </Badge>
   );
 }
 
@@ -217,7 +222,7 @@ const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = 
   timed_event:    { desc: "Admin-created timed bonus event over one or more areas (effect_config is always {\"type\": \"score_multiplier\", \"multiplier\": N}). Never auto-triggered — created manually here or from the campaign page. Fully implemented.", implemented: true },
 };
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 transition-[border-color] duration-150 focus:outline-none focus:border-zinc-500";
 
 // ─── Campaigns Tab ────────────────────────────────────────────────────────────
 
@@ -402,10 +407,10 @@ function CampaignsTab({ campaigns, setCampaigns }: {
             onClick={openRecomputeImpact}
             disabled={recomputeLoading}
             title={pendingRecomputeCount ? `${pendingRecomputeCount} user${pendingRecomputeCount !== 1 ? "s" : ""} have stale balances` : undefined}
-            className={`px-3 py-1.5 text-xs disabled:opacity-40 rounded-lg font-medium transition-colors ${
+            className={`px-3 py-1.5 min-h-9 text-xs disabled:opacity-40 disabled:active:scale-100 rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation ${
               pendingRecomputeCount
-                ? "bg-amber-700 hover:bg-amber-600 text-white"
-                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                ? "bg-amber-700 hover:bg-amber-600 active:bg-amber-800 text-white"
+                : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300"
             }`}
           >
             {recomputeLoading
@@ -416,7 +421,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
           </button>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+            className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
           >
             {showCreate ? "Cancel" : "+ New Campaign"}
           </button>
@@ -427,7 +432,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
+        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
           <p className="text-sm font-semibold text-zinc-300">Create Campaign</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-1">
@@ -483,7 +488,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
           <button
             type="submit"
             disabled={loading || !title.trim() || !slug.trim()}
-            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+            className="px-4 py-2 min-h-11 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-40 disabled:active:scale-100 text-white text-sm rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
           >
             {loading ? "Creating…" : "Create"}
           </button>
@@ -491,15 +496,15 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {campaigns.length === 0 ? (
-        <div className="border border-zinc-800 rounded-xl px-4 py-8 text-center text-zinc-600 text-sm">No campaigns.</div>
+        <div className="border border-zinc-800 rounded-xl px-4 py-8 text-center text-zinc-600 text-sm shadow-elevation-1">No campaigns.</div>
       ) : (
         <>
           <div className="sm:hidden space-y-2">
             {campaigns.map(c => (
-              <div key={c.id} className="border border-zinc-800 rounded-xl p-4 space-y-2">
+              <div key={c.id} className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 font-medium transition-colors">
+                    <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 active:text-zinc-300 font-medium transition-colors duration-150">
                       {c.title}
                     </Link>
                     <p className="text-xs text-zinc-600 mt-0.5">/{c.slug} · {c.contribution_type}</p>
@@ -530,7 +535,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/40">
@@ -544,7 +549,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                 {campaigns.map(c => (
                   <tr key={c.id} className="hover:bg-zinc-900/20">
                     <td className="px-4 py-3">
-                      <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 font-medium transition-colors">
+                      <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 active:text-zinc-300 font-medium transition-colors duration-150">
                         {c.title}
                       </Link>
                       <p className="text-xs text-zinc-600 mt-0.5">/{c.slug} · {c.contribution_type}</p>
@@ -583,14 +588,14 @@ function CampaignsTab({ campaigns, setCampaigns }: {
 
       {(spendableLoading || spendableImpact || spendableError) && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 max-w-lg w-full max-h-[80vh] overflow-y-auto space-y-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 max-w-lg w-full max-h-[80vh] overflow-y-auto space-y-4 shadow-elevation-4">
             {spendableLoading && <p className="text-sm text-zinc-400">Loading impact preview…</p>}
             {spendableError && (
               <>
                 <p className="text-red-400 text-sm">{spendableError}</p>
                 <button
                   onClick={() => { setSpendableError(null); setSpendableImpact(null); }}
-                  className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg"
+                  className="px-3 py-1.5 min-h-9 text-xs bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
                 >
                   Close
                 </button>
@@ -612,7 +617,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                 {spendableImpact.users.length === 0 ? (
                   <p className="text-xs text-zinc-600">No users would be affected — everyone's spendable balance already matches what it would be.</p>
                 ) : (
-                  <div className="border border-zinc-800 rounded-lg overflow-x-auto">
+                  <div className="border border-zinc-800 rounded-lg overflow-x-auto shadow-elevation-1">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-zinc-800 bg-zinc-900/60">
@@ -655,14 +660,14 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                   <button
                     onClick={() => setSpendableImpact(null)}
                     disabled={spendableApplying}
-                    className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 rounded-lg"
+                    className="px-3 py-1.5 min-h-9 text-xs bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:active:scale-100 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={confirmSpendableToggle}
                     disabled={spendableApplying}
-                    className="px-3 py-1.5 text-xs bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white rounded-lg font-medium"
+                    className="px-3 py-1.5 min-h-9 text-xs bg-sky-700 hover:bg-sky-600 active:bg-sky-800 disabled:opacity-40 disabled:active:scale-100 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
                   >
                     {spendableApplying ? "Saving…" : `${spendableImpact.enabled ? "Enable" : "Disable"} (won't apply balances yet)`}
                   </button>
@@ -675,7 +680,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
 
       {(recomputeLoading || recomputeImpact || recomputeError) && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-elevation-4">
             {recomputeLoading && (
               <p className="text-sm text-zinc-400">Checking affected users…</p>
             )}
@@ -685,7 +690,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                 <div className="flex justify-end">
                   <button
                     onClick={() => setRecomputeError(null)}
-                    className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg"
+                    className="px-3 py-1.5 min-h-9 text-xs bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
                   >
                     Close
                   </button>
@@ -768,14 +773,14 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                   <button
                     onClick={() => setRecomputeImpact(null)}
                     disabled={recomputeApplying}
-                    className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 rounded-lg"
+                    className="px-3 py-1.5 min-h-9 text-xs bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:active:scale-100 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={confirmRecompute}
                     disabled={recomputeApplying || recomputeImpact.users.length === 0}
-                    className="px-3 py-1.5 text-xs bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white rounded-lg font-medium"
+                    className="px-3 py-1.5 min-h-9 text-xs bg-sky-700 hover:bg-sky-600 active:bg-sky-800 disabled:opacity-40 disabled:active:scale-100 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
                   >
                     {recomputeApplying ? "Applying…" : "Confirm"}
                   </button>
@@ -903,14 +908,14 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
         <span className="text-sm text-zinc-500">{triggers.length} trigger{triggers.length !== 1 ? "s" : ""}</span>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+          className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
         >
           {showCreate ? "Cancel" : "+ New Trigger"}
         </button>
       </div>
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
+        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
           <p className="text-sm font-semibold text-zinc-300">Create Trigger</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-1">
@@ -941,7 +946,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
                 <option value="decay_start">decay_start</option>
               </select>
               {EVENT_TYPE_INFO[eventType] && (
-                <div className="mt-1.5 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs space-y-1">
+                <div className="mt-1.5 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs space-y-1 shadow-elevation-1">
                   <p className="text-zinc-400 leading-relaxed">{EVENT_TYPE_INFO[eventType].desc}</p>
                   {EVENT_TYPE_INFO[eventType].implemented
                     ? <span className="text-emerald-400">✓ Trigger logic implemented</span>
@@ -967,7 +972,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
           <button
             type="submit"
             disabled={loading || !name.trim() || !campaignId}
-            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+            className="px-4 py-2 min-h-11 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-40 disabled:active:scale-100 text-white text-sm rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
           >
             {loading ? "Creating…" : "Create"}
           </button>
@@ -975,12 +980,12 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
       )}
 
       {triggers.length === 0 ? (
-        <div className="border border-zinc-800 rounded-xl px-4 py-8 text-center text-zinc-600 text-sm">No triggers.</div>
+        <div className="border border-zinc-800 rounded-xl px-4 py-8 text-center text-zinc-600 text-sm shadow-elevation-1">No triggers.</div>
       ) : (
         <>
           <div className="sm:hidden space-y-2">
             {triggers.map(t => (
-              <div key={t.id} className="border border-zinc-800 rounded-xl p-4 space-y-1.5">
+              <div key={t.id} className="border border-zinc-800 rounded-xl p-4 space-y-1.5 shadow-elevation-1">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-zinc-300 font-medium text-sm">{t.name}</p>
                   <button
@@ -1000,7 +1005,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/40">
@@ -1260,14 +1265,14 @@ function EventsTab({ campaigns, events, setEvents }: {
         </span>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+          className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
         >
           {showCreate ? "Cancel" : "+ New Event"}
         </button>
       </div>
 
       {showCreate && (
-        <div className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4">
+        <div className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
           <p className="text-sm font-semibold text-zinc-300">Create Event</p>
           <div className="space-y-1">
             <label className="text-xs text-zinc-500">Event type</label>
@@ -1363,7 +1368,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                     <button
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
-                      className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+                      className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 active:scale-95 transition-[border-color,transform] duration-150 touch-manipulation group shrink-0 shadow-elevation-1"
                     >
                       {imagePreview ? (
                         <img src={imagePreview} alt="Event" className="w-full h-full object-cover" />
@@ -1397,7 +1402,7 @@ function EventsTab({ campaigns, events, setEvents }: {
               <button
                 type="submit"
                 disabled={createLoading || !title.trim() || !campaignId}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+                className="px-4 py-2 min-h-11 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-40 disabled:active:scale-100 text-white text-sm rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
               >
                 {createLoading ? "Creating…" : "Create"}
               </button>
@@ -1407,13 +1412,13 @@ function EventsTab({ campaigns, events, setEvents }: {
       )}
 
       {events.length === 0 ? (
-        <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
+        <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
           No active events.
         </div>
       ) : (
         <div className="space-y-2">
           {events.map(e => (
-            <div key={e.id} className={`border rounded-xl px-5 py-4 ${e.status === "paused" ? "border-yellow-900/60 bg-yellow-950/10" : "border-zinc-800"}`}>
+            <div key={e.id} className={`border rounded-xl px-5 py-4 shadow-elevation-1 ${e.status === "paused" ? "border-yellow-900/60 bg-yellow-950/10" : "border-zinc-800"}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0">
                 <span className="text-xl shrink-0 mt-0.5">{EVENT_ICON[e.event_type] ?? "⚡"}</span>
@@ -1445,7 +1450,7 @@ function EventsTab({ campaigns, events, setEvents }: {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => (editingId === e.id ? cancelEdit() : startEdit(e))}
-                  className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
+                  className="px-3 py-1.5 min-h-9 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:scale-95 rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation"
                 >
                   {editingId === e.id ? "Close" : "Edit"}
                 </button>
@@ -1453,7 +1458,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                   <button
                     onClick={() => updateStatus(e.id, "paused")}
                     disabled={pendingId === e.id}
-                    className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-yellow-400 hover:border-yellow-900 rounded-lg transition-colors disabled:opacity-40"
+                    className="px-3 py-1.5 min-h-9 text-xs border border-zinc-700 text-zinc-400 hover:text-yellow-400 hover:border-yellow-900 active:scale-95 disabled:active:scale-100 rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation disabled:opacity-40"
                   >
                     Pause
                   </button>
@@ -1462,7 +1467,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                   <button
                     onClick={() => updateStatus(e.id, "active")}
                     disabled={pendingId === e.id}
-                    className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-emerald-400 hover:border-emerald-900 rounded-lg transition-colors disabled:opacity-40"
+                    className="px-3 py-1.5 min-h-9 text-xs border border-zinc-700 text-zinc-400 hover:text-emerald-400 hover:border-emerald-900 active:scale-95 disabled:active:scale-100 rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation disabled:opacity-40"
                   >
                     Resume
                   </button>
@@ -1470,7 +1475,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                 <button
                   onClick={() => updateStatus(e.id, "cancelled")}
                   disabled={pendingId === e.id}
-                  className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900 rounded-lg transition-colors disabled:opacity-40"
+                  className="px-3 py-1.5 min-h-9 text-xs border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900 active:scale-95 disabled:active:scale-100 rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation disabled:opacity-40"
                 >
                   Cancel
                 </button>
@@ -1516,7 +1521,7 @@ function EventsTab({ campaigns, events, setEvents }: {
                         <button
                           type="button"
                           onClick={() => editImageInputRef.current?.click()}
-                          className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+                          className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 active:scale-95 transition-[border-color,transform] duration-150 touch-manipulation group shrink-0 shadow-elevation-1"
                         >
                           {editImagePreview ? (
                             <img src={editImagePreview} alt="Event" className="w-full h-full object-cover" />
@@ -1553,14 +1558,14 @@ function EventsTab({ campaigns, events, setEvents }: {
                     <button
                       type="submit"
                       disabled={editLoading || !editTitle.trim()}
-                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-colors"
+                      className="px-4 py-2 min-h-11 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-40 disabled:active:scale-100 text-white text-sm rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
                     >
                       {editLoading ? "Saving…" : "Save changes"}
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg font-medium transition-colors"
+                      className="px-4 py-2 min-h-11 text-sm bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
                     >
                       Cancel
                     </button>
@@ -1617,7 +1622,7 @@ function CleanupEventWipeTool() {
   };
 
   return (
-    <div className="border border-red-900/60 rounded-xl p-5 bg-red-950/10 space-y-3 mt-6">
+    <div className="border border-red-900/60 rounded-xl p-5 bg-red-950/10 space-y-3 mt-6 shadow-elevation-2">
       <p className="text-sm font-semibold text-red-400">Reset a cleanup event's logged data</p>
       <p className="text-xs text-zinc-500 leading-relaxed">
         Use this to undo bad logging on a cleanup event — e.g. an individual log made before
@@ -1635,7 +1640,7 @@ function CleanupEventWipeTool() {
         <button
           onClick={handleWipe}
           disabled={loading || !cleanupId.trim()}
-          className="px-4 py-2 text-sm bg-red-900/60 hover:bg-red-900 border border-red-800 disabled:opacity-40 text-red-300 rounded-lg font-medium transition-colors shrink-0"
+          className="px-4 py-2 min-h-11 text-sm bg-red-900/60 hover:bg-red-900 active:bg-red-950 border border-red-800 disabled:opacity-40 disabled:active:scale-100 text-red-300 rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shrink-0"
         >
           {loading ? "Wiping…" : "Wipe event data"}
         </button>
@@ -1733,7 +1738,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
   }
 
   return (
-    <div className="border border-zinc-800 rounded-lg px-4 py-3">
+    <div className="border border-zinc-800 rounded-lg px-4 py-3 shadow-elevation-1">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium text-zinc-200">{offer.title}</p>
@@ -1748,7 +1753,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
               <button
                 type="button"
                 onClick={toggleRedemptions}
-                className="text-zinc-500 hover:text-zinc-300 underline decoration-dotted transition-colors"
+                className="text-zinc-500 hover:text-zinc-300 active:text-zinc-200 underline decoration-dotted transition-colors duration-150"
               >
                 {redemptionCount}/{offer.max_total_redemptions ?? "∞"} redeemed
               </button>
@@ -1758,7 +1763,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
             {offer.code && <span className="text-zinc-600 font-mono">code: {offer.code}</span>}
           </div>
           {showRedemptions && (
-            <div className="mt-2 border border-zinc-800 rounded-lg divide-y divide-zinc-800/60 overflow-hidden">
+            <div className="mt-2 border border-zinc-800 rounded-lg divide-y divide-zinc-800/60 overflow-hidden shadow-elevation-1">
               {loadingRedemptions ? (
                 <p className="px-3 py-2 text-xs text-zinc-600">Loading…</p>
               ) : redemptions && redemptions.length > 0 ? (
@@ -1796,14 +1801,14 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setEditing(true)}
-              className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 rounded-lg transition-colors"
+              className="px-2.5 py-1 min-h-9 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 active:scale-95 rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation"
             >
               Edit
             </button>
             <button
               onClick={handleCancelOffer}
               disabled={cancelling}
-              className="px-2.5 py-1 text-xs border border-red-900/60 text-red-500 hover:text-red-400 hover:border-red-800 rounded-lg transition-colors disabled:opacity-40"
+              className="px-2.5 py-1 min-h-9 text-xs border border-red-900/60 text-red-500 hover:text-red-400 hover:border-red-800 active:scale-95 disabled:active:scale-100 rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation disabled:opacity-40"
             >
               {cancelling ? "Cancelling…" : "Cancel offer"}
             </button>
@@ -1932,7 +1937,7 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
                   />
                   Business-only
                 </label>
-                <button onClick={() => handleRemove(a.id)} className="text-red-500 hover:text-red-400 transition-colors">
+                <button onClick={() => handleRemove(a.id)} className="text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150">
                   Remove
                 </button>
               </div>
@@ -1961,7 +1966,7 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
                   key={u.id}
                   onClick={() => handleAdd(u)}
                   disabled={loading}
-                  className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-40"
+                  className="w-full text-left px-3 py-1.5 min-h-9 text-xs text-zinc-300 hover:bg-zinc-800 active:bg-zinc-700 disabled:active:scale-100 transition-[background-color,transform] duration-150 active:scale-[0.98] touch-manipulation disabled:opacity-40"
                 >
                   {u.username ?? u.email} <span className="text-zinc-600">({u.email})</span>
                 </button>
@@ -2094,10 +2099,10 @@ function BusinessCard({
   };
 
   return (
-    <div className={`border rounded-xl overflow-hidden ${isPending ? "border-amber-800/60" : isRejected ? "border-red-900/60" : "border-zinc-800"}`}>
+    <div className={`border rounded-xl overflow-hidden shadow-elevation-1 ${isPending ? "border-amber-800/60" : isRejected ? "border-red-900/60" : "border-zinc-800"}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-zinc-900/30 transition-colors text-left"
+        className="w-full flex items-center justify-between px-5 py-3.5 min-h-11 hover:bg-zinc-900/30 active:bg-zinc-900/50 transition-[background-color,transform] duration-150 active:scale-[0.99] touch-manipulation text-left"
       >
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-zinc-500 text-xs">{expanded ? "▾" : "▸"}</span>
@@ -2119,7 +2124,7 @@ function BusinessCard({
               role="button"
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); handleReject(); }}
-              className="text-xs text-red-500 hover:text-red-400 transition-colors px-2 py-1"
+              className="text-xs text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150 px-2 py-1"
             >
               {rejecting ? "Rejecting…" : "Reject"}
             </span>
@@ -2128,7 +2133,7 @@ function BusinessCard({
             role="button"
             tabIndex={0}
             onClick={(e) => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1"
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors duration-150 px-2 py-1"
           >
             {editing ? "Cancel edit" : "Edit"}
           </span>
@@ -2169,7 +2174,7 @@ function BusinessCard({
           )}
           <button
             onClick={() => setShowCreateOffer(!showCreateOffer)}
-            className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+            className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
           >
             {showCreateOffer ? "Cancel" : "+ New Offer"}
           </button>
@@ -2251,7 +2256,7 @@ function PartnersTab({
           <Link
             href="/partners/apply"
             target="_blank"
-            className="px-3 py-1.5 text-xs border border-zinc-700 hover:border-zinc-500 text-zinc-300 rounded-lg font-medium transition-colors"
+            className="px-3 py-1.5 min-h-9 text-xs border border-zinc-700 hover:border-zinc-500 active:scale-95 text-zinc-300 rounded-lg font-medium transition-[border-color,transform] duration-150 touch-manipulation"
           >
             Open apply form ↗
           </Link>
@@ -2261,13 +2266,13 @@ function PartnersTab({
               setLinkCopied(true);
               setTimeout(() => setLinkCopied(false), 1500);
             }}
-            className="px-3 py-1.5 text-xs border border-zinc-700 hover:border-zinc-500 text-zinc-300 rounded-lg font-medium transition-colors"
+            className="px-3 py-1.5 min-h-9 text-xs border border-zinc-700 hover:border-zinc-500 active:scale-95 text-zinc-300 rounded-lg font-medium transition-[border-color,transform] duration-150 touch-manipulation"
           >
             {linkCopied ? "Copied!" : "Copy link"}
           </button>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+            className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
           >
             {showCreate ? "Cancel" : "+ New Partner"}
           </button>
@@ -2333,7 +2338,7 @@ function PartnersTab({
 
       <div className="space-y-2">
         {businesses.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
+          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
             No partner businesses.
           </div>
         )}
@@ -2458,10 +2463,10 @@ function GroupCard({
     : [];
 
   return (
-    <div className={`border rounded-xl overflow-hidden ${isPending ? "border-amber-800/60" : isRejected ? "border-red-900/60" : "border-zinc-800"}`}>
+    <div className={`border rounded-xl overflow-hidden shadow-elevation-1 ${isPending ? "border-amber-800/60" : isRejected ? "border-red-900/60" : "border-zinc-800"}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-zinc-900/30 transition-colors text-left"
+        className="w-full flex items-center justify-between px-5 py-3.5 min-h-11 hover:bg-zinc-900/30 active:bg-zinc-900/50 transition-[background-color,transform] duration-150 active:scale-[0.99] touch-manipulation text-left"
       >
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-zinc-500 text-xs">{expanded ? "▾" : "▸"}</span>
@@ -2486,7 +2491,7 @@ function GroupCard({
                 role="button"
                 tabIndex={0}
                 onClick={(e) => { e.stopPropagation(); handleApprove(); }}
-                className="text-xs text-emerald-500 hover:text-emerald-400 transition-colors px-2 py-1"
+                className="text-xs text-emerald-500 hover:text-emerald-400 active:text-emerald-300 transition-colors duration-150 px-2 py-1"
               >
                 {working ? "Working…" : "Approve"}
               </span>
@@ -2494,7 +2499,7 @@ function GroupCard({
                 role="button"
                 tabIndex={0}
                 onClick={(e) => { e.stopPropagation(); handleReject(); }}
-                className="text-xs text-red-500 hover:text-red-400 transition-colors px-2 py-1"
+                className="text-xs text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150 px-2 py-1"
               >
                 Reject
               </span>
@@ -2505,7 +2510,7 @@ function GroupCard({
               role="button"
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1"
+              className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors duration-150 px-2 py-1"
             >
               Delete
             </span>
@@ -2515,7 +2520,7 @@ function GroupCard({
               role="button"
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); setExpanded(true); setConfirmingDelete(true); }}
-              className="text-xs text-zinc-500 hover:text-red-400 transition-colors px-2 py-1"
+              className="text-xs text-zinc-500 hover:text-red-400 active:text-red-300 transition-colors duration-150 px-2 py-1"
             >
               Delete
             </span>
@@ -2541,7 +2546,7 @@ function GroupCard({
               <button
                 type="button"
                 onClick={() => setShowDetailModal(true)}
-                className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-amber-800/60 text-amber-400 hover:bg-amber-900/20 transition-colors"
+                className="shrink-0 text-xs px-2.5 py-1 min-h-9 rounded-lg border border-amber-800/60 text-amber-400 hover:bg-amber-900/20 active:bg-amber-900/30 active:scale-95 transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 View full submission
               </button>
@@ -2556,7 +2561,7 @@ function GroupCard({
             <Link
               href={`/groups/${group.slug}`}
               target="_blank"
-              className="inline-block text-xs text-emerald-500 hover:text-emerald-400 underline"
+              className="inline-block text-xs text-emerald-500 hover:text-emerald-400 active:text-emerald-300 underline transition-colors duration-150"
             >
               View public group page → /groups/{group.slug}
             </Link>
@@ -2592,7 +2597,7 @@ function GroupCard({
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs px-2 py-1 rounded-full border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-colors"
+                  className="text-xs px-2 py-1 rounded-full border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 active:scale-95 transition-[border-color,color,transform] duration-150 touch-manipulation"
                 >
                   {platform}
                 </a>
@@ -2607,7 +2612,7 @@ function GroupCard({
                   role="button"
                   tabIndex={0}
                   onClick={() => setConfirmingDelete(true)}
-                  className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                  className="text-xs text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150"
                 >
                   Delete this group…
                 </span>
@@ -2628,14 +2633,14 @@ function GroupCard({
                       type="button"
                       disabled={typedName !== group.name || working}
                       onClick={handleConfirmedDelete}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-800 text-red-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-900/60 transition-colors"
+                      className="text-xs px-3 py-1.5 min-h-9 rounded-lg bg-red-900/40 border border-red-800 text-red-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 hover:bg-red-900/60 active:bg-red-900/80 active:scale-95 transition-[background-color,transform] duration-150 touch-manipulation"
                     >
                       {working ? "Deleting…" : "Confirm delete"}
                     </button>
                     <button
                       type="button"
                       onClick={() => { setConfirmingDelete(false); setTypedName(""); }}
-                      className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                      className="text-xs px-3 py-1.5 min-h-9 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 active:scale-95 transition-[color,transform] duration-150 touch-manipulation"
                     >
                       Cancel
                     </button>
@@ -2653,7 +2658,7 @@ function GroupCard({
           onClick={() => setShowDetailModal(false)}
         >
           <div
-            className="w-full max-w-lg max-h-full overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6"
+            className="w-full max-w-lg max-h-full overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-elevation-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 mb-4">
@@ -2661,7 +2666,7 @@ function GroupCard({
               <button
                 type="button"
                 onClick={() => setShowDetailModal(false)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors text-xl leading-none"
+                className="text-zinc-500 hover:text-zinc-300 active:text-zinc-200 active:scale-90 transition-[color,transform] duration-150 text-xl leading-none touch-manipulation"
               >
                 ×
               </button>
@@ -2722,7 +2727,7 @@ function GroupCard({
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs px-2.5 py-1 rounded-full border border-zinc-800 text-zinc-300 hover:border-zinc-700 transition-colors"
+                        className="text-xs px-2.5 py-1 rounded-full border border-zinc-800 text-zinc-300 hover:border-zinc-700 active:scale-95 transition-[border-color,transform] duration-150 touch-manipulation"
                       >
                         {platform}
                       </a>
@@ -2737,7 +2742,7 @@ function GroupCard({
                 role="button"
                 tabIndex={0}
                 onClick={() => { setShowDetailModal(false); handleApprove(); }}
-                className="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/40 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/60 transition-colors"
+                className="text-xs px-3 py-1.5 min-h-9 rounded-lg bg-emerald-900/40 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/60 active:bg-emerald-900/80 active:scale-95 transition-[background-color,transform] duration-150 touch-manipulation cursor-pointer"
               >
                 {working ? "Working…" : "Approve"}
               </span>
@@ -2745,7 +2750,7 @@ function GroupCard({
                 role="button"
                 tabIndex={0}
                 onClick={() => { setShowDetailModal(false); handleReject(); }}
-                className="text-xs px-3 py-1.5 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 transition-colors"
+                className="text-xs px-3 py-1.5 min-h-9 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 active:bg-red-900/30 active:scale-95 transition-[background-color,transform] duration-150 touch-manipulation cursor-pointer"
               >
                 Reject
               </span>
@@ -2794,7 +2799,7 @@ function GroupsTab({ groups, setGroups, currentUserId }: { groups: AdminGroup[];
 
       <div className="space-y-2">
         {groups.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm">
+          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
             No groups.
           </div>
         )}
@@ -2901,14 +2906,14 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
         </div>
         <button
           onClick={setThisWeek}
-          className="px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 rounded-lg transition-colors"
+          className="px-3 py-2 min-h-11 text-sm bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
         >
           This week (Mon–Mon)
         </button>
         <button
           onClick={fetchLeaderboard}
           disabled={!campaignId || loading}
-          className="px-4 py-2 text-sm font-semibold bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
+          className="px-4 py-2 min-h-11 text-sm font-semibold bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg transition-[background-color,transform] duration-150 active:scale-95 disabled:active:scale-100 touch-manipulation disabled:opacity-50"
         >
           {loading ? "Loading…" : "Run"}
         </button>
@@ -2920,12 +2925,12 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
         <>
           <div className="sm:hidden space-y-2">
             {entries.map((entry, i) => (
-              <div key={entry.user_id} className="border border-zinc-800 rounded-xl p-4 space-y-2">
+              <div key={entry.user_id} className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-zinc-500 text-xs tabular-nums shrink-0">#{i + 1}</span>
                   <Link
                     href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
-                    className="text-emerald-400 hover:underline text-sm truncate"
+                    className="text-emerald-400 hover:underline active:text-emerald-300 transition-colors duration-150 text-sm truncate"
                   >
                     {entry.display_name || entry.username || entry.user_id}
                   </Link>
@@ -2942,7 +2947,7 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto border border-zinc-800 rounded-xl">
+          <div className="hidden sm:block overflow-x-auto border border-zinc-800 rounded-xl shadow-elevation-1">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-800">
@@ -2962,7 +2967,7 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
                     <td className="px-3 py-2">
                       <Link
                         href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
-                        className="text-emerald-400 hover:underline"
+                        className="text-emerald-400 hover:underline active:underline"
                       >
                         {entry.display_name || entry.username || entry.user_id}
                       </Link>
@@ -3087,7 +3092,7 @@ function SettingsTab({ settings, setSettings }: {
               exception is trash report value, which is calculated live and is fully covered by recompute.
             </p>
           )}
-          <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
+          <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 shadow-elevation-1">
             {rows.map(setting => {
               const dirty = drafts[setting.key] !== String(setting.value);
               const isProximity = setting.category === "proximity";
@@ -3149,7 +3154,7 @@ function SettingsTab({ settings, setSettings }: {
                   <button
                     onClick={() => handleSave(setting)}
                     disabled={!dirty || savingKey === setting.key}
-                    className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors shrink-0"
+                    className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-40 disabled:hover:bg-emerald-700 disabled:active:scale-100 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shrink-0"
                   >
                     {savingKey === setting.key ? "Saving…" : savedKey === setting.key ? "Saved ✓" : "Save"}
                   </button>
@@ -3206,15 +3211,7 @@ export default function AdminPanel({
   };
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const mobileMoreRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (mobileMoreRef.current && !mobileMoreRef.current.contains(e.target as Node)) {
-        setMobileMoreOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+  useClickOutside(mobileMoreRef, () => setMobileMoreOpen(false), mobileMoreOpen);
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const sortedCampaigns = useMemo(() => sortCampaignsByStatus(campaigns), [campaigns]);
   const activeCampaigns = useMemo(() => sortedCampaigns.filter(c => c.status === "active"), [sortedCampaigns]);
@@ -3265,7 +3262,7 @@ export default function AdminPanel({
             <button
               onClick={handleSeedDemo}
               disabled={seedingDemo}
-              className="px-4 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-xl transition-colors disabled:opacity-50"
+              className="px-4 py-2 min-h-11 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-xl transition-[background-color,border-color,transform] duration-150 active:scale-95 disabled:active:scale-100 touch-manipulation disabled:opacity-50 shadow-elevation-1"
             >
               {seedingDemo ? "Seeding…" : "Seed Demo Data"}
             </button>
@@ -3283,10 +3280,10 @@ export default function AdminPanel({
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors -mb-px ${
+            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-[color,border-color,transform] duration-150 -mb-px active:scale-[0.97] ${
               tab === t
                 ? "border-emerald-500 text-emerald-400"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
+                : "border-transparent text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
             }`}
           >
             {t}
@@ -3304,23 +3301,37 @@ export default function AdminPanel({
         ))}
       </div>
 
-      <nav className="sm:hidden fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm pb-safe">
-        <div className="flex items-stretch">
+      <nav className="sm:hidden fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur-sm shadow-elevation-3 pb-safe">
+        <div className="flex items-stretch px-1 pt-1">
           {MOBILE_PRIMARY_TABS.map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); setMobileMoreOpen(false); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[48px] text-[11px] font-medium capitalize transition-colors relative ${
-                tab === t ? "text-emerald-400" : "text-zinc-500"
-              }`}
+              className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[48px] text-[11px] font-medium capitalize relative active:scale-95 transition-transform duration-100 touch-manipulation"
             >
-              <span className="text-lg leading-none">{TAB_ICON[t]}</span>
-              <span>{t}</span>
+              <span className="relative flex items-center justify-center w-9 h-7">
+                {tab === t && (
+                  <motion.span
+                    layoutId="admin-tab-pill"
+                    className="absolute inset-0 rounded-full bg-emerald-500/15"
+                    transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span
+                  className={cn(
+                    "relative z-10 text-lg leading-none transition-colors",
+                    tab === t ? "text-emerald-400" : "text-zinc-500"
+                  )}
+                >
+                  {TAB_ICON[t]}
+                </span>
+              </span>
+              <span className={cn("transition-colors", tab === t ? "text-emerald-400" : "text-zinc-500")}>{t}</span>
               {t === "events" && events.filter(e => e.status === "active").length > 0 && (
-                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-red-500" />
+                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.7)]" />
               )}
               {t === "groups" && groups.filter(g => g.status === "pending").length > 0 && (
-                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-amber-500" />
+                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.7)]" />
               )}
             </button>
           ))}
@@ -3329,29 +3340,46 @@ export default function AdminPanel({
               onClick={() => setMobileMoreOpen(o => !o)}
               aria-label="More admin tabs"
               aria-expanded={mobileMoreOpen}
-              className={`w-full h-full flex flex-col items-center justify-center gap-0.5 py-2 min-h-[48px] text-[11px] font-medium transition-colors ${
+              className={cn(
+                "w-full h-full flex flex-col items-center justify-center gap-0.5 py-2 min-h-[48px] text-[11px] font-medium transition-colors active:scale-95 duration-100 touch-manipulation",
                 mobileMoreOpen || MOBILE_OVERFLOW_TABS.includes(tab) ? "text-emerald-400" : "text-zinc-500"
-              }`}
+              )}
             >
-              <span className="text-lg leading-none">⋯</span>
+              <span
+                className={cn(
+                  "flex items-center justify-center w-9 h-7 rounded-full text-lg leading-none transition-colors",
+                  mobileMoreOpen || MOBILE_OVERFLOW_TABS.includes(tab) ? "bg-emerald-500/15 text-emerald-400" : "text-zinc-500"
+                )}
+              >
+                ⋯
+              </span>
               <span>More</span>
             </button>
-            {mobileMoreOpen && (
-              <div className="absolute bottom-full right-0 mb-2 w-48 max-w-[calc(100vw-1rem)] bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl py-1 text-sm">
-                {MOBILE_OVERFLOW_TABS.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => { setTab(t); setMobileMoreOpen(false); }}
-                    className={`w-full text-left block px-4 py-2.5 min-h-[44px] flex items-center gap-2 capitalize transition-colors hover:bg-zinc-800 ${
-                      tab === t ? "text-emerald-400" : "text-zinc-300"
-                    }`}
-                  >
-                    <span>{TAB_ICON[t]}</span>
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
+            <AnimatePresence>
+              {mobileMoreOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 4 }}
+                  transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute bottom-full right-0 mb-2 w-48 max-w-[calc(100vw-1rem)] bg-zinc-900 border border-zinc-800 rounded-xl shadow-elevation-4 py-1 text-sm origin-bottom-right"
+                >
+                  {MOBILE_OVERFLOW_TABS.map(t => (
+                    <button
+                      key={t}
+                      onClick={() => { setTab(t); setMobileMoreOpen(false); }}
+                      className={cn(
+                        "w-full text-left block px-4 py-2.5 min-h-[44px] flex items-center gap-2 capitalize transition-colors hover:bg-zinc-800 active:bg-zinc-800",
+                        tab === t ? "text-emerald-400" : "text-zinc-300"
+                      )}
+                    >
+                      <span>{TAB_ICON[t]}</span>
+                      {t}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </nav>

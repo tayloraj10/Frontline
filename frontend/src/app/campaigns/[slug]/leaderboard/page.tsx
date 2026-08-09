@@ -214,7 +214,7 @@ export default async function LeaderboardPage({ params }: Props) {
             </div>
           )}
 
-          <div className="border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
             <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
               <span className="text-sm font-semibold text-zinc-300">Individuals</span>
             </div>
@@ -227,7 +227,7 @@ export default async function LeaderboardPage({ params }: Props) {
             />
           </div>
 
-          <div className="border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
             <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
               <span className="text-sm font-semibold text-zinc-300">Groups</span>
             </div>
