@@ -81,7 +81,7 @@ export default function TermsContent() {
       <Section title="10. Contact">
         <p>
           Questions? Email us at{" "}
-          <a href="mailto:collectiveactionsupport@gmail.com" className="text-emerald-400 hover:text-emerald-300">
+          <a href="mailto:collectiveactionsupport@gmail.com" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             collectiveactionsupport@gmail.com
           </a>
           .

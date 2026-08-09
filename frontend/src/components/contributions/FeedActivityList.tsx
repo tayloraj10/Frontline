@@ -94,14 +94,14 @@ export default function FeedActivityList({
         const isOwn = !!currentUserId && c.user_id === currentUserId;
         return (
           <li key={c.id} className="px-5 py-3 flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0 mt-0.5">
+            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0 mt-0.5 shadow-elevation-1">
               {actorName[0].toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5 flex-wrap">
                 <Link
                   href={`/users/${profile?.username ?? ""}`}
-                  className="text-sm font-semibold text-zinc-200 hover:text-zinc-100 transition-colors"
+                  className="text-sm font-semibold text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150"
                 >
                   {actorName}
                 </Link>
@@ -110,7 +110,7 @@ export default function FeedActivityList({
                     <span className="text-xs text-zinc-600">via</span>
                     <Link
                       href={`/groups/${group.slug}`}
-                      className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="text-xs font-medium text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150"
                     >
                       {group.name}
                     </Link>
@@ -141,7 +141,7 @@ export default function FeedActivityList({
                 <button
                   onClick={() => handleDelete(c.id)}
                   disabled={deleting === c.id}
-                  className="text-zinc-700 hover:text-red-400 transition-colors disabled:opacity-40"
+                  className="text-zinc-700 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40"
                   title="Delete contribution"
                 >
                   {deleting === c.id ? <span className="text-xs text-zinc-600">…</span> : <TrashIcon />}

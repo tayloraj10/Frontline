@@ -49,7 +49,7 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
         />
         <div>
           {route.submitted_by.username ? (
-            <Link href={`/users/${route.submitted_by.username}`} className="text-sm text-zinc-200 hover:text-zinc-100 transition-colors">
+            <Link href={`/users/${route.submitted_by.username}`} className="text-sm text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
               {submitterName}
             </Link>
           ) : (
@@ -66,7 +66,7 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
         <p className="mt-2 text-xs text-zinc-500">
           Logged for{" "}
           {route.group_slug ? (
-            <Link href={`/groups/${route.group_slug}`} className="text-zinc-300 hover:underline">
+            <Link href={`/groups/${route.group_slug}`} className="text-zinc-300 hover:underline active:underline">
               {route.group_name}
             </Link>
           ) : (
@@ -93,7 +93,7 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
               key={url}
               src={url}
               alt="Cleanup route photo"
-              className="h-24 w-24 object-cover rounded-lg cursor-pointer border border-zinc-800 hover:border-emerald-600 transition-colors"
+              className="h-24 w-24 object-cover rounded-lg cursor-pointer border border-zinc-800 hover:border-emerald-600 active:border-emerald-600 active:scale-[0.96] transition-[border-color,transform] duration-150 touch-manipulation shadow-elevation-1"
               onClick={() => setLightboxIndex(i)}
             />
           ))}

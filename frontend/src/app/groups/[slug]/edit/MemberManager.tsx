@@ -97,7 +97,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
                 <div className="min-w-0">
                   <Link
                     href={`/users/${m.username}`}
-                    className="text-sm text-zinc-200 hover:text-zinc-100 transition-colors font-medium"
+                    className="text-sm text-zinc-200 hover:text-zinc-100 transition-[color,transform] duration-150 active:scale-[0.97] touch-manipulation font-medium"
                   >
                     {m.displayName ?? m.username}
                   </Link>
@@ -114,7 +114,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
                 {!isBusy && !isAdmin && (
                   <button
                     onClick={() => promote(m.userId)}
-                    className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors px-2 py-0.5 hover:bg-zinc-800 rounded"
+                    className="text-xs text-zinc-500 hover:text-emerald-400 transition-[color,background-color,transform] duration-150 px-2 py-0.5 hover:bg-zinc-800 rounded active:scale-[0.93] touch-manipulation"
                   >
                     Make admin
                   </button>
@@ -122,7 +122,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
                 {!isBusy && canDemote && (
                   <button
                     onClick={() => demote(m.userId)}
-                    className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-0.5 hover:bg-zinc-800 rounded"
+                    className="text-xs text-zinc-500 hover:text-zinc-300 transition-[color,background-color,transform] duration-150 px-2 py-0.5 hover:bg-zinc-800 rounded active:scale-[0.93] touch-manipulation"
                   >
                     Demote
                   </button>
@@ -130,7 +130,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
                 {!isBusy && !isSelf && (
                   <button
                     onClick={() => remove(m.userId)}
-                    className="text-xs text-zinc-600 hover:text-red-400 transition-colors px-2 py-0.5 hover:bg-zinc-800 rounded"
+                    className="text-xs text-zinc-600 hover:text-red-400 transition-[color,background-color,transform] duration-150 px-2 py-0.5 hover:bg-zinc-800 rounded active:scale-[0.93] touch-manipulation"
                   >
                     Remove
                   </button>

@@ -21,7 +21,7 @@ export default async function AccountSettingsPage() {
         </div>
         <Link
           href="/settings/profile"
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
         >
           Edit profile
         </Link>
@@ -32,10 +32,10 @@ export default async function AccountSettingsPage() {
       <div className="mt-12 pt-6 border-t border-zinc-800">
         <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Legal</h2>
         <div className="flex gap-4">
-          <Link href="/legal/terms" className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <Link href="/legal/terms" className="text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Terms of Service
           </Link>
-          <Link href="/legal/privacy" className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <Link href="/legal/privacy" className="text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Privacy Policy
           </Link>
         </div>

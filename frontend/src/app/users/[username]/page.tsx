@@ -152,7 +152,7 @@ export default async function UserProfilePage({ params }: Props) {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
-          <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 shadow-elevation-1 overflow-hidden shrink-0 flex items-center justify-center">
             {profile.avatar_url ? (
               <img src={profile.avatar_url} alt={profile.display_name ?? profile.username} className="w-full h-full object-cover" />
             ) : (
@@ -175,7 +175,7 @@ export default async function UserProfilePage({ params }: Props) {
         {isOwn && (
           <Link
             href="/settings/profile"
-            className="shrink-0 px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg transition-colors"
+            className="shrink-0 px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
           >
             Edit profile
           </Link>
@@ -192,7 +192,7 @@ export default async function UserProfilePage({ params }: Props) {
         ].map(({ label, value }) => (
           <div
             key={label}
-            className="border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/30 text-center"
+            className="border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/30 shadow-elevation-1 text-center"
           >
             <div className="text-xl font-black text-zinc-100 tabular-nums">{value}</div>
             <div className="text-xs text-zinc-500 mt-0.5">{label}</div>
@@ -202,7 +202,7 @@ export default async function UserProfilePage({ params }: Props) {
 
       {/* Campaign Participation */}
       {campaignEntries.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">Campaigns</span>
           </div>
@@ -216,7 +216,7 @@ export default async function UserProfilePage({ params }: Props) {
                 <li key={campaignId} className="px-5 py-3 flex items-center gap-3">
                   <Link
                     href={`/campaigns/${campaign.slug}`}
-                    className="flex-1 text-sm text-zinc-200 hover:text-zinc-100 transition-colors font-medium truncate min-w-0"
+                    className="flex-1 text-sm text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150 font-medium truncate min-w-0"
                   >
                     {campaign.title}
                   </Link>
@@ -240,7 +240,7 @@ export default async function UserProfilePage({ params }: Props) {
 
       {/* Groups */}
       {(membersData ?? []).length > 0 && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">Groups</span>
           </div>
@@ -252,7 +252,7 @@ export default async function UserProfilePage({ params }: Props) {
                 <li key={m.group_id} className="px-5 py-3 flex items-center justify-between gap-3">
                   <Link
                     href={`/groups/${group.slug}`}
-                    className="text-sm text-zinc-200 hover:text-zinc-100 transition-colors font-medium"
+                    className="text-sm text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150 font-medium"
                   >
                     {group.name}
                   </Link>
@@ -266,7 +266,7 @@ export default async function UserProfilePage({ params }: Props) {
 
       {/* Achievements */}
       {isOwn && (achievementsData ?? []).length > 0 && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6">
+        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">Achievements</span>
           </div>
@@ -288,7 +288,7 @@ export default async function UserProfilePage({ params }: Props) {
       )}
 
       {/* Recent Activity */}
-      <div className="border border-zinc-800 rounded-xl overflow-hidden">
+      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Recent activity</span>
         </div>

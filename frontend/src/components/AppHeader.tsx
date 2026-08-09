@@ -47,14 +47,14 @@ export default async function AppHeader() {
 
   return (
     <>
-    <header className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
+    <header className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50 shadow-elevation-2">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
           <Link
             href="/"
-            className="flex items-center gap-2 font-black text-base tracking-widest min-w-0"
+            className="flex items-center gap-2 font-black text-base tracking-widest min-w-0 active:scale-[0.97] transition-transform duration-150"
           >
-            <span className="text-emerald-400 text-lg shrink-0">⚑</span>
+            <span className="text-emerald-400 text-lg shrink-0 drop-shadow-[0_0_6px_rgba(16,185,129,0.5)]">⚑</span>
             <span className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent truncate">
               FRONTLINE
             </span>
@@ -72,10 +72,10 @@ export default async function AppHeader() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors hover:bg-zinc-800/60 ${
+                className={`px-3 py-1.5 text-sm rounded-lg transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
                   link.highlight
-                    ? "text-amber-500 hover:text-amber-400"
-                    : "text-zinc-400 hover:text-zinc-100"
+                    ? "text-amber-500 hover:text-amber-400 active:text-amber-400"
+                    : "text-zinc-400 hover:text-zinc-100 active:text-zinc-100"
                 }`}
               >
                 {link.label}

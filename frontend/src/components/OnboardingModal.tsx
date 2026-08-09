@@ -109,7 +109,7 @@ export default function OnboardingModal({ campaigns }: Props) {
                   key={c.id}
                   href={`/campaigns/${c.slug}`}
                   onClick={dismiss}
-                  className="flex items-center justify-between gap-3 px-4 py-3 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 hover:border-zinc-600 rounded-xl transition-all group"
+                  className="flex items-center justify-between gap-3 px-4 py-3 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 hover:border-zinc-600 active:bg-zinc-800 active:border-zinc-600 active:scale-[0.98] rounded-xl transition-all duration-150 touch-manipulation group"
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-zinc-100 group-hover:text-white truncate">
@@ -129,14 +129,14 @@ export default function OnboardingModal({ campaigns }: Props) {
             {step > 0 && (
               <button
                 onClick={() => setStep((s) => s - 1)}
-                className="px-4 py-2.5 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 text-sm font-semibold rounded-xl transition-colors"
+                className="px-4 py-2.5 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.97] text-sm font-semibold rounded-xl transition-[background-color,border-color,transform] duration-150 touch-manipulation"
               >
                 Back
               </button>
             )}
             <button
               onClick={next}
-              className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+              className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {isLast ? "Browse all campaigns" : "Next"}
             </button>
@@ -144,7 +144,7 @@ export default function OnboardingModal({ campaigns }: Props) {
 
           <button
             onClick={dismiss}
-            className="w-full mt-3 py-1.5 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            className="w-full mt-3 py-1.5 text-xs text-zinc-600 hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150"
           >
             Skip
           </button>

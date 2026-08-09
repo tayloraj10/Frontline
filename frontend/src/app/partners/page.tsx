@@ -55,7 +55,7 @@ export default async function PartnersPage() {
       </div>
 
       {isBusinessOnly && (
-        <div className="mb-6 px-4 py-3 rounded-lg border border-sky-900/50 bg-sky-950/30 text-sm text-sky-300">
+        <div className="mb-6 px-4 py-3 rounded-lg border border-sky-900/50 bg-sky-950/30 text-sm text-sky-300 shadow-elevation-1">
           This is what other users see for your business's listing and offers. A business
           only appears here while it has at least one active offer, but it shows up on the
           map at all times regardless of offers.

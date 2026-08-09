@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
           <p className="text-zinc-400 text-sm">
             We sent a password reset link to <span className="text-zinc-200">{email}</span>.
           </p>
-          <Link href="/login" className="block text-sm text-emerald-400 hover:text-emerald-300">
+          <Link href="/login" className="block text-sm text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             Back to sign in
           </Link>
         </div>
@@ -74,14 +74,14 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm"
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-[background-color,transform] duration-150 text-sm touch-manipulation"
           >
             {loading ? "Sending…" : "Send reset link"}
           </button>
         </form>
 
         <p className="text-center text-zinc-400 text-sm">
-          <Link href="/login" className="text-emerald-400 hover:text-emerald-300">
+          <Link href="/login" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             Back to sign in
           </Link>
         </p>

@@ -51,7 +51,7 @@ export default async function EditCleanupEventPage({ params }: Props) {
         </span>
       </h1>
 
-      <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/30">
+      <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/30 shadow-elevation-2">
         <CreateCleanupEventForm
           groupId={groupData.id}
           groupSlug={slug}

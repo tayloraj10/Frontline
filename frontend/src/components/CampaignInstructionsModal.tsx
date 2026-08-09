@@ -143,7 +143,7 @@ export default function CampaignInstructionsModal({
         <button
           onClick={() => setOpen(true)}
           title="About this campaign"
-          className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0"
+          className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 active:text-zinc-200 active:bg-zinc-800 active:border-zinc-600 active:scale-[0.92] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation shrink-0"
         >
           i
         </button>
@@ -159,7 +159,7 @@ export default function CampaignInstructionsModal({
               <div className="px-6 pb-5 shrink-0">
                 <button
                   onClick={() => setOpen(false)}
-                  className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+                  className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
                 >
                   Got it
                 </button>
@@ -189,7 +189,7 @@ export default function CampaignInstructionsModal({
         <button
           onClick={reopen}
           title="How this campaign works"
-          className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0"
+          className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 active:text-zinc-200 active:bg-zinc-800 active:border-zinc-600 active:scale-[0.92] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation shrink-0"
         >
           ?
         </button>
@@ -197,7 +197,7 @@ export default function CampaignInstructionsModal({
           <button
             onClick={() => setDescOpen(true)}
             title="About this campaign"
-            className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 transition-colors shrink-0 sm:hidden"
+            className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 active:text-zinc-200 active:bg-zinc-800 active:border-zinc-600 active:scale-[0.92] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation shrink-0 sm:hidden"
           >
             i
           </button>
@@ -216,7 +216,7 @@ export default function CampaignInstructionsModal({
             <div className="px-6 pb-5 shrink-0">
               <button
                 onClick={() => setDescOpen(false)}
-                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 Got it
               </button>
@@ -269,7 +269,7 @@ export default function CampaignInstructionsModal({
               </label>
               <button
                 onClick={close}
-                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 Got it
               </button>

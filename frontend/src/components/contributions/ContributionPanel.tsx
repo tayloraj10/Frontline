@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
+import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Camera } from "@capacitor/camera";
@@ -452,7 +453,7 @@ function GpsIndicator({
           <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
           <span className="text-red-400">{msg}</span>
         </div>
-        <button onClick={onRetry} className="self-start text-zinc-400 underline hover:text-zinc-200 text-xs ml-4">
+        <button onClick={onRetry} className="self-start text-zinc-400 underline hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 text-xs ml-4">
           Try again
         </button>
       </div>
@@ -553,14 +554,14 @@ function CameraModal({
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm hover:bg-zinc-800 transition-colors"
+              className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Cancel
             </button>
             <button
               onClick={capture}
               disabled={!ready}
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               📸 Capture
             </button>
@@ -622,14 +623,14 @@ function PhotoCaptureInput({
         <button
           type="button"
           onClick={handleTakePhoto}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 active:border-zinc-500 active:text-zinc-100 active:scale-[0.97] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
         >
           📷 Take Photo
         </button>
         <button
           type="button"
           onClick={handleChooseFromGallery}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 active:border-zinc-500 active:text-zinc-100 active:scale-[0.97] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
         >
           🖼️ Choose from Gallery
         </button>
@@ -1032,13 +1033,13 @@ function ContributeModal({
               <p className="text-xs text-lime-400 text-center">+<SettingValue value={gameSettings.trash_war_solarpunk_credit} loading={settingsLoading} /> Solarpunk bloom points earned 🌱</p>
               <Link
                 href="/campaigns/solarpunk"
-                className="mt-1 text-sm text-lime-400 hover:text-lime-300 font-medium"
+                className="mt-1 text-sm text-lime-400 hover:text-lime-300 active:text-lime-300 transition-colors duration-150 font-medium"
               >
                 🌱 Check out Solarpunk →
               </Link>
             </>
           )}
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">
+          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Close
           </button>
         </div>
@@ -1154,7 +1155,7 @@ function ContributeModal({
                 onClick={() => setContributeMode("point")}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "point"
                   ? "bg-zinc-600 text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-200"
+                  : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
                   }`}
               >
                 📍 Point
@@ -1164,7 +1165,7 @@ function ContributeModal({
                 onClick={() => setContributeMode("route")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "route"
                   ? "bg-zinc-600 text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-200"
+                  : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
                   }`}
               >
                 🛤️ Route
@@ -1200,7 +1201,7 @@ function ContributeModal({
             {gps.status === "success" && gps.coords && (
               <button
                 onClick={onEnterPinPicker}
-                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
               >
                 {overrideCoords ? "Reposition on map" : "Place pin on map"}
               </button>
@@ -1218,7 +1219,7 @@ function ContributeModal({
               <button
                 type="button"
                 onClick={onEnterRoutePicker}
-                className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+                className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
               >
                 🛤️ Draw route on map
               </button>
@@ -1232,7 +1233,7 @@ function ContributeModal({
                   <button
                     type="button"
                     onClick={onEnterRoutePicker}
-                    className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+                    className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
                   >
                     Redraw
                   </button>
@@ -1254,7 +1255,7 @@ function ContributeModal({
                           title={u.active_multiplier ? `${u.active_multiplier.title} · ${u.active_multiplier.multiplier}x` : undefined}
                           className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 ${selectedRouteGeoUnitId === u.geo_unit_id
                             ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
-                            : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                            : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
                             }`}
                         >
                           {u.display_name}
@@ -1292,7 +1293,7 @@ function ContributeModal({
             <span className="text-base shrink-0">🌱</span>
             <span>
               This also earns your{" "}
-              <Link href="/campaigns/solarpunk" className="underline font-semibold hover:text-lime-200">
+              <Link href="/campaigns/solarpunk" className="underline font-semibold hover:text-lime-200 active:text-lime-200 transition-colors duration-150">
                 Solarpunk
               </Link>{" "}
               hex +8 bloom points.
@@ -1310,7 +1311,7 @@ function ContributeModal({
                 onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null
                   ? "bg-zinc-700 border-zinc-500 text-zinc-100"
-                  : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                  : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
                   }`}
               >
                 Individual
@@ -1322,7 +1323,7 @@ function ContributeModal({
                   onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id
                     ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
-                    : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                    : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
                     }`}
                 >
                   {g.image_url ? (
@@ -1418,7 +1419,7 @@ function ContributeModal({
                   onClick={() => setSelectedAction(a.key)}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${selectedAction === a.key
                     ? "bg-blue-900/60 border-blue-500 text-blue-200"
-                    : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
+                    : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 active:border-zinc-500 active:text-zinc-300 active:scale-[0.97]"
                     }`}
                 >
                   <span className="text-base shrink-0">{a.icon}</span>
@@ -1528,7 +1529,7 @@ function ContributeModal({
         <div className="flex gap-2 pt-1">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Cancel
           </button>
@@ -1536,14 +1537,14 @@ function ContributeModal({
             <button
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {submitting ? "Submitting…" : "Submit"}
             </button>
           ) : (
             <Link
               href={`/login?next=${pathname}`}
-              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold text-center transition-colors"
+              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Sign in to submit
             </Link>
@@ -1644,7 +1645,7 @@ function ReportModal({
               ? "Report submitted! Your report just pushed this area over the threshold — a Hotspot has spawned!"
               : "Report submitted! If enough reports come in, a Hotspot will spawn."}
           </p>
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">
+          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Close
           </button>
         </div>
@@ -1672,7 +1673,7 @@ function ReportModal({
           {gps.status === "success" && gps.coords && (
             <button
               onClick={onEnterPinPicker}
-              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
             >
               {overrideCoords ? "Reposition pin on map" : "Place pin on map"}
             </button>
@@ -1716,7 +1717,7 @@ function ReportModal({
                     : s === "medium"
                       ? "bg-yellow-900/60 border-yellow-600 text-yellow-300"
                       : "bg-zinc-700 border-zinc-500 text-zinc-200"
-                  : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                  : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
                   }`}
               >
                 {s}
@@ -1740,7 +1741,7 @@ function ReportModal({
         <div className="flex gap-2 pt-1">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Cancel
           </button>
@@ -1748,14 +1749,14 @@ function ReportModal({
             <button
               onClick={handleSubmit}
               disabled={!submitCoords || !photo || submitting}
-              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {submitting ? "Submitting…" : "Report"}
             </button>
           ) : (
             <Link
               href={`/login?next=${pathname}`}
-              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold text-center transition-colors"
+              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-500 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Sign in to report
             </Link>
@@ -2141,7 +2142,7 @@ function ClaimReportModal({
         <button
           onClick={handleFlag}
           disabled={flagState === "submitting"}
-          className="text-xs text-zinc-500 hover:text-red-400 underline disabled:opacity-40"
+          className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40"
           title={
             gameSettings.flag_auto_hide_threshold !== undefined
               ? `If ${gameSettings.flag_auto_hide_threshold} people flag this report as inaccurate, it will be automatically removed from the map.`
@@ -2175,7 +2176,7 @@ function ClaimReportModal({
           <p className="text-zinc-100 text-sm text-center">Sign in to claim this report and earn a <SettingValue value={gameSettings.claim_challenge_multiplier} loading={settingsLoading} />× challenge bonus.</p>
           <Link
             href={`/login?next=${pathname}`}
-            className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold text-center transition-colors"
+            className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 active:bg-violet-500 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Sign in
           </Link>
@@ -2195,7 +2196,7 @@ function ClaimReportModal({
           <p className="text-zinc-100 text-sm text-center">
             Someone else is already working this report. If they don&apos;t finish in time, it&apos;ll reopen for anyone to claim.
           </p>
-          <button onClick={onClose} className="mt-1 text-sm text-zinc-400 hover:text-zinc-200">
+          <button onClick={onClose} className="mt-1 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Close
           </button>
           {flagControl}
@@ -2217,11 +2218,11 @@ function ClaimReportModal({
           </p>
           <button
             onClick={onViewActiveClaim}
-            className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors"
+            className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 active:bg-violet-500 active:scale-[0.97] text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
           >
             View my active claim
           </button>
-          <button onClick={onClose} className="text-sm text-zinc-400 hover:text-zinc-200">
+          <button onClick={onClose} className="text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Close
           </button>
         </div>
@@ -2279,14 +2280,14 @@ function ClaimReportModal({
           <div className="flex gap-2 pt-1">
             <button
               onClick={onClose}
-              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Cancel
             </button>
             <button
               onClick={handleClaim}
               disabled={submitting}
-              className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 active:bg-violet-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {submitting ? "Claiming…" : "🎯 Claim"}
             </button>
@@ -2368,14 +2369,14 @@ function ClaimReportModal({
           <div className="flex gap-2 pt-1">
             <button
               onClick={onClose}
-              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Cancel
             </button>
             <button
               onClick={handleBeforePhoto}
               disabled={!photo || submitting || beforeCountdown.expired || !withinClaimRadius}
-              className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 active:bg-violet-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {submitting ? "Submitting…" : "Submit before photo"}
             </button>
@@ -2383,7 +2384,7 @@ function ClaimReportModal({
           <button
             onClick={handleRelease}
             disabled={submitting}
-            className="text-xs text-zinc-500 hover:text-red-400 underline disabled:opacity-40 text-center"
+            className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40 text-center"
           >
             Back out of this claim
           </button>
@@ -2466,14 +2467,14 @@ function ClaimReportModal({
         <div className="flex gap-2 pt-1">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Cancel
           </button>
           <button
             onClick={handleAfterPhoto}
             disabled={!photo || submitting || afterCountdown.expired || !withinClaimRadius}
-            className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors leading-tight"
+            className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 active:bg-violet-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation leading-tight"
           >
             {submitting ? (
               "Submitting…"
@@ -2490,7 +2491,7 @@ function ClaimReportModal({
         <button
           onClick={handleRelease}
           disabled={submitting}
-          className="text-xs text-zinc-500 hover:text-red-400 underline disabled:opacity-40 text-center"
+          className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40 text-center"
         >
           Back out of this claim
         </button>
@@ -2526,10 +2527,10 @@ function ActiveClaimBadge({
   return (
     <button
       onClick={onClick}
-      className={`absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium backdrop-blur-sm shadow-lg transition-colors ${
+      className={`absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium backdrop-blur-sm shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
         countdown.expired
-          ? "border-red-800/60 bg-red-950/80 text-red-300 hover:bg-red-900/80"
-          : "border-violet-800/60 bg-violet-950/80 text-violet-200 hover:bg-violet-900/80"
+          ? "border-red-800/60 bg-red-950/80 text-red-300 hover:bg-red-900/80 active:bg-red-900/80 active:scale-[0.97]"
+          : "border-violet-800/60 bg-violet-950/80 text-violet-200 hover:bg-violet-900/80 active:bg-violet-900/80 active:scale-[0.97]"
       }`}
     >
       <span className="text-sm">🎯</span>
@@ -2682,13 +2683,13 @@ function HostEventModal({
           <div className="flex gap-2 w-full mt-1">
             <Link
               href={`/cleanup-events/${created.id}`}
-              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-300 text-sm text-center hover:bg-zinc-800 transition-colors"
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-300 text-sm text-center hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               View event
             </Link>
             <button
               onClick={onClose}
-              className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-sky-950 text-sm font-semibold transition-colors"
+              className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Done
             </button>
@@ -2890,7 +2891,7 @@ function HostEventModal({
             {submitCoords && (
               <button
                 onClick={() => onEnterPinPicker(submitCoords)}
-                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline"
+                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
               >
                 {overrideCoords ? "Reposition pin on map" : "Fine-tune pin on map"}
               </button>
@@ -2905,7 +2906,7 @@ function HostEventModal({
           <button
             type="button"
             onClick={() => setRoute(null)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
           >
             Use a single pin instead
           </button>
@@ -2925,7 +2926,7 @@ function HostEventModal({
             <button
               type="button"
               onClick={onEnterRoutePicker}
-              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
             >
               🛤️ Draw route on map
             </button>
@@ -2939,7 +2940,7 @@ function HostEventModal({
                 <button
                   type="button"
                   onClick={onEnterRoutePicker}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
                 >
                   Redraw
                 </button>
@@ -2955,7 +2956,7 @@ function HostEventModal({
             type="file"
             accept="image/*"
             onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600 active:file:bg-zinc-600 transition-colors duration-150"
           />
           {imagePreview && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -2979,14 +2980,14 @@ function HostEventModal({
         <div className="flex gap-2 pt-1">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors"
+            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
-            className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed text-sky-950 text-sm font-semibold transition-colors"
+            className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-sky-950 text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
           >
             {submitting ? "Creating…" : "Create Event"}
           </button>
@@ -3092,7 +3093,7 @@ function SolarpunkActionModal({
               ? `+${selectedAction?.points ?? 0} bloom points! Your hex is growing.`
               : "Action logged! 🌱"}
           </p>
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">Close</button>
+          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">Close</button>
         </div>
       </ModalShell>
     );
@@ -3115,7 +3116,7 @@ function SolarpunkActionModal({
             </div>
           )}
           {gps.status === "success" && gps.coords && (
-            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline">
+            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline">
               {overrideCoords ? "Reposition on map" : "Place pin on map"}
             </button>
           )}
@@ -3136,7 +3137,7 @@ function SolarpunkActionModal({
                 onClick={() => { setSelectedCategoryIdx(i); setSelectedAction(null); }}
                 className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg border text-xs font-medium transition-colors ${selectedCategoryIdx === i
                   ? "bg-lime-900/60 border-lime-600 text-lime-300"
-                  : "bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                  : "bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300 active:border-zinc-500 active:text-zinc-300 active:scale-[0.97]"
                   }`}
               >
                 <span className="text-base">{cat.icon}</span>
@@ -3156,7 +3157,7 @@ function SolarpunkActionModal({
                   <Link
                     key={a.key}
                     href={a.link}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 transition-colors"
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 active:bg-emerald-900/60 active:border-emerald-500 active:scale-[0.97] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
                   >
                     <span className="text-base shrink-0">🗑️</span>
                     <span className="flex-1">{a.label}</span>
@@ -3169,7 +3170,7 @@ function SolarpunkActionModal({
                     onClick={() => setSelectedAction(a)}
                     className={`flex items-center justify-between min-h-11 px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left ${selectedAction?.key === a.key
                       ? "bg-lime-900/60 border-lime-600 text-lime-200"
-                      : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                      : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.97]"
                       }`}
                   >
                     <span>{a.label}</span>
@@ -3191,14 +3192,14 @@ function SolarpunkActionModal({
               <button
                 type="button"
                 onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"}`}
               >Individual</button>
               {userGroups.map((g) => (
                 <button
                   key={g.id}
                   type="button"
                   onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"}`}
                 >
                   {g.image_url ? (
                     <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
@@ -3221,28 +3222,28 @@ function SolarpunkActionModal({
             type="file"
             accept="image/*"
             onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600 active:file:bg-zinc-600 transition-colors duration-150"
           />
         </div>
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
         <div className="flex gap-2 pt-1">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation">
             Cancel
           </button>
           {userId ? (
             <button
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 active:bg-lime-600 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {submitting ? "Submitting…" : selectedAction ? `Submit (+${selectedAction.points} pts)` : "Submit"}
             </button>
           ) : (
             <Link
               href={`/login?next=${pathname}`}
-              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold text-center transition-colors"
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 active:bg-lime-600 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {selectedAction ? `Sign in to log (+${selectedAction.points} pts)` : "Sign in to log"}
             </Link>
@@ -3341,7 +3342,7 @@ function SolarpunkPhotoModal({
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">🌿</span>
           <p className="text-zinc-100 font-semibold text-center">Photo added to the bloom map!</p>
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200">Close</button>
+          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">Close</button>
         </div>
       </ModalShell>
     );
@@ -3362,7 +3363,7 @@ function SolarpunkPhotoModal({
             </div>
           )}
           {gps.status === "success" && gps.coords && (
-            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 underline">
+            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline">
               {overrideCoords ? "Reposition on map" : "Place pin on map"}
             </button>
           )}
@@ -3379,7 +3380,7 @@ function SolarpunkPhotoModal({
             type="file"
             accept="image/*"
             onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600"
+            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600 active:file:bg-zinc-600 transition-colors duration-150"
           />
         </div>
 
@@ -3401,12 +3402,12 @@ function SolarpunkPhotoModal({
             <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
             <div className="flex flex-wrap gap-1.5">
               <button type="button" onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null ? "bg-zinc-700 border-zinc-500 text-zinc-100" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"}`}>
                 Individual
               </button>
               {userGroups.map((g) => (
                 <button key={g.id} type="button" onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500"}`}>
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id ? "bg-lime-900/60 border-lime-600 text-lime-300" : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"}`}>
                   {g.image_url ? (
                     <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
                   ) : (
@@ -3424,21 +3425,21 @@ function SolarpunkPhotoModal({
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
         <div className="flex gap-2 pt-1">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 transition-colors">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation">
             Cancel
           </button>
           {userId ? (
             <button
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 active:bg-lime-600 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {submitting ? "Uploading…" : "Submit (+2 pts)"}
             </button>
           ) : (
             <Link
               href={`/login?next=${pathname}`}
-              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold text-center transition-colors"
+              className="flex-1 py-2 rounded-lg bg-lime-700 hover:bg-lime-600 active:bg-lime-600 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Sign in to submit (+2 pts)
             </Link>
@@ -3474,7 +3475,7 @@ function AllActionsModal({
                     key={a.key}
                     href={a.link}
                     onClick={onClose}
-                    className="flex items-center gap-2 min-h-11 px-3 py-2 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 transition-colors"
+                    className="flex items-center gap-2 min-h-11 px-3 py-2 rounded-lg border-2 border-emerald-600 bg-emerald-950/50 text-xs font-semibold text-left text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-500 active:bg-emerald-900/60 active:border-emerald-500 active:scale-[0.97] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
                   >
                     <span className="text-base shrink-0">🗑️</span>
                     <span className="flex-1">{a.label}</span>
@@ -3496,7 +3497,7 @@ function AllActionsModal({
 
         <button
           onClick={onLogAction}
-          className="py-2 rounded-lg bg-lime-700 hover:bg-lime-600 text-white text-sm font-semibold transition-colors"
+          className="py-2 rounded-lg bg-lime-700 hover:bg-lime-600 active:bg-lime-600 active:scale-[0.97] text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
         >
           Log an Action
         </button>
@@ -3549,7 +3550,7 @@ function ModalShell({
                   </span>
                 )}
               </div>
-              <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-zinc-500 hover:text-zinc-300 text-lg leading-none" aria-label="Close">
+              <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 text-lg leading-none" aria-label="Close">
                 ×
               </IconButton>
             </div>
@@ -3746,7 +3747,7 @@ export default function ContributionPanel({
             setMode("contribute");
             gps.capture();
           }}
-          className="absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-800/60 bg-amber-950/80 text-amber-200 text-xs font-medium backdrop-blur-sm shadow-lg transition-colors hover:bg-amber-900/80"
+          className="absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-800/60 bg-amber-950/80 text-amber-200 text-xs font-medium backdrop-blur-sm shadow-glow-amber transition-[background-color,transform] duration-150 hover:bg-amber-900/80 active:scale-[0.96] touch-manipulation"
         >
           <span className="text-sm">🎯</span>
           <span>Finish logging your hotspot cleanup to earn points</span>
@@ -3773,47 +3774,62 @@ export default function ContributionPanel({
             {showHostEvent ? (
               <div className="flex items-center gap-2">
                 <div className="relative w-14 h-14">
-                  <button
+                  <motion.button
                     onClick={() => setLogHostExpanded((v) => !v)}
                     aria-label={logHostExpanded ? "Close menu" : "Log Cleanup or Host Event"}
-                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-2xl backdrop-blur-sm transition-colors shadow-lg"
+                    whileTap={{ scale: 0.9 }}
+                    animate={{ rotate: logHostExpanded ? 45 : 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-zinc-700 text-2xl backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                   >
                     {logHostExpanded ? "✕" : btn.icon}
-                  </button>
-                  {logHostExpanded && (
-                    <>
-                      <button
-                        onClick={() => { openContribute(); setLogHostExpanded(false); }}
-                        title={btn.label}
-                        aria-label={btn.label}
-                        style={{ transform: "translate(10px, -78px)" }}
-                        className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 border border-zinc-700 backdrop-blur-sm transition-transform shadow-lg"
-                      >
-                        <span className="text-base leading-none">{btn.icon}</span>
-                        <span className="text-[8px] leading-none text-zinc-300">Log</span>
-                      </button>
-                      <button
-                        onClick={() => { setMode("host_event"); setHostEventOverrideCoords(null); gps.capture(); setLogHostExpanded(false); }}
-                        title="Host Event (Beta) — this feature should work but is still being tested."
-                        aria-label="Host Event (Beta)"
-                        style={{ transform: "translate(66px, -38px)" }}
-                        className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 border border-sky-800/60 backdrop-blur-sm transition-transform shadow-lg"
-                      >
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-zinc-900" />
-                        <span className="text-base leading-none">📅</span>
-                        <span className="text-[8px] leading-none text-sky-300">Event</span>
-                      </button>
-                    </>
-                  )}
+                  </motion.button>
+                  <AnimatePresence>
+                    {logHostExpanded && (
+                      <>
+                        <motion.button
+                          key="log"
+                          onClick={() => { openContribute(); setLogHostExpanded(false); }}
+                          title={btn.label}
+                          aria-label={btn.label}
+                          initial={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
+                          animate={{ opacity: 1, x: 10, y: -78, scale: 1 }}
+                          exit={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
+                          transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                          whileTap={{ scale: 0.9 }}
+                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-zinc-700 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                        >
+                          <span className="text-base leading-none">{btn.icon}</span>
+                          <span className="text-[8px] leading-none text-zinc-300">Log</span>
+                        </motion.button>
+                        <motion.button
+                          key="event"
+                          onClick={() => { setMode("host_event"); setHostEventOverrideCoords(null); gps.capture(); setLogHostExpanded(false); }}
+                          title="Host Event (Beta) — this feature should work but is still being tested."
+                          aria-label="Host Event (Beta)"
+                          initial={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
+                          animate={{ opacity: 1, x: 66, y: -38, scale: 1 }}
+                          exit={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
+                          transition={{ type: "spring", stiffness: 420, damping: 30, delay: 0.03 }}
+                          whileTap={{ scale: 0.9 }}
+                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-sky-800/60 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                        >
+                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-zinc-900" />
+                          <span className="text-base leading-none">📅</span>
+                          <span className="text-[8px] leading-none text-sky-300">Event</span>
+                        </motion.button>
+                      </>
+                    )}
+                  </AnimatePresence>
                 </div>
-                <span className="text-zinc-300 text-sm font-medium bg-zinc-900/90 border border-zinc-700 px-2 py-1 rounded-lg backdrop-blur-sm shadow-lg">
+                <span className="text-zinc-300 text-sm font-medium bg-zinc-900/90 border border-zinc-700 px-2 py-1 rounded-lg backdrop-blur-sm shadow-elevation-2">
                   Cleanup
                 </span>
               </div>
             ) : (
               <button
                 onClick={openContribute}
-                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.96] shadow-elevation-3 touch-manipulation"
               >
                 {btn.icon} {btn.label}
               </button>
@@ -3823,7 +3839,7 @@ export default function ContributionPanel({
                 onClick={() => setMode("all_actions")}
                 title="View all actions"
                 aria-label="View all Solarpunk actions"
-                className="flex items-center justify-center w-9 h-9 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-bold backdrop-blur-sm transition-colors shadow-lg"
+                className="flex items-center justify-center w-9 h-9 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-bold backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.93] shadow-elevation-3 touch-manipulation"
               >
                 ℹ️
               </button>
@@ -3833,14 +3849,14 @@ export default function ContributionPanel({
           <div className="hidden sm:flex items-center gap-2">
             <button
               onClick={openContribute}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
             >
               {btn.icon} {btn.label}
             </button>
             {showHostEvent && (
               <button
                 onClick={() => { setMode("host_event"); setHostEventOverrideCoords(null); gps.capture(); }}
-                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-sky-800/60 rounded-lg text-sky-300 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-sky-800/60 rounded-lg text-sky-300 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
               >
                 📅 Host Event
                 <span
@@ -3856,7 +3872,7 @@ export default function ContributionPanel({
                 onClick={() => setMode("all_actions")}
                 title="View all actions"
                 aria-label="View all Solarpunk actions"
-                className="flex items-center justify-center w-9 h-9 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-bold backdrop-blur-sm transition-colors shadow-lg"
+                className="flex items-center justify-center w-9 h-9 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-bold backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.93] shadow-elevation-3 touch-manipulation"
               >
                 ℹ️
               </button>
@@ -3865,7 +3881,7 @@ export default function ContributionPanel({
           {isSolarpunk && (
             <button
               onClick={() => { setMode("solarpunk_photo"); setSolarpunkPhotoOverrideCoords(null); gps.capture(); }}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-lime-800/60 rounded-lg text-lime-300 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-lime-800/60 rounded-lg text-lime-300 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
             >
               📸 Spot It
             </button>
@@ -3873,21 +3889,21 @@ export default function ContributionPanel({
           {showReport && (
             <button
               onClick={() => { setMode("report"); setReportOverrideCoords(null); gps.capture(); }}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-colors shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
             >
               ⚠️ Report Trash
             </button>
           )}
           {onStyleChange && (
             <div className="self-start flex flex-wrap gap-2">
-              <div className="flex gap-0.5 p-1 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg">
+              <div className="flex gap-0.5 p-1 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3">
                 {MAP_STYLES.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => onStyleChange(s.id)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${activeMapStyle === s.id
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-[background-color,color,transform] duration-150 active:scale-[0.95] touch-manipulation ${activeMapStyle === s.id
                       ? "bg-zinc-600 text-zinc-100"
-                      : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                      : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.95]"
                       }`}
                   >
                     {s.label}

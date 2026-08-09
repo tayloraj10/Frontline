@@ -65,7 +65,7 @@ export default function LegalAcceptForm({
 
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm px-6 py-10">
-        <div className="w-full max-w-2xl max-h-full flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+        <div className="w-full max-w-2xl max-h-full flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-4">
           <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-800 shrink-0">
             <BackButton onClick={() => setView("list")} label="Back" className="-ml-2" />
             <div>
@@ -83,7 +83,7 @@ export default function LegalAcceptForm({
           <div className="shrink-0 px-6 py-5 border-t border-zinc-800 bg-zinc-900">
             <button
               onClick={handleAgree}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base rounded-lg transition-colors"
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.98] text-white font-bold text-base rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {accepted[doc] ? "Accepted ✓" : `I Agree to the ${DOC_LABEL[doc]}`}
             </button>
@@ -95,7 +95,7 @@ export default function LegalAcceptForm({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm px-6">
-      <div className="w-full max-w-sm space-y-5 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+      <div className="w-full max-w-sm space-y-5 bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-elevation-4">
         <div className="space-y-2 text-center">
           <p className="text-3xl">📋</p>
           <h1 className="text-xl font-black text-zinc-100">
@@ -111,10 +111,10 @@ export default function LegalAcceptForm({
             <button
               key={doc}
               onClick={() => setView(doc)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium border transition-colors ${
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium border transition-[background-color,transform] duration-150 active:scale-[0.98] touch-manipulation ${
                 accepted[doc]
                   ? "bg-emerald-950/40 border-emerald-800 text-emerald-300"
-                  : "bg-zinc-800 hover:bg-zinc-700 border-zinc-600 text-zinc-100"
+                  : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 border-zinc-600 text-zinc-100"
               }`}
             >
               <span>{DOC_LABEL[doc]}</span>
@@ -132,7 +132,7 @@ export default function LegalAcceptForm({
         <button
           onClick={handleAccept}
           disabled={!allAccepted || loading}
-          className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-lg transition-colors"
+          className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.98] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
         >
           {loading ? "Saving…" : "Continue"}
         </button>

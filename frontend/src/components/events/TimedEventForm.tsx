@@ -159,7 +159,7 @@ export default function TimedEventForm({
               <button
                 type="button"
                 onClick={areaPicker.onRequestPick}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 {selectedAreas.length > 0 ? "Edit selection on map" : "Pick areas on the map"}
               </button>
@@ -172,7 +172,7 @@ export default function TimedEventForm({
             <button
               type="button"
               onClick={() => imageInputRef.current?.click()}
-              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation group shrink-0"
             >
               {imagePreview ? (
                 <img src={imagePreview} alt="Event" className="w-full h-full object-cover" />
@@ -208,14 +208,14 @@ export default function TimedEventForm({
         <button
           type="submit"
           disabled={loading || !title.trim() || !campaignId || selectedAreas.length === 0}
-          className="px-4 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+          className="px-4 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
         >
           {loading ? "Creating…" : "Create Timed Event"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg font-medium transition-colors"
+          className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] text-zinc-300 rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
         >
           Cancel
         </button>

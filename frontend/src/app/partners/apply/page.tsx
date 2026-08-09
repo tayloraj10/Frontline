@@ -24,14 +24,14 @@ export default function PartnerApplyPage() {
   if (submitted) {
     return (
       <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
-        <div className="w-full max-w-sm space-y-4 text-center">
+        <div className="w-full max-w-sm space-y-4 text-center rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 shadow-elevation-2">
           <div className="text-4xl">📬</div>
           <h1 className="text-2xl font-bold">Submitted for review</h1>
           <p className="text-zinc-400 text-sm">
             Thanks! A Frontline admin will review your business and get it added to the right campaigns soon.
           </p>
           <p className="text-zinc-500 text-xs">
-            <Link href="/" className="text-emerald-400 hover:text-emerald-300">
+            <Link href="/" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
               Back to Frontline
             </Link>
           </p>

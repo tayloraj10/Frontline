@@ -98,7 +98,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
     <div className="relative" ref={panelRef}>
       <IconButton
         onClick={handleOpen}
-        className="relative text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+        className="relative text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 active:text-zinc-100 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
         aria-label="Notifications"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,7 +148,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
                 );
 
                 return (
-                  <li key={n.id} className="hover:bg-zinc-800/40 transition-colors">
+                  <li key={n.id} className="hover:bg-zinc-800/40 active:bg-zinc-800/40 transition-colors duration-150">
                     {n.campaign_slug ? (
                       <Link href={`/campaigns/${n.campaign_slug}`} onClick={() => setOpen(false)}>
                         {inner}

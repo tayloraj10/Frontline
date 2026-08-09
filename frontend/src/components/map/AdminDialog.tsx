@@ -29,7 +29,7 @@ export default function AdminDialog({
       <div className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-4 shadow-2xl">
         <button
           onClick={() => onOpenChange(false)}
-          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] text-lg leading-none transition-[background-color,transform] duration-150 touch-manipulation"
         >
           ×
         </button>
@@ -37,7 +37,7 @@ export default function AdminDialog({
         <div className="flex flex-col gap-2">
           <button
             onClick={onOpenTimedEvent}
-            className="w-full text-left px-3 py-2 text-sm font-medium rounded-lg border transition-colors bg-amber-950/80 border-amber-700/60 text-amber-300 hover:text-amber-200 hover:bg-amber-900"
+            className="w-full text-left px-3 py-2 text-sm font-medium rounded-lg border transition-[background-color,transform] duration-150 bg-amber-950/80 border-amber-700/60 text-amber-300 hover:text-amber-200 hover:bg-amber-900 active:text-amber-200 active:bg-amber-900 active:scale-[0.98] touch-manipulation"
           >
             ✨ New Timed Event
           </button>
@@ -54,7 +54,7 @@ export default function AdminDialog({
           <button
             onClick={onHideControls}
             title="Hides the admin gear button until the next page refresh — useful for screenshots/recording"
-            className="w-full text-left px-3 py-2 text-sm rounded-lg border transition-colors bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            className="w-full text-left px-3 py-2 text-sm rounded-lg border transition-[background-color,transform] duration-150 bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.98] touch-manipulation"
           >
             Hide admin controls until next refresh
           </button>

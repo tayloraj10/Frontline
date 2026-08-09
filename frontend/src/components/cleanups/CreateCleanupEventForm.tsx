@@ -325,7 +325,7 @@ export default function CreateCleanupEventForm({
             <button
               type="button"
               onClick={() => imageInputRef.current?.click()}
-              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.96] transition-[border-color,transform] duration-150 group shrink-0 touch-manipulation"
             >
               {imagePreview ? (
                 <img src={imagePreview} alt="Event" className="w-full h-full object-cover" />
@@ -358,7 +358,7 @@ export default function CreateCleanupEventForm({
         <button
           type="submit"
           disabled={loading || !canSubmit}
-          className="px-4 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+          className="px-4 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
         >
           {mode === "edit" ? (loading ? "Saving…" : "Save Changes") : (loading ? "Creating…" : "Create Event")}
         </button>

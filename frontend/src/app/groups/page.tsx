@@ -96,7 +96,7 @@ export default async function GroupsPage() {
         {canCreateGroup && (
           <Link
             href="/groups/apply"
-            className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors"
+            className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
           >
             Add Your Group
           </Link>
@@ -104,7 +104,7 @@ export default async function GroupsPage() {
       </div>
 
       {ownSubmissions.length > 0 && (
-        <div className="mb-8 rounded-2xl border border-amber-800/50 bg-amber-950/20 p-5">
+        <div className="mb-8 rounded-2xl border border-amber-800/50 bg-amber-950/20 p-5 shadow-elevation-1">
           <h2 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">
             Your submission{ownSubmissions.length !== 1 ? "s" : ""}
           </h2>
@@ -113,7 +113,7 @@ export default async function GroupsPage() {
               <Link
                 key={g.id}
                 href={`/groups/${g.slug}`}
-                className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 hover:border-zinc-600 transition-colors"
+                className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.98] touch-manipulation"
               >
                 <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
                   {g.image_url ? (
@@ -144,7 +144,7 @@ export default async function GroupsPage() {
           <p className="font-semibold text-zinc-500">No groups yet.</p>
           {canCreateGroup && (
             <p className="text-sm mt-1">
-              <Link href="/groups/apply" className="text-emerald-400 hover:text-emerald-300">
+              <Link href="/groups/apply" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
                 Add the first one.
               </Link>
             </p>

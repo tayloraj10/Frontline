@@ -15,10 +15,10 @@ export default function CampaignTabNav({ slug, active }: { slug: string; active:
         <Link
           key={tab.id}
           href={tab.path(slug)}
-          className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+          className={`px-3 py-1 text-xs font-medium rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.95] touch-manipulation ${
             active === tab.id
               ? "bg-zinc-700 text-zinc-100"
-              : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
+              : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 active:text-zinc-300 active:bg-zinc-800/60"
           }`}
         >
           {tab.label}

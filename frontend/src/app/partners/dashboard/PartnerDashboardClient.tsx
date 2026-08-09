@@ -145,11 +145,11 @@ function BusinessPanel({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden">
+    <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
       <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
           {business.logo_url ? (
-            <img src={business.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+            <img src={business.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 shadow-elevation-1" />
           ) : (
             <span className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-sm font-black text-zinc-400 shrink-0">
               {business.name[0]?.toUpperCase()}
@@ -165,14 +165,14 @@ function BusinessPanel({
             <Link
               key={c.id}
               href={`/campaigns/${c.slug}?lat=${business.lat}&lng=${business.lng}`}
-              className="text-xs text-sky-400 hover:text-sky-300 transition-colors px-2 py-1"
+              className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150 px-2 py-1"
             >
               {linkedCampaigns.length > 1 ? `View on map (${c.title})` : "View on map"}
             </Link>
           ))}
           <button
             onClick={() => setEditing(!editing)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1"
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.95] touch-manipulation px-2 py-1"
           >
             {editing ? "Cancel edit" : "Edit business info"}
           </button>
@@ -203,7 +203,7 @@ function BusinessPanel({
         )}
         <button
           onClick={() => setShowCreateOffer(!showCreateOffer)}
-          className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors"
+          className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
         >
           {showCreateOffer ? "Cancel" : "+ New Offer"}
         </button>

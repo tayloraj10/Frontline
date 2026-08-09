@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import CampaignMapWrapper, { type ClaimLabel } from "@/components/map/CampaignMapWrapper";
 import type { MapBusiness, MapCleanupEvent } from "@/components/map/CampaignMap";
 import ContributionPanel from "@/components/contributions/ContributionPanel";
 import CreateTimedEventButton from "@/components/events/CreateTimedEventButton";
 import AdminDialog from "@/components/map/AdminDialog";
+import BottomSheet from "@/components/ui/BottomSheet";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
@@ -14,6 +16,7 @@ import { listCampaignCleanupRoutes, type CampaignCleanupRoute, type RouteLineStr
 import { useGameSettings } from "@/lib/gameSettings";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
+import { cn } from "@/lib/cn";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -138,7 +141,7 @@ export function CampaignStatBar({
   const totalBagCount = smallBags + largeBags;
 
   return (
-    <div className="border-b border-zinc-800/60 bg-zinc-950/40">
+    <div className="border-b border-zinc-800/60 bg-zinc-950/60 shadow-elevation-1">
       <div className="px-3 sm:px-5 py-2 flex items-center gap-x-2.5 sm:gap-x-6 overflow-x-auto">
         {campaignType === "collage" ? (
           <StatBarItem label="Photos submitted" value={displayStatValue(contributionCount)} />
@@ -162,7 +165,7 @@ export function CampaignStatBar({
             <button
               type="button"
               onClick={() => setShowBagBreakdown((v) => !v)}
-              className="relative flex items-baseline gap-1 sm:gap-1.5 shrink-0 rounded-lg sm:pointer-events-none active:bg-zinc-800/60 sm:active:bg-transparent transition-colors before:content-[''] before:absolute before:-inset-y-2.5 before:-inset-x-1.5 sm:before:content-none"
+              className="relative flex items-baseline gap-1 sm:gap-1.5 shrink-0 rounded-lg sm:pointer-events-none active:bg-zinc-800/60 active:scale-[0.97] sm:active:bg-transparent sm:active:scale-100 transition-[background-color,transform] duration-150 before:content-[''] before:absolute before:-inset-y-2.5 before:-inset-x-1.5 sm:before:content-none"
             >
               <span className="text-sm font-bold tabular-nums text-zinc-100">{displayStatValue(totalBagCount)}</span>
               <span className="text-xs text-zinc-500 flex items-center gap-0.5">
@@ -184,11 +187,16 @@ export function CampaignStatBar({
             <StatBarItem label="Contributions" value={displayStatValue(contributionCount)} />
           </>
         )}
-        {eventsCount > 0 && <StatBarItem label="Hotspots" value={eventsCount} highlight />}
+        {eventsCount > 0 && (
+          <div className="flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/25 shadow-[0_0_10px_rgba(248,113,113,0.25)]">
+            <span className="text-sm font-bold tabular-nums text-red-400">{eventsCount}</span>
+            <span className="text-xs text-red-400/80">Hotspots</span>
+          </div>
+        )}
       </div>
       {isTerritory && showBagBreakdown && (
         <div className="px-4 pb-2 sm:hidden flex justify-center">
-          <div className="flex items-center gap-x-4 max-w-full overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+          <div className="flex items-center gap-x-4 max-w-full overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-1.5 shadow-elevation-2">
             <StatBarItem label="Small bags" value={displayStatValue(smallBags)} />
             <StatBarItem label="Large bags" value={displayStatValue(largeBags)} />
             {pounds > 0 && <StatBarItem label="Pounds" value={displayStatValue(Math.round(pounds))} />}
@@ -384,7 +392,7 @@ function LeaderboardRow({
       <RankBadge rank={rank} />
       {avatarNode}
       {variant === "user" && entry.username ? (
-        <Link href={`/users/${entry.username}`} className="flex-1 min-w-0 text-xs text-zinc-200 break-words hover:text-zinc-100 transition-colors">
+        <Link href={`/users/${entry.username}`} className="flex-1 min-w-0 text-xs text-zinc-200 break-words hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
           {entry.name}
         </Link>
       ) : (
@@ -550,7 +558,7 @@ function StatsPanel({
 
       <dl className="grid grid-cols-2 gap-3 px-4">
         {stats.map((s) => (
-          <div key={s.label} className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5">
+          <div key={s.label} className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5 shadow-elevation-1">
             <dt className="text-xs text-zinc-500">{s.label}</dt>
             <dd className="text-sm font-semibold text-zinc-200 tabular-nums mt-0.5">{s.value}</dd>
           </div>
@@ -624,7 +632,7 @@ function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { ite
                 {item.actorUsername ? (
                   <Link
                     href={`/users/${item.actorUsername}`}
-                    className="text-xs font-semibold text-zinc-200 hover:text-zinc-100 transition-colors"
+                    className="text-xs font-semibold text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150"
                   >
                     {item.actorName}
                   </Link>
@@ -636,7 +644,7 @@ function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { ite
                     <span className="text-xs text-zinc-600">via</span>
                     <Link
                       href={`/groups/${item.groupSlug}`}
-                      className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="text-xs font-medium text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150"
                     >
                       {item.groupName}
                     </Link>
@@ -660,6 +668,134 @@ function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { ite
         );
       })}
     </ul>
+  );
+}
+
+type PanelKey = "leaderboard" | "activity" | "mine" | "stats";
+
+function PanelTabs({
+  openPanel,
+  onSelect,
+  userId,
+  onClose,
+}: {
+  openPanel: PanelKey;
+  onSelect: (panel: PanelKey) => void;
+  userId: string | null;
+  onClose?: () => void;
+}) {
+  const tabs: { key: PanelKey; label: string }[] = [
+    { key: "leaderboard", label: "Leaderboard" },
+    { key: "activity", label: "Activity" },
+    ...(userId ? [{ key: "mine" as const, label: "Mine" }] : []),
+    { key: "stats", label: "Stats" },
+  ];
+  return (
+    <div className="flex items-center border-b border-zinc-800 shrink-0 px-2 pt-2 pb-0 gap-1">
+      {tabs.map((tab) => {
+        const active = openPanel === tab.key;
+        const isMine = tab.key === "mine";
+        return (
+          <button
+            key={tab.key}
+            onClick={() => onSelect(tab.key)}
+            className={cn(
+              "relative flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors active:scale-[0.97] duration-150 touch-manipulation",
+              active ? (isMine ? "text-emerald-300" : "text-zinc-100") : "text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
+            )}
+          >
+            {tab.label}
+            {active && (
+              <motion.span
+                layoutId="campaign-panel-tab"
+                className={cn("absolute left-2 right-2 -bottom-px h-0.5 rounded-full", isMine ? "bg-emerald-400" : "bg-zinc-300")}
+                transition={{ type: "spring", stiffness: 500, damping: 40 }}
+              />
+            )}
+          </button>
+        );
+      })}
+      {onClose && (
+        <button
+          onClick={onClose}
+          aria-label="Close panel"
+          className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-zinc-300 active:scale-90 transition-transform shrink-0 mb-0.5 touch-manipulation"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PanelContent({
+  openPanel,
+  leaderboard,
+  campaignType,
+  unit,
+  activityItems,
+  userId,
+  userUsername,
+  claims,
+  eventCount,
+  startsAt,
+  contributionCount,
+  bagMetrics,
+}: {
+  openPanel: PanelKey;
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  campaignType: string;
+  unit: string;
+  activityItems: ActivityItem[];
+  userId: string | null;
+  userUsername: string | null;
+  claims: TerritoryClaim[];
+  eventCount: number;
+  startsAt: string | null;
+  contributionCount: number;
+  bagMetrics: { small: number; large: number; pounds: number };
+}) {
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={openPanel}
+        initial={{ opacity: 0, x: 8 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -8 }}
+        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+      >
+        {openPanel === "leaderboard" && (
+          <LeaderboardPanel users={leaderboard.users} groups={leaderboard.groups} unit={unit} campaignType={campaignType} />
+        )}
+        {openPanel === "activity" && <ActivityPanel items={activityItems} unit={unit} />}
+        {openPanel === "mine" && (
+          <>
+            {userUsername && (
+              <div className="px-4 pt-3 pb-1 flex items-center justify-between border-b border-zinc-800/60">
+                <span className="text-xs text-zinc-500">Your submissions</span>
+                <Link href={`/users/${userUsername}`} className="text-xs text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+                  Manage on profile →
+                </Link>
+              </div>
+            )}
+            <ActivityPanel items={activityItems.filter((a) => a.user_id === userId)} unit={unit} emptyMessage="You haven't contributed yet." />
+          </>
+        )}
+        {openPanel === "stats" && (
+          <StatsPanel
+            claims={claims}
+            leaderboard={leaderboard}
+            campaignType={campaignType}
+            unit={unit}
+            eventCount={eventCount}
+            startsAt={startsAt}
+            userId={userId}
+            contributionCount={contributionCount}
+            bagMetrics={bagMetrics}
+          />
+        )}
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
@@ -1031,97 +1167,60 @@ export default function CampaignPageClient({
         }
       />
 
-      {/* Side panel */}
+      {/* Side panel — desktop: fixed right column. */}
       {openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive && (
-        <div className="absolute bottom-0 left-0 right-0 h-[55vh] sm:h-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-t sm:border-t-0 sm:border-l border-zinc-800 flex flex-col z-20 overflow-hidden">
-          {/* Header: tab buttons + close */}
-          <div className="flex items-center border-b border-zinc-800 shrink-0 px-2 pt-2 pb-0 gap-1">
-            <button
-              onClick={() => setOpenPanel("leaderboard")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors ${
-                openPanel === "leaderboard"
-                  ? "text-zinc-100 border-b-2 border-zinc-300"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Leaderboard
-            </button>
-            <button
-              onClick={() => setOpenPanel("activity")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors ${
-                openPanel === "activity"
-                  ? "text-zinc-100 border-b-2 border-zinc-300"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Activity
-            </button>
-            {userId && (
-              <button
-                onClick={() => setOpenPanel("mine")}
-                className={`flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors ${
-                  openPanel === "mine"
-                    ? "text-emerald-300 border-b-2 border-emerald-400"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                Mine
-              </button>
-            )}
-            <button
-              onClick={() => setOpenPanel("stats")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors ${
-                openPanel === "stats"
-                  ? "text-zinc-100 border-b-2 border-zinc-300"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Stats
-            </button>
-            <button
-              onClick={() => setOpenPanel(null)}
-              aria-label="Close panel"
-              className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 mb-0.5"
-            >
-              ×
-            </button>
-          </div>
+        <div className="hidden sm:flex absolute inset-y-0 right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-l border-zinc-800 flex-col z-20 overflow-hidden shadow-elevation-4">
+          <PanelTabs openPanel={openPanel} onSelect={setOpenPanel} userId={userId} onClose={() => setOpenPanel(null)} />
           <div className="flex-1 overflow-y-auto">
-            {openPanel === "leaderboard" && (
-              <LeaderboardPanel users={leaderboard.users} groups={leaderboard.groups} unit={unit} campaignType={campaign.campaign_type ?? ""} />
-            )}
-            {openPanel === "activity" && (
-              <ActivityPanel items={activityItems} unit={unit} />
-            )}
-            {openPanel === "mine" && (
-              <>
-                {userUsername && (
-                  <div className="px-4 pt-3 pb-1 flex items-center justify-between border-b border-zinc-800/60">
-                    <span className="text-xs text-zinc-500">Your submissions</span>
-                    <Link href={`/users/${userUsername}`} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
-                      Manage on profile →
-                    </Link>
-                  </div>
-                )}
-                <ActivityPanel items={activityItems.filter((a) => a.user_id === userId)} unit={unit} emptyMessage="You haven't contributed yet." />
-              </>
-            )}
-            {openPanel === "stats" && (
-              <StatsPanel
-                claims={claims}
-                leaderboard={leaderboard}
-                campaignType={campaign.campaign_type ?? ""}
-                unit={unit}
-                eventCount={activeEventsList.length}
-                startsAt={campaign.starts_at}
-                userId={userId}
-                contributionCount={contributionCount}
-                bagMetrics={bagMetrics}
-              />
-            )}
+            <PanelContent
+              openPanel={openPanel}
+              leaderboard={leaderboard}
+              campaignType={campaign.campaign_type ?? ""}
+              unit={unit}
+              activityItems={activityItems}
+              userId={userId}
+              userUsername={userUsername}
+              claims={claims}
+              eventCount={activeEventsList.length}
+              startsAt={campaign.starts_at}
+              contributionCount={contributionCount}
+              bagMetrics={bagMetrics}
+            />
           </div>
         </div>
       )}
+
+      {/* Side panel — mobile: draggable bottom sheet. */}
+      <div className="sm:hidden">
+        <BottomSheet
+          open={!!openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive}
+          onClose={() => setOpenPanel(null)}
+          peekHeight={260}
+          expandedHeight="72dvh"
+          header={
+            openPanel && <PanelTabs openPanel={openPanel} onSelect={setOpenPanel} userId={userId} onClose={() => setOpenPanel(null)} />
+          }
+        >
+          {openPanel && (
+            <div className="-mx-4">
+              <PanelContent
+                openPanel={openPanel}
+                leaderboard={leaderboard}
+                campaignType={campaign.campaign_type ?? ""}
+                unit={unit}
+                activityItems={activityItems}
+                userId={userId}
+                userUsername={userUsername}
+                claims={claims}
+                eventCount={activeEventsList.length}
+                startsAt={campaign.starts_at}
+                contributionCount={contributionCount}
+                bagMetrics={bagMetrics}
+              />
+            </div>
+          )}
+        </BottomSheet>
+      </div>
 
       {/* Activity button — opens the Leaderboard/Activity/Mine panel. Hidden when panel open. */}
       {statsButtonActive && (
@@ -1130,7 +1229,7 @@ export default function CampaignPageClient({
           <div className="hidden sm:block absolute top-3 right-[3.25rem] z-20">
             <button
               onClick={() => togglePanel("stats")}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-elevation-2 bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.97] touch-manipulation"
             >
               📊 Stats
             </button>
@@ -1142,7 +1241,7 @@ export default function CampaignPageClient({
             <div className="sm:hidden absolute left-4 z-20 top-4">
               <button
                 onClick={() => togglePanel("stats")}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.97] touch-manipulation"
               >
                 📊 Stats
               </button>
@@ -1157,7 +1256,7 @@ export default function CampaignPageClient({
             <button
               onClick={() => setShowAdminDialog(true)}
               title="Admin controls"
-              className="absolute z-20 top-4 right-[3.25rem] sm:top-11 w-8 h-8 flex items-center justify-center text-base rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              className="absolute z-20 top-4 right-[3.25rem] sm:top-11 w-8 h-8 flex items-center justify-center text-base rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-elevation-2 bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.93] touch-manipulation"
             >
               ⚙️
             </button>
@@ -1219,7 +1318,7 @@ export default function CampaignPageClient({
           {activeEventsList.length > 0 && (
             <button
               onClick={() => setHexEventsExpanded((e) => !e)}
-              className="self-start sm:hidden px-3 py-1.5 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm text-emerald-300 text-xs font-semibold"
+              className="self-start sm:hidden px-3 py-1.5 bg-emerald-950/90 border border-emerald-700 rounded-lg backdrop-blur-sm shadow-elevation-2 text-emerald-300 text-xs font-semibold active:scale-[0.97] transition-transform duration-150 touch-manipulation"
             >
               ⚡ {activeEventsList.length} Event{activeEventsList.length > 1 ? "s" : ""} {hexEventsExpanded ? "▲" : "▼"}
             </button>
@@ -1240,7 +1339,7 @@ export default function CampaignPageClient({
             </div>
           )}
           <div className="flex items-start gap-2">
-            <div className="w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm pointer-events-none">
+            <div className="w-48 px-3 py-2 bg-zinc-950/90 rounded-lg border border-zinc-800 backdrop-blur-sm shadow-elevation-2 pointer-events-none">
               <div className="flex items-baseline justify-between mb-1">
                 <span className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">World Bloom</span>
                 <span className="text-[10px] text-emerald-400/80 tabular-nums font-mono">
@@ -1268,7 +1367,7 @@ export default function CampaignPageClient({
               <div className="sm:hidden z-20 shrink-0">
                 <button
                   onClick={() => togglePanel("stats")}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.97] touch-manipulation"
                 >
                   📊 Stats
                 </button>
@@ -1279,7 +1378,12 @@ export default function CampaignPageClient({
       )}
 
       {nearbyCleanupEvent && !pinPickerActive && !areaPickerActive && (
-        <div className="absolute top-4 left-4 right-16 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm px-4 py-3 rounded-xl bg-sky-950/95 border border-sky-700/50 backdrop-blur-sm shadow-lg flex items-center gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: -8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute top-4 left-4 right-16 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm px-4 py-3 rounded-xl bg-sky-950/95 border border-sky-700/50 backdrop-blur-sm shadow-glow-sky flex items-center gap-3"
+        >
           <div className="w-10 h-10 shrink-0 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-lg">
             🧹
           </div>
@@ -1289,18 +1393,18 @@ export default function CampaignPageClient({
           </div>
           <button
             onClick={() => setDismissedCleanupEventIds((prev) => new Set(prev).add(nearbyCleanupEvent.id))}
-            className="shrink-0 text-sky-500 hover:text-sky-300 text-sm px-1"
+            className="shrink-0 text-sky-500 hover:text-sky-300 active:scale-90 transition-transform text-sm px-1 touch-manipulation"
             aria-label="Dismiss"
           >
             ✕
           </button>
           <button
             onClick={() => setPendingCleanupEventId(nearbyCleanupEvent.id)}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-sky-950 text-xs font-semibold shadow-sm transition-colors"
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 active:scale-[0.97] text-sky-950 text-xs font-semibold shadow-elevation-1 transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Log here
           </button>
-        </div>
+        </motion.div>
       )}
 
       <ContributionPanel

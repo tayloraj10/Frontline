@@ -665,7 +665,7 @@ function LegendToggle({
 }) {
   return (
     <label
-      className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm cursor-pointer select-none hover:bg-zinc-800/80 ${
+      className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded shadow-elevation-1 backdrop-blur-sm cursor-pointer select-none transition-[background-color,transform] duration-150 hover:bg-zinc-800/80 active:scale-[0.97] touch-manipulation ${
         indent ? "ml-3" : ""
       } ${checked ? "" : "opacity-50"}`}
     >
@@ -1000,7 +1000,7 @@ function TerritoryPanel({
                 {isContested ? "Contested" : "Claimed"}
               </span>
             )}
-            <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
+            <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
         </div>
 
@@ -1012,7 +1012,7 @@ function TerritoryPanel({
                 {isGroup && claimLabel.groupSlug ? (
                   <Link
                     href={`/groups/${claimLabel.groupSlug}`}
-                    className="truncate text-sm font-semibold hover:underline"
+                    className="truncate text-sm font-semibold hover:underline active:underline"
                     style={{ color: accentHex }}
                   >
                     {claimLabel.name}
@@ -1034,7 +1034,7 @@ function TerritoryPanel({
                 {totalPoints} point{totalPoints !== 1 ? "s" : ""} total in {unitLabel}
                 <button
                   onClick={() => setShowPointsInfo(true)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-base text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 leading-none"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-base text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 active:bg-zinc-700 active:text-zinc-200 active:scale-[0.92] transition-[background-color,color,transform] duration-150 touch-manipulation leading-none"
                   aria-label="What are points?"
                   title="What are points?"
                 >
@@ -1124,7 +1124,7 @@ function TerritoryPanel({
                       <button
                         key={i}
                         onClick={() => onPhotoSelect(url)}
-                        className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 transition-colors"
+                        className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 active:border-orange-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={url} alt="Report photo" className="w-full h-full object-cover" />
@@ -1146,7 +1146,7 @@ function TerritoryPanel({
                 <button
                   key={i}
                   onClick={() => onPhotoSelect(url)}
-                  className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 transition-colors"
+                  className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 active:border-emerald-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt="Cleanup photo" className="w-full h-full object-cover" />
@@ -1243,7 +1243,7 @@ function TerritoryPanel({
         >
           <div className="flex items-start justify-between mb-2">
             <p className="text-sm font-semibold text-zinc-100">What are points?</p>
-            <IconButton onClick={() => setShowPointsInfo(false)} size="sm" className="-mr-1.5 -mt-1 text-lg leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
+            <IconButton onClick={() => setShowPointsInfo(false)} size="sm" className="-mr-1.5 -mt-1 text-lg leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
             The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
@@ -1289,7 +1289,7 @@ function StatePanel({
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
             <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1386,7 +1386,7 @@ function HexPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
             <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1420,7 +1420,7 @@ function HexPanel({
               {photos.map((p, i) => (
                 <div
                   key={i}
-                  className="aspect-square overflow-hidden rounded-md bg-zinc-800 cursor-pointer hover:opacity-80 transition-opacity"
+                  className="aspect-square overflow-hidden rounded-md bg-zinc-800 cursor-pointer hover:opacity-80 active:opacity-80 active:scale-[0.96] transition-[opacity,transform] duration-150 touch-manipulation"
                   onClick={() => onPhotoSelect(p.photo_url)}
                 >
                   <img
@@ -4433,13 +4433,13 @@ export default function CampaignMap({
             <button
               onClick={onAreaPickerConfirm}
               disabled={areaPickerCount === 0}
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-lg transition-colors"
+              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Confirm ({areaPickerCount})
             </button>
             <button
               onClick={onAreaPickerCancel}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
             </button>
@@ -4460,13 +4460,13 @@ export default function CampaignMap({
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
             <button
               onClick={handleConfirmPin}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-lg transition-colors"
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Confirm location
             </button>
             <button
               onClick={onPinCancelled}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
             </button>
@@ -4493,27 +4493,27 @@ export default function CampaignMap({
             <button
               onClick={handleUndoRouteVertex}
               disabled={routePickerVertexCount === 0}
-              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Undo
             </button>
             <button
               onClick={handleClearRouteVertices}
               disabled={routePickerVertexCount === 0}
-              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Clear
             </button>
             <button
               onClick={onRoutePickerFinish}
               disabled={routePickerVertexCount < 2}
-              className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-lg transition-colors"
+              className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Finish route
             </button>
             <button
               onClick={onRoutePickerCancel}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-lg transition-colors"
+              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
             </button>
@@ -4527,14 +4527,14 @@ export default function CampaignMap({
             <div className="flex items-center gap-1.5 sm:hidden">
               <button
                 onClick={() => setEventsExpanded((e) => !e)}
-                className="self-start px-3 py-1.5 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm text-red-300 text-xs font-semibold"
+                className="self-start px-3 py-1.5 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm shadow-glow-amber text-red-300 text-xs font-semibold transition-transform duration-150 active:scale-[0.96] touch-manipulation"
               >
                 ⚡ {activeEvents.length} Event{activeEvents.length > 1 ? "s" : ""} {eventsExpanded ? "▲" : "▼"}
               </button>
               {onMobileStatsClick && (
                 <button
                   onClick={onMobileStatsClick}
-                  className="self-start px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
+                  className="self-start px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-elevation-2 transition-transform duration-150 active:scale-[0.96] touch-manipulation"
                 >
                   📊 Stats
                 </button>
@@ -4554,7 +4554,7 @@ export default function CampaignMap({
                         map.current.flyTo({ center: [centroid.lng, centroid.lat], zoom: 13, duration: 800 });
                       }
                     }}
-                    className={`px-3 py-2 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm transition-colors${centroid ? " cursor-pointer hover:bg-red-900/90" : ""}`}
+                    className={`px-3 py-2 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm shadow-elevation-1 transition-[background-color,transform] duration-150${centroid ? " cursor-pointer hover:bg-red-900/90 active:scale-[0.97] touch-manipulation" : ""}`}
                   >
                     <p className="text-red-300 text-xs font-semibold">{event.title}</p>
                     {event.description && (
@@ -4568,7 +4568,7 @@ export default function CampaignMap({
           {activeEvents.length === 0 && onMobileStatsClick && (
             <button
               onClick={onMobileStatsClick}
-              className="self-start sm:hidden px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-md"
+              className="self-start sm:hidden px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-elevation-2 transition-transform duration-150 active:scale-[0.96] touch-manipulation"
             >
               📊 Stats
             </button>
@@ -4594,12 +4594,12 @@ export default function CampaignMap({
                       : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
                   )
                 }
-                className={`w-[8.5rem] px-2 py-1.5 text-xs bg-zinc-900/90 border rounded text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${geoSearchError ? "border-red-600" : "border-zinc-700"}`}
+                className={`w-[8.5rem] px-2 py-1.5 text-xs bg-zinc-900/90 border rounded shadow-elevation-1 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${geoSearchError ? "border-red-600" : "border-zinc-700"}`}
               />
               <button
                 type="submit"
                 disabled={!geoSearch}
-                className="px-2.5 py-1.5 text-xs bg-zinc-800/90 border border-zinc-700 rounded text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+                className="px-2.5 py-1.5 text-xs bg-zinc-800/90 border border-zinc-700 rounded shadow-elevation-1 text-zinc-300 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:scale-[0.95] disabled:opacity-40 touch-manipulation"
               >
                 Go
               </button>
@@ -4610,7 +4610,7 @@ export default function CampaignMap({
       )}
 
       {tilesLoading && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-2 py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-2 py-1 bg-zinc-900/80 rounded shadow-elevation-2 backdrop-blur-sm">
           <div className="w-3 h-3 rounded-full border-2 border-zinc-600 border-t-zinc-300 animate-spin" />
           <span className="text-zinc-400 text-xs">Loading map…</span>
         </div>
@@ -4625,7 +4625,7 @@ export default function CampaignMap({
         <div className={`absolute bottom-12 z-10 flex flex-col items-end gap-1 sm:gap-1.5 text-xs max-w-[min(88vw,16rem)] ${legendOpen ? "right-14" : "right-4"}`}>
           <button
             onClick={() => setLegendOpen((v) => !v)}
-            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg text-sm font-medium text-zinc-200 hover:bg-zinc-800/80"
+            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3 text-sm font-medium text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-800/80 active:scale-[0.97] touch-manipulation"
           >
             <span>🗺️ Layers</span>
             <span className="text-zinc-500">{legendOpen ? "▾" : "▸"}</span>
@@ -4642,7 +4642,7 @@ export default function CampaignMap({
             )}
           </button>
           {legendOpen && (
-            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-1 sm:gap-1.5 p-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-lg">
+            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-1 sm:gap-1.5 p-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3">
               {!isChoropleth && !isHeatmap && !isHexBloom && (
                 <>
                   <p className="px-1 pt-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Geographic Stats</p>
@@ -4665,7 +4665,7 @@ export default function CampaignMap({
                           className={`group flex items-center justify-between gap-2 px-2.5 py-1.5 font-medium rounded-md border cursor-pointer transition-all active:scale-[0.98] ${
                             active
                               ? "bg-emerald-600 border-emerald-400 text-white shadow-sm shadow-emerald-900/40"
-                              : "bg-zinc-800/60 border-zinc-700/70 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 hover:shadow-sm"
+                              : "bg-zinc-800/60 border-zinc-700/70 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 hover:shadow-sm active:text-zinc-100 active:bg-zinc-700/80 active:border-zinc-500 active:scale-[0.97]"
                           }`}
                         >
                           <span className="flex items-center gap-1.5">
@@ -4843,7 +4843,7 @@ export default function CampaignMap({
             />
             <IconButton
               onClick={() => setSelectedPhoto(null)}
-              className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 active:bg-black/80 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
               aria-label="Close"
             >
               ×
@@ -4863,7 +4863,7 @@ export default function CampaignMap({
           >
             <IconButton
               onClick={() => setSelectedBusiness(null)}
-              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
               aria-label="Close"
             >
               ×
@@ -4900,7 +4900,7 @@ export default function CampaignMap({
                   href={selectedBusiness.website_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 underline"
+                  className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
                 >
                   Visit website
                 </a>
@@ -4910,7 +4910,7 @@ export default function CampaignMap({
                   href={selectedBusiness.google_maps_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 underline"
+                  className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
                 >
                   Open in Google Maps
                 </a>
@@ -4918,7 +4918,7 @@ export default function CampaignMap({
             </div>
             <Link
               href={`/partners/${selectedBusiness.slug}`}
-              className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-sm font-semibold shadow-sm transition-colors"
+              className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-400 active:scale-[0.97] text-emerald-950 text-sm font-semibold shadow-sm transition-[background-color,transform] duration-150 touch-manipulation"
             >
               View offer & redeem
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -4940,7 +4940,7 @@ export default function CampaignMap({
           >
             <IconButton
               onClick={() => setSelectedCleanupEvent(null)}
-              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
               aria-label="Close"
             >
               <span className="-translate-y-[2px]">×</span>
@@ -4981,7 +4981,7 @@ export default function CampaignMap({
                 </div>
                 <Link
                   href={`/groups/${selectedCleanupEvent.group_slug}`}
-                  className="text-xs text-sky-400 hover:text-sky-300"
+                  className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
                 >
                   {selectedCleanupEvent.group_name}
                 </Link>
@@ -4991,7 +4991,7 @@ export default function CampaignMap({
                     {selectedCleanupEvent.cohost_groups.map((g, i) => (
                       <span key={g.group_id}>
                         {i > 0 && ", "}
-                        <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300">
+                        <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
                           {g.group_name}
                         </Link>
                       </span>
@@ -5035,8 +5035,8 @@ export default function CampaignMap({
             <Link
               href={`/cleanup-events/${selectedCleanupEvent.id}`}
               className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${selectedCleanupEvent.is_past
-                  ? "bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
-                  : "bg-sky-500 hover:bg-sky-400 text-sky-950"
+                  ? "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] text-zinc-200"
+                  : "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950"
                 }`}
             >
               {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
@@ -5073,7 +5073,7 @@ export default function CampaignMap({
             >
               <IconButton
                 onClick={() => setSelectedEvent(null)}
-                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
                 aria-label="Close"
               >
                 ×

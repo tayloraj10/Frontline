@@ -97,7 +97,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-colors group shrink-0"
+            className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 transition-[border-color,transform] duration-150 active:scale-[0.95] touch-manipulation group shrink-0 shadow-elevation-1"
           >
             {displayAvatar ? (
               <img src={displayAvatar} alt="Avatar" className="w-full h-full object-cover" />
@@ -137,7 +137,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
           onChange={(e) => setDisplay(e.target.value)}
           maxLength={60}
           placeholder={username}
-          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors shadow-elevation-1"
         />
         <p className="mt-1 text-xs text-zinc-600">Shown on your profile and leaderboards. Defaults to your username.</p>
       </div>
@@ -152,7 +152,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
           rows={3}
           maxLength={200}
           placeholder="Tell the community something about yourself…"
-          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors resize-none"
+          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors resize-none shadow-elevation-1"
         />
         <p className="mt-1 text-xs text-zinc-600">{bioVal.length}/200</p>
       </div>
@@ -167,14 +167,14 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-2 bg-zinc-100 text-zinc-900 text-sm font-semibold rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-2 bg-zinc-100 text-zinc-900 text-sm font-semibold rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
         >
           {saving ? "Saving…" : "Save changes"}
         </button>
         <button
           type="button"
           onClick={() => router.push(`/users/${username}`)}
-          className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.96] touch-manipulation"
         >
           Cancel
         </button>

@@ -41,7 +41,7 @@ export default function CreateTimedEventButton({
             onClick={() => onOpenChange(true)}
             className={
               className ??
-              "px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors backdrop-blur-sm shadow-md bg-amber-950/80 border-amber-700/60 text-amber-300 hover:text-amber-200 hover:bg-amber-900"
+              "px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,transform] duration-150 backdrop-blur-sm shadow-md bg-amber-950/80 border-amber-700/60 text-amber-300 hover:text-amber-200 hover:bg-amber-900 active:text-amber-200 active:bg-amber-900 active:scale-[0.97] touch-manipulation"
             }
           >
             ✨ New Timed Event
@@ -51,7 +51,7 @@ export default function CreateTimedEventButton({
             title="Hide until next page refresh"
             aria-label="Hide until next page refresh"
             size="sm"
-            className="absolute -top-3 -right-3 bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-[10px] leading-none opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+            className="absolute -top-3 -right-3 bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 active:text-zinc-200 active:bg-zinc-700 active:scale-[0.9] text-[10px] leading-none opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-[opacity,background-color,color,transform] duration-150 touch-manipulation"
           >
             ×
           </IconButton>
@@ -67,7 +67,7 @@ export default function CreateTimedEventButton({
 
             <IconButton
               onClick={() => onOpenChange(false)}
-              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 text-lg leading-none"
+              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] text-lg leading-none transition-[background-color,transform] duration-150 touch-manipulation"
               aria-label="Close"
             >
               ×
