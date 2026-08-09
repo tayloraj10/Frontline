@@ -10,7 +10,7 @@ export async function GET() {
       relation: ["delegate_permission/common.handle_all_urls"],
       target: {
         namespace: "android_app",
-        package_name: "com.frontline.app",
+        package_name: "com.frontlinemaps.app",
         sha256_cert_fingerprints: ["47:1D:E4:D6:83:E0:B2:28:9B:88:7B:2A:A5:B8:D4:70:23:F6:57:97:F9:3F:F2:B9:A9:BE:42:3C:C5:7F:D9:16"],
       },
     },
