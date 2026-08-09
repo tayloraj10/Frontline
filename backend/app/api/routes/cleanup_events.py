@@ -974,6 +974,15 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
         if not prox_result.scalar():
             raise HTTPException(status_code=403, detail="You're too far from the event location to check in")
 
+    # Only the first check-in for this attendee should award points — re-checking in
+    # (e.g. a retry, or the organizer checking in someone who already self-checked-in)
+    # must not re-credit them.
+    already_result = await db.execute(
+        text("SELECT checked_in_at FROM cleanup_rsvps WHERE cleanup_id = :cleanup_id AND user_id = :user_id"),
+        {"cleanup_id": str(cleanup_id), "user_id": str(payload.user_id)},
+    )
+    already_checked_in = already_result.scalar() is not None
+
     result = await db.execute(
         text("""
             INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at)
@@ -986,9 +995,27 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
         {"cleanup_id": str(cleanup_id), "user_id": str(payload.user_id)},
     )
     row = result.fetchone()
+
+    points_awarded = 0.0
+    if not already_checked_in:
+        points_awarded = settings.get("cleanup_event_checkin_value", 5)
+        credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, payload.user_id)
+        await record_contribution(
+            db,
+            user_id=payload.user_id,
+            campaign_id=event.campaign_id,
+            group_id=credit_group_id,
+            geo_unit_id=None,
+            cleanup_id=None,
+            cleanup_event_id=str(cleanup_id),
+            contribution_type="cleanup_event_checkin",
+            value=points_awarded,
+            apply_multiplier=False,
+        )
+
     await db.commit()
 
-    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat()}
+    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat(), "points_awarded": points_awarded}
 
 
 @router.post("/{cleanup_id}/organizer-check-in")
@@ -1002,6 +1029,12 @@ async def organizer_check_in_attendee(cleanup_id: UUID, payload: OrganizerCheckI
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can check in an attendee")
 
+    already_result = await db.execute(
+        text("SELECT checked_in_at FROM cleanup_rsvps WHERE cleanup_id = :cleanup_id AND user_id = :user_id"),
+        {"cleanup_id": str(cleanup_id), "user_id": str(payload.attendee_user_id)},
+    )
+    already_checked_in = already_result.scalar() is not None
+
     result = await db.execute(
         text("""
             INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at)
@@ -1014,9 +1047,29 @@ async def organizer_check_in_attendee(cleanup_id: UUID, payload: OrganizerCheckI
         {"cleanup_id": str(cleanup_id), "user_id": str(payload.attendee_user_id)},
     )
     row = result.fetchone()
+
+    points_awarded = 0.0
+    if not already_checked_in:
+        settings = await get_game_settings(db)
+        points_awarded = settings.get("cleanup_event_checkin_value", 5)
+        credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, payload.attendee_user_id)
+        await record_contribution(
+            db,
+            user_id=payload.attendee_user_id,
+            campaign_id=event.campaign_id,
+            group_id=credit_group_id,
+            geo_unit_id=None,
+            cleanup_id=None,
+            cleanup_event_id=str(cleanup_id),
+            contribution_type="cleanup_event_checkin",
+            value=points_awarded,
+            apply_multiplier=False,
+            recorded_by_user_id=payload.organizer_user_id,
+        )
+
     await db.commit()
 
-    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat()}
+    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat(), "points_awarded": points_awarded}
 
 
 @router.post("/{cleanup_id}/log-for-attendee")
