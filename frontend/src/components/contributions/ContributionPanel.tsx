@@ -1478,7 +1478,7 @@ function ContributeModal({
                     <IconButton
                       onClick={() => setExistingPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
                       size="sm"
-                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                       aria-label="Remove photo"
                     >
                       ×
@@ -1499,7 +1499,7 @@ function ContributeModal({
                     <IconButton
                       onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
                       size="sm"
-                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                       aria-label="Remove photo"
                     >
                       ×
@@ -1713,7 +1713,7 @@ function ReportModal({
                 <IconButton
                   onClick={() => setPhoto(null)}
                   size="sm"
-                  className="absolute top-0 right-0 bg-black/70 text-white text-[10px] leading-none rounded-bl rounded-tr-lg"
+                  className="absolute top-1 right-1 bg-black/70 text-white text-[10px] leading-none rounded-lg! w-6! h-6!"
                   aria-label="Remove photo"
                 >
                   ×
@@ -2369,7 +2369,7 @@ function ClaimReportModal({
                       <IconButton
                         onClick={() => setPhoto(null)}
                         size="sm"
-                        className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                        className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                         aria-label="Remove photo"
                       >
                         ×
@@ -2467,7 +2467,7 @@ function ClaimReportModal({
                     <IconButton
                       onClick={() => setPhoto(null)}
                       size="sm"
-                      className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none rounded-bl rounded-tr-lg"
+                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
                       aria-label="Remove photo"
                     >
                       ×
@@ -2984,7 +2984,7 @@ function HostEventModal({
                 <IconButton
                   onClick={() => setImageFile(null)}
                   size="sm"
-                  className="absolute top-0 right-0 bg-black/70 text-white text-[10px] leading-none rounded-bl rounded-tr-lg"
+                  className="absolute top-1 right-1 bg-black/70 text-white text-[10px] leading-none rounded-lg! w-6! h-6!"
                   aria-label="Remove photo"
                 >
                   ×
@@ -3799,9 +3799,9 @@ export default function ContributionPanel({
                     whileTap={{ scale: 0.9 }}
                     animate={{ rotate: logHostExpanded ? 45 : 0 }}
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-zinc-700 text-2xl backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-zinc-700 text-2xl backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                   >
-                    {logHostExpanded ? "✕" : btn.icon}
+                    {logHostExpanded ? "+" : btn.icon}
                   </motion.button>
                   <AnimatePresence>
                     {logHostExpanded && (
@@ -3816,7 +3816,7 @@ export default function ContributionPanel({
                           exit={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
                           transition={{ type: "spring", stiffness: 420, damping: 30 }}
                           whileTap={{ scale: 0.9 }}
-                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-zinc-700 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-zinc-700 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                         >
                           <span className="text-base leading-none">{btn.icon}</span>
                           <span className="text-[8px] leading-none text-zinc-300">Log</span>
@@ -3831,7 +3831,7 @@ export default function ContributionPanel({
                           exit={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
                           transition={{ type: "spring", stiffness: 420, damping: 30, delay: 0.03 }}
                           whileTap={{ scale: 0.9 }}
-                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,transform] duration-150 border border-sky-800/60 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                          className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-sky-800/60 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                         >
                           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-zinc-900" />
                           <span className="text-base leading-none">📅</span>
