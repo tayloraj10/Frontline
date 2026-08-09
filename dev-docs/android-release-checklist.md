@@ -1,17 +1,22 @@
 # Android Release Checklist
 
-Everything needed to get `com.frontline.app` from "runs on an emulator" to "live on the Play Store," and to keep it maintainable release-over-release. Native scaffolding/OAuth/push context lives in `capacitor-scoping-2026-08-04.md`; this doc is the production-release path specifically.
+Everything needed to get `com.frontlinemaps.app` from "runs on an emulator" to "live on the Play Store," and to keep it maintainable release-over-release. Native scaffolding/OAuth/push context lives in `capacitor-scoping-2026-08-04.md`; this doc is the production-release path specifically.
 
-## 1. Firebase API key restriction (do this now, doesn't block anything else)
+**Package renamed 2026-08-08:** was `com.frontline.app`, changed to `com.frontlinemaps.app` (matches iOS bundle ID) after discovering the old name was already taken on the Play Store. Touched `build.gradle`, the Java package directory, `strings.xml`, the `assetlinks.json` route, and `google-services.json` (new Firebase Android app registered under the new package, old one deleted).
 
-GitHub flagged `frontend/android/app/google-services.json`'s API key as an exposed secret (2026-08-07). It's a client config key, not a real secret — Google's own guidance is that these ship inside every APK anyway — but it should still be restricted to this app so a scraped key can't be reused elsewhere:
+## 1. Firebase API key restriction (deferred — leave open for now)
 
-- Google Cloud Console → APIs & Services → Credentials → the Android key for project `frontline-498904`.
-- Add an Android app restriction:
-  - Package name: `com.frontline.app`
+GitHub flagged `frontend/android/app/google-services.json`'s API key as an exposed secret (2026-08-07). It's a client config key, not a real secret — Google's own guidance is that these ship inside every APK anyway — but it should still be restricted to this app so a scraped key can't be reused elsewhere.
+
+**Status (2026-08-09): deliberately left unrestricted for now** — deprioritized behind finishing Android release prep. Do this pass later, not urgent while pre-launch.
+
+- Package name is now `com.frontlinemaps.app` (renamed 2026-08-08 — `com.frontline.app` was already taken on Play Store).
+- Google Cloud Console → APIs & Services → Credentials → project `frontline-498904` currently shows **two "Android key (auto created by Firebase)" entries**. The old `com.frontline.app` Firebase Android app was deleted, but unlike the iOS equivalent (where the orphaned key disappeared immediately on app deletion), this Android key was still present right after deletion — check both keys and confirm which is still live/tied to `com.frontlinemaps.app` before restricting; delete the stale one if it's still orphaned by then.
+- Add an Android app restriction to the live key:
+  - Package name: `com.frontlinemaps.app`
   - SHA-1 (debug keystore, current dev machine): `A7:7A:59:4B:F8:5F:DB:18:63:97:7A:AF:C1:A8:2E:23:A9:33:85:D0`
   - **Add the release keystore's SHA-1 too once it exists (step 2 below)** — otherwise this restriction blocks signed release builds while debug builds keep working, which is a confusing failure mode to hit later.
-- Do the same restriction for the iOS key (bundle ID `com.frontline.app`) while in there — see `ios-release-checklist.md`.
+- Do the same restriction for the iOS key (bundle ID `com.frontlinemaps.app`) and the Browser key while in there — see `ios-release-checklist.md`.
 
 ## 2. Release keystore (blocks everything below)
 

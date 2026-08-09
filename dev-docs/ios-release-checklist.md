@@ -2,17 +2,19 @@
 
 Everything needed to get `com.frontlinemaps.app` from "runs in the Simulator" to "live on the App Store." `ios-setup-2026-08-06.md` covers the greenfield `npx cap add ios` scaffolding steps (Mac-only, done as of `phase2/ios-setup`); this doc picks up from there through store submission and repeat releases. Native scaffolding/OAuth/push context lives in `capacitor-scoping-2026-08-04.md`.
 
-Note: iOS's bundle ID (`com.frontlinemaps.app`, per `capacitor.config.ts`'s `appId` and `project.pbxproj`) intentionally differs from Android's `applicationId` (`com.frontline.app`, per `android/app/build.gradle`) — they don't need to match, each platform's `.well-known` route declares its own correct value.
+Note: iOS's bundle ID and Android's `applicationId` are now the same, `com.frontlinemaps.app` (per `capacitor.config.ts`'s `appId`, `project.pbxproj`, and `android/app/build.gradle`) — Android was renamed to match on 2026-08-08 after `com.frontline.app` turned out to already be taken on the Play Store. Each platform's `.well-known` route still declares its own value independently.
 
 **Everything here needs the Mac laptop.** None of it can be done from Windows.
 
-## 1. Firebase API key restriction (do this now, doesn't block anything else)
+## 1. Firebase API key restriction (deferred — leave open for now)
 
-GitHub flagged `frontend/pending-ios-assets/GoogleService-Info.plist`'s API key as an exposed secret (2026-08-07). Same as the Android key — client config, not a real secret, but restrict it anyway:
+GitHub flagged `frontend/pending-ios-assets/GoogleService-Info.plist`'s API key as an exposed secret (2026-08-07). Same as the Android key — client config, not a real secret, but restrict it anyway.
+
+**Status (2026-08-09): deliberately left unrestricted for now** — deprioritized behind Android release prep. Do this pass later, not urgent while pre-launch.
 
 - Google Cloud Console → APIs & Services → Credentials → the iOS key for project `frontline-498904`.
 - Add an iOS app restriction: Bundle ID `com.frontlinemaps.app`.
-- (The Android key restriction is covered in `android-release-checklist.md`, same Cloud Console visit.)
+- (The Android key restriction — including a currently-unresolved duplicate-key situation from the 2026-08-08 package rename — is covered in `android-release-checklist.md`, same Cloud Console visit. Also restrict the Browser key while in there.)
 
 ## 2. Prerequisites (from `ios-setup-2026-08-06.md`)
 
