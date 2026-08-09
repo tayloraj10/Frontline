@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Camera } from "@capacitor/camera";
 import type { MediaResult } from "@capacitor/camera";
+import { Filesystem } from "@capacitor/filesystem";
 import { isNativePlatform } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
@@ -464,19 +465,28 @@ function GpsIndicator({
 
 // ─── Camera capture ───────────────────────────────────────────────────────────
 
-// Native camera/gallery results come back as a webPath (or file uri as a
-// fallback) rather than a File, but uploadToR2 needs a real File, so fetch
-// it back through the WebView's registered scheme handler and re-wrap it.
+// Native camera/gallery results come back as a native file uri (and a
+// capacitor://localhost webPath alias of it), but uploadToR2 needs a real
+// File. This used to fetch() the webPath, which works fine while the WebView's
+// own page is served from a local/dev origin — but in production the page
+// loads from the real https://www.frontlinemaps.com origin, and WKWebView's
+// mixed-content policy blocks an HTTPS page from fetching a non-https
+// capacitor:// resource, silently breaking photo capture in TestFlight/App
+// Store builds only. Filesystem.readFile reads the bytes through the native
+// plugin bridge instead of a WebView network request, so it isn't subject to
+// that same-origin/mixed-content policy at all.
 async function mediaResultToFile(result: MediaResult, index = 0): Promise<File> {
-  const src = result.webPath ?? result.uri;
-  if (!src) throw new Error("Photo capture returned no file");
-  const res = await fetch(src);
-  const blob = await res.blob();
+  const path = result.uri ?? result.webPath;
+  if (!path) throw new Error("Photo capture returned no file");
   const format = result.metadata?.format?.toLowerCase();
   const ext = format === "png" ? "png" : "jpg";
-  return new File([blob], `photo-${Date.now()}-${index}.${ext}`, {
-    type: blob.type || (ext === "png" ? "image/png" : "image/jpeg"),
-  });
+  const type = ext === "png" ? "image/png" : "image/jpeg";
+  const { data } = await Filesystem.readFile({ path });
+  const base64 = typeof data === "string" ? data : await data.text();
+  const bytes = atob(base64);
+  const buffer = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+  return new File([buffer], `photo-${Date.now()}-${index}.${ext}`, { type });
 }
 
 function CameraModal({
