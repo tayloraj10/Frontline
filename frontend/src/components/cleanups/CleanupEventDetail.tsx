@@ -466,7 +466,8 @@ export default function CleanupEventDetail({
             {viewerCheckedIn && (
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
                 ✓ Checked in
-                {checkInPointsAwarded !== null && ` · +${checkInPointsAwarded} pts`}
+                {(event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded ?? 0) > 0 &&
+                  ` · +${event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded} pts`}
               </span>
             )}
           </div>
@@ -607,7 +608,9 @@ export default function CleanupEventDetail({
                       {r.checked_in_at ? (
                         <span className="text-xs text-emerald-400 whitespace-nowrap">
                           ✓ checked in
-                          {recentCheckinPoints[r.user_id] ? ` · +${recentCheckinPoints[r.user_id]} pts` : ""}
+                          {(r.checkin_points || recentCheckinPoints[r.user_id])
+                            ? ` · +${r.checkin_points || recentCheckinPoints[r.user_id]} pts`
+                            : ""}
                         </span>
                       ) : event.is_organizer ? (
                         <OrganizerCheckInButton
@@ -662,7 +665,15 @@ export default function CleanupEventDetail({
                           {r.pounds > 0 && `${r.small_bags + r.large_bags > 0 ? " · " : ""}⚖️ ${r.pounds.toLocaleString()} lbs`}
                         </span>
                       )}
-                      {r.points > 0 && (
+                      {r.checkin_points > 0 && (
+                        <span
+                          className="text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/30 rounded px-1.5 py-0.5 shrink-0"
+                          title="Credited for checking in to the event"
+                        >
+                          +{r.checkin_points.toLocaleString()} pts · check-in
+                        </span>
+                      )}
+                      {r.team_total_points > 0 && (
                         <span
                           className="text-xs text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0"
                           title={
@@ -671,7 +682,7 @@ export default function CleanupEventDetail({
                               : undefined
                           }
                         >
-                          +{r.points.toLocaleString()} pts
+                          +{r.team_total_points.toLocaleString()} pts
                           {r.small_bags + r.large_bags === 0 && r.pounds === 0 && " · team total"}
                         </span>
                       )}

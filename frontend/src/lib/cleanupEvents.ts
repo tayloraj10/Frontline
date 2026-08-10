@@ -23,6 +23,8 @@ export type CleanupEventRsvp = {
   large_bags: number;
   pounds: number;
   points: number;
+  checkin_points: number;
+  team_total_points: number;
   photos: string[];
   is_late: boolean;
   has_individual_contribution: boolean;
