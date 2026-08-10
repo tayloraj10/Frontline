@@ -518,7 +518,7 @@ function CameraModal({
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
+          videoRef.current.play().catch(() => { });
         }
         setReady(true);
       })
@@ -707,7 +707,7 @@ function ContributeModal({
   userGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
-  onEnterPinPicker: () => void;
+  onEnterPinPicker: (hasPhoto?: boolean) => void;
   onEnterRoutePicker: () => void;
   routeOverride: RouteLineString | null;
   onClose: () => void;
@@ -1042,8 +1042,8 @@ function ContributeModal({
           {isCleanup && appliedMultiplier && (
             <p
               className={`text-sm font-semibold text-center transition-all duration-500 ${appliedMultiplier.multiplier > challengeMultiplier
-                  ? `text-orange-300 ${celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"}`
-                  : "text-orange-500/50 line-through"
+                ? `text-orange-300 ${celebrate ? "opacity-100 scale-100" : "opacity-0 scale-75"}`
+                : "text-orange-500/50 line-through"
                 }`}
             >
               <span className="inline-block animate-bounce">🔥</span>{" "}
@@ -1229,17 +1229,25 @@ function ContributeModal({
             )}
             {gps.status === "success" && gps.coords && (
               <button
-                onClick={onEnterPinPicker}
+                onClick={() => onEnterPinPicker(photos.length > 0 || existingPhotoUrls.length > 0)}
                 className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
               >
                 {overrideCoords ? "Reposition on map" : "Place pin on map"}
               </button>
             )}
+            {isCleanup && gps.status === "success" && gps.coords && (
+              <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-lg border border-amber-800/60 bg-amber-950/30 text-[10px] text-amber-300">
+                {photos.length > 0 || existingPhotoUrls.length > 0
+                  ? "Photo attached — the pin can go anywhere on the map."
+                  : "Pin must stay in your current ZIP code unless a photo is added to this cleanup."}
+              </div>
+            )}
+            {submitCoords && (
+              <div className="mt-2">
+                <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+              </div>
+            )}
           </div>
-        )}
-
-        {needsLocation && !isRouteMode && submitCoords && (
-          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
         )}
 
         {isRouteMode && (
@@ -2159,7 +2167,7 @@ function ClaimReportModal({
       images={[localReport.photo_url]}
       index={0}
       onClose={() => setReportPhotoLightboxOpen(false)}
-      onNavigate={() => {}}
+      onNavigate={() => { }}
     />
   );
 
@@ -2420,7 +2428,7 @@ function ClaimReportModal({
           {flagControl}
         </div>
         {lightboxOpen && photoPreview && (
-          <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
+          <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => { }} />
         )}
         {reportPhotoLightbox}
       </ModalShell>
@@ -2527,7 +2535,7 @@ function ClaimReportModal({
         {flagControl}
       </div>
       {lightboxOpen && photoPreview && (
-        <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
+        <Lightbox images={[photoPreview]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => { }} />
       )}
       {reportPhotoLightbox}
     </ModalShell>
@@ -2556,11 +2564,10 @@ function ActiveClaimBadge({
   return (
     <button
       onClick={onClick}
-      className={`absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium backdrop-blur-sm shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
-        countdown.expired
-          ? "border-red-800/60 bg-red-950/80 text-red-300 hover:bg-red-900/80 active:bg-red-900/80 active:scale-[0.97]"
-          : "border-violet-800/60 bg-violet-950/80 text-violet-200 hover:bg-violet-900/80 active:bg-violet-900/80 active:scale-[0.97]"
-      }`}
+      className={`absolute top-[5.5rem] sm:top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium backdrop-blur-sm shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation ${countdown.expired
+        ? "border-red-800/60 bg-red-950/80 text-red-300 hover:bg-red-900/80 active:bg-red-900/80 active:scale-[0.97]"
+        : "border-violet-800/60 bg-violet-950/80 text-violet-200 hover:bg-violet-900/80 active:bg-violet-900/80 active:scale-[0.97]"
+        }`}
     >
       <span className="text-sm">🎯</span>
       <span>
@@ -3661,7 +3668,7 @@ export default function ContributionPanel({
     )
       .then((res) => (res.ok ? res.json() : null))
       .then(setPendingChallengeCompletion)
-      .catch(() => {});
+      .catch(() => { });
   }, [campaignId, userId]);
   useEffect(() => { refreshPendingChallengeCompletion(); }, [refreshPendingChallengeCompletion]);
 
@@ -3726,11 +3733,14 @@ export default function ContributionPanel({
     gps.capture();
   };
 
-  const handleEnterPinPickerForContribute = () => {
+  const handleEnterPinPickerForContribute = (hasPhoto = false) => {
     const coords = contributeOverrideCoords ?? gps.coords;
     if (!coords) return;
     const noun = CONTRIBUTION_LOCATION_NOUN[campaignContributionType] ?? "cleanup";
-    onEnterPinPicker(coords, !isSolarpunk, `Drag the pin to your exact ${noun} location`);
+    // A submitted photo stands in for the zip-boundary check as proof of location, so
+    // attaching one first lets the pin roam freely instead of snapping back to the zip
+    // the user's GPS started in.
+    onEnterPinPicker(coords, !isSolarpunk && !hasPhoto, `Drag the pin to your exact ${noun} location`);
   };
 
   const handleEnterPinPickerForSolarpunkPhoto = () => {

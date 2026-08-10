@@ -4476,12 +4476,18 @@ export default function CampaignMap({
 
       {pinPickerActive && (
         <>
-          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap transition-colors duration-200 ${outOfZoneWarning
-            ? "bg-red-950/95 border-red-700 text-red-300"
-            : "bg-zinc-900/95 border-zinc-700 text-zinc-200"
+          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 max-w-[90vw] px-4 py-2 border rounded-lg text-center text-sm shadow-xl transition-colors duration-200 ${outOfZoneWarning
+            ? "leading-snug bg-red-950/95 border-red-700 text-red-300"
+            : "whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200"
             }`}>
             {outOfZoneWarning
-              ? `Pin must stay within your ${pinPickerUnitLabel === "ZIP" ? "ZIP code" : "postcode"}`
+              ? (
+                <>
+                  Pin must stay within your {pinPickerUnitLabel === "ZIP" ? "ZIP code" : "postcode"}
+                  <br />
+                  or attach a photo to place it anywhere
+                </>
+              )
               : pinPickerLabel ?? "Drag the pin to your exact cleanup location"}
           </div>
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
