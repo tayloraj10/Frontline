@@ -686,6 +686,11 @@ export default function CleanupEventDetail({
                           {r.small_bags + r.large_bags === 0 && r.pounds === 0 && " · team total"}
                         </span>
                       )}
+                      {r.checkin_points > 0 && r.team_total_points > 0 && (
+                        <span className="text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 rounded px-1.5 py-0.5 shrink-0">
+                          = {r.points.toLocaleString()} pts
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -1123,6 +1128,7 @@ function LogTeamTotalForm({
   const [largeBags, setLargeBags] = useState("");
   const [pounds, setPounds] = useState("");
   const [pool, setPool] = useState<"checked_in" | "going">("checked_in");
+  const [alsoCheckIn, setAlsoCheckIn] = useState(false);
   const [scoringMethod, setScoringMethod] = useState<"bags" | "pounds">("bags");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [overrideListOpen, setOverrideListOpen] = useState(false);
@@ -1161,6 +1167,7 @@ function LogTeamTotalForm({
     "small_bag_value",
     "large_bag_value",
     "pound_value",
+    "cleanup_event_checkin_value",
   ] as const);
   const bagValuesReady = pointValues.small_bag_value !== undefined && pointValues.large_bag_value !== undefined;
   const poundValueReady = pointValues.pound_value !== undefined;
@@ -1209,6 +1216,7 @@ function LogTeamTotalForm({
         attendeePool: pool,
         scoringMethod,
         overrides: Object.keys(overridesPayload).length ? overridesPayload : undefined,
+        alsoCheckIn: pool === "going" && alsoCheckIn,
       });
       await onLogged();
       await loadLogs();
@@ -1217,7 +1225,12 @@ function LogTeamTotalForm({
       setLargeBags("");
       setPounds("");
       setOverrides({});
-      setResult(`Credited ${res.credited_count} attendee${res.credited_count === 1 ? "" : "s"}.`);
+      const checkinNote = res.newly_checked_in_count
+        ? ` ${res.newly_checked_in_count} newly checked in and awarded check-in points.`
+        : "";
+      setResult(
+        `Credited ${res.credited_count} attendee${res.credited_count === 1 ? "" : "s"}.${checkinNote}`
+      );
     } catch (err) {
       setError(extractErrorMessage(err, "Failed to log team total"));
     } finally {
@@ -1292,7 +1305,10 @@ function LogTeamTotalForm({
         {(["checked_in", "going"] as const).map((p) => (
           <button
             key={p}
-            onClick={() => setPool(p)}
+            onClick={() => {
+              setPool(p);
+              if (p !== "going") setAlsoCheckIn(false);
+            }}
             className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
               pool === p
                 ? "bg-emerald-700 border-emerald-700 text-white"
@@ -1303,6 +1319,22 @@ function LogTeamTotalForm({
           </button>
         ))}
       </div>
+
+      {pool === "going" && (
+        <label className="flex items-start gap-2 text-[11px] text-zinc-500 pl-0.5">
+          <input
+            type="checkbox"
+            checked={alsoCheckIn}
+            onChange={(e) => setAlsoCheckIn(e.target.checked)}
+            className="mt-0.5 accent-emerald-600"
+          />
+          <span>
+            Also check in anyone in this pool who isn&apos;t already checked in, and award them{" "}
+            <SettingValue value={pointValues.cleanup_event_checkin_value} loading={pointValuesLoading} />
+            {" "}check-in points. Leave unchecked to only credit the team total. RSVPs aren&apos;t verified attendance.
+          </span>
+        </label>
+      )}
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
         <p className="text-[11px] text-zinc-600">
