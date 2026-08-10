@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AppHeader />
         <div
           id="app-scroll-container"
-          className="flex flex-col flex-1 min-h-0 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0"
+          className="flex flex-col flex-1 min-h-0 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-0"
         >
           <PullToRefresh />
           {children}
