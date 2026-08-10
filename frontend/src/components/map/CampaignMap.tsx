@@ -305,6 +305,13 @@ export type MapBusiness = {
   lat: number;
   lng: number;
   activeOfferTitle?: string | null;
+  // Public offer catalog (safe to cache); used server-side, after the cache read, to
+  // derive affordableOfferTitle below for the current viewer. Not otherwise rendered.
+  offers?: { title: string; mode: "spend" | "threshold"; requirement: number }[];
+  // Server-computed per-viewer (never cached alongside the rest of this object — see
+  // campaigns/[slug]/page.tsx's cache-boundary comment): set when the signed-in viewer
+  // currently has enough points for at least one of this business's active offers.
+  affordableOfferTitle?: string | null;
 };
 
 export type MapCleanupEvent = {
@@ -1730,6 +1737,7 @@ export default function CampaignMap({
   const eventMarkerZoomListenerRef = useRef(false);
   const partnerBusinessesRef = useRef(partnerBusinesses ?? []);
   const businessMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const businessTweensRef = useRef<gsap.core.Tween[]>([]);
   const cleanupEventsRef = useRef(cleanupEvents ?? []);
   const cleanupEventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const cleanupEventDateLabelsRef = useRef<maplibregl.Marker[]>([]);
@@ -1974,29 +1982,47 @@ export default function CampaignMap({
 
     businessMarkersRef.current.forEach((m) => m.remove());
     businessMarkersRef.current = [];
+    businessTweensRef.current.forEach((t) => t.kill());
+    businessTweensRef.current = [];
 
     for (const business of businesses) {
       const hasOffer = !!business.activeOfferTitle;
+      const affordable = !!business.affordableOfferTitle;
+      // MapLibre sets `transform` on `el` for geo-positioning, so GSAP must never touch
+      // `el` directly (see the same isolation pattern on event markers above) — the pulse
+      // tween below targets `innerEl`, a separate nested element, instead.
       const el = document.createElement("div");
       const size = hasOffer ? 24 : 20;
-      el.style.cssText = hasOffer
-        ? `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:6;` +
-        "border:2px solid #fbbf24;box-shadow:0 0 8px rgba(251,191,36,0.7),0 1px 4px rgba(0,0,0,0.6);" +
-        "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9)"
-        : `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;cursor:pointer;z-index:5;` +
+      el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;z-index:${hasOffer ? 6 : 5}`;
+
+      const innerEl = document.createElement("div");
+      innerEl.style.cssText = hasOffer
+        ? `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
+        `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6);` +
+        "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9);transform-origin:center"
+        : `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
         "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
         "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
+      el.appendChild(innerEl);
+      if (affordable) {
+        const pulseTween = gsap.to(innerEl, { scale: 1.08, duration: 1.6, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.4 });
+        businessTweensRef.current.push(pulseTween);
+      }
 
       if (business.logo_url) {
         const img = document.createElement("img");
         img.src = business.logo_url;
         img.style.cssText = "width:100%;height:100%;object-fit:cover";
-        el.appendChild(img);
+        innerEl.appendChild(img);
       } else {
-        el.textContent = hasOffer ? "🎁" : "🏪";
-        el.style.fontSize = hasOffer ? "12px" : "10px";
+        innerEl.textContent = hasOffer ? "🎁" : "🏪";
+        innerEl.style.fontSize = hasOffer ? "12px" : "10px";
       }
-      el.title = hasOffer ? `${business.name} — ${business.activeOfferTitle}` : business.name;
+      el.title = affordable
+        ? `${business.name} — you have enough points for ${business.affordableOfferTitle}!`
+        : hasOffer
+          ? `${business.name} — ${business.activeOfferTitle}`
+          : business.name;
 
       if (!layerToggleRef.current.showPartners) {
         el.style.display = "none";
@@ -3981,6 +4007,7 @@ export default function CampaignMap({
       userLocationMarkerRef.current?.remove();
       userLocationMarkerRef.current = null;
       eventTweensRef.current.forEach((t) => t.kill());
+      businessTweensRef.current.forEach((t) => t.kill());
       ro.disconnect();
       eventMarkersRef.current.forEach((m) => m.remove());
       businessMarkersRef.current.forEach((m) => m.remove());
@@ -4886,7 +4913,14 @@ export default function CampaignMap({
             {selectedBusiness.description && (
               <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.description}</p>
             )}
-            {selectedBusiness.activeOfferTitle && (
+            {selectedBusiness.affordableOfferTitle ? (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/70 shadow-[0_0_10px_rgba(251,191,36,0.35)] flex items-center gap-2">
+                <span className="text-base leading-none animate-pulse">🎁</span>
+                <p className="text-sm text-amber-100">
+                  <span className="font-semibold">You have enough points!</span> Redeem {selectedBusiness.affordableOfferTitle} now.
+                </p>
+              </div>
+            ) : selectedBusiness.activeOfferTitle && (
               <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50 flex items-center gap-2">
                 <span className="text-base leading-none">🎁</span>
                 <p className="text-sm text-amber-200">

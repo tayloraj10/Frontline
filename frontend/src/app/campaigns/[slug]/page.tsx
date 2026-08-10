@@ -51,6 +51,7 @@ type PartnerBusinessRow = {
   id: string; name: string; slug: string; description: string | null; logo_url: string | null;
   website_url: string | null; google_maps_url: string | null; lat: number | null; lng: number | null; status: string;
 };
+type OfferRequirement = { title: string; mode: "spend" | "threshold"; requirement: number };
 
 // Everything here is public, RLS-open data (or FastAPI-computed data with no
 // per-user variance), so it's safe to share one cache entry across all
@@ -128,18 +129,31 @@ const getCampaignPageData = unstable_cache(
     const { data: activeOfferRows } = businessIds.length > 0
       ? await supabase
           .from("partner_offers")
-          .select("business_id, title, starts_at, ends_at")
+          .select("business_id, title, starts_at, ends_at, redemption_mode, points_cost, points_threshold")
           .in("business_id", businessIds)
           .eq("status", "active")
-      : { data: [] as { business_id: string; title: string; starts_at: string; ends_at: string | null }[] };
+      : {
+          data: [] as {
+            business_id: string; title: string; starts_at: string; ends_at: string | null;
+            redemption_mode: "spend" | "threshold"; points_cost: number | null; points_threshold: number | null;
+          }[],
+        };
     const nowIso = new Date().toISOString();
     const activeOfferTitleByBusiness = new Map<string, string>();
+    // Full active-offer catalog is public data (same rows /partners already exposes), so it's
+    // safe to keep inside the shared cache. Per-viewer affordability is computed from this
+    // afterward, outside the cache boundary — see the comment on getCampaignPageData.
+    const activeOffersByBusiness = new Map<string, OfferRequirement[]>();
     for (const row of activeOfferRows ?? []) {
       if (row.starts_at > nowIso) continue;
       if (row.ends_at && row.ends_at <= nowIso) continue;
       if (!activeOfferTitleByBusiness.has(row.business_id)) {
         activeOfferTitleByBusiness.set(row.business_id, row.title);
       }
+      const requirement = row.redemption_mode === "spend" ? row.points_cost ?? 0 : row.points_threshold ?? 0;
+      const list = activeOffersByBusiness.get(row.business_id) ?? [];
+      list.push({ title: row.title, mode: row.redemption_mode, requirement });
+      activeOffersByBusiness.set(row.business_id, list);
     }
 
     const partnerBusinesses: MapBusiness[] = linkedBusinesses.map((b) => ({
@@ -153,6 +167,7 @@ const getCampaignPageData = unstable_cache(
       lat: b.lat as number,
       lng: b.lng as number,
       activeOfferTitle: activeOfferTitleByBusiness.get(b.id) ?? null,
+      offers: activeOffersByBusiness.get(b.id) ?? [],
     }));
 
     const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number } = lbRes?.ok
@@ -224,10 +239,25 @@ export default async function CampaignPage({ params, searchParams }: Props) {
       ? supabase.from("group_members").select("group_id, role").eq("user_id", user.id)
       : Promise.resolve({ data: [] as { group_id: string; role: string }[] }),
     user
-      ? supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single()
-      : Promise.resolve({ data: null as { is_admin: boolean } | null }),
+      ? supabase.schema("public").from("profiles").select("is_admin, points, spendable_points").eq("id", user.id).single()
+      : Promise.resolve({ data: null as { is_admin: boolean; points: number; spendable_points: number } | null }),
   ]);
   const isAdmin = adminProfile?.is_admin ?? false;
+
+  // Per-viewer, so computed here rather than inside getCampaignPageData's shared cache
+  // (see the cache-boundary comment above it) — otherwise one visitor's eligibility would
+  // leak onto the cached response served to every other visitor of this campaign page.
+  const partnerBusinessesWithEligibility: MapBusiness[] = partnerBusinesses.map((b) => {
+    const offers = b.offers ?? [];
+    const affordable = adminProfile
+      ? offers.find((o) =>
+          o.mode === "spend"
+            ? adminProfile.spendable_points >= o.requirement
+            : adminProfile.points >= o.requirement
+        )
+      : undefined;
+    return { ...b, affordableOfferTitle: affordable?.title ?? null };
+  });
 
   const tractsCount = claims.length;
   const totalBags = Math.round(
@@ -422,7 +452,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
           problemReports={problemReports}
           eventCentroids={eventCentroids}
           eventGeoUnitIds={eventGeoUnitIds}
-          partnerBusinesses={partnerBusinesses}
+          partnerBusinesses={partnerBusinessesWithEligibility}
           cleanupEvents={cleanupEvents}
           focusCoords={focusCoords}
           bagMetrics={bagMetrics}
