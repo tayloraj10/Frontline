@@ -23,6 +23,7 @@ import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
 import Avatar from "@/components/ui/Avatar";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
+import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
 
 const inputCls =
@@ -110,6 +111,10 @@ export default function CleanupEventDetail({
   );
   const [cancelLoading, setCancelLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [checkInPointsAwarded, setCheckInPointsAwarded] = useState<number | null>(null);
+  const [recentCheckinPoints, setRecentCheckinPoints] = useState<Record<string, number>>({});
+  const { values: checkinPointValues } = useGameSettings(["cleanup_event_checkin_value"]);
+  const checkinPointValue = checkinPointValues.cleanup_event_checkin_value;
 
   const viewerCheckedInInitial = !!initialEvent.viewer_rsvp?.checked_in_at;
 
@@ -159,12 +164,16 @@ export default function CleanupEventDetail({
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          await checkInToCleanupEvent({
+          const result = await checkInToCleanupEvent({
             cleanupId: event.id,
             userId,
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
           });
+          if (result.points_awarded > 0) {
+            setCheckInPointsAwarded(result.points_awarded);
+            refreshUserPoints(userId);
+          }
           await refresh();
         } catch (err) {
           setError(extractErrorMessage(err, "Failed to check in"));
@@ -184,7 +193,11 @@ export default function CleanupEventDetail({
     setError(null);
     setCheckInLoading(true);
     try {
-      await checkInToCleanupEvent({ cleanupId: event.id, userId, joinCode: joinCodeInput.trim() });
+      const result = await checkInToCleanupEvent({ cleanupId: event.id, userId, joinCode: joinCodeInput.trim() });
+      if (result.points_awarded > 0) {
+        setCheckInPointsAwarded(result.points_awarded);
+        refreshUserPoints(userId);
+      }
       await refresh();
       setJoinCodeInput("");
     } catch (err) {
@@ -453,6 +466,8 @@ export default function CleanupEventDetail({
             {viewerCheckedIn && (
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
                 ✓ Checked in
+                {(event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded ?? 0) > 0 &&
+                  ` · +${event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded} pts`}
               </span>
             )}
           </div>
@@ -484,6 +499,9 @@ export default function CleanupEventDetail({
 
           {!viewerCheckedIn && (
             <div className="pt-2 border-t border-zinc-800 space-y-2">
+              <p className="text-xs text-emerald-400/80 font-medium">
+                🏅 Earn <SettingValue value={checkinPointValue} loading={checkinPointValue === undefined} /> points for checking in
+              </p>
               <button
                 onClick={handleCheckInWithLocation}
                 disabled={checkInLoading}
@@ -588,13 +606,24 @@ export default function CleanupEventDetail({
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
                       {r.checked_in_at ? (
-                        <span className="text-xs text-emerald-400 whitespace-nowrap">✓ checked in</span>
+                        <span className="text-xs text-emerald-400 whitespace-nowrap">
+                          ✓ checked in
+                          {(r.checkin_points || recentCheckinPoints[r.user_id])
+                            ? ` · +${r.checkin_points || recentCheckinPoints[r.user_id]} pts`
+                            : ""}
+                        </span>
                       ) : event.is_organizer ? (
                         <OrganizerCheckInButton
                           cleanupId={event.id}
                           organizerUserId={userId!}
                           attendeeUserId={r.user_id}
-                          onCheckedIn={refresh}
+                          onCheckedIn={async (pointsAwarded) => {
+                            if (pointsAwarded > 0) {
+                              setRecentCheckinPoints((prev) => ({ ...prev, [r.user_id]: pointsAwarded }));
+                              if (r.user_id === userId) refreshUserPoints(userId);
+                            }
+                            await refresh();
+                          }}
                           onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to check in attendee"))}
                         />
                       ) : null}
@@ -636,7 +665,15 @@ export default function CleanupEventDetail({
                           {r.pounds > 0 && `${r.small_bags + r.large_bags > 0 ? " · " : ""}⚖️ ${r.pounds.toLocaleString()} lbs`}
                         </span>
                       )}
-                      {r.points > 0 && (
+                      {r.checkin_points > 0 && (
+                        <span
+                          className="text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/30 rounded px-1.5 py-0.5 shrink-0"
+                          title="Credited for checking in to the event"
+                        >
+                          +{r.checkin_points.toLocaleString()} pts · check-in
+                        </span>
+                      )}
+                      {r.team_total_points > 0 && (
                         <span
                           className="text-xs text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0"
                           title={
@@ -645,7 +682,7 @@ export default function CleanupEventDetail({
                               : undefined
                           }
                         >
-                          +{r.points.toLocaleString()} pts
+                          +{r.team_total_points.toLocaleString()} pts
                           {r.small_bags + r.large_bags === 0 && r.pounds === 0 && " · team total"}
                         </span>
                       )}
@@ -867,7 +904,7 @@ function OrganizerCheckInButton({
   cleanupId: string;
   organizerUserId: string;
   attendeeUserId: string;
-  onCheckedIn: () => Promise<void>;
+  onCheckedIn: (pointsAwarded: number) => Promise<void>;
   onError: (message: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -875,8 +912,8 @@ function OrganizerCheckInButton({
   const submit = async () => {
     setLoading(true);
     try {
-      await organizerCheckInAttendee({ cleanupId, organizerUserId, attendeeUserId });
-      await onCheckedIn();
+      const result = await organizerCheckInAttendee({ cleanupId, organizerUserId, attendeeUserId });
+      await onCheckedIn(result.points_awarded);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to check in attendee");
     } finally {
@@ -1175,6 +1212,7 @@ function LogTeamTotalForm({
       });
       await onLogged();
       await loadLogs();
+      refreshUserPoints(organizerUserId);
       setSmallBags("");
       setLargeBags("");
       setPounds("");

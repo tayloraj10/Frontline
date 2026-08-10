@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import PartnersBrowseClient, { type BrowseBusiness, type BrowseOffer } from "./PartnersBrowseClient";
+import BusinessApplyPrompt from "./BusinessApplyPrompt";
 
 export default async function PartnersPage() {
   const supabase = await createClient();
@@ -53,6 +54,8 @@ export default async function PartnersPage() {
           Redeem the points you've earned from campaigns for discounts at local partner businesses.
         </p>
       </div>
+
+      <BusinessApplyPrompt />
 
       {isBusinessOnly && (
         <div className="mb-6 px-4 py-3 rounded-lg border border-sky-900/50 bg-sky-950/30 text-sm text-sky-300 shadow-elevation-1">

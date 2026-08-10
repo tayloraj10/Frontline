@@ -23,6 +23,8 @@ export type CleanupEventRsvp = {
   large_bags: number;
   pounds: number;
   points: number;
+  checkin_points: number;
+  team_total_points: number;
   photos: string[];
   is_late: boolean;
   has_individual_contribution: boolean;
@@ -295,7 +297,7 @@ export async function checkInToCleanupEvent({
   joinCode?: string;
   latitude?: number;
   longitude?: number;
-}): Promise<{ id: string; checked_in_at: string }> {
+}): Promise<{ id: string; checked_in_at: string; points_awarded: number }> {
   return postJson(`/cleanup-events/${cleanupId}/check-in`, {
     user_id: userId,
     join_code: joinCode,
@@ -312,7 +314,7 @@ export async function organizerCheckInAttendee({
   cleanupId: string;
   organizerUserId: string;
   attendeeUserId: string;
-}): Promise<{ id: string; checked_in_at: string }> {
+}): Promise<{ id: string; checked_in_at: string; points_awarded: number }> {
   return postJson(`/cleanup-events/${cleanupId}/organizer-check-in`, {
     organizer_user_id: organizerUserId,
     attendee_user_id: attendeeUserId,

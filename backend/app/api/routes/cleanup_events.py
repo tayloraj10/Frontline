@@ -561,18 +561,28 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     # Team-total credits have no dedicated cleanups row (cleanup_id is NULL, see
     # log_team_total) so they never match the join above and show as 0/0/0 bags —
     # honest, since we don't know their individual bag breakdown, but it reads as "no
-    # credit happened." Pull each attendee's total points directly from contributions so
-    # the UI can show something even when bags/pounds are all zero.
+    # credit happened." Pull each attendee's points directly from contributions, split by
+    # contribution_type, so the UI can tell check-in credit apart from team-total credit
+    # instead of lumping both into one number (they used to be indistinguishable once the
+    # page reloads, since neither has bags/pounds attached).
     points_by_user_result = await db.execute(
         text("""
-            SELECT user_id, SUM(value) AS points
+            SELECT user_id, contribution_type, SUM(value) AS points
             FROM contributions
             WHERE cleanup_event_id = :id
-            GROUP BY user_id
+            GROUP BY user_id, contribution_type
         """),
         {"id": str(cleanup_id)},
     )
-    points_by_user = {str(r.user_id): float(r.points) for r in points_by_user_result.fetchall()}
+    checkin_points_by_user: dict[str, float] = {}
+    team_total_points_by_user: dict[str, float] = {}
+    for r in points_by_user_result.fetchall():
+        target = checkin_points_by_user if r.contribution_type == "cleanup_event_checkin" else team_total_points_by_user
+        target[str(r.user_id)] = target.get(str(r.user_id), 0.0) + float(r.points)
+    points_by_user = {
+        uid: checkin_points_by_user.get(uid, 0.0) + team_total_points_by_user.get(uid, 0.0)
+        for uid in set(checkin_points_by_user) | set(team_total_points_by_user)
+    }
 
     # Photo-only adds (no bags/pounds/points attached) — kept separate from the
     # contribution-derived photos above since they don't belong to any attendee's bag
@@ -611,6 +621,8 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "pounds": user_bags["pounds"],
             "photos": user_bags["photos"],
             "points": points_by_user.get(str(r.user_id), 0.0),
+            "checkin_points": checkin_points_by_user.get(str(r.user_id), 0.0),
+            "team_total_points": team_total_points_by_user.get(str(r.user_id), 0.0),
             "is_late": bool(contributed_at and late_cutoff and contributed_at > late_cutoff),
             # True only for credit from self-log / "log for them" (both create their own
             # cleanups row, which is how they land in bags_by_user). Team-total credit never
@@ -974,21 +986,47 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
         if not prox_result.scalar():
             raise HTTPException(status_code=403, detail="You're too far from the event location to check in")
 
+    # Only the first check-in for this attendee should award points — re-checking in
+    # (e.g. a retry, or the organizer checking in someone who already self-checked-in)
+    # must not re-credit them. A separate SELECT-then-INSERT would race under concurrent
+    # requests (both could read "not checked in yet" before either commits), so
+    # "was this the first check-in" is derived from the upsert itself: `just_checked_in`
+    # is true only when checked_in_at was NULL before this statement, and the unique
+    # index on (cleanup_id, user_id) serializes concurrent upserts of the same row.
     result = await db.execute(
         text("""
+            WITH ts AS (SELECT NOW() AS now_val)
             INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at)
-            VALUES (:cleanup_id, :user_id, 'going', NOW())
+            SELECT :cleanup_id, :user_id, 'going', now_val FROM ts
             ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
-                checked_in_at = NOW(),
-                updated_at = NOW()
-            RETURNING id, checked_in_at
+                checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, (SELECT now_val FROM ts)),
+                updated_at = (SELECT now_val FROM ts)
+            RETURNING id, checked_in_at, (checked_in_at = (SELECT now_val FROM ts)) AS just_checked_in
         """),
         {"cleanup_id": str(cleanup_id), "user_id": str(payload.user_id)},
     )
     row = result.fetchone()
+
+    points_awarded = 0.0
+    if row.just_checked_in:
+        points_awarded = settings.get("cleanup_event_checkin_value", 5)
+        credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, payload.user_id)
+        await record_contribution(
+            db,
+            user_id=payload.user_id,
+            campaign_id=event.campaign_id,
+            group_id=credit_group_id,
+            geo_unit_id=None,
+            cleanup_id=None,
+            cleanup_event_id=str(cleanup_id),
+            contribution_type="cleanup_event_checkin",
+            value=points_awarded,
+            apply_multiplier=False,
+        )
+
     await db.commit()
 
-    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat()}
+    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat(), "points_awarded": points_awarded}
 
 
 @router.post("/{cleanup_id}/organizer-check-in")
@@ -1002,21 +1040,44 @@ async def organizer_check_in_attendee(cleanup_id: UUID, payload: OrganizerCheckI
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can check in an attendee")
 
+    # See check_in_to_cleanup_event for why "was this the first check-in" is derived
+    # from the upsert's RETURNING instead of a separate SELECT-then-INSERT.
     result = await db.execute(
         text("""
+            WITH ts AS (SELECT NOW() AS now_val)
             INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at)
-            VALUES (:cleanup_id, :user_id, 'going', NOW())
+            SELECT :cleanup_id, :user_id, 'going', now_val FROM ts
             ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
-                checked_in_at = NOW(),
-                updated_at = NOW()
-            RETURNING id, checked_in_at
+                checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, (SELECT now_val FROM ts)),
+                updated_at = (SELECT now_val FROM ts)
+            RETURNING id, checked_in_at, (checked_in_at = (SELECT now_val FROM ts)) AS just_checked_in
         """),
         {"cleanup_id": str(cleanup_id), "user_id": str(payload.attendee_user_id)},
     )
     row = result.fetchone()
+
+    points_awarded = 0.0
+    if row.just_checked_in:
+        settings = await get_game_settings(db)
+        points_awarded = settings.get("cleanup_event_checkin_value", 5)
+        credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, payload.attendee_user_id)
+        await record_contribution(
+            db,
+            user_id=payload.attendee_user_id,
+            campaign_id=event.campaign_id,
+            group_id=credit_group_id,
+            geo_unit_id=None,
+            cleanup_id=None,
+            cleanup_event_id=str(cleanup_id),
+            contribution_type="cleanup_event_checkin",
+            value=points_awarded,
+            apply_multiplier=False,
+            recorded_by_user_id=payload.organizer_user_id,
+        )
+
     await db.commit()
 
-    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat()}
+    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat(), "points_awarded": points_awarded}
 
 
 @router.post("/{cleanup_id}/log-for-attendee")
