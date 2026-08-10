@@ -361,6 +361,7 @@ export async function logTeamTotal({
   attendeePool = "checked_in",
   scoringMethod = "bags",
   overrides,
+  alsoCheckIn = false,
 }: {
   cleanupId: string;
   organizerUserId: string;
@@ -371,7 +372,13 @@ export async function logTeamTotal({
   attendeePool?: "checked_in" | "going";
   scoringMethod?: "bags" | "pounds";
   overrides?: Record<string, number>;
-}): Promise<{ credited_count: number; total_value: number; per_attendee_value: number }> {
+  alsoCheckIn?: boolean;
+}): Promise<{
+  credited_count: number;
+  total_value: number;
+  per_attendee_value: number;
+  newly_checked_in_count: number;
+}> {
   return postJson(`/cleanup-events/${cleanupId}/log-team-total`, {
     organizer_user_id: organizerUserId,
     small_bags: smallBags,
@@ -381,6 +388,7 @@ export async function logTeamTotal({
     attendee_pool: attendeePool,
     scoring_method: scoringMethod,
     overrides,
+    also_check_in: alsoCheckIn,
   });
 }
 

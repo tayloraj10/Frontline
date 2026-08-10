@@ -201,6 +201,7 @@ class LogTeamTotalRequest(BaseModel):
     attendee_pool: Literal["checked_in", "going"] = "checked_in"
     scoring_method: Literal["bags", "pounds"] = "bags"
     overrides: dict[UUID, float] | None = None
+    also_check_in: bool = False
 
     @field_validator("small_bags", "large_bags", "pounds")
     @classmethod
@@ -1199,7 +1200,15 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     currently eligible — including attendees added or checked in since the last log.
     Attendees credited via a different path (self-logged, or `log-for-attendee`) are
     untouched, since they carry their own `cleanup_id` and are never targeted by the
-    wipe below."""
+    wipe below.
+
+    `attendee_pool: "going"` credits everyone who RSVP'd going, not just people who
+    formally checked in — that's an unverified pool (no proximity check, no organizer
+    vouch), so it never checks anyone in or awards check-in points on its own. An
+    organizer can opt into also checking in (and awarding the check-in bonus to) anyone
+    in that pool who isn't already checked in via `also_check_in=True`, which is an
+    explicit attendance attestation on top of just logging a total. `attendee_pool:
+    "checked_in"` is already a verified pool, so this always applies to it."""
     event = await _get_event_or_404(db, cleanup_id)
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
@@ -1253,13 +1262,23 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
             )
 
     pool_query = """
-        SELECT user_id FROM cleanup_rsvps
+        SELECT user_id, checked_in_at FROM cleanup_rsvps
         WHERE cleanup_id = :cleanup_id AND status = 'going' AND contribution_id IS NULL
     """
     if payload.attendee_pool == "checked_in":
         pool_query += " AND checked_in_at IS NOT NULL"
     pool_result = await db.execute(text(pool_query), {"cleanup_id": str(cleanup_id)})
-    pool = [str(r.user_id) for r in pool_result.fetchall()]
+    pool_rows = pool_result.fetchall()
+    pool = [str(r.user_id) for r in pool_rows]
+    # The "checked_in" pool is already a verified attendance signal, so it always checks
+    # people in. The "going" pool is just an RSVP with no attendance verification, so it
+    # only checks people in (and awards the check-in bonus) if the organizer explicitly
+    # opts in via also_check_in — otherwise a no-show who RSVP'd would get marked
+    # checked-in and paid the check-in bonus for doing nothing.
+    should_check_in = payload.attendee_pool == "checked_in" or payload.also_check_in
+    not_yet_checked_in = (
+        {str(r.user_id) for r in pool_rows if r.checked_in_at is None} if should_check_in else set()
+    )
 
     # Nothing has been committed yet (the wipe above is still pending on this session), so
     # bailing out here just discards it — the prior log stays intact. Without this check, an
@@ -1300,6 +1319,9 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     # Points are awarded in whole/half increments, not raw division remainders.
     split_value = round(split_value * 2) / 2
 
+    checkin_value = settings.get("cleanup_event_checkin_value", 5)
+    newly_checked_in_count = 0
+
     for user_id in pool:
         share = round(overrides.get(user_id, split_value) * 2) / 2
         credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, UUID(user_id))
@@ -1323,16 +1345,41 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
             cleanup_event_id=str(cleanup_id),
             allow_explicit_value=True,
         )
+
+        if user_id in not_yet_checked_in:
+            newly_checked_in_count += 1
+            await record_contribution(
+                db,
+                user_id=user_id,
+                campaign_id=event.campaign_id,
+                group_id=credit_group_id,
+                geo_unit_id=None,
+                cleanup_id=None,
+                cleanup_event_id=str(cleanup_id),
+                contribution_type="cleanup_event_checkin",
+                value=checkin_value,
+                apply_multiplier=False,
+            )
+
         await db.execute(
             text("""
                 INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at, contribution_id)
-                VALUES (:cleanup_id, :user_id, 'going', NOW(), :contribution_id)
+                VALUES (
+                    :cleanup_id, :user_id, 'going',
+                    CASE WHEN :should_check_in THEN NOW() ELSE NULL END,
+                    :contribution_id
+                )
                 ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
                     checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, EXCLUDED.checked_in_at),
                     contribution_id = EXCLUDED.contribution_id,
                     updated_at = NOW()
             """),
-            {"cleanup_id": str(cleanup_id), "user_id": user_id, "contribution_id": recorded.contribution_id},
+            {
+                "cleanup_id": str(cleanup_id),
+                "user_id": user_id,
+                "contribution_id": recorded.contribution_id,
+                "should_check_in": should_check_in,
+            },
         )
 
     await db.execute(
@@ -1358,7 +1405,12 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
 
     await db.commit()
 
-    return {"credited_count": len(pool), "total_value": total_value, "per_attendee_value": split_value}
+    return {
+        "credited_count": len(pool),
+        "total_value": total_value,
+        "per_attendee_value": split_value,
+        "newly_checked_in_count": newly_checked_in_count,
+    }
 
 
 @router.get("/{cleanup_id}/team-total-logs")
