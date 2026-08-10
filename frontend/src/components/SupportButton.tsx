@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 
-const SUPPORT_EMAIL = "collectiveactionsupport@gmail.com";
+const SUPPORT_EMAIL = "frontlinemapsapp@gmail.com";
 
 export default function SupportButton() {
   const [open, setOpen] = useState(false);
