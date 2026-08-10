@@ -27,7 +27,7 @@ export async function deleteAccount() {
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
-    throw new Error("Account deletion is not configured. Contact collectiveactionsupport@gmail.com.");
+    throw new Error("Account deletion is not configured. Contact frontlinemapsapp@gmail.com.");
   }
 
   const { createClient } = await import("@supabase/supabase-js");

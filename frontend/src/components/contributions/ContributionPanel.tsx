@@ -2182,11 +2182,11 @@ function ClaimReportModal({
           className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40"
           title={
             gameSettings.flag_auto_hide_threshold !== undefined
-              ? `If ${gameSettings.flag_auto_hide_threshold} people flag this report as inaccurate, it will be automatically removed from the map.`
+              ? `Flag this if it's fake, inaccurate, or has an inappropriate photo. If ${gameSettings.flag_auto_hide_threshold} people flag it, it's automatically removed from the map.`
               : undefined
           }
         >
-          {flagState === "submitting" ? "Flagging…" : "🚩 Report this as inaccurate"}
+          {flagState === "submitting" ? "Flagging…" : "🚩 Report this (inaccurate or inappropriate)"}
         </button>
       )}
       {localReport.flag_count > 0 && (
@@ -2194,7 +2194,7 @@ function ClaimReportModal({
           className="text-xs text-zinc-600 mt-1"
           title={
             gameSettings.flag_auto_hide_threshold !== undefined
-              ? `If ${gameSettings.flag_auto_hide_threshold} people flag this report as inaccurate, it will be automatically removed from the map.`
+              ? `Flag this if it's fake, inaccurate, or has an inappropriate photo. If ${gameSettings.flag_auto_hide_threshold} people flag it, it's automatically removed from the map.`
               : undefined
           }
         >

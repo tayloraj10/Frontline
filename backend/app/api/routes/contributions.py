@@ -493,7 +493,7 @@ async def get_hex_photos(campaign_id: UUID, h3_index: str, db: AsyncSession = De
     """Return recent contributions with photos for a specific H3 hex in a campaign."""
     result = await db.execute(
         text("""
-            SELECT c.photo_url, c.submitted_at, p.display_name, p.username
+            SELECT c.id, c.photo_url, c.submitted_at, p.display_name, p.username
             FROM contributions c
             LEFT JOIN profiles p ON p.id = c.user_id
             WHERE c.campaign_id = :campaign_id
@@ -511,6 +511,7 @@ async def get_hex_photos(campaign_id: UUID, h3_index: str, db: AsyncSession = De
     rows = result.fetchall()
     return [
         {
+            "contribution_id": str(row.id),
             "photo_url": row.photo_url,
             "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
             "display_name": row.display_name,

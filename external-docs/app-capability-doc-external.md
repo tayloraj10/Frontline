@@ -15,6 +15,8 @@ Every campaign — like our flagship Trash War — plays out on a live map. You 
 
 You can also report a problem you spot — trash that needs cleaning up — by dropping a pin with a photo. Other users can then "claim" that report as a personal challenge: submit a before photo, do the cleanup, submit an after photo, and it automatically turns into a logged contribution.
 
+If you ever come across an inappropriate photo anywhere in the app — a contribution photo on the map, an event gallery photo, or someone's profile picture — you can report it, and it's automatically taken down once enough people flag it.
+
 ### Cleanup events
 Groups host real-world cleanup events you can RSVP to. You can check in when you arrive — either automatically via your phone's location or by entering a short code from the organizer — and see the event's roster, photos, and results. Depending on how the organizer set up the event, you might log your own contribution afterward, or the organizer will log the group's total for everyone.
 

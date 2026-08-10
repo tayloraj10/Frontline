@@ -4,9 +4,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.admin import (
+    ResolveContentFlagRequest,
+    list_content_flags_queue,
+    list_resolved_content_flags,
     preview_campaign_spendable_points_impact,
     preview_points_recompute_impact,
     recompute_all_points,
+    resolve_content_flag_group,
     search_users_by_username_or_email,
     toggle_campaign_spendable_points,
     wipe_cleanup_event,
@@ -90,3 +94,33 @@ async def apply_points_recompute(
 ):
     _check_secret(x_admin_api_secret)
     return await recompute_all_points(db)
+
+
+@router.get("/content-flags/queue")
+async def get_content_flags_queue(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await list_content_flags_queue(db)
+
+
+@router.get("/content-flags/history")
+async def get_content_flags_history(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await list_resolved_content_flags(db)
+
+
+@router.post("/content-flags/resolve")
+async def post_resolve_content_flag(
+    payload: ResolveContentFlagRequest,
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await resolve_content_flag_group(
+        db, payload.content_type, payload.content_id, payload.photo_url, payload.resolution, payload.admin_id
+    )

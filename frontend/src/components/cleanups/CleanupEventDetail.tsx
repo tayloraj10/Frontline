@@ -21,6 +21,7 @@ import {
 import { searchUsers, type UserSearchResult } from "@/lib/users";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
+import ReportPhotoButton from "@/components/ReportPhotoButton";
 import Avatar from "@/components/ui/Avatar";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
@@ -725,11 +726,11 @@ export default function CleanupEventDetail({
           </div>
           {event.photos.length > 0 && (
             <div className="p-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {event.photos.map((url, i) => (
+              {event.photos.map((photo, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  key={`${url}-${i}`}
-                  src={url}
+                  key={`${photo.url}-${i}`}
+                  src={photo.url}
                   alt=""
                   onClick={() => setLightboxIndex(i)}
                   className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation shadow-elevation-1"
@@ -742,10 +743,26 @@ export default function CleanupEventDetail({
 
       {lightboxIndex !== null && (
         <Lightbox
-          images={event.photos}
+          images={event.photos.map((p) => p.url)}
           index={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onNavigate={setLightboxIndex}
+          renderActions={(_url, i) => {
+            const photo = event.photos[i];
+            if (!photo || !userId) return null;
+            return (
+              <ReportPhotoButton
+                contentType={photo.content_type}
+                contentId={photo.content_id}
+                photoUrl={photo.url}
+                userId={userId}
+                onHidden={() => {
+                  setLightboxIndex(null);
+                  refresh();
+                }}
+              />
+            );
+          }}
         />
       )}
     </div>

@@ -52,6 +52,6 @@ Applications are reviewed by our team, usually within a few days.
 
 **Apply at [frontlinemaps.com/partners/apply](https://www.frontlinemaps.com/partners/apply)**
 
-Questions? [collectiveactionsupport@gmail.com](mailto:collectiveactionsupport@gmail.com)
+Questions? [frontlinemapsapp@gmail.com](mailto:frontlinemapsapp@gmail.com)
 
 *Frontline · Trash War Campaign*

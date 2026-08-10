@@ -50,6 +50,7 @@ interface Props {
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;
   cleanupRoutes?: CampaignCleanupRoute[];
+  userId?: string | null;
 }
 
 const CampaignMap = dynamic(() => import("./CampaignMap"), {
