@@ -2,7 +2,7 @@ import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, admin_prod, cleanup_events, contributions, decay, device_tokens, events, geo_units, groups, health, leaderboard, partners, problem_reports, tiles, upload, users
+from app.api.routes import admin, admin_prod, cleanup_events, content_flags, contributions, decay, device_tokens, events, geo_units, groups, health, leaderboard, partners, problem_reports, tiles, upload, users
 from app.core.config import settings
 
 if settings.sentry_dsn:
@@ -30,6 +30,7 @@ app.include_router(events.router, prefix="/api")
 app.include_router(decay.router, prefix="/api")
 app.include_router(upload.router, prefix="/api")
 app.include_router(problem_reports.router, prefix="/api")
+app.include_router(content_flags.router, prefix="/api")
 app.include_router(tiles.router, prefix="/api")
 app.include_router(leaderboard.router, prefix="/api")
 app.include_router(geo_units.router, prefix="/api")

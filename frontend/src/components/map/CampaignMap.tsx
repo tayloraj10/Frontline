@@ -16,6 +16,7 @@ import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { getCleanupRoute, type CampaignCleanupRoute } from "@/lib/cleanupRoutes";
 import { formatPoints } from "@/lib/formatPoints";
 import IconButton from "@/components/ui/IconButton";
+import ReportPhotoButton from "@/components/ReportPhotoButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -357,6 +358,7 @@ interface Props {
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;
   cleanupRoutes?: CampaignCleanupRoute[];
+  userId?: string | null;
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
@@ -761,8 +763,8 @@ function applyEventAreaHighlights(
 
 function addPhotoMarker(
   m: maplibregl.Map,
-  loc: { latitude: number; longitude: number; photo_url: string | null; submitted_at?: string | null },
-  onSelect: (url: string) => void,
+  loc: { id: string; latitude: number; longitude: number; photo_url: string | null; submitted_at?: string | null },
+  onSelect: (photo: { url: string; contentType: "contribution_photo"; contentId: string }) => void,
   size = 48,
 ): maplibregl.Marker {
   const el = document.createElement("div");
@@ -775,7 +777,7 @@ function addPhotoMarker(
     img.src = loc.photo_url;
     img.style.cssText = "width:100%;height:100%;object-fit:cover";
     el.appendChild(img);
-    el.onclick = () => onSelect(loc.photo_url!);
+    el.onclick = () => onSelect({ url: loc.photo_url!, contentType: "contribution_photo", contentId: loc.id });
   } else {
     el.style.display = "flex";
     el.style.alignItems = "center";
@@ -813,6 +815,14 @@ type StatsDisplayRow = {
   largeBags: number;
 };
 
+type SelectablePhoto = {
+  url: string;
+  contentType?: "contribution_photo" | "cleanup_log_photo";
+  contentId?: string;
+};
+
+type CleanupPhoto = { url: string; cleanupId: string };
+
 function TerritoryPanel({
   geoUnitId,
   displayName,
@@ -836,13 +846,13 @@ function TerritoryPanel({
   reportThreshold: number | null;
   reportPhotos: string[];
   onClose: () => void;
-  onPhotoSelect: (url: string) => void;
+  onPhotoSelect: (photo: SelectablePhoto) => void;
   variant?: "territory" | "stats";
   campaignId?: string;
 }) {
   const [contribs, setContribs] = useState<ContribRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cleanupPhotos, setCleanupPhotos] = useState<string[]>([]);
+  const [cleanupPhotos, setCleanupPhotos] = useState<CleanupPhoto[]>([]);
   const [showPointsInfo, setShowPointsInfo] = useState(false);
   const [bagTotals, setBagTotals] = useState({ small: 0, large: 0 });
   const [statsTotalPoints, setStatsTotalPoints] = useState(0);
@@ -866,7 +876,12 @@ function TerritoryPanel({
           setBagTotals(data.bag_totals ?? { small: 0, large: 0 });
           setStatsReportCount(data.open_report_count ?? 0);
           setStatsTotalReportCount(data.total_report_count ?? 0);
-          setCleanupPhotos(data.cleanup_photos ?? []);
+          setCleanupPhotos(
+            (data.cleanup_photos ?? []).map((p: { url: string; cleanup_id: string }) => ({
+              url: p.url,
+              cleanupId: p.cleanup_id,
+            })),
+          );
           setStatsRecent(
             (data.recent_contributions ?? []).map((r: {
               value: number | null;
@@ -914,13 +929,15 @@ function TerritoryPanel({
 
     supabase
       .from("cleanups")
-      .select("image_urls")
+      .select("id, image_urls")
       .eq("geo_unit_id", geoUnitId)
       .order("created_at", { ascending: false })
       .limit(10)
       .then(({ data }) => {
-        const urls = (data ?? []).flatMap((c: { image_urls: string[] | null }) => c.image_urls ?? []);
-        setCleanupPhotos(urls);
+        const photos = (data ?? []).flatMap((c: { id: string; image_urls: string[] | null }) =>
+          (c.image_urls ?? []).map((url) => ({ url, cleanupId: c.id })),
+        );
+        setCleanupPhotos(photos);
       });
 
     supabase
@@ -1130,7 +1147,7 @@ function TerritoryPanel({
                     {reportPhotos.slice(0, 4).map((url, i) => (
                       <button
                         key={i}
-                        onClick={() => onPhotoSelect(url)}
+                        onClick={() => onPhotoSelect({ url })}
                         className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 active:border-orange-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1149,14 +1166,16 @@ function TerritoryPanel({
           <div className="px-4 py-3 border-t border-zinc-800">
             <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Cleanup Photos</p>
             <div className="flex gap-1.5 flex-wrap">
-              {cleanupPhotos.slice(0, 4).map((url, i) => (
+              {cleanupPhotos.slice(0, 4).map((photo, i) => (
                 <button
                   key={i}
-                  onClick={() => onPhotoSelect(url)}
+                  onClick={() =>
+                    onPhotoSelect({ url: photo.url, contentType: "cleanup_log_photo", contentId: photo.cleanupId })
+                  }
                   className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 active:border-emerald-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="Cleanup photo" className="w-full h-full object-cover" />
+                  <img src={photo.url} alt="Cleanup photo" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
@@ -1355,7 +1374,7 @@ function pulseClaim(m: maplibregl.Map, geoUnitId: string): void {
 
 // ─── Hex bloom detail panel ───────────────────────────────────────────────────
 
-type HexPhoto = { photo_url: string; display_name: string | null; submitted_at: string | null };
+type HexPhoto = { photo_url: string; contribution_id: string; display_name: string | null; submitted_at: string | null };
 
 function HexPanel({
   entry,
@@ -1367,7 +1386,7 @@ function HexPanel({
   entry: HexBloomEntry;
   campaignId: string;
   onClose: () => void;
-  onPhotoSelect: (url: string) => void;
+  onPhotoSelect: (photo: SelectablePhoto) => void;
   refreshKey: number;
 }) {
   const stageFloor = BLOOM_THRESHOLDS[entry.bloom_stage] ?? 0;
@@ -1428,7 +1447,9 @@ function HexPanel({
                 <div
                   key={i}
                   className="aspect-square overflow-hidden rounded-md bg-zinc-800 cursor-pointer hover:opacity-80 active:opacity-80 active:scale-[0.96] transition-[opacity,transform] duration-150 touch-manipulation"
-                  onClick={() => onPhotoSelect(p.photo_url)}
+                  onClick={() =>
+                    onPhotoSelect({ url: p.photo_url, contentType: "contribution_photo", contentId: p.contribution_id })
+                  }
                 >
                   <img
                     src={p.photo_url}
@@ -1587,6 +1608,7 @@ export default function CampaignMap({
   onRoutePickerFinish,
   onRoutePickerCancel,
   cleanupRoutes,
+  userId,
   newContribution,
   newReport,
   userLocation,
@@ -1620,7 +1642,7 @@ export default function CampaignMap({
   const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
   const [hexPhotoVersion, setHexPhotoVersion] = useState(0);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
-  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<SelectablePhoto | null>(null);
   const [selectedBusiness, setSelectedBusiness] = useState<MapBusiness | null>(null);
   const [selectedCleanupEvent, setSelectedCleanupEvent] = useState<MapCleanupEvent | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CampaignEvent | null>(null);
@@ -4204,12 +4226,13 @@ export default function CampaignMap({
       const marker = addPhotoMarker(
         map.current,
         {
+          id: "",
           latitude: newContribution.lat,
           longitude: newContribution.lng,
           photo_url: newContribution.photoUrl ?? null,
           submitted_at: new Date().toISOString(),
         },
-        setSelectedPhoto,
+        (photo) => setSelectedPhoto(photo.contentId ? photo : { url: photo.url }),
       );
       photoMarkersRef.current.push(marker);
       gsap.from(marker.getElement(), { y: -40, opacity: 0, duration: 0.5, ease: "bounce.out" });
@@ -4235,8 +4258,8 @@ export default function CampaignMap({
         if (newContribution.photoUrl) {
           const marker = addPhotoMarker(
             map.current,
-            { latitude: newContribution.lat, longitude: newContribution.lng, photo_url: newContribution.photoUrl },
-            setSelectedPhoto,
+            { id: "", latitude: newContribution.lat, longitude: newContribution.lng, photo_url: newContribution.photoUrl },
+            (photo) => setSelectedPhoto(photo.contentId ? photo : { url: photo.url }),
             32,
           );
           photoMarkersRef.current.push(marker);
@@ -4867,20 +4890,31 @@ export default function CampaignMap({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
           onClick={() => setSelectedPhoto(null)}
         >
-          <div className="relative max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={selectedPhoto}
-              alt="Contribution photo"
-              className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
-            />
-            <IconButton
-              onClick={() => setSelectedPhoto(null)}
-              className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 active:bg-black/80 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
-              aria-label="Close"
-            >
-              ×
-            </IconButton>
+          <div className="flex flex-col items-center gap-3 max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="relative w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={selectedPhoto.url}
+                alt="Contribution photo"
+                className="w-full max-h-[74vh] object-contain rounded-xl shadow-2xl"
+              />
+              <IconButton
+                onClick={() => setSelectedPhoto(null)}
+                className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 active:bg-black/80 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                aria-label="Close"
+              >
+                ×
+              </IconButton>
+            </div>
+            {selectedPhoto.contentType && selectedPhoto.contentId && (
+              <ReportPhotoButton
+                contentType={selectedPhoto.contentType}
+                contentId={selectedPhoto.contentId}
+                photoUrl={selectedPhoto.url}
+                userId={userId ?? null}
+                onHidden={() => setSelectedPhoto(null)}
+              />
+            )}
           </div>
         </div>
       )}

@@ -30,6 +30,7 @@ Last updated: 2026-08-03.
 - Report a trash "problem": pin, severity, optional photo.
 - **Claim-a-report challenge**: claim an open report (one active claim per user), submit a GPS-gated "before" photo within a countdown window, then a GPS-gated "after" photo within a second countdown, which auto-resolves the report and rolls straight into normal bag/pound contribution logging with both photos attached. Claims can be released voluntarily or expire back to "open."
 - Flag a report as inappropriate/spam; auto-hides after a flag-count threshold.
+- Flag/report any other user-submitted photo (contribution map-marker photos, cleanup-event gallery photos, profile avatars) as inappropriate; auto-hides after the same flag-count threshold as problem reports.
 - Proximity "Log here" banner appears near an in-window, self-log-mode cleanup event (dismissible per session); suppressed entirely for organizer-total events.
 - View nearby partner-business offers and event hotspots plotted on the map.
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, type ReactNode } from "react";
 import IconButton from "@/components/ui/IconButton";
 
 export default function Lightbox({
@@ -8,11 +8,13 @@ export default function Lightbox({
   index,
   onClose,
   onNavigate,
+  renderActions,
 }: {
   images: string[];
   index: number;
   onClose: () => void;
   onNavigate: (nextIndex: number) => void;
+  renderActions?: (currentUrl: string, index: number) => ReactNode;
 }) {
   const goPrev = useCallback(() => {
     onNavigate((index - 1 + images.length) % images.length);
@@ -61,13 +63,23 @@ export default function Lightbox({
         </IconButton>
       )}
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={current}
-        alt=""
-        className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg"
+      <div
+        className="flex flex-col items-center gap-3 max-h-[90vh] max-w-[90vw]"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={current}
+          alt=""
+          className="block max-h-[78vh] max-w-[90vw] object-contain rounded-lg"
+        />
+        {renderActions && <div className="flex justify-center">{renderActions(current, index)}</div>}
+        {images.length > 1 && (
+          <div className="text-zinc-400 text-sm tabular-nums">
+            {index + 1} / {images.length}
+          </div>
+        )}
+      </div>
 
       {images.length > 1 && (
         <IconButton
@@ -80,12 +92,6 @@ export default function Lightbox({
         >
           &#8250;
         </IconButton>
-      )}
-
-      {images.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-zinc-400 text-sm tabular-nums">
-          {index + 1} / {images.length}
-        </div>
       )}
     </div>
   );

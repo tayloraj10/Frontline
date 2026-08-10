@@ -538,6 +538,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
                    COALESCE(SUM(cl.metrics_large_bags), 0) AS large_bags,
                    COALESCE(SUM(cl.metrics_pounds), 0) AS pounds,
                    MAX(co.submitted_at) AS contributed_at,
+                   array_agg(cl.id) FILTER (WHERE cl.image_urls IS NOT NULL AND cardinality(cl.image_urls) > 0) AS cleanup_ids,
                    array_agg(cl.image_urls) FILTER (WHERE cl.image_urls IS NOT NULL AND cardinality(cl.image_urls) > 0) AS image_url_arrays
             FROM contributions co
             JOIN cleanups cl ON cl.id = co.cleanup_id
@@ -547,9 +548,13 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         {"id": str(cleanup_id)},
     )
     bags_by_user = {}
-    all_photos: list[str] = []
+    all_photos: list[dict] = []
     for r in bags_by_user_result.fetchall():
-        photos = [url for arr in (r.image_url_arrays or []) for url in arr]
+        photos = [
+            {"url": url, "content_type": "cleanup_log_photo", "content_id": str(cleanup_row_id)}
+            for cleanup_row_id, arr in zip(r.cleanup_ids or [], r.image_url_arrays or [])
+            for url in arr
+        ]
         all_photos.extend(photos)
         bags_by_user[str(r.user_id)] = {
             "small_bags": r.small_bags,
@@ -589,10 +594,13 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     # contribution-derived photos above since they don't belong to any attendee's bag
     # breakdown, just the flat event-wide gallery.
     event_photos_result = await db.execute(
-        text("SELECT photo_url FROM cleanup_event_photos WHERE cleanup_id = :id ORDER BY created_at ASC"),
+        text("SELECT id, photo_url FROM cleanup_event_photos WHERE cleanup_id = :id ORDER BY created_at ASC"),
         {"id": str(cleanup_id)},
     )
-    all_photos.extend(r.photo_url for r in event_photos_result.fetchall())
+    all_photos.extend(
+        {"url": r.photo_url, "content_type": "cleanup_event_photo", "content_id": str(r.id)}
+        for r in event_photos_result.fetchall()
+    )
 
     # A submission counts as "late" once it lands more than cleanup_event_late_submission_hours
     # after the event's window closes — unrestricted (submissions are never blocked), just flagged.

@@ -114,7 +114,7 @@ export type GameSetting = {
   sort_order: number;
 };
 
-const TAB_VALUES = ["campaigns", "triggers", "events", "partners", "groups", "leaderboard", "settings"] as const;
+const TAB_VALUES = ["campaigns", "triggers", "events", "partners", "groups", "leaderboard", "moderation", "settings"] as const;
 type Tab = (typeof TAB_VALUES)[number];
 
 const TAB_ICON: Record<Tab, string> = {
@@ -124,10 +124,11 @@ const TAB_ICON: Record<Tab, string> = {
   partners: "🤝",
   groups: "👥",
   leaderboard: "🏆",
+  moderation: "🚩",
   settings: "⚙️",
 };
 const MOBILE_PRIMARY_TABS: Tab[] = ["campaigns", "events", "groups", "partners"];
-const MOBILE_OVERFLOW_TABS: Tab[] = ["triggers", "leaderboard", "settings"];
+const MOBILE_OVERFLOW_TABS: Tab[] = ["triggers", "leaderboard", "moderation", "settings"];
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -2996,6 +2997,259 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
   );
 }
 
+// ─── Moderation Tab ───────────────────────────────────────────────────────────
+
+const CONTENT_TYPE_LABELS: Record<string, string> = {
+  contribution_photo: "Contribution photo",
+  cleanup_log_photo: "Cleanup gallery photo",
+  cleanup_event_photo: "Cleanup gallery photo",
+  avatar: "Profile avatar",
+  problem_report: "Trash report",
+};
+
+type ContentFlagGroup = {
+  content_type: string;
+  content_id: string;
+  photo_url: string;
+  flag_count: number;
+  reasons: string[];
+  first_flagged_at: string;
+  last_flagged_at: string;
+  context?: {
+    label: string | null;
+    user_id: string | null;
+    username: string | null;
+    map_link: { campaign_slug: string; lat: number; lng: number } | null;
+  };
+};
+
+type ResolvedContentFlagGroup = ContentFlagGroup & {
+  resolution: "hidden" | "dismissed";
+  resolved_at: string;
+  resolved_by: {
+    user_id: string | null;
+    label: string | null;
+  };
+};
+
+function ModerationTab() {
+  const [flags, setFlags] = useState<ContentFlagGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [resolvingKey, setResolvingKey] = useState<string | null>(null);
+  const [history, setHistory] = useState<ResolvedContentFlagGroup[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const keyOf = (f: ContentFlagGroup) => `${f.content_type}:${f.content_id}:${f.photo_url}`;
+
+  const fetchQueue = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/content-flags/queue");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to load flag queue");
+      setFlags(data ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load flag queue");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch("/api/admin/content-flags/history");
+      const data = await res.json();
+      if (res.ok) setHistory(data ?? []);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQueue();
+    fetchHistory();
+  }, []);
+
+  const resolve = async (f: ContentFlagGroup, resolution: "hide" | "dismiss") => {
+    setResolvingKey(keyOf(f));
+    try {
+      const res = await fetch("/api/admin/content-flags/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content_type: f.content_type,
+          content_id: f.content_id,
+          photo_url: f.photo_url,
+          resolution,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to resolve flag");
+      setFlags(prev => prev.filter(x => keyOf(x) !== keyOf(f)));
+      fetchHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resolve flag");
+    } finally {
+      setResolvingKey(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-zinc-500">
+          Reported photos and trash reports waiting for review. Hiding removes a photo from wherever it&apos;s displayed (or pulls a trash report off the map); dismissing leaves it up and clears the report.
+        </p>
+        <button
+          onClick={fetchQueue}
+          disabled={loading}
+          className="shrink-0 px-3 py-2 min-h-11 text-sm bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation disabled:opacity-50"
+        >
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      {!loading && flags.length === 0 && !error && (
+        <p className="text-sm text-zinc-500">No open reports. Nothing to review.</p>
+      )}
+
+      {flags.length > 0 && (
+        <div className="space-y-3">
+          {flags.map((f) => {
+            const key = keyOf(f);
+            const busy = resolvingKey === key;
+            return (
+              <div key={key} className="flex flex-col sm:flex-row gap-4 border border-zinc-800 rounded-xl p-4 shadow-elevation-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={f.photo_url}
+                  alt=""
+                  className="w-full sm:w-32 h-32 object-cover rounded-lg border border-zinc-800 shrink-0"
+                />
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge>{CONTENT_TYPE_LABELS[f.content_type] ?? f.content_type}</Badge>
+                    <span className="px-1.5 py-0.5 rounded-full bg-red-900/60 text-red-400 text-xs tabular-nums font-semibold">
+                      {f.flag_count} report{f.flag_count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {f.context?.label && (
+                    <p className="text-sm text-zinc-200 font-medium truncate">{f.context.label}</p>
+                  )}
+                  {f.reasons.length > 0 && (
+                    <p className="text-xs text-zinc-400 truncate">Reasons: {f.reasons.join(", ")}</p>
+                  )}
+                  <p className="text-xs text-zinc-500">
+                    First reported {new Date(f.first_flagged_at).toLocaleString()} · Last {new Date(f.last_flagged_at).toLocaleString()}
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      onClick={() => resolve(f, "hide")}
+                      disabled={busy}
+                      className="px-3 py-2 min-h-11 text-sm font-semibold bg-red-800 hover:bg-red-700 active:bg-red-900 text-white rounded-lg transition-[background-color,transform] duration-150 active:scale-95 disabled:active:scale-100 touch-manipulation disabled:opacity-50"
+                    >
+                      {busy ? "Working…" : f.content_type === "problem_report" ? "Pull from map" : "Hide photo"}
+                    </button>
+                    <button
+                      onClick={() => resolve(f, "dismiss")}
+                      disabled={busy}
+                      className="px-3 py-2 min-h-11 text-sm bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 disabled:active:scale-100 touch-manipulation disabled:opacity-50"
+                    >
+                      Dismiss
+                    </button>
+                    {f.context?.map_link && (
+                      <a
+                        href={`/campaigns/${f.context.map_link.campaign_slug}?lat=${f.context.map_link.lat}&lng=${f.context.map_link.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-2 min-h-11 text-sm bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-zinc-300 rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation inline-flex items-center"
+                      >
+                        See on map
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="pt-4 border-t border-zinc-800">
+        <button
+          onClick={() => setShowHistory(s => !s)}
+          className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          {showHistory ? "Hide" : "Show"} past moderations {history.length > 0 && `(${history.length})`}
+        </button>
+
+        {showHistory && (
+          <div className="mt-3 space-y-2">
+            {historyLoading && <p className="text-sm text-zinc-500">Loading…</p>}
+            {!historyLoading && history.length === 0 && (
+              <p className="text-sm text-zinc-500">No resolved reports yet.</p>
+            )}
+            {history.map((f) => {
+              const key = `${keyOf(f)}:${f.resolved_at}`;
+              return (
+                <div
+                  key={key}
+                  className="flex flex-col sm:flex-row gap-4 border border-zinc-800/60 rounded-xl p-4 opacity-50 grayscale"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={f.photo_url}
+                    alt=""
+                    className="w-full sm:w-24 h-24 object-cover rounded-lg border border-zinc-800 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge>{CONTENT_TYPE_LABELS[f.content_type] ?? f.content_type}</Badge>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+                          f.resolution === "hidden" ? "bg-red-900/40 text-red-400" : "bg-zinc-700/60 text-zinc-300"
+                        }`}
+                      >
+                        {f.resolution === "hidden" ? "Hidden" : "Dismissed"}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-xs tabular-nums">
+                        {f.flag_count} report{f.flag_count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    {f.context?.label && <p className="text-sm text-zinc-300 truncate">{f.context.label}</p>}
+                    {f.reasons.length > 0 && (
+                      <p className="text-xs text-zinc-500 truncate">Reasons: {f.reasons.join(", ")}</p>
+                    )}
+                    <p className="text-xs text-zinc-500">
+                      Resolved {new Date(f.resolved_at).toLocaleString()} by {f.resolved_by.label ?? "Unknown admin"}
+                    </p>
+                    {f.context?.map_link && (
+                      <a
+                        href={`/campaigns/${f.context.map_link.campaign_slug}?lat=${f.context.map_link.lat}&lng=${f.context.map_link.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block text-xs text-zinc-400 hover:text-zinc-200 underline transition-colors"
+                      >
+                        See on map
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -3391,6 +3645,7 @@ export default function AdminPanel({
       )}
       {tab === "groups" && <GroupsTab groups={groups} setGroups={setGroups} currentUserId={currentUserId} />}
       {tab === "leaderboard" && <LeaderboardTab campaigns={activeCampaigns} />}
+      {tab === "moderation" && <ModerationTab />}
       {tab === "settings" && <SettingsTab settings={settings} setSettings={setSettings} />}
     </main>
   );

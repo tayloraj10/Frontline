@@ -86,7 +86,7 @@ async def get_geo_unit_stats(
     cleanups = (
         await db.execute(
             text("""
-                SELECT cl.metrics_small_bags, cl.metrics_large_bags, cl.image_urls
+                SELECT cl.id, cl.metrics_small_bags, cl.metrics_large_bags, cl.image_urls
                 FROM cleanups cl
                 JOIN geo_units t ON t.id = :geo_unit_id
                 WHERE cl.campaign_id = :campaign_id AND ST_Contains(t.geometry, cl.location::geometry)
@@ -109,11 +109,11 @@ async def get_geo_unit_stats(
     ).fetchone()
 
     bag_totals = {"small": 0, "large": 0}
-    cleanup_photos: list[str] = []
+    cleanup_photos: list[dict] = []
     for c in cleanups:
         bag_totals["small"] += c.metrics_small_bags or 0
         bag_totals["large"] += c.metrics_large_bags or 0
-        cleanup_photos.extend(c.image_urls or [])
+        cleanup_photos.extend({"url": url, "cleanup_id": str(c.id)} for url in (c.image_urls or []))
 
     return {
         "total_points": totals_row.total_points,

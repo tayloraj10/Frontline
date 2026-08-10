@@ -11,6 +11,12 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type FlaggablePhoto = {
+  url: string;
+  content_type: "cleanup_log_photo" | "cleanup_event_photo";
+  content_id: string;
+};
+
 export type CleanupEventRsvp = {
   user_id: string;
   username: string | null;
@@ -25,7 +31,7 @@ export type CleanupEventRsvp = {
   points: number;
   checkin_points: number;
   team_total_points: number;
-  photos: string[];
+  photos: FlaggablePhoto[];
   is_late: boolean;
   has_individual_contribution: boolean;
 };
@@ -71,7 +77,7 @@ export type CleanupEventDetailData = {
   total_small_bags: number;
   total_large_bags: number;
   total_pounds: number;
-  photos: string[];
+  photos: FlaggablePhoto[];
   external_link: string | null;
   check_in_window_start: string | null;
   check_in_window_end: string | null;

@@ -4,9 +4,11 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.content_flags import _HIDE_HANDLERS
 from app.core.config import settings
 from app.db.database import get_db
 from app.services import geo
@@ -995,3 +997,465 @@ async def recompute_all_points(db: AsyncSession) -> dict:
         if c["old_points"] != c["new_points"] or c["old_spendable_points"] != c["new_spendable_points"]
     ]
     return {"users_checked": len(changes), "users_changed": len(changed)}
+
+
+@router.get("/content-flags/queue")
+async def get_content_flags_queue(db: AsyncSession = Depends(get_db)):
+    return await list_content_flags_queue(db)
+
+
+def _map_link(campaign_slug, lat, lng) -> dict | None:
+    if not campaign_slug or lat is None or lng is None:
+        return None
+    return {"campaign_slug": campaign_slug, "lat": lat, "lng": lng}
+
+
+def _content_flag_context(r) -> dict:
+    if r.content_type == "avatar":
+        return {
+            "label": r.avatar_display_name or (f"@{r.avatar_username}" if r.avatar_username else "Deleted user"),
+            "user_id": str(r.content_id),
+            "username": r.avatar_username,
+            "map_link": None,
+        }
+    if r.content_type == "contribution_photo":
+        who = r.contribution_display_name or (f"@{r.contribution_username}" if r.contribution_username else "Unknown user")
+        return {
+            "label": f"Contribution by {who}" + (f" · {r.contribution_campaign_title}" if r.contribution_campaign_title else ""),
+            "user_id": str(r.contribution_user_id) if r.contribution_user_id else None,
+            "username": r.contribution_username,
+            "map_link": _map_link(r.contribution_campaign_slug, r.contribution_lat, r.contribution_lng),
+        }
+    if r.content_type == "cleanup_log_photo":
+        return {
+            "label": (r.cleanup_log_title or "Cleanup") + (f" · {r.cleanup_log_group_name}" if r.cleanup_log_group_name else ""),
+            "user_id": None,
+            "username": None,
+            "map_link": _map_link(r.cleanup_log_campaign_slug, r.cleanup_log_lat, r.cleanup_log_lng),
+        }
+    if r.content_type == "cleanup_event_photo":
+        who = r.cleanup_event_display_name or (f"@{r.cleanup_event_username}" if r.cleanup_event_username else "Unknown user")
+        return {
+            "label": f"Uploaded by {who} · {r.cleanup_event_cleanup_title or 'Cleanup'}"
+            + (f" ({r.cleanup_event_group_name})" if r.cleanup_event_group_name else ""),
+            "user_id": str(r.cleanup_event_user_id) if r.cleanup_event_user_id else None,
+            "username": r.cleanup_event_username,
+            "map_link": _map_link(r.cleanup_event_campaign_slug, r.cleanup_event_lat, r.cleanup_event_lng),
+        }
+    return {"label": None, "user_id": None, "username": None, "map_link": None}
+
+
+def _problem_report_flag_context(r) -> dict:
+    who = r.reporter_display_name or (f"@{r.reporter_username}" if r.reporter_username else "Unknown user")
+    return {
+        "label": f"Trash report by {who}" + (f" · {r.campaign_title}" if r.campaign_title else ""),
+        "user_id": str(r.reporter_id) if r.reporter_id else None,
+        "username": r.reporter_username,
+        "map_link": _map_link(r.campaign_slug, r.report_lat, r.report_lng),
+    }
+
+
+async def _fetch_problem_report_flags_unresolved(db: AsyncSession) -> list[dict]:
+    rows = (
+        await db.execute(
+            text("""
+                SELECT
+                    pr.id AS report_id,
+                    pr.image_urls,
+                    pr.severity,
+                    pr.status,
+                    pr.submitted_by_user_id AS reporter_id,
+                    reporter.username AS reporter_username,
+                    reporter.display_name AS reporter_display_name,
+                    camp.title AS campaign_title,
+                    camp.slug AS campaign_slug,
+                    ST_Y(pr.location::geometry) AS report_lat,
+                    ST_X(pr.location::geometry) AS report_lng,
+                    COUNT(*) AS flag_count,
+                    array_remove(array_agg(DISTINCT prf.reason), NULL) AS reasons,
+                    MIN(prf.created_at) AS first_flagged_at,
+                    MAX(prf.created_at) AS last_flagged_at
+                FROM problem_report_flags prf
+                JOIN problem_reports pr ON pr.id = prf.report_id
+                LEFT JOIN profiles reporter ON reporter.id = pr.submitted_by_user_id
+                LEFT JOIN campaigns camp ON camp.id = pr.campaign_id
+                WHERE prf.resolved_at IS NULL
+                GROUP BY pr.id, pr.image_urls, pr.severity, pr.status, pr.submitted_by_user_id,
+                    reporter.username, reporter.display_name, camp.title, camp.slug, pr.location
+            """)
+        )
+    ).fetchall()
+
+    return [
+        {
+            "content_type": "problem_report",
+            "content_id": str(r.report_id),
+            "photo_url": r.image_urls[0] if r.image_urls else None,
+            "flag_count": r.flag_count,
+            "reasons": r.reasons,
+            "first_flagged_at": r.first_flagged_at.isoformat(),
+            "last_flagged_at": r.last_flagged_at.isoformat(),
+            "context": _problem_report_flag_context(r),
+        }
+        for r in rows
+    ]
+
+
+async def _fetch_problem_report_flags_resolved(db: AsyncSession, limit: int) -> list[dict]:
+    rows = (
+        await db.execute(
+            text("""
+                WITH queue AS (
+                    SELECT
+                        report_id,
+                        resolution,
+                        resolved_by,
+                        COUNT(*) AS flag_count,
+                        array_remove(array_agg(DISTINCT reason), NULL) AS reasons,
+                        MIN(created_at) AS first_flagged_at,
+                        MAX(created_at) AS last_flagged_at,
+                        MAX(resolved_at) AS resolved_at
+                    FROM problem_report_flags
+                    WHERE resolved_at IS NOT NULL
+                    GROUP BY report_id, resolution, resolved_by
+                )
+                SELECT
+                    q.*,
+                    pr.image_urls,
+                    pr.severity,
+                    pr.status,
+                    pr.submitted_by_user_id AS reporter_id,
+                    reporter.username AS reporter_username,
+                    reporter.display_name AS reporter_display_name,
+                    camp.title AS campaign_title,
+                    camp.slug AS campaign_slug,
+                    ST_Y(pr.location::geometry) AS report_lat,
+                    ST_X(pr.location::geometry) AS report_lng,
+                    admin_p.username AS resolved_by_username,
+                    admin_p.display_name AS resolved_by_display_name
+                FROM queue q
+                JOIN problem_reports pr ON pr.id = q.report_id
+                LEFT JOIN profiles reporter ON reporter.id = pr.submitted_by_user_id
+                LEFT JOIN campaigns camp ON camp.id = pr.campaign_id
+                LEFT JOIN profiles admin_p ON admin_p.id = q.resolved_by
+                ORDER BY q.resolved_at DESC
+                LIMIT :limit
+            """),
+            {"limit": limit},
+        )
+    ).fetchall()
+
+    return [
+        {
+            "content_type": "problem_report",
+            "content_id": str(r.report_id),
+            "photo_url": r.image_urls[0] if r.image_urls else None,
+            "flag_count": r.flag_count,
+            "reasons": r.reasons,
+            "first_flagged_at": r.first_flagged_at.isoformat(),
+            "last_flagged_at": r.last_flagged_at.isoformat(),
+            "context": _problem_report_flag_context(r),
+            "resolution": r.resolution,
+            "resolved_at": r.resolved_at.isoformat(),
+            "resolved_by": {
+                "user_id": str(r.resolved_by) if r.resolved_by else None,
+                "label": r.resolved_by_display_name or (f"@{r.resolved_by_username}" if r.resolved_by_username else "Unknown admin"),
+            },
+        }
+        for r in rows
+    ]
+
+
+async def list_content_flags_queue(db: AsyncSession) -> list[dict]:
+    """
+    Groups unresolved content_flags rows by the photo they target, so an admin sees one
+    entry per flagged photo (with its flag count and reasons) rather than one row per flag.
+    Also joins in enough context about the parent object -- whose avatar it is, who
+    submitted the contribution/cleanup, which cleanup/group it belongs to -- so the queue
+    is actionable without an admin having to go look the object up themselves. Flagged trash
+    reports (problem_report_flags) are merged into the same list rather than a separate
+    section, since from an admin's perspective they're all just "things users flagged".
+    """
+    rows = (
+        await db.execute(
+            text("""
+                WITH queue AS (
+                    SELECT
+                        content_type,
+                        content_id,
+                        photo_url,
+                        COUNT(*) AS flag_count,
+                        array_remove(array_agg(DISTINCT reason), NULL) AS reasons,
+                        MIN(created_at) AS first_flagged_at,
+                        MAX(created_at) AS last_flagged_at
+                    FROM content_flags
+                    WHERE resolved_at IS NULL
+                    GROUP BY content_type, content_id, photo_url
+                )
+                SELECT
+                    q.*,
+                    av.username AS avatar_username,
+                    av.display_name AS avatar_display_name,
+                    contrib_p.id AS contribution_user_id,
+                    contrib_p.username AS contribution_username,
+                    contrib_p.display_name AS contribution_display_name,
+                    contrib_camp.title AS contribution_campaign_title,
+                    contrib_camp.slug AS contribution_campaign_slug,
+                    ST_Y(contrib.location::geometry) AS contribution_lat,
+                    ST_X(contrib.location::geometry) AS contribution_lng,
+                    cl_direct.title AS cleanup_log_title,
+                    cl_direct_g.name AS cleanup_log_group_name,
+                    cl_direct_camp.slug AS cleanup_log_campaign_slug,
+                    ST_Y(cl_direct.location::geometry) AS cleanup_log_lat,
+                    ST_X(cl_direct.location::geometry) AS cleanup_log_lng,
+                    cep_p.id AS cleanup_event_user_id,
+                    cep_p.username AS cleanup_event_username,
+                    cep_p.display_name AS cleanup_event_display_name,
+                    cep_cl.title AS cleanup_event_cleanup_title,
+                    cep_g.name AS cleanup_event_group_name,
+                    cep_camp.slug AS cleanup_event_campaign_slug,
+                    ST_Y(cep_cl.location::geometry) AS cleanup_event_lat,
+                    ST_X(cep_cl.location::geometry) AS cleanup_event_lng
+                FROM queue q
+                LEFT JOIN profiles av ON q.content_type = 'avatar' AND av.id = q.content_id
+                LEFT JOIN contributions contrib ON q.content_type = 'contribution_photo' AND contrib.id = q.content_id
+                LEFT JOIN profiles contrib_p ON contrib_p.id = contrib.user_id
+                LEFT JOIN campaigns contrib_camp ON contrib_camp.id = contrib.campaign_id
+                LEFT JOIN cleanups cl_direct ON q.content_type = 'cleanup_log_photo' AND cl_direct.id = q.content_id
+                LEFT JOIN groups cl_direct_g ON cl_direct_g.id = cl_direct.group_id
+                LEFT JOIN campaigns cl_direct_camp ON cl_direct_camp.id = cl_direct.campaign_id
+                LEFT JOIN cleanup_event_photos cep ON q.content_type = 'cleanup_event_photo' AND cep.id = q.content_id
+                LEFT JOIN profiles cep_p ON cep_p.id = cep.user_id
+                LEFT JOIN cleanups cep_cl ON cep_cl.id = cep.cleanup_id
+                LEFT JOIN groups cep_g ON cep_g.id = cep_cl.group_id
+                LEFT JOIN campaigns cep_camp ON cep_camp.id = cep_cl.campaign_id
+                ORDER BY q.last_flagged_at DESC
+            """)
+        )
+    ).fetchall()
+
+    photo_flags = [
+        {
+            "content_type": r.content_type,
+            "content_id": str(r.content_id),
+            "photo_url": r.photo_url,
+            "flag_count": r.flag_count,
+            "reasons": r.reasons,
+            "first_flagged_at": r.first_flagged_at.isoformat(),
+            "last_flagged_at": r.last_flagged_at.isoformat(),
+            "context": _content_flag_context(r),
+        }
+        for r in rows
+    ]
+    report_flags = await _fetch_problem_report_flags_unresolved(db)
+    return sorted(photo_flags + report_flags, key=lambda x: x["last_flagged_at"], reverse=True)
+
+
+@router.get("/content-flags/history")
+async def get_content_flags_history(db: AsyncSession = Depends(get_db)):
+    return await list_resolved_content_flags(db)
+
+
+async def list_resolved_content_flags(db: AsyncSession, limit: int = 50) -> list[dict]:
+    """
+    Same shape as list_content_flags_queue, but for already-resolved reports, most recently
+    resolved first, capped at `limit` since this is a history view rather than an actionable
+    queue. Also surfaces which admin resolved it and how.
+    """
+    rows = (
+        await db.execute(
+            text("""
+                WITH queue AS (
+                    SELECT
+                        content_type,
+                        content_id,
+                        photo_url,
+                        resolution,
+                        resolved_by,
+                        COUNT(*) AS flag_count,
+                        array_remove(array_agg(DISTINCT reason), NULL) AS reasons,
+                        MIN(created_at) AS first_flagged_at,
+                        MAX(created_at) AS last_flagged_at,
+                        MAX(resolved_at) AS resolved_at
+                    FROM content_flags
+                    WHERE resolved_at IS NOT NULL
+                    GROUP BY content_type, content_id, photo_url, resolution, resolved_by
+                )
+                SELECT
+                    q.*,
+                    admin_p.username AS resolved_by_username,
+                    admin_p.display_name AS resolved_by_display_name,
+                    av.username AS avatar_username,
+                    av.display_name AS avatar_display_name,
+                    contrib_p.id AS contribution_user_id,
+                    contrib_p.username AS contribution_username,
+                    contrib_p.display_name AS contribution_display_name,
+                    contrib_camp.title AS contribution_campaign_title,
+                    contrib_camp.slug AS contribution_campaign_slug,
+                    ST_Y(contrib.location::geometry) AS contribution_lat,
+                    ST_X(contrib.location::geometry) AS contribution_lng,
+                    cl_direct.title AS cleanup_log_title,
+                    cl_direct_g.name AS cleanup_log_group_name,
+                    cl_direct_camp.slug AS cleanup_log_campaign_slug,
+                    ST_Y(cl_direct.location::geometry) AS cleanup_log_lat,
+                    ST_X(cl_direct.location::geometry) AS cleanup_log_lng,
+                    cep_p.id AS cleanup_event_user_id,
+                    cep_p.username AS cleanup_event_username,
+                    cep_p.display_name AS cleanup_event_display_name,
+                    cep_cl.title AS cleanup_event_cleanup_title,
+                    cep_g.name AS cleanup_event_group_name,
+                    cep_camp.slug AS cleanup_event_campaign_slug,
+                    ST_Y(cep_cl.location::geometry) AS cleanup_event_lat,
+                    ST_X(cep_cl.location::geometry) AS cleanup_event_lng
+                FROM queue q
+                LEFT JOIN profiles admin_p ON admin_p.id = q.resolved_by
+                LEFT JOIN profiles av ON q.content_type = 'avatar' AND av.id = q.content_id
+                LEFT JOIN contributions contrib ON q.content_type = 'contribution_photo' AND contrib.id = q.content_id
+                LEFT JOIN profiles contrib_p ON contrib_p.id = contrib.user_id
+                LEFT JOIN campaigns contrib_camp ON contrib_camp.id = contrib.campaign_id
+                LEFT JOIN cleanups cl_direct ON q.content_type = 'cleanup_log_photo' AND cl_direct.id = q.content_id
+                LEFT JOIN groups cl_direct_g ON cl_direct_g.id = cl_direct.group_id
+                LEFT JOIN campaigns cl_direct_camp ON cl_direct_camp.id = cl_direct.campaign_id
+                LEFT JOIN cleanup_event_photos cep ON q.content_type = 'cleanup_event_photo' AND cep.id = q.content_id
+                LEFT JOIN profiles cep_p ON cep_p.id = cep.user_id
+                LEFT JOIN cleanups cep_cl ON cep_cl.id = cep.cleanup_id
+                LEFT JOIN groups cep_g ON cep_g.id = cep_cl.group_id
+                LEFT JOIN campaigns cep_camp ON cep_camp.id = cep_cl.campaign_id
+                ORDER BY q.resolved_at DESC
+                LIMIT :limit
+            """),
+            {"limit": limit},
+        )
+    ).fetchall()
+
+    photo_flags = [
+        {
+            "content_type": r.content_type,
+            "content_id": str(r.content_id),
+            "photo_url": r.photo_url,
+            "flag_count": r.flag_count,
+            "reasons": r.reasons,
+            "first_flagged_at": r.first_flagged_at.isoformat(),
+            "last_flagged_at": r.last_flagged_at.isoformat(),
+            "context": _content_flag_context(r),
+            "resolution": r.resolution,
+            "resolved_at": r.resolved_at.isoformat(),
+            "resolved_by": {
+                "user_id": str(r.resolved_by) if r.resolved_by else None,
+                "label": r.resolved_by_display_name or (f"@{r.resolved_by_username}" if r.resolved_by_username else "Unknown admin"),
+            },
+        }
+        for r in rows
+    ]
+    report_flags = await _fetch_problem_report_flags_resolved(db, limit)
+    merged = sorted(photo_flags + report_flags, key=lambda x: x["resolved_at"], reverse=True)
+    return merged[:limit]
+
+
+class ResolveContentFlagRequest(BaseModel):
+    content_type: str
+    content_id: UUID
+    photo_url: str
+    resolution: str
+    admin_id: UUID
+
+
+@router.post("/content-flags/resolve")
+async def post_resolve_content_flag(payload: ResolveContentFlagRequest, db: AsyncSession = Depends(get_db)):
+    return await resolve_content_flag_group(
+        db, payload.content_type, payload.content_id, payload.photo_url, payload.resolution, payload.admin_id
+    )
+
+
+async def _resolve_problem_report_flag_group(
+    db: AsyncSession, report_id: UUID, resolution: str, admin_id: UUID
+) -> dict:
+    hidden = False
+    if resolution == "hide":
+        hide_result = await db.execute(
+            text("""
+                UPDATE problem_reports
+                SET status = 'flagged'
+                WHERE id = :report_id AND status IN ('open', 'scheduled', 'in_progress')
+                RETURNING claimed_by_user_id, campaign_id
+            """),
+            {"report_id": str(report_id)},
+        )
+        hide_row = hide_result.fetchone()
+        hidden = hide_row is not None
+        if hide_row and hide_row[0]:
+            await db.execute(
+                text("""
+                    INSERT INTO user_notifications (user_id, type, title, body, campaign_id, campaign_slug)
+                    SELECT :user_id, 'claim_expired', 'Report pulled from the map',
+                           'The trash report you claimed was flagged as inaccurate by other users and removed from the map — your claim has been released.',
+                           :campaign_id, camps.slug
+                    FROM campaigns camps WHERE camps.id = :campaign_id
+                """),
+                {"user_id": str(hide_row[0]), "campaign_id": str(hide_row[1])},
+            )
+
+    result = await db.execute(
+        text("""
+            UPDATE problem_report_flags
+            SET resolved_at = NOW(), resolved_by = :admin_id, resolution = :resolution
+            WHERE report_id = :report_id AND resolved_at IS NULL
+            RETURNING id
+        """),
+        {
+            "admin_id": str(admin_id),
+            "resolution": "hidden" if resolution == "hide" else "dismissed",
+            "report_id": str(report_id),
+        },
+    )
+    resolved_count = len(result.fetchall())
+    await db.commit()
+    return {"resolved_count": resolved_count, "hidden": hidden}
+
+
+async def resolve_content_flag_group(
+    db: AsyncSession, content_type: str, content_id: UUID, photo_url: str, resolution: str, admin_id: UUID
+) -> dict:
+    """
+    Marks every unresolved content_flags row for this (content_type, content_id, photo_url)
+    as resolved. resolution='hide' removes the photo from wherever it's displayed (reusing
+    content_flags.py's auto-hide handlers); resolution='dismiss' leaves the photo up and just
+    clears the queue entry.
+
+    content_type='problem_report' is handled separately, since a trash report's photo is
+    required (can't be nulled out) -- "hide" there means pulling the report off the map
+    (status -> 'flagged', releasing any active claim) the same way flag_problem_report's
+    auto-hide branch already does, not removing a photo.
+    """
+    if resolution not in {"hide", "dismiss"}:
+        raise HTTPException(400, "resolution must be 'hide' or 'dismiss'")
+
+    if content_type == "problem_report":
+        return await _resolve_problem_report_flag_group(db, content_id, resolution, admin_id)
+
+    if content_type not in _HIDE_HANDLERS:
+        raise HTTPException(400, "Invalid content_type")
+
+    hidden = False
+    if resolution == "hide":
+        hidden = await _HIDE_HANDLERS[content_type](db, content_id, photo_url)
+
+    result = await db.execute(
+        text("""
+            UPDATE content_flags
+            SET resolved_at = NOW(), resolved_by = :admin_id, resolution = :resolution
+            WHERE content_type = :content_type AND content_id = :content_id AND photo_url = :photo_url
+                AND resolved_at IS NULL
+            RETURNING id
+        """),
+        {
+            "admin_id": str(admin_id),
+            "resolution": "hidden" if resolution == "hide" else "dismissed",
+            "content_type": content_type,
+            "content_id": str(content_id),
+            "photo_url": photo_url,
+        },
+    )
+    resolved_count = len(result.fetchall())
+    await db.commit()
+    return {"resolved_count": resolved_count, "hidden": hidden}

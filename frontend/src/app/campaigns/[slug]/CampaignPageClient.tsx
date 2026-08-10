@@ -1141,6 +1141,7 @@ export default function CampaignPageClient({
         onRoutePickerChange={setLiveRouteVertices}
         onRoutePickerFinish={handleRoutePickerFinish}
         onRoutePickerCancel={handleRoutePickerCancel}
+        userId={userId}
         newContribution={newContribution}
         newReport={newReport}
         userLocation={userLocation}
