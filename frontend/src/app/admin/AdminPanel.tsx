@@ -3005,6 +3005,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   proximity: "Proximity",
   triggers: "Trigger defaults",
   moderation: "Moderation",
+  milestones: "Milestone ladders",
 };
 
 const METERS_TO_FEET = 3.28084;
@@ -3032,6 +3033,21 @@ const UNIT_LABELS: Record<string, string> = {
   trash_report_value: "pts",
   trash_war_solarpunk_credit: "pts",
   threshold_reached_default: "pts",
+  points_milestone_1: "pts",
+  points_milestone_2: "pts",
+  points_milestone_3: "pts",
+  points_milestone_4: "pts",
+  points_milestone_5: "pts",
+  cleanup_bag_milestone_1: "bags",
+  cleanup_bag_milestone_2: "bags",
+  cleanup_bag_milestone_3: "bags",
+  cleanup_bag_milestone_4: "bags",
+  cleanup_bag_milestone_5: "bags",
+  cleanup_pound_milestone_1: "lbs",
+  cleanup_pound_milestone_2: "lbs",
+  cleanup_pound_milestone_3: "lbs",
+  cleanup_pound_milestone_4: "lbs",
+  cleanup_pound_milestone_5: "lbs",
 };
 
 function SettingsTab({ settings, setSettings }: {
@@ -3080,9 +3096,21 @@ function SettingsTab({ settings, setSettings }: {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="flex items-start gap-8">
+      <nav className="hidden md:block sticky top-20 shrink-0 w-40 space-y-1">
+        {Object.keys(grouped).map(category => (
+          <a
+            key={category}
+            href={`#settings-${category}`}
+            className="block text-xs text-zinc-400 hover:text-emerald-400 active:text-emerald-400 transition-colors duration-150 py-1"
+          >
+            {CATEGORY_LABELS[category] ?? category}
+          </a>
+        ))}
+      </nav>
+      <div className="flex-1 min-w-0 space-y-8">
       {Object.entries(grouped).map(([category, rows]) => (
-        <div key={category} className="space-y-3">
+        <div key={category} id={`settings-${category}`} className="space-y-3 scroll-mt-20">
           <h2 className="text-sm font-semibold text-zinc-300">{CATEGORY_LABELS[category] ?? category}</h2>
           {(category === "points" || category === "multipliers") && (
             <p className="text-xs text-amber-400/80 -mt-1.5">
@@ -3170,6 +3198,7 @@ function SettingsTab({ settings, setSettings }: {
       {settings.length === 0 && (
         <p className="text-sm text-zinc-500">No settings found — has migration 055_game_settings.sql been applied?</p>
       )}
+      </div>
     </div>
   );
 }
@@ -3227,52 +3256,13 @@ export default function AdminPanel({
   const [groups, setGroups] = useState(initialGroups);
   const [settings, setSettings] = useState(initialSettings);
   const hotspotMultiplier = settings.find(s => s.key === "hotspot_multiplier")?.value ?? 1;
-  const [seedingDemo, setSeedingDemo] = useState(false);
-  const [seedDemoResult, setSeedDemoResult] = useState<string | null>(null);
-
-  const handleSeedDemo = async () => {
-    setSeedingDemo(true);
-    setSeedDemoResult(null);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/admin/seed/demo-data`,
-        { method: "POST" },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed");
-      const errs = data.errors?.length ? ` · ${data.errors.length} error(s)` : "";
-      setSeedDemoResult(`✓ ${data.inserted} inserted, ${data.skipped} skipped${errs}`);
-    } catch (err) {
-      setSeedDemoResult(`✗ ${err instanceof Error ? err.message : "Error"}`);
-    } finally {
-      setSeedingDemo(false);
-    }
-  };
 
   return (
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 sm:pb-10 w-full">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <BackButton href="/" label="Back to app" className="sm:hidden mb-1 text-xs" />
-          <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
-          <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
-        </div>
-        {process.env.NODE_ENV === "development" && (
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              onClick={handleSeedDemo}
-              disabled={seedingDemo}
-              className="px-4 py-2 min-h-11 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-xl transition-[background-color,border-color,transform] duration-150 active:scale-95 disabled:active:scale-100 touch-manipulation disabled:opacity-50 shadow-elevation-1"
-            >
-              {seedingDemo ? "Seeding…" : "Seed Demo Data"}
-            </button>
-            {seedDemoResult && (
-              <span className={`text-xs ${seedDemoResult.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>
-                {seedDemoResult}
-              </span>
-            )}
-          </div>
-        )}
+      <div className="mb-6">
+        <BackButton href="/" label="Back to app" className="sm:hidden mb-1 text-xs" />
+        <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
+        <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
       </div>
 
       <div className="hidden sm:flex gap-1 mb-6 border-b border-zinc-800">

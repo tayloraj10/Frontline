@@ -122,7 +122,7 @@ export function OfferCard({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-lg p-4 shadow-elevation-1">
+    <div id={offer.id} className="border border-zinc-800 rounded-lg p-4 shadow-elevation-1 scroll-mt-20">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-sm font-semibold text-zinc-100">{offer.title}</h3>
