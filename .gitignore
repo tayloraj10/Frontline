@@ -25,11 +25,6 @@ build/
 # Large geo data files — generated locally, not committed
 backend/data/
 
-# Local-only dev convenience script (pulls prod data into local Supabase) — never committed,
-# even though it takes credentials via env var rather than storing them, to keep it firmly
-# out of anyone's PR history.
-backend/scripts/pull_prod_snapshot.sh
-
 # Android release signing key — never committed, losing it permanently blocks store updates
 *.jks
 *.keystore
