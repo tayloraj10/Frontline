@@ -377,11 +377,11 @@ export default function StatDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 px-0 sm:px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-lg bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl shadow-elevation-3 max-h-[85vh] overflow-y-auto"
+        className="w-full sm:max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl shadow-elevation-3 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-950">
