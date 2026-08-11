@@ -1,6 +1,7 @@
+import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,53 @@ from app.db.database import get_db
 router = APIRouter(prefix="/geo-units", tags=["geo-units"])
 
 _UK_POSTCODE_DISTRICT_RE = re.compile(r"^[A-Z]{1,2}[0-9][A-Z0-9]?$")
+
+
+# Registered ahead of /{geo_unit_id}/bbox below: both are GET under /geo-units, and a
+# literal "bbox" path segment would otherwise be swallowed by that route's {geo_unit_id}.
+@router.get("/bbox")
+async def get_geo_units_bbox_union(
+    ids: str = Query(..., description="Comma-separated geo_unit ids"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Union bounding box across multiple geo units — e.g. to zoom the map to fit a top-3 set."""
+    id_list = [i.strip() for i in ids.split(",") if i.strip()]
+    if not id_list:
+        raise HTTPException(400, "ids must contain at least one geo_unit id")
+
+    row = await db.execute(
+        text("""
+            SELECT
+              ST_XMin(ext) AS min_lng,
+              ST_YMin(ext) AS min_lat,
+              ST_XMax(ext) AS max_lng,
+              ST_YMax(ext) AS max_lat
+            FROM (SELECT ST_Extent(geometry::geometry) AS ext FROM geo_units WHERE id = ANY(:ids)) e
+        """),
+        {"ids": id_list},
+    )
+    result = row.fetchone()
+    if not result or result.min_lng is None:
+        raise HTTPException(404, "No matching geo units found")
+    return {"bbox": [result.min_lng, result.min_lat, result.max_lng, result.max_lat]}
+
+
+@router.get("/{geo_unit_id}/boundary")
+async def get_geo_unit_boundary(geo_unit_id: str, db: AsyncSession = Depends(get_db)):
+    """Simplified GeoJSON boundary for a single geo unit — e.g. to outline the focused
+    neighborhood while its child zip codes are shown as the primary choropleth."""
+    row = await db.execute(
+        text("""
+            SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(geometry, 0.0002)) AS geojson
+            FROM geo_units
+            WHERE id = :geo_unit_id
+        """),
+        {"geo_unit_id": geo_unit_id},
+    )
+    result = row.fetchone()
+    if not result:
+        raise HTTPException(404, f"Geo unit {geo_unit_id} not found")
+    return {"geometry": json.loads(result.geojson)}
 
 
 @router.get("/zip/{zip_code}/centroid")
@@ -33,6 +81,34 @@ async def get_zip_centroid(zip_code: str, db: AsyncSession = Depends(get_db)):
     if not result:
         raise HTTPException(404, f"ZIP code {zip_code} not found")
     return {
+        "lat": result.lat,
+        "lng": result.lng,
+        "bbox": [result.min_lng, result.min_lat, result.max_lng, result.max_lat],
+    }
+
+
+@router.get("/{geo_unit_id}/bbox")
+async def get_geo_unit_bbox(geo_unit_id: str, db: AsyncSession = Depends(get_db)):
+    row = await db.execute(
+        text("""
+            SELECT
+              display_name,
+              ST_Y(ST_Centroid(geometry::geometry)) AS lat,
+              ST_X(ST_Centroid(geometry::geometry)) AS lng,
+              ST_XMin(geometry::geometry) AS min_lng,
+              ST_YMin(geometry::geometry) AS min_lat,
+              ST_XMax(geometry::geometry) AS max_lng,
+              ST_YMax(geometry::geometry) AS max_lat
+            FROM geo_units
+            WHERE id = :geo_unit_id
+        """),
+        {"geo_unit_id": geo_unit_id},
+    )
+    result = row.fetchone()
+    if not result:
+        raise HTTPException(404, f"Geo unit {geo_unit_id} not found")
+    return {
+        "display_name": result.display_name,
         "lat": result.lat,
         "lng": result.lng,
         "bbox": [result.min_lng, result.min_lat, result.max_lng, result.max_lat],
