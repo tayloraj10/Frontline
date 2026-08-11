@@ -50,7 +50,7 @@ export default async function PartnersPage() {
   );
 
   return (
-    <main className={`max-w-4xl mx-auto px-6 py-10 w-full ${isNativeApp ? "min-h-[102dvh]" : ""}`}>
+    <main className={`max-w-4xl mx-auto px-6 py-10 w-full ${isNativeApp ? "min-h-[100.5dvh]" : ""}`}>
       <div className="mb-6">
         <h1 className="text-2xl font-black text-zinc-100">Partner Perks</h1>
         <p className="text-sm text-zinc-500 mt-1">
