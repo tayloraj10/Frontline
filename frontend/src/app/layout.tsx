@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import LegalGate from "@/components/LegalGate";
 import NativeAppBridge from "@/components/NativeAppBridge";
 import PullToRefresh from "@/components/PullToRefresh";
+import ScrollReflowFix from "@/components/ScrollReflowFix";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${geist.variable} dark h-full antialiased`}>
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
         <NativeAppBridge />
+        <ScrollReflowFix />
         <AppHeader />
         <div
           id="app-scroll-container"
