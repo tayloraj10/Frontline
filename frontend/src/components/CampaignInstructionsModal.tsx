@@ -150,7 +150,7 @@ export default function CampaignInstructionsModal({
         {open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)}>
             <div
-              className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-6 py-5 overflow-y-auto">
@@ -207,7 +207,7 @@ export default function CampaignInstructionsModal({
       {description && descOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setDescOpen(false)}>
           <div
-            className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-5 overflow-y-auto">
@@ -227,7 +227,7 @@ export default function CampaignInstructionsModal({
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
             <div className="px-6 pt-6 pb-4 shrink-0 border-b border-zinc-800/60">
               <div className="text-4xl mb-3 text-center">{instructions.icon}</div>
               <h2 className="text-xl font-black text-zinc-100 text-center mb-1.5 tracking-tight">
