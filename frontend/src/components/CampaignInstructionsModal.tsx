@@ -25,7 +25,7 @@ const INSTRUCTIONS: Record<string, CampaignInstructions> = {
       {
         icon: "🧹",
         title: "Log a Cleanup",
-        body: "Collected trash? Log it with a bag count and photos to earn points toward the leaderboard.",
+        body: "Picked up some trash? Log it with a bag count and photos to earn points toward the leaderboard.",
       },
       {
         icon: "🚩",
@@ -153,7 +153,7 @@ export default function CampaignInstructionsModal({
               className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-6 py-5 overflow-y-auto">
+              <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
                 <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
               </div>
               <div className="px-6 pb-5 shrink-0">
@@ -210,7 +210,7 @@ export default function CampaignInstructionsModal({
             className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-5 overflow-y-auto">
+            <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
               <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
             </div>
             <div className="px-6 pb-5 shrink-0">
@@ -227,31 +227,32 @@ export default function CampaignInstructionsModal({
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-6 pt-6 pb-4 shrink-0 border-b border-zinc-800/60">
-              <div className="text-4xl mb-3 text-center">{instructions.icon}</div>
-              <h2 className="text-xl font-black text-zinc-100 text-center mb-1.5 tracking-tight">
+          <div className="relative w-full max-w-md sm:max-w-2xl max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-6 pt-5 pb-3 shrink-0 border-b border-zinc-800/60">
+              <div className="text-3xl mb-2 text-center">{instructions.icon}</div>
+              <h2 className="text-lg font-black text-zinc-100 text-center mb-1 tracking-tight">
                 {instructions.title}
               </h2>
-              <p className="text-zinc-400 text-sm text-center leading-relaxed">{instructions.intro}</p>
+              <p className="text-zinc-400 text-xs text-center leading-relaxed">{instructions.intro}</p>
             </div>
 
-            <div className="px-6 py-4 overflow-y-auto">
-              <ul className="space-y-4">
+            <div className="px-3 py-3 sm:px-5 sm:py-4 overflow-y-auto min-h-0 flex-1">
+              <ul className="grid grid-cols-2 gap-2 sm:gap-2.5">
                 {instructions.features.map((f) => (
-                  <li key={f.title} className="flex items-start gap-3">
-                    <span className="text-lg shrink-0 mt-0.5">{f.icon}</span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold text-zinc-100">{f.title}</p>
-                        {f.beta && (
-                          <span className="text-[9px] font-bold uppercase tracking-wide text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded px-1 py-0.5 leading-none">
-                            Beta
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">{f.body}</p>
+                  <li
+                    key={f.title}
+                    className="flex flex-col gap-1 rounded-xl border border-zinc-800/70 bg-zinc-800/30 px-2.5 py-2 sm:px-3 sm:py-2.5 min-w-0"
+                  >
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-sm sm:text-base shrink-0">{f.icon}</span>
+                      <p className="text-[11px] sm:text-[13px] font-semibold text-zinc-100 leading-tight">{f.title}</p>
+                      {f.beta && (
+                        <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded px-1 py-0.5 leading-none">
+                          Beta
+                        </span>
+                      )}
                     </div>
+                    <p className="text-[9.5px] sm:text-[11px] text-zinc-400 leading-snug">{f.body}</p>
                   </li>
                 ))}
               </ul>
