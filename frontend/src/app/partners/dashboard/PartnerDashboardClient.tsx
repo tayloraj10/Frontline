@@ -146,7 +146,7 @@ function BusinessPanel({
 
   return (
     <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
-      <div className="flex items-center justify-between px-5 py-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
           {business.logo_url ? (
             <img src={business.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 shadow-elevation-1" />
@@ -156,11 +156,11 @@ function BusinessPanel({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-200">{business.name}</p>
+            <p className="text-sm font-semibold text-zinc-200 truncate">{business.name}</p>
             <p className="text-xs text-zinc-600">{businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center flex-wrap gap-x-1 gap-y-1 shrink-0">
           {business.lat != null && business.lng != null && linkedCampaigns.map((c) => (
             <Link
               key={c.id}
