@@ -167,9 +167,14 @@ export default async function CampaignsPage() {
   ]);
 
   let contribCount: number | null = null;
+  let userCount: number | null = null;
   if (user) {
-    const { count } = await supabase.from("contributions").select("*", { count: "exact", head: true });
-    contribCount = count ?? 0;
+    const [{ count: contribs }, { count: users }] = await Promise.all([
+      supabase.from("contributions").select("*", { count: "exact", head: true }),
+      supabase.schema("public").from("profiles").select("*", { count: "exact", head: true }),
+    ]);
+    contribCount = contribs ?? 0;
+    userCount = users ?? 0;
   }
 
   const campaigns = [...campaignsData].sort((a, b) => {
@@ -194,6 +199,9 @@ export default async function CampaignsPage() {
           {campaigns.length} mission{campaigns.length !== 1 ? "s" : ""} running —{" "}
           pick your fight.
         </p>
+        <p className="text-emerald-400/80 mt-1 text-xs font-semibold tracking-wide">
+          Join us on the frontline.
+        </p>
       </div>
 
       {campaigns.length === 0 ? (
@@ -217,6 +225,12 @@ export default async function CampaignsPage() {
                     <div className="text-lg font-bold text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
                     <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">contributions logged</div>
                   </div>
+                  {userCount !== null && (
+                    <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
+                      <div className="text-lg font-bold text-emerald-400 tabular-nums">{userCount.toLocaleString()}</div>
+                      <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">users on the platform</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

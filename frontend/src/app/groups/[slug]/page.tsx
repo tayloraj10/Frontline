@@ -4,6 +4,7 @@ import { BarChart3, CalendarPlus, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
+import Avatar from "@/components/ui/Avatar";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
 import BackButton from "@/components/ui/BackButton";
 import type { Database } from "@/types/database";
@@ -65,8 +66,8 @@ export default async function GroupProfilePage({ params }: Props) {
   const userIds = members.map((m) => m.user_id);
 
   const { data: profilesData } = userIds.length > 0
-    ? await supabase.schema("public").from("profiles").select("id, username, display_name").in("id", userIds)
-    : { data: [] as Pick<Profile, "id" | "username" | "display_name">[] };
+    ? await supabase.schema("public").from("profiles").select("id, username, display_name, avatar_url").in("id", userIds)
+    : { data: [] as Pick<Profile, "id" | "username" | "display_name" | "avatar_url">[] };
 
   const profilesById = new Map((profilesData ?? []).map((p) => [p.id, p]));
 
@@ -299,9 +300,12 @@ export default async function GroupProfilePage({ params }: Props) {
               return (
                 <li key={m.user_id} className="px-5 py-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 shrink-0">
-                      {(profile?.display_name ?? profile?.username ?? "?")[0].toUpperCase()}
-                    </div>
+                    <Avatar
+                      avatarUrl={profile?.avatar_url}
+                      name={profile?.display_name ?? profile?.username ?? "?"}
+                      username={profile?.username}
+                      size="sm"
+                    />
                     <span className="text-sm text-zinc-200 truncate">
                       {profile?.display_name ?? profile?.username ?? "Unknown"}
                     </span>
