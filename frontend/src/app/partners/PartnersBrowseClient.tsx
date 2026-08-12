@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { type RedemptionProof } from "./RedemptionConfirmationModal";
 
 export type BrowseBusiness = {
@@ -42,12 +43,14 @@ type Redemption = { id: string; code: string; points_spent: number; redeemed_at:
 export function OfferCard({
   offer,
   businessName,
+  businessSlug,
   userId,
   userPoints,
   onRedeemed,
 }: {
   offer: BrowseOffer;
   businessName: string;
+  businessSlug: string;
   userId: string | null;
   userPoints: number | null;
   onRedeemed: (offerId: string, spent: number) => void;
@@ -128,9 +131,16 @@ export function OfferCard({
           <h3 className="text-sm font-semibold text-zinc-100">{offer.title}</h3>
           {offer.description && <p className="text-sm text-zinc-500 mt-0.5">{offer.description}</p>}
         </div>
-        <span className="text-xs font-semibold text-emerald-400 shrink-0">
-          {offer.redemption_mode === "spend" ? `${offer.points_cost} pts` : `${offer.points_threshold}+ pts`}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-xs font-semibold text-emerald-400">
+            {offer.redemption_mode === "spend" ? `${offer.points_cost} pts` : `${offer.points_threshold}+ pts`}
+          </span>
+          <ShareButton
+            variant="icon"
+            size="sm"
+            content={{ title: `${offer.title} — ${businessName}`, text: offer.description ?? undefined, url: `/partners/${businessSlug}#${offer.id}` }}
+          />
+        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-3 flex-wrap">
@@ -234,6 +244,11 @@ export default function PartnersBrowseClient({
                 </p>
               )}
             </div>
+            <ShareButton
+              variant="icon"
+              size="sm"
+              content={{ title: business.name, text: business.description ?? undefined, url: `/partners/${business.slug}` }}
+            />
             <Link
               href={`/partners/${business.slug}`}
               className="flex items-center gap-1 text-xs font-semibold text-emerald-950 shrink-0 px-3 py-1.5 rounded-lg bg-emerald-400 shadow-elevation-1 hover:bg-emerald-300 active:bg-emerald-500 active:scale-[0.95] transition-[background-color,transform] duration-150 touch-manipulation"
@@ -250,6 +265,7 @@ export default function PartnersBrowseClient({
                 key={offer.id}
                 offer={offer}
                 businessName={business.name}
+                businessSlug={business.slug}
                 userId={userId}
                 userPoints={points}
                 onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}
