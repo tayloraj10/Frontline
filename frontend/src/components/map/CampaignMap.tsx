@@ -184,6 +184,20 @@ function getEventMarkerScale(zoom: number): number {
   return EVENT_MARKER_SCALE_MIN + t * (1 - EVENT_MARKER_SCALE_MIN);
 }
 
+// Businesses grow (rather than shrink) as you zoom in, so they stand out more once
+// they're the thing you're most likely to be looking for at street-level zoom.
+const BUSINESS_MARKER_SCALE_MIN_ZOOM = 8;
+const BUSINESS_MARKER_SCALE_MAX_ZOOM = 16;
+const BUSINESS_MARKER_SCALE_MAX = 1.6;
+
+function getBusinessMarkerScale(zoom: number): number {
+  if (zoom <= BUSINESS_MARKER_SCALE_MIN_ZOOM) return 1;
+  if (zoom >= BUSINESS_MARKER_SCALE_MAX_ZOOM) return BUSINESS_MARKER_SCALE_MAX;
+  const t =
+    (zoom - BUSINESS_MARKER_SCALE_MIN_ZOOM) / (BUSINESS_MARKER_SCALE_MAX_ZOOM - BUSINESS_MARKER_SCALE_MIN_ZOOM);
+  return 1 + t * (BUSINESS_MARKER_SCALE_MAX - 1);
+}
+
 // Zero-cost, no-permission-prompt signal for a UK vs. US default view. Only consulted
 // for campaigns whose geo_unit already covers uk_postcode_district (e.g. Trash War).
 function isLikelyUK(): boolean {
@@ -1760,6 +1774,8 @@ export default function CampaignMap({
   const partnerBusinessesRef = useRef(partnerBusinesses ?? []);
   const businessMarkersRef = useRef<maplibregl.Marker[]>([]);
   const businessTweensRef = useRef<gsap.core.Tween[]>([]);
+  const businessMarkerScaleElsRef = useRef<HTMLDivElement[]>([]);
+  const businessMarkerZoomListenerRef = useRef(false);
   const cleanupEventsRef = useRef(cleanupEvents ?? []);
   const cleanupEventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const cleanupEventDateLabelsRef = useRef<maplibregl.Marker[]>([]);
@@ -2006,6 +2022,7 @@ export default function CampaignMap({
     businessMarkersRef.current = [];
     businessTweensRef.current.forEach((t) => t.kill());
     businessTweensRef.current = [];
+    businessMarkerScaleElsRef.current = [];
 
     for (const business of businesses) {
       const hasOffer = !!business.activeOfferTitle;
@@ -2014,8 +2031,15 @@ export default function CampaignMap({
       // `el` directly (see the same isolation pattern on event markers above) — the pulse
       // tween below targets `innerEl`, a separate nested element, instead.
       const el = document.createElement("div");
-      const size = hasOffer ? 24 : 20;
+      const size = hasOffer ? 30 : 26;
       el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;z-index:${hasOffer ? 6 : 5}`;
+
+      const scaleWrapper = document.createElement("div");
+      scaleWrapper.style.cssText =
+        `width:100%;height:100%;position:relative;transform-origin:center;` +
+        `transform:scale(${map.current ? getBusinessMarkerScale(map.current.getZoom()) : 1});transition:transform 0.15s ease-out`;
+      el.appendChild(scaleWrapper);
+      businessMarkerScaleElsRef.current.push(scaleWrapper);
 
       const innerEl = document.createElement("div");
       innerEl.style.cssText = hasOffer
@@ -2025,7 +2049,7 @@ export default function CampaignMap({
         : `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
         "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
         "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
-      el.appendChild(innerEl);
+      scaleWrapper.appendChild(innerEl);
       if (affordable) {
         const pulseTween = gsap.to(innerEl, { scale: 1.08, duration: 1.6, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.4 });
         businessTweensRef.current.push(pulseTween);
@@ -2038,7 +2062,7 @@ export default function CampaignMap({
         innerEl.appendChild(img);
       } else {
         innerEl.textContent = hasOffer ? "🎁" : "🏪";
-        innerEl.style.fontSize = hasOffer ? "12px" : "10px";
+        innerEl.style.fontSize = hasOffer ? "15px" : "13px";
       }
       el.title = affordable
         ? `${business.name} — you have enough points for ${business.affordableOfferTitle}!`
@@ -3063,6 +3087,15 @@ export default function CampaignMap({
       m.on("zoom", () => {
         const scale = getEventMarkerScale(m.getZoom());
         eventMarkerScaleElsRef.current.forEach((wrapperEl) => {
+          wrapperEl.style.transform = `scale(${scale})`;
+        });
+      });
+    }
+    if (!businessMarkerZoomListenerRef.current) {
+      businessMarkerZoomListenerRef.current = true;
+      m.on("zoom", () => {
+        const scale = getBusinessMarkerScale(m.getZoom());
+        businessMarkerScaleElsRef.current.forEach((wrapperEl) => {
           wrapperEl.style.transform = `scale(${scale})`;
         });
       });
@@ -4983,6 +5016,14 @@ export default function CampaignMap({
                   Open in Google Maps
                 </a>
               )}
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.lat},${selectedBusiness.lng}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
+              >
+                Get directions
+              </a>
             </div>
             <Link
               href={`/partners/${selectedBusiness.slug}`}

@@ -805,7 +805,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
   hotspotMultiplier: number;
 }) {
   const [showCreate, setShowCreate] = useState(false);
-  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [campaignId, setCampaignId] = useState(campaigns.find((c) => c.slug === "trash-war")?.id ?? campaigns[0]?.id ?? "");
   const [name, setName] = useState("");
   const [conditionType, setConditionType] = useState("threshold_reached");
   const [conditionConfigRaw, setConditionConfigRaw] = useState(
@@ -1065,7 +1065,7 @@ function EventsTab({ campaigns, events, setEvents }: {
 }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [campaignId, setCampaignId] = useState(campaigns.find((c) => c.slug === "trash-war")?.id ?? campaigns[0]?.id ?? "");
   const [eventType, setEventType] = useState("boss_spawn");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -2318,7 +2318,9 @@ function PartnersTab({
 
       {showCreate && (
         <BusinessForm
-          initialCampaignIds={[]}
+          initialCampaignIds={
+            [campaigns.find(c => c.slug === "trash-war")?.id ?? campaigns[0]?.id].filter((id): id is string => !!id)
+          }
           campaigns={campaigns}
           onSubmit={handleCreateSubmit}
           onCancel={() => setShowCreate(false)}
@@ -2895,7 +2897,7 @@ function toDateInputValue(d: Date): string {
 }
 
 function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
-  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [campaignId, setCampaignId] = useState(campaigns.find((c) => c.slug === "trash-war")?.id ?? campaigns[0]?.id ?? "");
   const thisMonday = mostRecentMonday(new Date());
   const nextMonday = new Date(thisMonday);
   nextMonday.setDate(nextMonday.getDate() + 7);
@@ -3593,6 +3595,11 @@ export default function AdminPanel({
                 {groups.filter(g => g.status === "pending").length}
               </span>
             )}
+            {t === "partners" && businesses.filter(b => b.status === "pending").length > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-400 text-xs tabular-nums">
+                {businesses.filter(b => b.status === "pending").length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -3627,6 +3634,9 @@ export default function AdminPanel({
                 <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.7)]" />
               )}
               {t === "groups" && groups.filter(g => g.status === "pending").length > 0 && (
+                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.7)]" />
+              )}
+              {t === "partners" && businesses.filter(b => b.status === "pending").length > 0 && (
                 <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.7)]" />
               )}
             </button>
