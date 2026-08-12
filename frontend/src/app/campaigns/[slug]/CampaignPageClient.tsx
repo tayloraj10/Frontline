@@ -16,6 +16,8 @@ import { listCampaignCleanupRoutes, type CampaignCleanupRoute, type RouteLineStr
 import { useGameSettings } from "@/lib/gameSettings";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
+import RankBadge from "@/components/ui/RankBadge";
+import { computeRanks } from "@/lib/ranking";
 import { cn } from "@/lib/cn";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -351,14 +353,6 @@ function timeAgo(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function RankBadge({ rank }: { rank: number }) {
-  const base = "text-sm font-black w-5 text-center shrink-0";
-  if (rank === 1) return <span className={`${base} text-yellow-400`}>1</span>;
-  if (rank === 2) return <span className={`${base} text-zinc-300`}>2</span>;
-  if (rank === 3) return <span className={`${base} text-amber-600`}>3</span>;
-  return <span className={`${base} text-zinc-600 tabular-nums`}>{rank}</span>;
-}
-
 function LeaderboardRow({
   entry,
   rank,
@@ -451,9 +445,12 @@ function LeaderboardPanel({
           <div className="px-4 py-4 text-xs text-zinc-600 text-center">No individual contributions yet.</div>
         ) : (
           <ul className="divide-y divide-zinc-800/50">
-            {users.map((entry, i) => (
-              <LeaderboardRow key={entry.entity_id} entry={entry} rank={i + 1} unit={unit} campaignType={campaignType} variant="user" />
-            ))}
+            {(() => {
+              const userRanks = computeRanks(users, (entry) => entry.total_value);
+              return users.map((entry, i) => (
+                <LeaderboardRow key={entry.entity_id} entry={entry} rank={userRanks[i]} unit={unit} campaignType={campaignType} variant="user" />
+              ));
+            })()}
           </ul>
         )}
       </section>
@@ -466,9 +463,12 @@ function LeaderboardPanel({
           <div className="px-4 py-4 text-xs text-zinc-600 text-center">No group contributions yet.</div>
         ) : (
           <ul className="divide-y divide-zinc-800/50">
-            {groups.map((entry, i) => (
-              <LeaderboardRow key={entry.entity_id} entry={entry} rank={i + 1} unit={unit} campaignType={campaignType} variant="group" />
-            ))}
+            {(() => {
+              const groupRanks = computeRanks(groups, (entry) => entry.total_value);
+              return groups.map((entry, i) => (
+                <LeaderboardRow key={entry.entity_id} entry={entry} rank={groupRanks[i]} unit={unit} campaignType={campaignType} variant="group" />
+              ));
+            })()}
           </ul>
         )}
       </section>

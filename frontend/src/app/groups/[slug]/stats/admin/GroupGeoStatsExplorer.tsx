@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
+import RankBadge from "@/components/ui/RankBadge";
+import { computeRanks } from "@/lib/ranking";
 import GeoStatsMap from "@/app/leaderboard/GeoStatsMap";
 import { type Interval, type StatsWindow, statsWindowParams } from "../statsWindow";
 
@@ -66,13 +68,6 @@ function levelsBelow(unitType: string | null): GeoLevel[] {
 function nextLevelBelow(unitType: string): GeoLevel | null {
   const levels = levelsBelow(unitType);
   return levels.length > 0 ? levels[0] : null;
-}
-
-function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <span className="text-yellow-400 font-black text-sm w-6 text-center">1</span>;
-  if (rank === 2) return <span className="text-zinc-300 font-black text-sm w-6 text-center">2</span>;
-  if (rank === 3) return <span className="text-amber-600 font-black text-sm w-6 text-center">3</span>;
-  return <span className="text-zinc-600 text-sm w-6 text-center tabular-nums">{rank}</span>;
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -315,14 +310,17 @@ export default function GroupGeoStatsExplorer({
           ) : (
             <>
               <ul className="divide-y divide-zinc-800/50">
-                {(level === "zip" || !showAllChildren ? data.children.slice(0, 10) : data.children).map(
-                  (child, i) => (
+                {(() => {
+                  const visibleChildren =
+                    level === "zip" || !showAllChildren ? data.children.slice(0, 10) : data.children;
+                  const childRanks = computeRanks(visibleChildren, (c) => c.total_value);
+                  return visibleChildren.map((child, i) => (
                     <li key={child.geo_unit_id}>
                       <button
                         onClick={() => drillInto(child)}
                         className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-zinc-800/40 transition-colors touch-manipulation"
                       >
-                        <RankBadge rank={i + 1} />
+                        <RankBadge rank={childRanks[i]} />
                         <span className="flex-1 min-w-0 text-sm text-zinc-200 truncate font-medium">
                           {child.display_name ?? child.unit_id}
                         </span>
@@ -342,8 +340,8 @@ export default function GroupGeoStatsExplorer({
                         </div>
                       </button>
                     </li>
-                  )
-                )}
+                  ));
+                })()}
               </ul>
               {level !== "zip" && data.children.length > 10 && (
                 <button
@@ -368,12 +366,14 @@ export default function GroupGeoStatsExplorer({
           </div>
         ) : (
           <ul className="divide-y divide-zinc-800/50">
-            {data.top_users.map((u, i) => {
-              const name = u.display_name ?? u.username ?? "Unknown User";
-              return (
-                <li key={u.user_id} className="px-5 py-3 flex items-center gap-3">
-                  <RankBadge rank={i + 1} />
-                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {(() => {
+              const userRanks = computeRanks(data.top_users, (u) => u.total_value);
+              return data.top_users.map((u, i) => {
+                const name = u.display_name ?? u.username ?? "Unknown User";
+                return (
+                  <li key={u.user_id} className="px-5 py-3 flex items-center gap-3">
+                    <RankBadge rank={userRanks[i]} />
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
                     <Avatar avatarUrl={u.avatar_url} name={name} username={u.username} size="sm" />
                     <span className="text-sm text-zinc-200 truncate font-medium">{name}</span>
                   </div>
@@ -392,8 +392,9 @@ export default function GroupGeoStatsExplorer({
                     </div>
                   </div>
                 </li>
-              );
-            })}
+                );
+              });
+            })()}
           </ul>
         )}
       </div>

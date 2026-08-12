@@ -30,14 +30,26 @@ export default async function NewCleanupEventPage({ params }: Props) {
     redirect(`/groups/${slug}`);
   }
 
-  const { data: campaignsData } = await supabase
+  const { data: campaignData } = await supabase
     .schema("public")
     .from("campaigns")
     .select("id, title")
+    .eq("slug", "trash-war")
     .eq("status", "active")
-    .order("title", { ascending: true });
+    .single();
 
-  const campaigns = campaignsData ?? [];
+  if (!campaignData) {
+    return (
+      <main className="max-w-lg mx-auto px-6 py-10 w-full">
+        <div className="mb-2">
+          <BackButton href={`/groups/${slug}`} label={groupData.name} />
+        </div>
+        <p className="text-zinc-500 text-sm mt-8">
+          The Trash War campaign isn&apos;t available right now, so events can&apos;t be created. Please try again later.
+        </p>
+      </main>
+    );
+  }
 
   return (
     <main className="max-w-lg mx-auto px-6 py-10 w-full">
@@ -54,7 +66,7 @@ export default async function NewCleanupEventPage({ params }: Props) {
           groupId={groupData.id}
           groupSlug={slug}
           organizerUserId={user.id}
-          campaigns={campaigns}
+          campaignId={campaignData.id}
         />
       </div>
     </main>

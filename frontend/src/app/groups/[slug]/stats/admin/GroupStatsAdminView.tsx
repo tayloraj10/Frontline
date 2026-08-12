@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { formatPoints } from "@/lib/formatPoints";
+import { computeRanks } from "@/lib/ranking";
 import Avatar from "@/components/ui/Avatar";
+import RankBadge from "@/components/ui/RankBadge";
 import GroupTrendChart, { type TrendBucket } from "./GroupTrendChart";
 import GroupEventsMap from "./GroupEventsMap";
 import GroupGeoStatsExplorer, { type ExternalFocusRequest } from "./GroupGeoStatsExplorer";
@@ -286,13 +288,15 @@ export default function GroupStatsAdminView({
                   <div className="px-5 py-8 text-center text-zinc-600 text-sm">No member activity in this range.</div>
                 ) : (
                   <ul className="divide-y divide-zinc-800/50">
-                    {activeCampaign.members.map((m, i) => (
+                    {(() => {
+                      const memberRanks = computeRanks(activeCampaign.members, (m) => m.total_value);
+                      return activeCampaign.members.map((m, i) => (
                       <li key={m.user_id}>
                         <button
                           onClick={() => setDrilldownMember(m)}
                           className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-zinc-900/40 transition-colors touch-manipulation"
                         >
-                          <span className="text-zinc-600 text-sm w-6 text-center tabular-nums shrink-0">{i + 1}</span>
+                          <RankBadge rank={memberRanks[i]} />
                           <Avatar avatarUrl={m.avatar_url} name={m.display_name ?? m.username ?? "?"} username={m.username} size="sm" />
                           <div className="min-w-0 flex-1">
                             <div className="text-sm text-zinc-200 truncate font-medium">
@@ -311,7 +315,8 @@ export default function GroupStatsAdminView({
                           </div>
                         </button>
                       </li>
-                    ))}
+                      ));
+                    })()}
                   </ul>
                 )}
               </section>

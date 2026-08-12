@@ -50,7 +50,6 @@ export default async function EditCleanupEventPage({ params }: Props) {
           groupId={groupData.id}
           groupSlug={slug}
           organizerUserId={user.id}
-          campaigns={[]}
           mode="edit"
           cleanupId={id}
           initialValues={{
