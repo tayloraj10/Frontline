@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
-import GeoStatsMap from "./GeoStatsMap";
-import StatDetailModal, { StatKind } from "./StatDetailModal";
+import GeoStatsMap from "@/app/leaderboard/GeoStatsMap";
+import { type Interval, type StatsWindow, statsWindowParams } from "../statsWindow";
 
-type Interval = "today" | "week" | "month" | "all";
 type GeoLevel = "borough" | "neighborhood" | "zip";
 
 interface FocusUnit {
@@ -23,33 +22,16 @@ interface TopUser {
   avatar_url: string | null;
   total_value: number;
   contribution_count: number;
-  small_bags: number;
-  large_bags: number;
-  pounds: number;
-}
-
-interface TopGroup {
-  group_id: string;
-  name: string | null;
-  total_value: number;
-  contribution_count: number;
-  small_bags: number;
-  large_bags: number;
-  pounds: number;
 }
 
 interface ChildUnit {
   geo_unit_id: string;
   unit_type: string;
   unit_id: string;
-  display_name: string | null;
+  display_name?: string | null;
   total_value: number;
   contribution_count: number;
   unique_contributors: number;
-  unique_groups: number;
-  small_bags: number;
-  large_bags: number;
-  pounds: number;
 }
 
 interface GeoStatsResponse {
@@ -59,22 +41,13 @@ interface GeoStatsResponse {
     total_value: number;
     contribution_count: number;
     unique_contributors: number;
-    unique_groups: number;
     small_bags: number;
     large_bags: number;
     pounds: number;
   };
   top_users: TopUser[];
-  top_groups: TopGroup[];
   children: ChildUnit[] | null;
 }
-
-const INTERVALS: { id: Interval; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "week", label: "This week" },
-  { id: "month", label: "This month" },
-  { id: "all", label: "All-time" },
-];
 
 const LEVEL_LABELS: Record<GeoLevel, string> = {
   borough: "Borough",
@@ -82,7 +55,7 @@ const LEVEL_LABELS: Record<GeoLevel, string> = {
   zip: "Zip / Postcode",
 };
 
-// zip-typed units (zip, uk_postcode_district) are terminal — nothing to drill into below them.
+// zip-typed units (zip, uk_postcode_district) are terminal -- nothing to drill into below them.
 function levelsBelow(unitType: string | null): GeoLevel[] {
   if (unitType === null) return ["borough", "neighborhood", "zip"];
   if (unitType === "nyc_borough") return ["neighborhood", "zip"];
@@ -102,33 +75,39 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="text-zinc-600 text-sm w-6 text-center tabular-nums">{rank}</span>;
 }
 
-function StatTile({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
+function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={!onClick}
-      className="border border-zinc-800 rounded-lg px-3 py-2.5 text-left hover:bg-zinc-800/40 hover:border-zinc-700 transition-colors touch-manipulation disabled:hover:bg-transparent disabled:hover:border-zinc-800"
-    >
+    <div className="border border-zinc-800 rounded-lg px-3 py-2.5 text-left">
       <div className="text-base font-bold text-zinc-100 tabular-nums">{value}</div>
       <div className="text-[11px] text-zinc-500">{label}</div>
-    </button>
+    </div>
   );
 }
 
-export default function GeoStatsExplorer({
+export interface ExternalFocusRequest {
+  unit: FocusUnit;
+  token: number;
+}
+
+export default function GroupGeoStatsExplorer({
+  groupId,
   campaignId,
+  window,
+  viewerUserId,
   fastapiUrl,
-  unit,
+  externalFocusRequest,
 }: {
+  groupId: string;
   campaignId: string;
+  window: StatsWindow;
+  viewerUserId: string;
   fastapiUrl: string;
-  unit: string;
+  externalFocusRequest?: ExternalFocusRequest | null;
 }) {
-  const [interval, setInterval] = useState<Interval>("all");
   const [focusStack, setFocusStack] = useState<FocusUnit[]>([]);
   const [level, setLevel] = useState<GeoLevel | null>(null);
   const [data, setData] = useState<GeoStatsResponse | null>(null);
-  // The (level, focus) that `data` was actually fetched for — lets the map/breakdown
+  // The (level, focus) that `data` was actually fetched for -- lets the map/breakdown
   // list wait for a matching response instead of briefly rendering the new level's
   // tiles against the previous level's children (mismatched geo_unit_ids => no color).
   const [dataKey, setDataKey] = useState<string>("");
@@ -136,11 +115,10 @@ export default function GeoStatsExplorer({
   const [showAllChildren, setShowAllChildren] = useState(false);
   const [focusBbox, setFocusBbox] = useState<[number, number, number, number] | null>(null);
   const [focusBoundary, setFocusBoundary] = useState<GeoJSON.Geometry | null>(null);
-  const [detailStat, setDetailStat] = useState<StatKind | null>(null);
 
   const focus = focusStack[focusStack.length - 1] ?? null;
   const availableLevels = levelsBelow(focus?.unit_type ?? null);
-  const requestKey = `${focus?.geo_unit_id ?? ""}|${level ?? ""}`;
+  const requestKey = `${focus?.geo_unit_id ?? ""}|${level ?? ""}|${window.interval}|${window.anchor.getTime()}`;
   const dataMatchesRequest = dataKey === requestKey;
   // A terminal unit (e.g. a zip code) has nothing further to drill into, so `level`
   // is null once focused on one. Rather than rendering no map at all, show the
@@ -156,10 +134,6 @@ export default function GeoStatsExplorer({
           total_value: data.aggregate.total_value,
           contribution_count: data.aggregate.contribution_count,
           unique_contributors: data.aggregate.unique_contributors,
-          unique_groups: data.aggregate.unique_groups,
-          small_bags: data.aggregate.small_bags,
-          large_bags: data.aggregate.large_bags,
-          pounds: data.aggregate.pounds,
         }
       : null;
   const mapLevel: GeoLevel | null = selfUnit ? "zip" : level;
@@ -169,10 +143,10 @@ export default function GeoStatsExplorer({
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    const params = new URLSearchParams({ interval });
+    const params = new URLSearchParams({ ...statsWindowParams(window), campaign_id: campaignId, viewer_user_id: viewerUserId });
     if (focus) params.set("focus_geo_unit_id", focus.geo_unit_id);
     if (level) params.set("children_level", level);
-    fetch(`${fastapiUrl}/api/campaigns/${campaignId}/geo-stats?${params}`, { signal: controller.signal })
+    fetch(`${fastapiUrl}/api/groups/${groupId}/stats/geo-stats?${params}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         setData(json);
@@ -182,11 +156,21 @@ export default function GeoStatsExplorer({
       .finally(() => setLoading(false));
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, fastapiUrl, interval, focus, level]);
+  }, [groupId, campaignId, fastapiUrl, window, viewerUserId, focus, level]);
 
   useEffect(() => {
     setShowAllChildren(false);
   }, [level, focus]);
+
+  // Lets sibling components (e.g. the geography pie-chart slice) jump this explorer
+  // straight to a specific geo unit. `token` must change on every request (even to
+  // the same unit) so re-clicking the same segment still re-triggers the jump.
+  useEffect(() => {
+    if (!externalFocusRequest) return;
+    setFocusStack([externalFocusRequest.unit]);
+    setLevel(nextLevelBelow(externalFocusRequest.unit.unit_type));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalFocusRequest?.token]);
 
   useEffect(() => {
     if (!focus) {
@@ -244,22 +228,6 @@ export default function GeoStatsExplorer({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 flex-wrap">
-        {INTERVALS.map((iv) => (
-          <button
-            key={iv.id}
-            onClick={() => setInterval(iv.id)}
-            className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors touch-manipulation ${
-              interval === iv.id
-                ? "bg-zinc-700 text-zinc-100"
-                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
-            }`}
-          >
-            {iv.label}
-          </button>
-        ))}
-      </div>
-
       <div className="flex items-center gap-1 text-xs text-zinc-500 flex-wrap">
         <button
           onClick={() => jumpTo(-1)}
@@ -298,26 +266,15 @@ export default function GeoStatsExplorer({
         </div>
       )}
 
-      <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
-        <StatTile
-          label="points"
-          value={data ? formatPoints(data.aggregate.total_value) : "—"}
-          onClick={data ? () => setDetailStat("pts") : undefined}
-        />
+      <div className={`grid grid-cols-3 gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
+        <StatTile label="points" value={data ? formatPoints(data.aggregate.total_value) : "—"} />
         <StatTile
           label="contributions"
           value={data ? data.aggregate.contribution_count.toLocaleString() : "—"}
-          onClick={data ? () => setDetailStat("contributions") : undefined}
         />
         <StatTile
           label="contributors"
           value={data ? data.aggregate.unique_contributors.toLocaleString() : "—"}
-          onClick={data && data.top_users.length > 0 ? () => setDetailStat("contributors") : undefined}
-        />
-        <StatTile
-          label="groups active"
-          value={data ? data.aggregate.unique_groups.toLocaleString() : "—"}
-          onClick={data && data.top_groups.length > 0 ? () => setDetailStat("groups") : undefined}
         />
       </div>
 
@@ -334,23 +291,6 @@ export default function GeoStatsExplorer({
             {formatPoints(data.aggregate.pounds)} lbs
           </div>
         </div>
-      )}
-
-      {detailStat && data && (
-        <StatDetailModal
-          kind={detailStat}
-          unit={unit}
-          campaignId={campaignId}
-          fastapiUrl={fastapiUrl}
-          interval={interval}
-          focusGeoUnitId={focus?.geo_unit_id ?? null}
-          topUsers={data.top_users}
-          topGroups={data.top_groups}
-          childUnits={data.children}
-          levelLabel={level ? LEVEL_LABELS[level] : null}
-          onClose={() => setDetailStat(null)}
-          onDrill={drillInto}
-        />
       )}
 
       {showMap && mapLevel && mapUnits && (
@@ -387,19 +327,11 @@ export default function GeoStatsExplorer({
                           {child.display_name ?? child.unit_id}
                         </span>
                         <div className="flex items-center gap-4 shrink-0 text-right">
-                          {(child.small_bags > 0 || child.large_bags > 0 || child.pounds > 0) && (
-                            <div className="hidden md:block text-right">
-                              <div className="text-xs font-semibold text-zinc-400 tabular-nums">
-                                {formatPoints(child.small_bags + child.large_bags)}
-                              </div>
-                              <div className="text-xs text-zinc-600">bags</div>
-                            </div>
-                          )}
                           <div className="hidden sm:block text-right">
                             <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                               {formatPoints(child.total_value)}
                             </div>
-                            <div className="text-xs text-zinc-600">{unit}</div>
+                            <div className="text-xs text-zinc-600">pts</div>
                           </div>
                           <div className="text-right">
                             <div className="text-xs font-semibold text-zinc-400 tabular-nums">
@@ -428,56 +360,11 @@ export default function GeoStatsExplorer({
 
       <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-          <span className="text-sm font-semibold text-zinc-300">Groups</span>
-        </div>
-        {!data || data.top_groups.length === 0 ? (
-          <div className="px-5 py-10 text-center text-zinc-600 text-sm">
-            {loading ? "Loading…" : "No group contributions yet."}
-          </div>
-        ) : (
-          <ul className="divide-y divide-zinc-800/50">
-            {data.top_groups.map((g, i) => (
-              <li key={g.group_id} className="px-5 py-3 flex items-center gap-3">
-                <RankBadge rank={i + 1} />
-                <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-xs font-bold shrink-0 text-emerald-400">
-                    {(g.name ?? "?")[0].toUpperCase()}
-                  </div>
-                  <span className="text-sm text-zinc-200 truncate font-medium">{g.name ?? "Unknown Group"}</span>
-                </div>
-                <div className="flex items-center gap-4 shrink-0 text-right">
-                  {(g.small_bags > 0 || g.large_bags > 0 || g.pounds > 0) && (
-                    <div className="hidden md:block text-right">
-                      <div className="text-xs font-semibold text-zinc-400 tabular-nums">
-                        {formatPoints(g.small_bags + g.large_bags)}
-                      </div>
-                      <div className="text-xs text-zinc-600">bags</div>
-                    </div>
-                  )}
-                  <div className="hidden sm:block text-right">
-                    <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-                      {formatPoints(g.total_value)}
-                    </div>
-                    <div className="text-xs text-zinc-600">{unit}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-semibold text-zinc-400 tabular-nums">{g.contribution_count}</div>
-                    <div className="text-xs text-zinc-600">logs</div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-        <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-          <span className="text-sm font-semibold text-zinc-300">Individuals</span>
+          <span className="text-sm font-semibold text-zinc-300">Members</span>
         </div>
         {!data || data.top_users.length === 0 ? (
           <div className="px-5 py-10 text-center text-zinc-600 text-sm">
-            {loading ? "Loading…" : "No individual contributions yet."}
+            {loading ? "Loading…" : "No member contributions yet in this area."}
           </div>
         ) : (
           <ul className="divide-y divide-zinc-800/50">
@@ -491,19 +378,11 @@ export default function GeoStatsExplorer({
                     <span className="text-sm text-zinc-200 truncate font-medium">{name}</span>
                   </div>
                   <div className="flex items-center gap-4 shrink-0 text-right">
-                    {(u.small_bags > 0 || u.large_bags > 0 || u.pounds > 0) && (
-                      <div className="hidden md:block text-right">
-                        <div className="text-xs font-semibold text-zinc-400 tabular-nums">
-                          {formatPoints(u.small_bags + u.large_bags)}
-                        </div>
-                        <div className="text-xs text-zinc-600">bags</div>
-                      </div>
-                    )}
                     <div className="hidden sm:block text-right">
                       <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                         {formatPoints(u.total_value)}
                       </div>
-                      <div className="text-xs text-zinc-600">{unit}</div>
+                      <div className="text-xs text-zinc-600">pts</div>
                     </div>
                     <div className="text-right">
                       <div className="text-xs font-semibold text-zinc-400 tabular-nums">

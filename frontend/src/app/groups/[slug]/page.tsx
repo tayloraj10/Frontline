@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BarChart3, CalendarPlus, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
@@ -137,19 +138,30 @@ export default async function GroupProfilePage({ params }: Props) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {isMember && (
+            <Link
+              href={`/groups/${slug}/stats`}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-emerald-800/60 bg-emerald-950/30 text-emerald-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-emerald-900/40 hover:border-emerald-600 hover:text-emerald-300 active:scale-[0.95] touch-manipulation"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Stats
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href={`/groups/${slug}/events/new`}
-              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:text-zinc-200 hover:border-zinc-500 active:scale-[0.95] touch-manipulation"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-sky-800/60 bg-sky-950/30 text-sky-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-sky-900/40 hover:border-sky-600 hover:text-sky-300 active:scale-[0.95] touch-manipulation"
             >
+              <CalendarPlus className="w-3.5 h-3.5" />
               New event
             </Link>
           )}
           {isAdmin && (
             <Link
               href={`/groups/${slug}/edit`}
-              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:text-zinc-200 hover:border-zinc-500 active:scale-[0.95] touch-manipulation"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-800/60 bg-amber-950/30 text-amber-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-amber-900/40 hover:border-amber-600 hover:text-amber-300 active:scale-[0.95] touch-manipulation"
             >
+              <Pencil className="w-3.5 h-3.5" />
               Edit group
             </Link>
           )}

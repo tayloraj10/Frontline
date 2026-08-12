@@ -16,14 +16,14 @@ interface ChildUnit {
   geo_unit_id: string;
   unit_type: string;
   unit_id: string;
-  display_name: string | null;
+  display_name?: string | null;
   total_value: number;
-  contribution_count: number;
-  unique_contributors: number;
-  unique_groups: number;
-  small_bags: number;
-  large_bags: number;
-  pounds: number;
+  contribution_count?: number;
+  unique_contributors?: number;
+  unique_groups?: number;
+  small_bags?: number;
+  large_bags?: number;
+  pounds?: number;
 }
 
 const LEVEL_TILE_INFO: Record<GeoLevel, { path: string; sourceLayer: string }> = {
@@ -47,7 +47,7 @@ function top3(units: ChildUnit[]): ChildUnit[] {
   return [...units].sort((a, b) => b.total_value - a.total_value).slice(0, 3);
 }
 
-function buildChoroplethExpr(units: ChildUnit[]): unknown[] | string {
+function buildChoroplethExpr(units: ChildUnit[], useRankColors: boolean): unknown[] | string {
   const withValue = units.filter((c) => c.total_value > 0);
   // A `match` expression needs at least one label/output pair besides the
   // fallback — with no unit having any activity (e.g. an empty time range),
@@ -55,7 +55,9 @@ function buildChoroplethExpr(units: ChildUnit[]): unknown[] | string {
   if (withValue.length === 0) return "#27272a";
   // Only units that actually have activity are eligible for a rank color — a
   // 0-point unit should never look like it "won" a top-3 spot via tiebreak.
-  const topRankColor = new Map(top3(withValue).map((child, i) => [child.geo_unit_id, RANK_COLORS[i]]));
+  const topRankColor = useRankColors
+    ? new Map(top3(withValue).map((child, i) => [child.geo_unit_id, RANK_COLORS[i]]))
+    : new Map<string, string>();
   const sorted = [...withValue].sort((a, b) => a.total_value - b.total_value);
   const matchExpr: unknown[] = ["match", ["get", "geo_unit_id"]];
   sorted.forEach((child, i) => {
@@ -81,6 +83,7 @@ export default function GeoStatsMap({
   focusBbox,
   focusBoundary,
   onDrill,
+  useRankColors = true,
 }: {
   level: GeoLevel;
   campaignId: string;
@@ -89,6 +92,7 @@ export default function GeoStatsMap({
   focusBbox: [number, number, number, number] | null;
   focusBoundary: GeoJSON.Geometry | null;
   onDrill: (child: ChildUnit) => void;
+  useRankColors?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -101,7 +105,10 @@ export default function GeoStatsMap({
   unitsRef.current = units;
   onDrillRef.current = onDrill;
 
-  const top3Key = useMemo(() => top3(units).map((c) => c.geo_unit_id).join(","), [units]);
+  const top3Key = useMemo(
+    () => top3(units.filter((u) => u.total_value > 0)).map((c) => c.geo_unit_id).join(","),
+    [units]
+  );
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -221,7 +228,7 @@ export default function GeoStatsMap({
 
     function applyChoropleth() {
       if (!map || !map.getLayer(FILL_LAYER_ID)) return;
-      map.setPaintProperty(FILL_LAYER_ID, "fill-color", buildChoroplethExpr(unitsRef.current) as string);
+      map.setPaintProperty(FILL_LAYER_ID, "fill-color", buildChoroplethExpr(unitsRef.current, useRankColors) as string);
     }
 
     if (map.isStyleLoaded()) {
@@ -229,14 +236,15 @@ export default function GeoStatsMap({
     } else {
       map.once("load", setup);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level, campaignId, fastapiUrl]);
 
   // Re-color when units data refreshes (interval/focus change) without rebuilding layers.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getLayer(FILL_LAYER_ID)) return;
-    map.setPaintProperty(FILL_LAYER_ID, "fill-color", buildChoroplethExpr(units) as string);
-  }, [units]);
+    map.setPaintProperty(FILL_LAYER_ID, "fill-color", buildChoroplethExpr(units, useRankColors) as string);
+  }, [units, useRankColors]);
 
   // Fit to encompass the top-3 units' combined bbox whenever the top-3 set changes;
   // fall back to the focused geo unit's own bbox, then the NYC-wide default.
@@ -312,9 +320,38 @@ export default function GeoStatsMap({
   }, [focusBoundary]);
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-[320px] rounded-xl overflow-hidden border border-zinc-800"
-    />
+    <div>
+      <div
+        ref={containerRef}
+        className="w-full h-[320px] rounded-xl overflow-hidden border border-zinc-800"
+      />
+      <div className="flex items-center justify-between gap-3 mt-2 text-[10px] text-zinc-500 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span>Less</span>
+          <span className="flex overflow-hidden rounded-sm border border-zinc-800">
+            {COLOR_RAMP.map((c) => (
+              <span key={c} className="w-3.5 h-2.5" style={{ backgroundColor: c }} />
+            ))}
+          </span>
+          <span>More</span>
+        </div>
+        {useRankColors && (
+          <div className="flex items-center gap-2.5">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: RANK_COLORS[0] }} />
+              #1
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: RANK_COLORS[1] }} />
+              #2
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: RANK_COLORS[2] }} />
+              #3
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
