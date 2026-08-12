@@ -6,7 +6,7 @@ import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
 import ShareCard from "@/components/groups/ShareCard";
 import MapSnapshotCard from "@/components/groups/MapSnapshotCard";
-import { downloadBlob, shareImage } from "@/lib/share";
+import { downloadImage, shareImage } from "@/lib/share";
 import IntervalPicker from "./IntervalPicker";
 import { type StatsWindow, detailedIntervalLabel, statsWindowParams } from "./statsWindow";
 
@@ -192,7 +192,11 @@ async function captionSnapshot(dataUrl: string, caption: string, subcaption: str
     }
   }
 
-  return canvas.toDataURL("image/png");
+  // JPEG instead of PNG: this map has no transparency, and a photographic basemap
+  // PNG can run 1MB+ as base64. iOS Safari's html-to-image capture (which re-embeds
+  // this <img> into an SVG foreignObject to rasterize the whole share card) renders
+  // blank once the embedded payload gets that large — JPEG cuts it down drastically.
+  return canvas.toDataURL("image/jpeg", 0.92);
 }
 
 async function renderMapSnapshot(opts: {
@@ -723,6 +727,18 @@ export default function GroupStatsView({
 
   async function renderCardBlob(): Promise<Blob | null> {
     if (!cardRef.current) return null;
+    // iOS Safari's html-to-image capture will silently blank out any <img> that hasn't
+    // finished loading/decoding yet — wait for all of them (including our own proxied
+    // logo fetch) before rasterizing, instead of racing the DOM paint.
+    const imgs = Array.from(cardRef.current.querySelectorAll("img"));
+    await Promise.all(
+      imgs.map((img) =>
+        img.complete ? img.decode().catch(() => undefined) : new Promise<void>((resolve) => {
+          img.onload = () => img.decode().then(resolve, () => resolve());
+          img.onerror = () => resolve();
+        })
+      )
+    );
     const { toPng } = await import("html-to-image");
     const dataUrl = await toPng(cardRef.current, { pixelRatio: 3, cacheBust: true });
     const res = await fetch(dataUrl);
@@ -750,7 +766,14 @@ export default function GroupStatsView({
     try {
       const blob = await renderCardBlob();
       if (!blob) return;
-      downloadBlob(blob, `${shareCamp.campaign_slug}-group-stats.png`);
+      // iOS Safari ignores the <a download> attribute for blob: URLs, so a plain
+      // downloadBlob() silently does nothing there. downloadImage() falls back to
+      // the native share sheet (Save Image) on iOS only — desktop/Android still get
+      // a normal direct file download.
+      await downloadImage(blob, `${shareCamp.campaign_slug}-group-stats.png`, {
+        title: `${groupName} · ${shareCamp.campaign_name}`,
+        text: `Here's what ${groupName} has accomplished on the ${shareCamp.campaign_name} campaign!`,
+      });
     } finally {
       setShareBusy(null);
     }

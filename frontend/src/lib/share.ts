@@ -48,6 +48,31 @@ export async function shareImage(
   return "downloaded";
 }
 
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  // iPadOS reports as "MacIntel" in the UA string, so touch support is the tiebreaker.
+  return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+/**
+ * Like shareImage, but prefers a direct file download when the platform actually
+ * supports one — desktop and Android browsers download via <a download> as normal.
+ * iOS (Safari, in-app browsers, and the native app's WKWebView) all silently ignore
+ * that attribute for blob: URLs, so there we fall back to the native share sheet
+ * (e.g. "Save Image") instead of a button that appears to do nothing.
+ */
+export async function downloadImage(
+  blob: Blob,
+  filename: string,
+  shareOpts: { title: string; text?: string }
+): Promise<"shared" | "downloaded"> {
+  if (isNativePlatform() || isIOS()) {
+    return shareImage(blob, filename, shareOpts);
+  }
+  downloadBlob(blob, filename);
+  return "downloaded";
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
