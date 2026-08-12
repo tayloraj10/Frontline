@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { LogOut, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -54,16 +55,18 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
         <button
           onClick={handleLeave}
           disabled={loading}
-          className="px-3 py-1.5 text-xs border border-zinc-700 hover:border-red-700 active:border-red-700 active:scale-[0.96] disabled:active:scale-100 text-zinc-400 hover:text-red-400 active:text-red-400 rounded-lg transition-[border-color,color,transform] duration-150 disabled:opacity-40 touch-manipulation"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-zinc-700 bg-zinc-900/40 hover:bg-red-950/30 hover:border-red-700 active:border-red-700 active:scale-[0.96] disabled:active:scale-100 text-zinc-400 hover:text-red-400 active:text-red-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,color,transform] duration-150 disabled:opacity-40 touch-manipulation"
         >
+          <LogOut className="w-3.5 h-3.5" />
           {loading ? "Leaving…" : "Leave Group"}
         </button>
       ) : (
         <button
           onClick={handleJoin}
           disabled={loading}
-          className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.96] disabled:active:scale-100 text-white font-semibold rounded-lg transition-[background-color,transform] duration-150 disabled:opacity-40 touch-manipulation"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.96] disabled:active:scale-100 text-white font-semibold rounded-lg shadow-elevation-1 transition-[background-color,transform] duration-150 disabled:opacity-40 touch-manipulation"
         >
+          <UserPlus className="w-3.5 h-3.5" />
           {loading ? "Joining…" : "Join Group"}
         </button>
       )}

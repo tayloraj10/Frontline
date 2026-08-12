@@ -26,7 +26,10 @@ const getActiveCampaigns = unstable_cache(
   { revalidate: 30 }
 );
 
-function CampaignCard({ campaign }: { campaign: Campaign }) {
+// TODO: swap for a real rights-cleared cleanup/volunteer photo when one is picked.
+const FEATURED_CARD_IMAGE_URL: string | null = null;
+
+function CampaignCard({ campaign, featured = false }: { campaign: Campaign; featured?: boolean }) {
   const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type] ?? {
     icon: "🏁",
     color: "text-zinc-400",
@@ -39,10 +42,45 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
     <Link
       key={campaign.id}
       href={`/campaigns/${campaign.slug}`}
-      className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-[0.98] active:border-zinc-700 active:duration-100 touch-manipulation"
+      className={`group relative block overflow-hidden rounded-2xl p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] active:duration-100 touch-manipulation ${
+        featured
+          ? "border border-emerald-700/60 bg-gradient-to-br from-emerald-950/50 via-zinc-900 to-zinc-900 shadow-[0_0_0_1px_rgba(16,185,129,0.08),0_20px_50px_-15px_rgba(16,185,129,0.35)] hover:border-emerald-500/80 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.15),0_25px_60px_-15px_rgba(16,185,129,0.5)] active:border-emerald-500/80"
+          : "border border-zinc-800/80 bg-zinc-900/80 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40 active:border-zinc-700"
+      }`}
     >
+      {featured && (
+        <>
+          {/* Background photo (or a stand-in texture until a real photo is chosen), heavily scrimmed so text stays legible */}
+          {FEATURED_CARD_IMAGE_URL ? (
+            <div
+              className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-25 transition-opacity duration-300 group-hover:opacity-35"
+              style={{ backgroundImage: `url(${FEATURED_CARD_IMAGE_URL})` }}
+            />
+          ) : (
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.08]"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(135deg, rgb(16,185,129) 0px, rgb(16,185,129) 1.5px, transparent 1.5px, transparent 14px)",
+              }}
+            />
+          )}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-zinc-950/90 via-zinc-950/70 to-emerald-950/40" />
+          {/* Ambient glow */}
+          <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-emerald-500/20 blur-3xl transition-opacity duration-300 group-hover:opacity-80" />
+          {/* Oversized watermark emblem */}
+          <span className="pointer-events-none absolute -right-3 -bottom-6 text-[9rem] leading-none text-emerald-500/10 select-none">
+            {cfg.icon}
+          </span>
+        </>
+      )}
+
       {/* Left accent border */}
-      <div className={`absolute inset-y-0 left-0 w-[3px] rounded-l-2xl ${cfg.bar} opacity-50 transition-opacity duration-300 group-hover:opacity-100`} />
+      <div
+        className={`absolute inset-y-0 left-0 rounded-l-2xl ${cfg.bar} transition-opacity duration-300 ${
+          featured ? "w-[4px] opacity-90 group-hover:opacity-100" : "w-[3px] opacity-50 group-hover:opacity-100"
+        }`}
+      />
 
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -66,11 +104,15 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
             )}
           </div>
 
-          <h2 className="text-lg font-bold leading-snug text-zinc-100 group-hover:text-white">
+          <h2
+            className={`font-black leading-snug text-zinc-100 group-hover:text-white ${
+              featured ? "text-2xl tracking-tight bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent" : "text-lg font-bold"
+            }`}
+          >
             {campaign.title}
           </h2>
           {campaign.description && (
-            <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">
+            <p className={`mt-1.5 leading-relaxed text-zinc-500 ${featured ? "text-sm max-w-md" : "text-sm"}`}>
               {campaign.slug === "brainrot" ? (
                 <>
                   <strong className="font-semibold text-zinc-300">
@@ -86,12 +128,16 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
         </div>
 
         {/* Live indicator + arrow, always grouped together regardless of badge wrap */}
-        <div className="flex flex-shrink-0 flex-col items-end gap-2">
+        <div className="relative flex flex-shrink-0 flex-col items-end gap-2">
           <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest text-emerald-400">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
             LIVE
           </span>
-          <span className="text-xl text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300">
+          <span
+            className={`text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300 ${
+              featured ? "text-2xl" : "text-xl"
+            }`}
+          >
             →
           </span>
         </div>
@@ -147,7 +193,7 @@ export default async function CampaignsPage() {
         <>
           {featuredCampaign && (
             <div className="mx-auto mt-6 max-w-xl">
-              <CampaignCard campaign={featuredCampaign} />
+              <CampaignCard campaign={featuredCampaign} featured />
               {user && contribCount !== null && (
                 <div className="mt-4 flex justify-center gap-3">
                   <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">

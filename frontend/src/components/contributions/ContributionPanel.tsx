@@ -1239,7 +1239,7 @@ function ContributeModal({
               <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-lg border border-amber-800/60 bg-amber-950/30 text-[10px] text-amber-300">
                 {photos.length > 0 || existingPhotoUrls.length > 0
                   ? "Photo attached — the pin can go anywhere on the map."
-                  : "Pin must stay in your current ZIP code unless a photo is added to this cleanup."}
+                  : "Pin must stay in your ZIP code unless a photo is added. Turn on ZIP codes in the trash map's Layers panel to see the boundary."}
               </div>
             )}
             {submitCoords && (
