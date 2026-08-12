@@ -127,9 +127,7 @@ export default function CleanupEventDetail({
   const [showJoinCodeField, setShowJoinCodeField] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
-  const [locationStatus, setLocationStatus] = useState<"checking" | "resolved" | "unavailable">(
-    typeof navigator !== "undefined" && !navigator.geolocation ? "unavailable" : "checking"
-  );
+  const [locationStatus, setLocationStatus] = useState<"checking" | "resolved" | "unavailable">("checking");
   const [cancelLoading, setCancelLoading] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -144,7 +142,10 @@ export default function CleanupEventDetail({
   // range, without requiring the "Check in with my location" button click first.
   useEffect(() => {
     if (!userId || viewerCheckedInInitial) return;
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setLocationStatus("unavailable");
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setDistanceMeters(haversineMeters(pos.coords.latitude, pos.coords.longitude, event.lat, event.lng));

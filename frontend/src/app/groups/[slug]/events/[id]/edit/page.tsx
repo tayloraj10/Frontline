@@ -43,12 +43,6 @@ export default async function EditCleanupEventPage({ params }: Props) {
 
       <h1 className="text-xl font-black text-zinc-100 mt-6 mb-8 flex items-center gap-2">
         Edit cleanup event
-        <span
-          title="This feature should work but is still being tested."
-          className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
-        >
-          Beta
-        </span>
       </h1>
 
       <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/30 shadow-elevation-2">

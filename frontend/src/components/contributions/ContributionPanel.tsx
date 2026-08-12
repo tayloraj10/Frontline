@@ -1198,12 +1198,6 @@ function ContributeModal({
                   }`}
               >
                 🛤️ Route
-                <span
-                  title="This feature should work but is still being tested."
-                  className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
-                >
-                  Beta
-                </span>
               </button>
             </div>
           </div>
@@ -2736,7 +2730,7 @@ function HostEventModal({
   }
 
   return (
-    <ModalShell title="Host Cleanup Event" badge="Beta" onClose={onClose}>
+    <ModalShell title="Host Cleanup Event" onClose={onClose}>
       <div className="flex flex-col gap-4">
         {adminGroups.length > 1 && (
           <div>
@@ -2951,12 +2945,6 @@ function HostEventModal({
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
             Pre-planned route (optional)
-            <span
-              title="This feature should work but is still being tested."
-              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
-            >
-              Beta
-            </span>
           </label>
           {!route ? (
             <button
@@ -3844,8 +3832,8 @@ export default function ContributionPanel({
                         <motion.button
                           key="event"
                           onClick={() => { setMode("host_event"); setHostEventOverrideCoords(null); gps.capture(); setLogHostExpanded(false); }}
-                          title="Host Event (Beta) — this feature should work but is still being tested."
-                          aria-label="Host Event (Beta)"
+                          title="Host Event"
+                          aria-label="Host Event"
                           initial={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
                           animate={{ opacity: 1, x: 66, y: -38, scale: 1 }}
                           exit={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
@@ -3853,7 +3841,6 @@ export default function ContributionPanel({
                           whileTap={{ scale: 0.9 }}
                           className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-sky-800/60 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                         >
-                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-zinc-900" />
                           <span className="text-base leading-none">📅</span>
                           <span className="text-[8px] leading-none text-sky-300">Event</span>
                         </motion.button>
@@ -3898,12 +3885,6 @@ export default function ContributionPanel({
                 className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-sky-800/60 rounded-lg text-sky-300 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
               >
                 📅 Host Event
-                <span
-                  title="This feature should work but is still being tested."
-                  className="text-[9px] text-amber-400 border border-amber-700/60 rounded px-1 py-0.5 leading-none cursor-help"
-                >
-                  Beta
-                </span>
               </button>
             )}
             {isSolarpunk && (

@@ -4538,12 +4538,6 @@ export default function CampaignMap({
                 ? "Route closed — click Undo to reopen"
                 : `Click the map to draw your cleanup route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
             </span>
-            <span
-              title="This feature should work but is still being tested."
-              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
-            >
-              Beta
-            </span>
           </div>
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
             <button
@@ -5046,12 +5040,6 @@ export default function CampaignMap({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold text-white">{selectedCleanupEvent.title}</h3>
-                  <span
-                    title="This feature should work but is still being tested."
-                    className="text-[10px] text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 shrink-0 cursor-help"
-                  >
-                    Beta
-                  </span>
                 </div>
                 <Link
                   href={`/groups/${selectedCleanupEvent.group_slug}`}
