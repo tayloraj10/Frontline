@@ -11,19 +11,24 @@ type OwnSubmission = Pick<Group, "id" | "slug" | "name" | "status" | "image_url"
 // Public, RLS-open data shared across all visitors — bounds these two
 // (currently unfiltered, whole-table) queries to once per 30s regardless of
 // traffic instead of once per page view.
+const ACTIVITY_WINDOW_DAYS = 30;
+
 const getGroupsListData = unstable_cache(
   async () => {
     const supabase = createPublicClient();
-    const [{ data: groupsData }, { data: membersData }, { data: eventsData }] = await Promise.all([
-      supabase.from("groups").select("*").order("created_at", { ascending: false }),
-      supabase.from("group_members").select("group_id, user_id"),
-      supabase
-        .from("cleanups")
-        .select("id, group_id")
-        .eq("is_group_event", true)
-        .neq("status", "cancelled")
-        .gt("scheduled_start", new Date().toISOString()),
-    ]);
+    const activitySince = new Date(Date.now() - ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const [{ data: groupsData }, { data: membersData }, { data: eventsData }, { data: recentContributionsData }] =
+      await Promise.all([
+        supabase.from("groups").select("*").order("created_at", { ascending: false }),
+        supabase.from("group_members").select("group_id, user_id"),
+        supabase
+          .from("cleanups")
+          .select("id, group_id")
+          .eq("is_group_event", true)
+          .neq("status", "cancelled")
+          .gt("scheduled_start", new Date().toISOString()),
+        supabase.from("contributions").select("group_id").not("group_id", "is", null).gt("submitted_at", activitySince),
+      ]);
 
     const eventIds = (eventsData ?? []).map((e) => e.id);
     const { data: cohostsData } = eventIds.length
@@ -35,6 +40,7 @@ const getGroupsListData = unstable_cache(
       members: membersData ?? ([] as { group_id: string; user_id: string }[]),
       events: eventsData ?? ([] as { id: string; group_id: string | null }[]),
       cohosts: cohostsData ?? ([] as { cleanup_id: string; group_id: string }[]),
+      recentContributions: recentContributionsData ?? ([] as { group_id: string | null }[]),
     };
   },
   ["groups-list-data"],
@@ -44,7 +50,7 @@ const getGroupsListData = unstable_cache(
 export default async function GroupsPage() {
   const supabase = await createClient();
 
-  const [{ data: { user } }, { groups: groupsData, members: membersData, events: eventsData, cohosts: cohostsData }] = await Promise.all([
+  const [{ data: { user } }, { groups: groupsData, members: membersData, events: eventsData, cohosts: cohostsData, recentContributions: recentContributionsData }] = await Promise.all([
     supabase.auth.getUser(),
     getGroupsListData(),
   ]);
@@ -81,6 +87,20 @@ export default async function GroupsPage() {
   for (const c of cohostsData ?? []) {
     upcomingEventCountByGroup[c.group_id] = (upcomingEventCountByGroup[c.group_id] ?? 0) + 1;
   }
+
+  const recentContributionCountByGroup: Record<string, number> = {};
+  for (const c of recentContributionsData ?? []) {
+    if (!c.group_id) continue;
+    recentContributionCountByGroup[c.group_id] = (recentContributionCountByGroup[c.group_id] ?? 0) + 1;
+  }
+
+  // Sort by a simple recent-activity score (last-30-day contributions weighted
+  // higher than upcoming events, since it's a stronger active-group signal),
+  // falling back to created_at desc (the query's default order) via Array.sort's
+  // stability when scores tie.
+  const activityScore = (g: Group) =>
+    (recentContributionCountByGroup[g.id] ?? 0) * 2 + (upcomingEventCountByGroup[g.id] ?? 0);
+  groups.sort((a, b) => activityScore(b) - activityScore(a));
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10 w-full">
