@@ -57,9 +57,8 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
   return (
     <div
       ref={ref}
-      className="relative flex h-[360px] w-[360px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-950 via-zinc-900 to-emerald-950 p-7"
+      className="relative flex h-[360px] w-[360px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-800 via-black to-emerald-800 p-7"
     >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-zinc-950/90 via-zinc-950/70 to-emerald-950/60" />
 
       <div className="relative flex items-center gap-3">
         {groupLogoUrl && (

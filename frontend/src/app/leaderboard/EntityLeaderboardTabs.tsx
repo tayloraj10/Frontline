@@ -4,13 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
-
-function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <span className="text-yellow-400 font-black text-sm w-6 text-center">1</span>;
-  if (rank === 2) return <span className="text-zinc-300 font-black text-sm w-6 text-center">2</span>;
-  if (rank === 3) return <span className="text-amber-600 font-black text-sm w-6 text-center">3</span>;
-  return <span className="text-zinc-600 text-sm w-6 text-center tabular-nums">{rank}</span>;
-}
+import RankBadge from "@/components/ui/RankBadge";
+import { computeRanks } from "@/lib/ranking";
 
 interface Profile {
   id: string;
@@ -71,6 +66,8 @@ export default function EntityLeaderboardTabs({
   groups: TrashWarGroup[];
 }) {
   const [tab, setTab] = useState<"users" | "groups">("users");
+  const profileRanks = computeRanks(profiles, (p) => p.points ?? 0);
+  const groupRanks = computeRanks(groups, (g) => g.total_value);
 
   return (
     <div className="mt-8">
@@ -107,7 +104,7 @@ export default function EntityLeaderboardTabs({
               {profiles.map((p, i) => (
                 <EntityRow
                   key={p.id}
-                  rank={i + 1}
+                  rank={profileRanks[i]}
                   href={`/users/${p.username}`}
                   avatarUrl={p.avatar_url}
                   name={p.display_name ?? p.username}
@@ -123,7 +120,7 @@ export default function EntityLeaderboardTabs({
             {groups.map((g, i) => (
               <EntityRow
                 key={g.entity_id}
-                rank={i + 1}
+                rank={groupRanks[i]}
                 href={`/groups/${g.slug}`}
                 avatarUrl={g.logo_url}
                 name={g.name ?? "Unknown group"}

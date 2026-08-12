@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatPoints } from "@/lib/formatPoints";
+import { computeRanks } from "@/lib/ranking";
 import Avatar from "@/components/ui/Avatar";
+import RankBadge from "@/components/ui/RankBadge";
 import ShareCard from "@/components/groups/ShareCard";
 import MapSnapshotCard from "@/components/groups/MapSnapshotCard";
 import { downloadImage, shareImage } from "@/lib/share";
@@ -638,17 +640,10 @@ async function renderShareCardSnapshot(opts: {
   ctx.clip();
 
   const bgGradient = ctx.createLinearGradient(0, 0, BASE, BASE);
-  bgGradient.addColorStop(0, "#09090b");
-  bgGradient.addColorStop(0.5, "#18181b");
-  bgGradient.addColorStop(1, "#022c22");
+  bgGradient.addColorStop(0, "#065f46");
+  bgGradient.addColorStop(0.5, "#000000");
+  bgGradient.addColorStop(1, "#065f46");
   ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, BASE, BASE);
-
-  const overlayGradient = ctx.createLinearGradient(0, 0, BASE, BASE);
-  overlayGradient.addColorStop(0, "rgba(9,9,11,0.9)");
-  overlayGradient.addColorStop(0.5, "rgba(9,9,11,0.7)");
-  overlayGradient.addColorStop(1, "rgba(2,44,34,0.6)");
-  ctx.fillStyle = overlayGradient;
   ctx.fillRect(0, 0, BASE, BASE);
 
   const pad = 28;
@@ -731,9 +726,23 @@ async function renderShareCardSnapshot(opts: {
       ctx.fill();
 
       ctx.font = "900 20px sans-serif";
-      const valueText = item.icon ? `${item.icon} ${item.value}` : item.value;
       ctx.fillStyle = "#fff";
-      ctx.fillText(valueText, cx, cy - 2);
+      if (item.icon) {
+        // Canvas centers a mixed emoji+digit string using the emoji's metrics, which
+        // don't match its rendered (color-font) width on iOS — the pair visibly drifts
+        // off-center. Measure and place each piece separately instead of trusting
+        // textAlign="center" on the combined string.
+        ctx.textAlign = "left";
+        const iconStr = `${item.icon} `;
+        const iconWidth = ctx.measureText(iconStr).width;
+        const valueWidth = ctx.measureText(item.value).width;
+        const startX = cx - (iconWidth + valueWidth) / 2;
+        ctx.fillText(iconStr, startX, cy - 2);
+        ctx.fillText(item.value, startX + iconWidth, cy - 2);
+        ctx.textAlign = "center";
+      } else {
+        ctx.fillText(item.value, cx, cy - 2);
+      }
 
       ctx.font = "600 9px sans-serif";
       ctx.fillStyle = "#71717a";
@@ -1088,9 +1097,11 @@ export default function GroupStatsView({
               <div className="px-5 py-8 text-center text-zinc-600 text-sm">No member activity in this range.</div>
             ) : (
               <ul className="divide-y divide-zinc-800/50">
-                {camp.members.map((m, i) => (
+                {(() => {
+                  const memberRanks = computeRanks(camp.members, (m) => m.total_value);
+                  return camp.members.map((m, i) => (
                   <li key={m.user_id} className="px-5 py-3 flex items-center gap-3">
-                    <span className="text-zinc-600 text-sm w-6 text-center tabular-nums shrink-0">{i + 1}</span>
+                    <RankBadge rank={memberRanks[i]} />
                     <Avatar
                       avatarUrl={m.avatar_url}
                       name={m.display_name ?? m.username ?? "?"}
@@ -1115,7 +1126,8 @@ export default function GroupStatsView({
                       <div className="text-xs text-zinc-600">pts</div>
                     </div>
                   </li>
-                ))}
+                  ));
+                })()}
               </ul>
             )}
           </div>
