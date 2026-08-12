@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS } from "@/config/campaigns";
+import ShareButton from "@/components/ShareButton";
 import type { Database } from "@/types/database";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -65,12 +66,18 @@ export default function OtherCampaignRow({ campaign }: { campaign: Campaign }) {
               </span>
             )}
           </div>
-          <Link
-            href={`/campaigns/${campaign.slug}`}
-            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150"
-          >
-            View campaign →
-          </Link>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Link
+              href={`/campaigns/${campaign.slug}`}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150"
+            >
+              View campaign →
+            </Link>
+            <ShareButton
+              variant="text"
+              content={{ title: campaign.title, text: campaign.description ?? undefined, url: `/campaigns/${campaign.slug}` }}
+            />
+          </div>
         </div>
       )}
     </div>

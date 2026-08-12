@@ -31,6 +31,25 @@ import ShareButton from "@/components/ShareButton";
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
+const EditGlyph = () => (
+  <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
+    <path
+      d="M11.5 1.5 14.5 4.5 5 14H2v-3L11.5 1.5Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const CancelGlyph = () => (
+  <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
+    <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;
   try {
@@ -337,36 +356,36 @@ export default function CleanupEventDetail({
             </span>
           )}
         </div>
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <h1 className="text-2xl font-black text-zinc-100 leading-tight break-words">{event.title}</h1>
-            <span
-              title="This feature should work but is still being tested."
-              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 shrink-0 cursor-help"
-            >
-              Beta
-            </span>
           </div>
-          <div className="flex items-center gap-3 shrink-0 pt-1">
-            <ShareButton content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
+          <div className="flex items-center gap-2 shrink-0 sm:pt-1">
+            <ShareButton variant="icon" content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
             {event.is_organizer && (
-              <div className="flex items-center gap-2">
+              <>
                 <Link
                   href={`/groups/${event.group_slug}/events/${event.id}/edit`}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
+                  title="Edit"
+                  className="w-11 h-11 flex items-center justify-center rounded-full border border-emerald-800/60 bg-emerald-950/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/50 hover:border-emerald-700 active:text-emerald-300 active:bg-emerald-950/50 active:border-emerald-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation"
                 >
-                  Edit
+                  <EditGlyph />
                 </Link>
                 {!isCancelled && (
                   <button
                     onClick={() => setConfirmingCancel(true)}
                     disabled={cancelLoading}
-                    className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40 disabled:active:text-zinc-500"
+                    title={cancelLoading ? "Cancelling…" : "Cancel event"}
+                    className="w-11 h-11 flex items-center justify-center rounded-full border border-red-800/60 bg-red-950/30 text-red-400 hover:text-red-300 hover:bg-red-950/50 hover:border-red-700 active:text-red-300 active:bg-red-950/50 active:border-red-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation disabled:opacity-40 disabled:active:text-red-400"
                   >
-                    {cancelLoading ? "Cancelling…" : "Cancel event"}
+                    {cancelLoading ? (
+                      <div className="w-4 h-4 border-2 border-red-400/60 border-t-red-200 rounded-full animate-spin" />
+                    ) : (
+                      <CancelGlyph />
+                    )}
                   </button>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>

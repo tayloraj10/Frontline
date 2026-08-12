@@ -6,6 +6,7 @@ import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS, CAMPAIGN_SLUG_ORDER } from "
 import type { Database } from "@/types/database";
 import OnboardingModalClient from "@/components/OnboardingModalClient";
 import OtherCampaignRow from "@/components/OtherCampaignRow";
+import ShareButton from "@/components/ShareButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 
@@ -39,15 +40,21 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
   };
 
   return (
-    <Link
+    <div
       key={campaign.id}
-      href={`/campaigns/${campaign.slug}`}
-      className={`group relative block overflow-hidden rounded-2xl p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] active:duration-100 touch-manipulation ${
+      className={`group relative overflow-hidden rounded-2xl p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] active:duration-100 ${
         featured
           ? "border border-emerald-700/60 bg-gradient-to-br from-emerald-950/50 via-zinc-900 to-zinc-900 shadow-[0_0_0_1px_rgba(16,185,129,0.08),0_20px_50px_-15px_rgba(16,185,129,0.35)] hover:border-emerald-500/80 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.15),0_25px_60px_-15px_rgba(16,185,129,0.5)] active:border-emerald-500/80"
           : "border border-zinc-800/80 bg-zinc-900/80 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40 active:border-zinc-700"
       }`}
     >
+      {/* Full-card click target — sits below the content/share button (z-10) so both stay clickable. */}
+      <Link
+        href={`/campaigns/${campaign.slug}`}
+        className="absolute inset-0 z-0 touch-manipulation"
+        aria-label={campaign.title}
+      />
+
       {featured && (
         <>
           {/* Background photo (or a stand-in texture until a real photo is chosen), heavily scrimmed so text stays legible */}
@@ -82,7 +89,7 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
         }`}
       />
 
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="relative z-10 flex items-start justify-between gap-3 pointer-events-none">
         <div className="min-w-0 flex-1">
           {/* Badges row */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -133,6 +140,12 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
             LIVE
           </span>
+          <ShareButton
+            variant="icon"
+            size="sm"
+            className="pointer-events-auto"
+            content={{ title: campaign.title, text: campaign.description ?? undefined, url: `/campaigns/${campaign.slug}` }}
+          />
           <span
             className={`text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300 ${
               featured ? "text-2xl" : "text-xl"
@@ -142,7 +155,7 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
           </span>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 

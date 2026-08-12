@@ -6,6 +6,7 @@ import Link from "next/link";
 import Lightbox from "@/components/Lightbox";
 import BackButton from "@/components/ui/BackButton";
 import Avatar from "@/components/ui/Avatar";
+import ShareButton from "@/components/ShareButton";
 import type { CleanupRouteDetailData } from "@/lib/cleanupRoutes";
 
 const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap"), {
@@ -24,14 +25,15 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-3">
         <h1 className="text-xl font-bold text-zinc-100">Cleanup route</h1>
-        <span
-          title="This feature should work but is still being tested."
-          className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 font-normal cursor-help"
-        >
-          Beta
-        </span>
+        <ShareButton
+          variant="icon"
+          content={{
+            title: route.group_name ? `${route.group_name} cleanup route` : "Cleanup route",
+            text: `Cleanup route submitted by ${submitterName}`,
+          }}
+        />
       </div>
 
       <RoutePreviewMap

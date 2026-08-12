@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import ShareButton from "@/components/ShareButton";
 import { OfferCard, type BrowseBusiness, type BrowseOffer } from "../PartnersBrowseClient";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), { ssr: false });
@@ -34,15 +35,21 @@ export default function PartnerDetailClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-4">
-        {business.logo_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-xl object-cover shrink-0 shadow-elevation-1" />
-        )}
-        <div className="min-w-0">
-          <h1 className="text-2xl font-black text-zinc-100">{business.name}</h1>
-          {address && <p className="text-sm text-zinc-500 mt-1">{address}</p>}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4 min-w-0">
+          {business.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-xl object-cover shrink-0 shadow-elevation-1" />
+          )}
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black text-zinc-100">{business.name}</h1>
+            {address && <p className="text-sm text-zinc-500 mt-1">{address}</p>}
+          </div>
         </div>
+        <ShareButton
+          variant="icon"
+          content={{ title: business.name, text: business.description ?? undefined }}
+        />
       </div>
 
       {business.description && (
@@ -121,6 +128,7 @@ export default function PartnerDetailClient({
               key={offer.id}
               offer={offer}
               businessName={business.name}
+              businessSlug={business.slug}
               userId={userId}
               userPoints={points}
               onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}

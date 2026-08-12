@@ -5,6 +5,7 @@ import { formatPoints } from "@/lib/formatPoints";
 import type { Database } from "@/types/database";
 import UserActivityList from "@/components/contributions/UserActivityList";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
+import ShareButton from "@/components/ShareButton";
 
 const CAMPAIGN_UNIT: Record<string, string> = {
   territory: "pts",
@@ -184,14 +185,20 @@ export default async function UserProfilePage({ params }: Props) {
             <p className="mt-1 text-xs text-zinc-600">Member since {joinedDate}</p>
           </div>
         </div>
-        {isOwn && (
-          <Link
-            href="/settings/profile"
-            className="shrink-0 px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
-          >
-            Edit profile
-          </Link>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          <ShareButton
+            variant="icon"
+            content={{ title: profile.display_name ?? profile.username, text: profile.bio ?? undefined }}
+          />
+          {isOwn && (
+            <Link
+              href="/settings/profile"
+              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
+            >
+              Edit profile
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Stats */}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BarChart3, CalendarPlus, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
+import ShareButton from "@/components/ShareButton";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
 import BackButton from "@/components/ui/BackButton";
 import type { Database } from "@/types/database";
@@ -138,6 +139,10 @@ export default async function GroupProfilePage({ params }: Props) {
         </div>
 
         <div className="flex items-center gap-x-2 gap-y-3 shrink-0 flex-wrap">
+          <ShareButton
+            variant="icon"
+            content={{ title: group.name, text: group.description ?? undefined }}
+          />
           {isMember && (
             <Link
               href={`/groups/${slug}/stats`}
@@ -188,12 +193,6 @@ export default async function GroupProfilePage({ params }: Props) {
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
             Upcoming Events <span className="text-zinc-500 font-normal">({upcomingEvents.length})</span>
-            <span
-              title="This feature should work but is still being tested."
-              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 cursor-help"
-            >
-              Beta
-            </span>
           </span>
         </div>
         {upcomingEvents.length === 0 ? (
@@ -238,12 +237,6 @@ export default async function GroupProfilePage({ params }: Props) {
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
             Event History <span className="text-zinc-500 font-normal">({pastEvents.length})</span>
-            <span
-              title="This feature should work but is still being tested."
-              className="text-xs text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 cursor-help"
-            >
-              Beta
-            </span>
           </span>
         </div>
         {pastEvents.length === 0 ? (

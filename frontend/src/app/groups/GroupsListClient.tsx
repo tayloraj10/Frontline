@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import ShareButton from "@/components/ShareButton";
 import type { Database } from "@/types/database";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
@@ -74,14 +75,20 @@ export default function GroupsListClient({
             const isMember = memberSet.has(group.id);
 
             return (
-              <Link
+              <div
                 key={group.id}
-                href={`/groups/${group.slug}`}
-                className="group relative block overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-elevation-3 active:scale-[0.98] active:translate-y-0 touch-manipulation"
+                className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/80 p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-elevation-3 active:scale-[0.98] active:translate-y-0"
               >
+                {/* Full-card click target — sits below the content/share button (z-10) so both stay clickable. */}
+                <Link
+                  href={`/groups/${group.slug}`}
+                  className="absolute inset-0 z-0 touch-manipulation"
+                  aria-label={group.name}
+                />
+
                 <div className="absolute inset-y-0 left-0 w-[3px] rounded-l-2xl bg-emerald-500 opacity-40 transition-opacity duration-300 group-hover:opacity-100" />
 
-                <div className="relative flex items-start justify-between gap-3">
+                <div className="relative z-10 flex items-start justify-between gap-3 pointer-events-none">
                   <div className="min-w-0 flex-1">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
@@ -121,11 +128,19 @@ export default function GroupsListClient({
                     )}
                   </div>
 
-                  <span className="mt-0.5 flex-shrink-0 text-xl text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300">
-                    →
-                  </span>
+                  <div className="relative flex flex-shrink-0 flex-col items-end gap-2">
+                    <ShareButton
+                      variant="icon"
+                      size="sm"
+                      className="pointer-events-auto"
+                      content={{ title: group.name, text: group.description ?? undefined, url: `/groups/${group.slug}` }}
+                    />
+                    <span className="mt-0.5 text-xl text-zinc-600 transition-all group-hover:translate-x-0.5 group-hover:text-zinc-300">
+                      →
+                    </span>
+                  </div>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
