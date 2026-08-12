@@ -443,14 +443,58 @@ export default function CleanupEventDetail({
             )}
           </div>
         )}
-        {(event.total_small_bags + event.total_large_bags) > 0 && (
-          <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
-            🗑️ {event.total_small_bags + event.total_large_bags} bags
-            <span className="text-xs font-normal text-emerald-400/70">
-              ({event.total_small_bags} small, {event.total_large_bags} large)
-            </span>
-            {event.total_pounds > 0 && ` · ${event.total_pounds.toLocaleString()} lbs`} logged so far
-          </p>
+        {(event.total_small_bags + event.total_large_bags > 0 || event.total_pounds > 0) && (
+          <div className="mt-3 rounded-xl border border-emerald-800/50 bg-gradient-to-br from-emerald-950/40 to-emerald-950/10 px-4 py-3.5 shadow-elevation-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 mb-3">
+              Logged so far
+            </p>
+            <div className="flex items-center gap-5 flex-wrap">
+              {event.total_small_bags > 0 && (
+                <div className="flex items-center gap-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="flex items-center justify-center w-9 h-9 rounded-full bg-emerald-500/15 text-lg shrink-0"
+                  >
+                    🛍️
+                  </span>
+                  <div>
+                    <p className="text-2xl font-black text-zinc-100 leading-none">{event.total_small_bags}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">small bag{event.total_small_bags === 1 ? "" : "s"}</p>
+                  </div>
+                </div>
+              )}
+              {event.total_large_bags > 0 && (
+                <div className="flex items-center gap-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="flex items-center justify-center w-9 h-9 rounded-full bg-emerald-500/15 text-lg shrink-0"
+                  >
+                    🗑️
+                  </span>
+                  <div>
+                    <p className="text-2xl font-black text-zinc-100 leading-none">{event.total_large_bags}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">large bag{event.total_large_bags === 1 ? "" : "s"}</p>
+                  </div>
+                </div>
+              )}
+              {event.total_pounds > 0 && (
+                <div className="flex items-center gap-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="flex items-center justify-center w-9 h-9 rounded-full bg-emerald-500/15 text-lg shrink-0"
+                  >
+                    ⚖️
+                  </span>
+                  <div>
+                    <p className="text-2xl font-black text-zinc-100 leading-none">
+                      {event.total_pounds.toLocaleString()}
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-500">lbs</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
         {event.description && <p className="mt-3 text-sm text-zinc-300 leading-relaxed">{event.description}</p>}
         {event.external_link && (
