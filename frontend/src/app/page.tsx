@@ -18,14 +18,16 @@ export default async function HomePage() {
     redirect(profile?.is_business_only ? "/partners/dashboard" : "/campaigns");
   }
 
-  const [{ count: campaignCount }, { count: contribCount }] = await Promise.all([
+  const [{ count: campaignCount }, { count: contribCount }, { count: userCount }] = await Promise.all([
     supabase.schema("public").from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active"),
     supabase.from("contributions").select("*", { count: "exact", head: true }),
+    supabase.schema("public").from("profiles").select("*", { count: "exact", head: true }),
   ]);
 
   const stats = [
     { value: campaignCount ?? 0, label: "active campaigns" },
     { value: (contribCount ?? 0).toLocaleString(), label: "contributions logged" },
+    { value: (userCount ?? 0).toLocaleString(), label: "users on the frontline" },
   ];
 
   return (
@@ -45,6 +47,9 @@ export default async function HomePage() {
           <span className="text-zinc-200">
             Join campaigns, take action, change the world.
           </span>
+        </p>
+        <p className="text-emerald-400/80 text-sm font-semibold tracking-wide">
+          Join us on the frontline.
         </p>
       </div>
 
