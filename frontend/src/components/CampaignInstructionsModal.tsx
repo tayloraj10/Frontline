@@ -52,13 +52,11 @@ const INSTRUCTIONS: Record<string, CampaignInstructions> = {
         icon: "👥",
         title: "Group Events",
         body: "RSVP to a scheduled group cleanup and track bags, pounds, and photos with everyone else who showed up.",
-        beta: true,
       },
       {
         icon: "🛣️",
         title: "Cleanup Routes",
         body: "Draw a route through multiple blocks and log one cleanup for the whole stretch.",
-        beta: true,
       },
       {
         icon: "🏆",
