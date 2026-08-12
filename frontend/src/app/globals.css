@@ -68,6 +68,9 @@ html, body {
 @utility shadow-glow-rose {
   box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.15), 0 8px 24px -4px rgba(244, 63, 94, 0.35);
 }
+@utility shadow-glow-orange {
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.15), 0 8px 24px -4px rgba(249, 115, 22, 0.35);
+}
 
 /* One-shot entrance for mounted content (auth cards, popovers) — anything
    interaction-driven (press/hover) is a Tailwind active:/hover: utility

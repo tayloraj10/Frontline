@@ -23,6 +23,7 @@ import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import Lightbox from "@/components/Lightbox";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import Avatar from "@/components/ui/Avatar";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
@@ -111,6 +112,7 @@ export default function CleanupEventDetail({
     typeof navigator !== "undefined" && !navigator.geolocation ? "unavailable" : "checking"
   );
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [checkInPointsAwarded, setCheckInPointsAwarded] = useState<number | null>(null);
   const [recentCheckinPoints, setRecentCheckinPoints] = useState<Record<string, number>>({});
@@ -210,7 +212,7 @@ export default function CleanupEventDetail({
 
   const handleCancelEvent = async () => {
     if (!userId) return;
-    if (!confirm(`Cancel "${event.title}"? Attendees will see this event as cancelled.`)) return;
+    setConfirmingCancel(false);
     setCancelLoading(true);
     setError(null);
     try {
@@ -357,7 +359,7 @@ export default function CleanupEventDetail({
                 </Link>
                 {!isCancelled && (
                   <button
-                    onClick={handleCancelEvent}
+                    onClick={() => setConfirmingCancel(true)}
                     disabled={cancelLoading}
                     className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40 disabled:active:text-zinc-500"
                   >
@@ -765,6 +767,15 @@ export default function CleanupEventDetail({
           }}
         />
       )}
+      <ConfirmModal
+        open={confirmingCancel}
+        title="Cancel event?"
+        message={`Cancel "${event.title}"? Attendees will see this event as cancelled.`}
+        confirmLabel="Cancel event"
+        cancelLabel="Keep event"
+        onConfirm={handleCancelEvent}
+        onCancel={() => setConfirmingCancel(false)}
+      />
     </div>
   );
 }

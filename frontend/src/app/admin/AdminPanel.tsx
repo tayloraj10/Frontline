@@ -15,6 +15,7 @@ import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from
 import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { updateEvent } from "@/lib/events";
 import { deleteGroup } from "@/lib/groups";
 import type { Json, Database } from "@/types/database";
@@ -1591,16 +1592,12 @@ function CleanupEventWipeTool() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingWipe, setConfirmingWipe] = useState(false);
 
   const handleWipe = async () => {
     const id = cleanupId.trim();
     if (!id) return;
-    if (!confirm(
-      "This deletes every contribution logged for this cleanup event (individual and group-total), " +
-      "removes/recomputes the zip claim, deletes its group-log audit history, and " +
-      "resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone. Continue?"
-    )) return;
-
+    setConfirmingWipe(false);
     setLoading(true);
     setError(null);
     setResult(null);
@@ -1639,7 +1636,7 @@ function CleanupEventWipeTool() {
           placeholder="Cleanup event ID (UUID)"
         />
         <button
-          onClick={handleWipe}
+          onClick={() => setConfirmingWipe(true)}
           disabled={loading || !cleanupId.trim()}
           className="px-4 py-2 min-h-11 text-sm bg-red-900/60 hover:bg-red-900 active:bg-red-950 border border-red-800 disabled:opacity-40 disabled:active:scale-100 text-red-300 rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shrink-0"
         >
@@ -1648,6 +1645,14 @@ function CleanupEventWipeTool() {
       </div>
       {result && <p className="text-xs text-emerald-400">{result}</p>}
       {error && <p className="text-xs text-red-400">✗ {error}</p>}
+      <ConfirmModal
+        open={confirmingWipe}
+        title="Wipe event data?"
+        message="This deletes every contribution logged for this cleanup event (individual and group-total), removes/recomputes the zip claim, deletes its group-log audit history, and resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone."
+        confirmLabel="Wipe data"
+        onConfirm={handleWipe}
+        onCancel={() => setConfirmingWipe(false)}
+      />
     </div>
   );
 }
@@ -1670,6 +1675,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [showRedemptions, setShowRedemptions] = useState(false);
   const [redemptions, setRedemptions] = useState<RedemptionDetail[] | null>(null);
   const [loadingRedemptions, setLoadingRedemptions] = useState(false);
@@ -1711,7 +1717,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
   };
 
   const handleCancelOffer = async () => {
-    if (!confirm(`Cancel "${offer.title}"? It will stop showing to users.`)) return;
+    setConfirmingCancel(false);
     setCancelling(true);
     const supabase = createClient();
     const { error: updateErr } = await supabase
@@ -1807,7 +1813,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
               Edit
             </button>
             <button
-              onClick={handleCancelOffer}
+              onClick={() => setConfirmingCancel(true)}
               disabled={cancelling}
               className="px-2.5 py-1 min-h-9 text-xs border border-red-900/60 text-red-500 hover:text-red-400 hover:border-red-800 active:scale-95 disabled:active:scale-100 rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation disabled:opacity-40"
             >
@@ -1816,6 +1822,15 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
           </div>
         )}
       </div>
+      <ConfirmModal
+        open={confirmingCancel}
+        title="Cancel offer?"
+        message={`Cancel "${offer.title}"? It will stop showing to users.`}
+        confirmLabel="Cancel offer"
+        cancelLabel="Keep offer"
+        onConfirm={handleCancelOffer}
+        onCancel={() => setConfirmingCancel(false)}
+      />
     </div>
   );
 }
@@ -1833,6 +1848,7 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [removingAdmin, setRemovingAdmin] = useState<BusinessAdmin | null>(null);
   const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
 
   const loadAdmins = async () => {
@@ -1904,7 +1920,7 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
   };
 
   const handleRemove = async (adminId: string) => {
-    if (!confirm("Remove this person's access to manage this business?")) return;
+    setRemovingAdmin(null);
     const res = await fetch(`${fastApiUrl}/api/partners/businesses/${businessId}/admins/${adminId}`, {
       method: "DELETE",
     });
@@ -1938,7 +1954,7 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
                   />
                   Business-only
                 </label>
-                <button onClick={() => handleRemove(a.id)} className="text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150">
+                <button onClick={() => setRemovingAdmin(a)} className="text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150">
                   Remove
                 </button>
               </div>
@@ -1977,6 +1993,14 @@ function BusinessAdminsManager({ businessId }: { businessId: string }) {
         )}
       </div>
       {error && <p className="text-red-400 text-xs">{error}</p>}
+      <ConfirmModal
+        open={removingAdmin !== null}
+        title="Remove business admin?"
+        message={`Remove ${removingAdmin?.username ?? removingAdmin?.email ?? "this person"}'s access to manage this business?`}
+        confirmLabel="Remove"
+        onConfirm={() => removingAdmin && handleRemove(removingAdmin.id)}
+        onCancel={() => setRemovingAdmin(null)}
+      />
     </div>
   );
 }
@@ -2008,6 +2032,7 @@ function BusinessCard({
   const [editing, setEditing] = useState(false);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [confirmingReject, setConfirmingReject] = useState(false);
 
   const businessOffers = offers.filter(o => o.business_id === business.id);
 
@@ -2078,7 +2103,7 @@ function BusinessCard({
   };
 
   const handleReject = async () => {
-    if (!confirm(`Reject "${business.name}"?`)) return;
+    setConfirmingReject(false);
     setRejecting(true);
     const supabase = createClient();
     const { data, error: updateErr } = await supabase
@@ -2124,7 +2149,7 @@ function BusinessCard({
             <span
               role="button"
               tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); handleReject(); }}
+              onClick={(e) => { e.stopPropagation(); setConfirmingReject(true); }}
               className="text-xs text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150 px-2 py-1"
             >
               {rejecting ? "Rejecting…" : "Reject"}
@@ -2185,6 +2210,14 @@ function BusinessCard({
           {!isPending && <BusinessAdminsManager businessId={business.id} />}
         </div>
       )}
+      <ConfirmModal
+        open={confirmingReject}
+        title="Reject business?"
+        message={`Reject "${business.name}"?`}
+        confirmLabel="Reject"
+        onConfirm={handleReject}
+        onCancel={() => setConfirmingReject(false)}
+      />
     </div>
   );
 }
@@ -2383,6 +2416,8 @@ function GroupCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [typedName, setTypedName] = useState("");
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [confirmingReject, setConfirmingReject] = useState(false);
+  const [confirmingQuickDelete, setConfirmingQuickDelete] = useState(false);
 
   const handleApprove = async () => {
     setWorking(true);
@@ -2415,7 +2450,7 @@ function GroupCard({
   };
 
   const handleReject = async () => {
-    if (!confirm(`Reject "${group.name}"?`)) return;
+    setConfirmingReject(false);
     setWorking(true);
     setError(null);
     const supabase = createClient();
@@ -2434,7 +2469,7 @@ function GroupCard({
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Permanently delete "${group.name}"? This can't be undone.`)) return;
+    setConfirmingQuickDelete(false);
     setWorking(true);
     setError(null);
     try {
@@ -2499,7 +2534,7 @@ function GroupCard({
               <span
                 role="button"
                 tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); handleReject(); }}
+                onClick={(e) => { e.stopPropagation(); setConfirmingReject(true); }}
                 className="text-xs text-red-500 hover:text-red-400 active:text-red-300 transition-colors duration-150 px-2 py-1"
               >
                 Reject
@@ -2510,7 +2545,7 @@ function GroupCard({
             <span
               role="button"
               tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+              onClick={(e) => { e.stopPropagation(); setConfirmingQuickDelete(true); }}
               className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors duration-150 px-2 py-1"
             >
               Delete
@@ -2750,7 +2785,7 @@ function GroupCard({
               <span
                 role="button"
                 tabIndex={0}
-                onClick={() => { setShowDetailModal(false); handleReject(); }}
+                onClick={() => { setShowDetailModal(false); setConfirmingReject(true); }}
                 className="text-xs px-3 py-1.5 min-h-9 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 active:bg-red-900/30 active:scale-95 transition-[background-color,transform] duration-150 touch-manipulation cursor-pointer"
               >
                 Reject
@@ -2759,6 +2794,23 @@ function GroupCard({
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmingReject}
+        title="Reject group?"
+        message={`Reject "${group.name}"?`}
+        confirmLabel="Reject"
+        onConfirm={handleReject}
+        onCancel={() => setConfirmingReject(false)}
+      />
+      <ConfirmModal
+        open={confirmingQuickDelete}
+        title="Delete group?"
+        message={`Permanently delete "${group.name}"? This can't be undone.`}
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingQuickDelete(false)}
+      />
     </div>
   );
 }

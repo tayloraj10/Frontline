@@ -137,7 +137,7 @@ export default async function GroupProfilePage({ params }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        <div className="flex items-center gap-x-2 gap-y-3 shrink-0 flex-wrap">
           {isMember && (
             <Link
               href={`/groups/${slug}/stats`}

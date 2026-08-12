@@ -24,13 +24,13 @@ function iconFor(href: string): LucideIcon {
   return ICONS_BY_HREF[href] ?? Flag;
 }
 
-type TabColor = "emerald" | "amber" | "sky" | "violet" | "rose";
+type TabColor = "emerald" | "amber" | "sky" | "violet" | "rose" | "orange";
 
 const COLOR_BY_HREF: Record<string, TabColor> = {
   "/campaigns": "emerald",
   "/leaderboard": "amber",
   "/partners": "sky",
-  "/partners/dashboard": "sky",
+  "/partners/dashboard": "orange",
   "/groups": "violet",
   "/admin": "rose",
 };
@@ -41,6 +41,7 @@ const ACTIVE_PILL_CLASSES: Record<TabColor, string> = {
   sky: "bg-sky-500/15 border-sky-500/30 shadow-glow-sky",
   violet: "bg-violet-500/15 border-violet-500/30 shadow-glow-violet",
   rose: "bg-rose-500/15 border-rose-500/30 shadow-glow-rose",
+  orange: "bg-orange-500/15 border-orange-500/30 shadow-glow-orange",
 };
 
 const ACTIVE_TEXT_CLASSES: Record<TabColor, string> = {
@@ -49,6 +50,7 @@ const ACTIVE_TEXT_CLASSES: Record<TabColor, string> = {
   sky: "text-sky-400",
   violet: "text-violet-400",
   rose: "text-rose-400",
+  orange: "text-orange-400",
 };
 
 function colorFor(href: string): TabColor {
@@ -74,8 +76,22 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   // AdminPanel renders its own mobile tab bar in the same fixed-bottom position.
   const isAdminRoute = pathname?.startsWith("/admin");
 
+  // A route can be prefix-matched by more than one link (e.g. "/partners" and
+  // "/partners/dashboard" both prefix-match "/partners/dashboard") — only the
+  // most specific (longest) match should light up, not every prefix that matches.
+  function matchesHref(href: string) {
+    if (href === "/") return pathname === "/";
+    if (!pathname?.startsWith(href)) return false;
+    return pathname.length === href.length || pathname[href.length] === "/";
+  }
+
   function isActive(href: string) {
-    return href === "/" ? pathname === "/" : pathname?.startsWith(href);
+    if (!matchesHref(href)) return false;
+    const longestMatch = links.reduce(
+      (best, l) => (matchesHref(l.href) && l.href.length > best.length ? l.href : best),
+      ""
+    );
+    return href === longestMatch;
   }
 
   if (isAdminRoute) return null;

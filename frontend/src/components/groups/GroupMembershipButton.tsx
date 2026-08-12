@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 interface Props {
   groupId: string;
@@ -16,6 +17,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   const handleJoin = async () => {
     setLoading(true);
@@ -29,13 +31,8 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
     setLoading(false);
   };
 
-  const handleLeave = async () => {
-    if (isOnlyAdmin) {
-      const confirmed = window.confirm(
-        "You're the only admin of this group. Leaving will leave it without an admin until a site admin assigns a new one. Continue?"
-      );
-      if (!confirmed) return;
-    }
+  const confirmLeave = async () => {
+    setConfirmingLeave(false);
     setLoading(true);
     setError(null);
     const supabase = createClient();
@@ -53,7 +50,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
     <div className="flex flex-col gap-1">
       {isMember ? (
         <button
-          onClick={handleLeave}
+          onClick={() => setConfirmingLeave(true)}
           disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-zinc-700 bg-zinc-900/40 hover:bg-red-950/30 hover:border-red-700 active:border-red-700 active:scale-[0.96] disabled:active:scale-100 text-zinc-400 hover:text-red-400 active:text-red-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,color,transform] duration-150 disabled:opacity-40 touch-manipulation"
         >
@@ -71,6 +68,18 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
         </button>
       )}
       {error && <p className="text-red-400 text-xs">{error}</p>}
+      <ConfirmModal
+        open={confirmingLeave}
+        title="Leave group?"
+        message={
+          isOnlyAdmin
+            ? "You're the only admin of this group. Leaving will leave it without an admin until a site admin assigns a new one. Continue?"
+            : "You'll need to be re-added or rejoin to see member-only stats and events again."
+        }
+        confirmLabel="Leave Group"
+        onConfirm={confirmLeave}
+        onCancel={() => setConfirmingLeave(false)}
+      />
     </div>
   );
 }
