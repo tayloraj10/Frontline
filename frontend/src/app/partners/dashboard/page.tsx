@@ -1,9 +1,12 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import PartnerDashboardClient, { type DashboardBusiness, type DashboardOffer } from "./PartnerDashboardClient";
 
 export default async function PartnerDashboardPage() {
   const supabase = await createClient();
+  const userAgent = (await headers()).get("user-agent") ?? "";
+  const isNativeApp = userAgent.includes("FrontlineNativeApp");
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -73,7 +76,7 @@ export default async function PartnerDashboardPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-6 py-10 w-full">
+    <main className={`max-w-4xl mx-auto px-6 py-10 w-full ${isNativeApp ? "min-h-[100.5dvh]" : ""}`}>
       <div className="mb-6">
         <h1 className="text-2xl font-black text-zinc-100">Partner Dashboard</h1>
         <p className="text-sm text-zinc-500 mt-1">
