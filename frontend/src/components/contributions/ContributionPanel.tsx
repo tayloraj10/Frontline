@@ -2594,7 +2594,7 @@ function HostEventModal({
 }: {
   campaignId: string;
   userId: string;
-  adminGroups: { id: string; name: string }[];
+  adminGroups: { id: string; name: string; image_url?: string | null }[];
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: (coords: Coords) => void;
@@ -2732,7 +2732,7 @@ function HostEventModal({
   return (
     <ModalShell title="Host Cleanup Event" onClose={onClose}>
       <div className="flex flex-col gap-4">
-        {adminGroups.length > 1 && (
+        {adminGroups.length > 1 ? (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Hosting group</label>
             <select
@@ -2748,6 +2748,23 @@ function HostEventModal({
               ))}
             </select>
           </div>
+        ) : (
+          adminGroups[0] && (
+            <div className="flex items-center gap-2.5 px-1">
+              <div className="w-8 h-8 shrink-0 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden flex items-center justify-center">
+                {adminGroups[0].image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={adminGroups[0].image_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xs font-bold text-zinc-400">{(adminGroups[0].name || "?")[0].toUpperCase()}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-zinc-500 leading-tight">Hosting as</p>
+                <p className="text-sm text-zinc-200 font-medium truncate leading-tight">{adminGroups[0].name}</p>
+              </div>
+            </div>
+          )
         )}
 
         {groupId && (

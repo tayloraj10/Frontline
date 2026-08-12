@@ -35,8 +35,8 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 export default function CreateCleanupEventForm({
   groupId,
   groupSlug,
+  campaignId,
   organizerUserId,
-  campaigns,
   mode = "create",
   cleanupId,
   initialValues,
@@ -44,8 +44,8 @@ export default function CreateCleanupEventForm({
 }: {
   groupId: string;
   groupSlug: string;
+  campaignId?: string;
   organizerUserId: string;
-  campaigns: { id: string; title: string }[];
   mode?: "create" | "edit";
   cleanupId?: string;
   initialValues?: {
@@ -69,7 +69,6 @@ export default function CreateCleanupEventForm({
   initialCohostGroupIds?: string[];
 }) {
   const router = useRouter();
-  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [scheduledStart, setScheduledStart] = useState(toDatetimeLocal(initialValues?.scheduledStart ?? null));
@@ -103,9 +102,7 @@ export default function CreateCleanupEventForm({
 
   const endBeforeStart = !!scheduledEnd && !!scheduledStart && new Date(scheduledEnd) <= new Date(scheduledStart);
 
-  const canSubmit = mode === "edit"
-    ? !!title.trim() && !!scheduledStart && lat !== null && lng !== null && !endBeforeStart
-    : !!campaignId && !!title.trim() && !!scheduledStart && lat !== null && lng !== null && !endBeforeStart;
+  const canSubmit = !!title.trim() && !!scheduledStart && lat !== null && lng !== null && !endBeforeStart;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,6 +139,11 @@ export default function CreateCleanupEventForm({
         });
         router.push(`/cleanup-events/${cleanupId}`);
       } else {
+        if (!campaignId) {
+          setError("The Trash War campaign isn't available right now. Please try again later.");
+          setLoading(false);
+          return;
+        }
         await createCleanupEvent({
           campaignId,
           groupId,
@@ -175,24 +177,23 @@ export default function CreateCleanupEventForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <CohostGroupPicker
+        primaryGroupId={groupId}
+        value={cohostGroupIds}
+        onChange={setCohostGroupIds}
+      />
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-500">Title</label>
+        <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Riverside Park Cleanup" />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-500">Description</label>
+        <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
-        {mode !== "edit" && (
-          <div className="col-span-2 space-y-1">
-            <label className="text-xs text-zinc-500">Campaign</label>
-            <select className={inputCls} value={campaignId} onChange={e => setCampaignId(e.target.value)} required>
-              {campaigns.length === 0 && <option value="">No active campaigns</option>}
-              {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
-          </div>
-        )}
-        <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Title</label>
-          <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Riverside Park Cleanup" />
-        </div>
-        <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Description</label>
-          <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
-        </div>
         <div className="space-y-1">
           <label className="text-xs text-zinc-500">Starts</label>
           <input type="datetime-local" className={inputCls} value={scheduledStart} onChange={e => setScheduledStart(e.target.value)} required />
@@ -217,148 +218,154 @@ export default function CreateCleanupEventForm({
             </p>
           )}
         </div>
-        <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Street address</label>
-          <AddressAutocomplete
-            value={addressLine1}
-            onChange={setAddressLine1}
-            onSelect={(s) => {
-              setAddressLine1(s.addressLine1);
-              setCity(s.city);
-              setState(s.state);
-              setPostalCode(s.postalCode);
-              setCountry(s.country);
-              setLat(s.lat);
-              setLng(s.lng);
-            }}
-            placeholder="Search for an address..."
-          />
-          <BusinessLocationMapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} locationNoun="event" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-zinc-500">City</label>
-          <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-zinc-500">State</label>
-          <input className={inputCls} value={state} onChange={e => setState(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-zinc-500">Postal code</label>
-          <input className={inputCls} value={postalCode} onChange={e => setPostalCode(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-zinc-500">Country</label>
-          <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} />
-        </div>
-        <div className="col-span-2 space-y-2">
-          <label className="flex items-center gap-2 text-xs text-zinc-500">
-            <input
-              type="checkbox"
-              checked={showRoutePicker}
-              onChange={(e) => {
-                setShowRoutePicker(e.target.checked);
-                if (!e.target.checked) setRoute(null);
-              }}
-            />
-            Add a cleanup route (optional)
-          </label>
-          {showRoutePicker && lat !== null && lng !== null && (
-            <RoutePicker
-              centerLat={lat}
-              centerLng={lng}
-              initialCoordinates={route?.coordinates ?? null}
-              onChange={(coords) => setRoute(coords ? { type: "LineString", coordinates: coords } : null)}
-            />
-          )}
-          {showRoutePicker && (lat === null || lng === null) && (
-            <p className="text-[11px] text-zinc-600">Set the event location above first, then draw the route.</p>
-          )}
-        </div>
-        <div className="col-span-2">
-          <CohostGroupPicker
-            primaryGroupId={groupId}
-            value={cohostGroupIds}
-            onChange={setCohostGroupIds}
-          />
-        </div>
-        <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">How should cleanups get logged?</label>
-          <select
-            className={inputCls}
-            value={loggingMode}
-            onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
-          >
-            <option value="organizer_total">Organizer logs team total (recommended)</option>
-            <option value="individual">Attendees self-log individually</option>
-          </select>
-          <p className="text-xs text-zinc-400">
-            {loggingMode === "organizer_total"
-              ? "You enter the combined haul once everyone's done; points get split across attendees."
-              : "Attendees self-log from the map near the event; no team total needed."}
-          </p>
-        </div>
-        <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">RSVP limit (optional)</label>
-          <input
-            type="number"
-            min={1}
-            className={inputCls}
-            value={maxAttendees}
-            onChange={(e) => setMaxAttendees(e.target.value.replace(/^0+(?=\d)/, ""))}
-            placeholder="No limit"
-          />
-        </div>
-        <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Event link (optional)</label>
-          <input
-            type="url"
-            className={inputCls}
-            value={externalLink}
-            onChange={(e) => setExternalLink(e.target.value)}
-            placeholder="https://... (site, waiver form, sign-up sheet)"
-          />
-        </div>
-        <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Event image</label>
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.96] transition-[border-color,transform] duration-150 group shrink-0 touch-manipulation"
-            >
-              {imagePreview ? (
-                <img src={imagePreview} alt="Event" className="w-full h-full object-cover" />
-              ) : (
-                <span className="flex items-center justify-center w-full h-full text-2xl">🧹</span>
-              )}
-              <div className="absolute inset-0 bg-black/50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-            </button>
-            <div className="text-xs text-zinc-500 space-y-0.5">
-              <p>JPG, PNG or WebP</p>
-              <p>Max 5 MB</p>
-            </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-500">How should cleanups get logged?</label>
+        <select
+          className={inputCls}
+          value={loggingMode}
+          onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
+        >
+          <option value="organizer_total">Organizer logs team total (recommended)</option>
+          <option value="individual">Attendees self-log individually</option>
+        </select>
+        <p className="text-xs text-zinc-400">
+          {loggingMode === "organizer_total"
+            ? "You enter the combined haul once everyone's done; points get split across attendees."
+            : "Attendees self-log from the map near the event; no team total needed."}
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-500">RSVP limit (optional)</label>
+        <input
+          type="number"
+          min={1}
+          className={inputCls}
+          value={maxAttendees}
+          onChange={(e) => setMaxAttendees(e.target.value.replace(/^0+(?=\d)/, ""))}
+          placeholder="No limit"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-500">Event link (optional)</label>
+        <input
+          type="url"
+          className={inputCls}
+          value={externalLink}
+          onChange={(e) => setExternalLink(e.target.value)}
+          placeholder="https://... (site, waiver form, sign-up sheet)"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-500">Street address</label>
+        <AddressAutocomplete
+          value={addressLine1}
+          onChange={setAddressLine1}
+          onSelect={(s) => {
+            setAddressLine1(s.addressLine1);
+            setCity(s.city);
+            setState(s.state);
+            setPostalCode(s.postalCode);
+            setCountry(s.country);
+            setLat(s.lat);
+            setLng(s.lng);
+          }}
+          placeholder="Search for an address..."
+        />
+        <BusinessLocationMapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} locationNoun="event" />
+        <div className="grid grid-cols-2 gap-4 pt-1">
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-500">City</label>
+            <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} />
           </div>
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={handleImageChange}
-          />
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-500">State</label>
+            <input className={inputCls} value={state} onChange={e => setState(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-500">Postal code</label>
+            <input className={inputCls} value={postalCode} onChange={e => setPostalCode(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-500">Country</label>
+            <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} />
+          </div>
         </div>
       </div>
+
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-xs text-zinc-500">
+          <input
+            type="checkbox"
+            checked={showRoutePicker}
+            onChange={(e) => {
+              setShowRoutePicker(e.target.checked);
+              if (!e.target.checked) setRoute(null);
+            }}
+          />
+          Add a cleanup route (optional)
+        </label>
+        {showRoutePicker && lat !== null && lng !== null && (
+          <RoutePicker
+            centerLat={lat}
+            centerLng={lng}
+            initialCoordinates={route?.coordinates ?? null}
+            onChange={(coords) => setRoute(coords ? { type: "LineString", coordinates: coords } : null)}
+          />
+        )}
+        {showRoutePicker && (lat === null || lng === null) && (
+          <p className="text-[11px] text-zinc-600">Set the event location above first, then draw the route.</p>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-500">Photo (optional)</label>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={handleImageChange}
+          className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600 active:file:bg-zinc-600 transition-colors duration-150"
+        />
+        {imagePreview && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imagePreview} alt="" className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => {
+                  setImageFile(null);
+                  setImagePreview(null);
+                  if (imageInputRef.current) imageInputRef.current.value = "";
+                }}
+                className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded bg-black/70 text-white text-xs leading-none"
+                aria-label="Remove photo"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {error && <p className="text-red-400 text-xs">{error}</p>}
-      <div className="flex items-center gap-2">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => router.push(mode === "edit" && cleanupId ? `/cleanup-events/${cleanupId}` : `/groups/${groupSlug}`)}
+          className="flex-1 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={loading || !canSubmit}
-          className="px-4 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
+          className="flex-1 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
         >
           {mode === "edit" ? (loading ? "Saving…" : "Save Changes") : (loading ? "Creating…" : "Create Event")}
         </button>
