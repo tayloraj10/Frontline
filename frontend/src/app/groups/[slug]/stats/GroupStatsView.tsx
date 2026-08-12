@@ -109,6 +109,25 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = src;
+  });
+}
+
+/** Canvas has no CSS `truncate` — clip manually so long names don't overflow their box. */
+function fillTruncatedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number) {
+  let t = text;
+  if (ctx.measureText(t).width > maxWidth) {
+    while (t.length > 1 && ctx.measureText(`${t}…`).width > maxWidth) t = t.slice(0, -1);
+    t = `${t}…`;
+  }
+  ctx.fillText(t, x, y);
+}
+
 const ACTIVITY_LEGEND_ITEMS: { color: string; label: string }[] = [
   { color: "#22c55e", label: "Contribution" },
   { color: "#3b82f6", label: "Upcoming event" },
@@ -116,14 +135,22 @@ const ACTIVITY_LEGEND_ITEMS: { color: string; label: string }[] = [
   { color: "#71717a", label: "Past event" },
 ];
 
-/** Draws a bottom gradient bar + caption text onto the exported map PNG (2D canvas compositing, since the source is a WebGL canvas). */
-async function captionSnapshot(dataUrl: string, caption: string, subcaption: string, legend?: boolean): Promise<string> {
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("image load failed"));
-    img.src = dataUrl;
-  });
+/**
+ * Draws a bottom gradient bar + caption text (and, optionally, a top header bar with the
+ * group's logo + name) onto the exported map PNG via 2D canvas compositing, since the source
+ * is a WebGL canvas. Baking the header in here — rather than layering it on top with a DOM
+ * overlay — means the final data URL is a single, fully self-contained image: nothing needs
+ * to fall back to html-to-image's DOM/SVG capture (which silently blanks out on iOS Safari)
+ * just to add a logo and title on top of the map.
+ */
+async function captionSnapshot(
+  dataUrl: string,
+  caption: string,
+  subcaption: string,
+  legend?: boolean,
+  header?: { groupName: string; groupLogoUrl: string | null }
+): Promise<string> {
+  const img = await loadImage(dataUrl);
 
   const canvas = document.createElement("canvas");
   canvas.width = img.width;
@@ -132,6 +159,52 @@ async function captionSnapshot(dataUrl: string, caption: string, subcaption: str
   if (!ctx) return dataUrl;
 
   ctx.drawImage(img, 0, 0);
+
+  if (header) {
+    // Fractions mirror MapSnapshotCard's old DOM header (p-4, h-8 logo, gap-2.5, text-sm)
+    // scaled off a 360px-wide card, so the baked-in header looks the same as before.
+    const hPad = img.width * 0.044;
+    const logoSize = img.width * 0.089;
+    const gap = img.width * 0.028;
+    const headerBarHeight = img.width * 0.16;
+
+    const topGradient = ctx.createLinearGradient(0, 0, 0, headerBarHeight);
+    topGradient.addColorStop(0, "rgba(9,9,11,0.9)");
+    topGradient.addColorStop(0.5, "rgba(9,9,11,0.4)");
+    topGradient.addColorStop(1, "rgba(9,9,11,0)");
+    ctx.fillStyle = topGradient;
+    ctx.fillRect(0, 0, img.width, headerBarHeight);
+
+    let textX = hPad;
+    if (header.groupLogoUrl) {
+      try {
+        const logoImg = await loadImage(header.groupLogoUrl);
+        const cx = hPad + logoSize / 2;
+        const cy = hPad + logoSize / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, logoSize / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(logoImg, hPad, hPad, logoSize, logoSize);
+        ctx.restore();
+        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+        ctx.lineWidth = Math.max(1, img.width * 0.0014);
+        ctx.beginPath();
+        ctx.arc(cx, cy, logoSize / 2, 0, Math.PI * 2);
+        ctx.stroke();
+        textX = hPad + logoSize + gap;
+      } catch {
+        // Logo failed to load (proxy timeout, deleted image, etc) — skip it rather
+        // than let one bad image blank the whole snapshot.
+      }
+    }
+
+    ctx.fillStyle = "#f4f4f5";
+    ctx.font = `900 ${Math.round(img.width * 0.039)}px sans-serif`;
+    ctx.textBaseline = "middle";
+    fillTruncatedText(ctx, header.groupName, textX, hPad + logoSize / 2, img.width - textX - hPad);
+    ctx.textBaseline = "alphabetic";
+  }
 
   const legendRowFrac = legend ? 0.038 : 0;
   const barHeight = img.height * (SNAPSHOT_BOTTOM_RESERVED_FRAC + legendRowFrac);
@@ -193,9 +266,7 @@ async function captionSnapshot(dataUrl: string, caption: string, subcaption: str
   }
 
   // JPEG instead of PNG: this map has no transparency, and a photographic basemap
-  // PNG can run 1MB+ as base64. iOS Safari's html-to-image capture (which re-embeds
-  // this <img> into an SVG foreignObject to rasterize the whole share card) renders
-  // blank once the embedded payload gets that large — JPEG cuts it down drastically.
+  // PNG can run 1MB+ as base64 — JPEG keeps the share-sheet/download payload small.
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
@@ -208,8 +279,9 @@ async function renderMapSnapshot(opts: {
   children: GeoChild[];
   events: EventSummaryRow[];
   bbox: [number, number, number, number] | null;
+  header?: { groupName: string; groupLogoUrl: string | null };
 }): Promise<string | null> {
-  const { mapType, campaignId, fastapiUrl, timeframeLabel, points, children, events, bbox } = opts;
+  const { mapType, campaignId, fastapiUrl, timeframeLabel, points, children, events, bbox, header } = opts;
   if (!MAPTILER_KEY) return null;
 
   const isChoropleth = (CHOROPLETH_TYPES as MapSnapshotType[]).includes(mapType);
@@ -533,7 +605,148 @@ async function renderMapSnapshot(opts: {
           .size;
         return `${uniqueLocations} location${uniqueLocations === 1 ? "" : "s"} active`;
       })();
-  return captionSnapshot(rawResult, timeframeLabel, subcaption, mapType === "activity");
+  return captionSnapshot(rawResult, timeframeLabel, subcaption, mapType === "activity", header);
+}
+
+/**
+ * Canvas-drawn mirror of ShareCard.tsx's layout. Produced directly instead of via
+ * html-to-image's DOM/SVG capture — that capture path is what silently blanks out the
+ * logo on iOS Safari, so the fix is to never route the shareable image through it at all.
+ */
+async function renderShareCardSnapshot(opts: {
+  groupName: string;
+  groupLogoUrl: string | null;
+  campaignName: string;
+  intervalLabel: string;
+  totalValue: number;
+  contributionCount: number;
+  uniqueContributors: number;
+  smallBags: number;
+  largeBags: number;
+  pounds: number;
+}): Promise<string> {
+  const BASE = 360;
+  const SCALE = 3;
+  const canvas = document.createElement("canvas");
+  canvas.width = BASE * SCALE;
+  canvas.height = BASE * SCALE;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2d context unavailable");
+  ctx.scale(SCALE, SCALE);
+
+  roundRect(ctx, 0, 0, BASE, BASE, 16);
+  ctx.clip();
+
+  const bgGradient = ctx.createLinearGradient(0, 0, BASE, BASE);
+  bgGradient.addColorStop(0, "#09090b");
+  bgGradient.addColorStop(0.5, "#18181b");
+  bgGradient.addColorStop(1, "#022c22");
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, BASE, BASE);
+
+  const overlayGradient = ctx.createLinearGradient(0, 0, BASE, BASE);
+  overlayGradient.addColorStop(0, "rgba(9,9,11,0.9)");
+  overlayGradient.addColorStop(0.5, "rgba(9,9,11,0.7)");
+  overlayGradient.addColorStop(1, "rgba(2,44,34,0.6)");
+  ctx.fillStyle = overlayGradient;
+  ctx.fillRect(0, 0, BASE, BASE);
+
+  const pad = 28;
+
+  let textX = pad;
+  const logoSize = 40;
+  if (opts.groupLogoUrl) {
+    try {
+      const logoImg = await loadImage(opts.groupLogoUrl);
+      const cx = pad + logoSize / 2;
+      const cy = pad + logoSize / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, logoSize / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(logoImg, pad, pad, logoSize, logoSize);
+      ctx.restore();
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, logoSize / 2, 0, Math.PI * 2);
+      ctx.stroke();
+      textX = pad + logoSize + 12;
+    } catch {
+      // Logo failed to load — skip it rather than let one bad image blank the whole card.
+    }
+  }
+
+  const textMaxWidth = BASE - pad - textX;
+  ctx.textBaseline = "alphabetic";
+
+  const line1Y = pad + 10;
+  ctx.fillStyle = "#34d399";
+  ctx.font = "700 11px sans-serif";
+  fillTruncatedText(ctx, opts.intervalLabel.toUpperCase(), textX, line1Y, textMaxWidth);
+
+  const line2Y = line1Y + 22;
+  ctx.fillStyle = "#fafafa";
+  ctx.font = "900 20px sans-serif";
+  fillTruncatedText(ctx, opts.groupName, textX, line2Y, textMaxWidth);
+
+  const line3Y = line2Y + 16;
+  ctx.fillStyle = "#a1a1aa";
+  ctx.font = "400 12px sans-serif";
+  fillTruncatedText(ctx, opts.campaignName, textX, line3Y, textMaxWidth);
+
+  const items: { icon?: string; value: string; label: string }[] = [];
+  if (opts.totalValue > 0) items.push({ value: formatPoints(opts.totalValue), label: "points" });
+  if (opts.contributionCount > 0) items.push({ value: opts.contributionCount.toLocaleString(), label: "logs" });
+  if (opts.uniqueContributors > 0) {
+    items.push({ value: opts.uniqueContributors.toLocaleString(), label: "contributors" });
+  }
+  if (opts.smallBags > 0) items.push({ icon: "🛍️", value: opts.smallBags.toLocaleString(), label: "small bags" });
+  if (opts.largeBags > 0) items.push({ icon: "🗑️", value: opts.largeBags.toLocaleString(), label: "large bags" });
+  if (opts.pounds > 0) items.push({ icon: "⚖️", value: Math.round(opts.pounds).toLocaleString(), label: "pounds" });
+
+  if (items.length > 0) {
+    const gap = 8;
+    const cols = 3;
+    const cellH = 58;
+    const colWidth = (BASE - pad * 2 - gap * (cols - 1)) / cols;
+    const rows = Math.ceil(items.length / cols);
+    const gridHeight = rows * cellH + (rows - 1) * gap;
+
+    const headerBottom = pad + logoSize;
+    const footerTop = BASE - pad - 14;
+    const gridTop = headerBottom + Math.max(0, (footerTop - headerBottom - gridHeight) / 2);
+
+    ctx.textAlign = "center";
+    items.forEach((item, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = pad + col * (colWidth + gap);
+      const y = gridTop + row * (cellH + gap);
+      const cx = x + colWidth / 2;
+      const cy = y + cellH / 2;
+
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      roundRect(ctx, x, y, colWidth, cellH, 8);
+      ctx.fill();
+
+      ctx.font = "900 20px sans-serif";
+      const valueText = item.icon ? `${item.icon} ${item.value}` : item.value;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(valueText, cx, cy - 2);
+
+      ctx.font = "600 9px sans-serif";
+      ctx.fillStyle = "#71717a";
+      ctx.fillText(item.label.toUpperCase(), cx, cy + 16);
+    });
+    ctx.textAlign = "left";
+  }
+
+  ctx.fillStyle = "#34d399";
+  ctx.font = "900 10px sans-serif";
+  ctx.fillText("FRONTLINE", pad, BASE - pad);
+
+  return canvas.toDataURL("image/png");
 }
 
 interface Member {
@@ -713,6 +926,7 @@ export default function GroupStatsView({
           children,
           events,
           bbox,
+          header: { groupName, groupLogoUrl: groupLogoUrl ? proxiedImageUrl(groupLogoUrl) : null },
         })
       );
     } finally {
@@ -725,24 +939,38 @@ export default function GroupStatsView({
     openMapSnapshot(shareCamp, type);
   }
 
+  // Both the map snapshot and the share card are now fully pre-composited on a 2D
+  // canvas (see captionSnapshot's header baking and renderShareCardSnapshot above) —
+  // this never touches html-to-image/DOM capture, which is what was silently blanking
+  // out the logo and map on iOS Safari.
   async function renderCardBlob(): Promise<Blob | null> {
-    if (!cardRef.current) return null;
-    // iOS Safari's html-to-image capture will silently blank out any <img> that hasn't
-    // finished loading/decoding yet — wait for all of them (including our own proxied
-    // logo fetch) before rasterizing, instead of racing the DOM paint.
-    const imgs = Array.from(cardRef.current.querySelectorAll("img"));
-    await Promise.all(
-      imgs.map((img) =>
-        img.complete ? img.decode().catch(() => undefined) : new Promise<void>((resolve) => {
-          img.onload = () => img.decode().then(resolve, () => resolve());
-          img.onerror = () => resolve();
-        })
-      )
-    );
-    const { toPng } = await import("html-to-image");
-    const dataUrl = await toPng(cardRef.current, { pixelRatio: 3, cacheBust: true });
+    let dataUrl: string | null;
+    if (shareMode === "map") {
+      dataUrl = mapImageUrl;
+    } else {
+      if (!shareCamp) return null;
+      dataUrl = await renderShareCardSnapshot({
+        groupName,
+        groupLogoUrl: groupLogoUrl ? proxiedImageUrl(groupLogoUrl) : null,
+        campaignName: shareCamp.campaign_name,
+        intervalLabel: detailedIntervalLabel(statsWindow),
+        totalValue: shareCamp.aggregate.total_value,
+        contributionCount: shareCamp.aggregate.contribution_count,
+        uniqueContributors: shareCamp.aggregate.unique_contributors,
+        smallBags: shareCamp.aggregate.small_bags,
+        largeBags: shareCamp.aggregate.large_bags,
+        pounds: shareCamp.aggregate.pounds,
+      });
+    }
+    if (!dataUrl) return null;
     const res = await fetch(dataUrl);
     return res.blob();
+  }
+
+  function cardFilename(camp: CampaignStats): string {
+    // Map snapshots export as JPEG (see captionSnapshot); share cards stay PNG for
+    // their transparent rounded corners.
+    return `${camp.campaign_slug}-group-stats.${shareMode === "map" ? "jpg" : "png"}`;
   }
 
   async function handleShareCard() {
@@ -751,7 +979,7 @@ export default function GroupStatsView({
     try {
       const blob = await renderCardBlob();
       if (!blob) return;
-      await shareImage(blob, `${shareCamp.campaign_slug}-group-stats.png`, {
+      await shareImage(blob, cardFilename(shareCamp), {
         title: `${groupName} · ${shareCamp.campaign_name}`,
         text: `Here's what ${groupName} has accomplished on the ${shareCamp.campaign_name} campaign!`,
       });
@@ -770,7 +998,7 @@ export default function GroupStatsView({
       // downloadBlob() silently does nothing there. downloadImage() falls back to
       // the native share sheet (Save Image) on iOS only — desktop/Android still get
       // a normal direct file download.
-      await downloadImage(blob, `${shareCamp.campaign_slug}-group-stats.png`, {
+      await downloadImage(blob, cardFilename(shareCamp), {
         title: `${groupName} · ${shareCamp.campaign_name}`,
         text: `Here's what ${groupName} has accomplished on the ${shareCamp.campaign_name} campaign!`,
       });

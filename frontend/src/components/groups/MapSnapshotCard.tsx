@@ -16,6 +16,9 @@ const MapSnapshotCard = forwardRef<HTMLDivElement, MapSnapshotCardProps>(functio
   return (
     <div ref={ref} className="relative flex h-[480px] w-[360px] flex-col overflow-hidden rounded-2xl bg-zinc-950">
       {mapImageUrl ? (
+        // The logo + group name header is already baked into mapImageUrl (see
+        // captionSnapshot's `header` option in GroupStatsView.tsx) so the exported
+        // image is a single self-contained file — no separate DOM overlay needed here.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={mapImageUrl}
@@ -24,24 +27,26 @@ const MapSnapshotCard = forwardRef<HTMLDivElement, MapSnapshotCardProps>(functio
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center px-8 text-center text-sm text-zinc-600">
-          {loading ? "Loading map…" : "No geotagged activity in this period."}
-        </div>
+        <>
+          <div className="absolute inset-0 flex items-center justify-center px-8 text-center text-sm text-zinc-600">
+            {loading ? "Loading map…" : "No geotagged activity in this period."}
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2.5 bg-gradient-to-b from-zinc-950/90 via-zinc-950/40 to-transparent p-4">
+            {groupLogoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={groupLogoUrl}
+                alt=""
+                crossOrigin="anonymous"
+                className="h-8 w-8 shrink-0 rounded-full border border-white/10 object-cover"
+              />
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-sm font-black leading-tight text-white">{groupName}</div>
+            </div>
+          </div>
+        </>
       )}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2.5 bg-gradient-to-b from-zinc-950/90 via-zinc-950/40 to-transparent p-4">
-        {groupLogoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={groupLogoUrl}
-            alt=""
-            crossOrigin="anonymous"
-            className="h-8 w-8 shrink-0 rounded-full border border-white/10 object-cover"
-          />
-        )}
-        <div className="min-w-0">
-          <div className="truncate text-sm font-black leading-tight text-white">{groupName}</div>
-        </div>
-      </div>
     </div>
   );
 });
