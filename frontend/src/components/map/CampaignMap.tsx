@@ -3157,7 +3157,8 @@ export default function CampaignMap({
       type: "circle",
       source: "report-points",
       paint: {
-        "circle-radius": 5,
+        // Matches contribution-dots' size so all point markers read as one consistent family.
+        "circle-radius": 6,
         "circle-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#a855f7", "#f97316"],
         "circle-opacity": 0.9,
         "circle-stroke-width": 1.5,
@@ -3607,16 +3608,26 @@ export default function CampaignMap({
       });
       map.current.on("mousemove", "contribution-dots", (e) => {
         if (pinPickerActiveRef.current || !e.features?.[0]) return;
-        const props = e.features[0].properties as { value?: number; submitted_at?: string };
+        const props = e.features[0].properties as { value?: number; submitted_at?: string; cleanup_event_id?: string };
         const date = props.submitted_at
           ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
           : "";
+        // A group event's total gets split into one contribution row per participant, each
+        // logged at the same event, so a single dot's own value is just that person's share.
+        // Sum every dot sharing this cleanup_event_id (already loaded, no extra lookup) to
+        // show the event's total instead of one participant's slice of it.
+        const displayValue = props.cleanup_event_id
+          ? contributionFeaturesRef.current.reduce((sum, f) => {
+              const p = f.properties as { value?: number; cleanup_event_id?: string } | null;
+              return p && p.cleanup_event_id === props.cleanup_event_id ? sum + (p.value ?? 0) : sum;
+            }, 0)
+          : (props.value ?? 1);
         hoverDiv.style.display = "block";
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
           `<span style="font-size:13px">🗑️</span>` +
-          `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${props.value ?? 1} bag${(props.value ?? 1) !== 1 ? "s" : ""}</span>` +
+          `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}${props.cleanup_event_id ? " total" : ""}</span>` +
           (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
       });
       map.current.on("mouseleave", "contribution-dots", () => {
@@ -3705,6 +3716,12 @@ export default function CampaignMap({
 
       map.current.on("mousemove", "territory-fill", (e) => {
         if (!map.current || !e.features?.[0] || pinPickerActiveRef.current) return;
+        // territory-fill covers the whole map (see the opacity-vs-interactivity note above), so
+        // its mousemove fires under report/contribution dots too and would otherwise clobber the
+        // pointer cursor those layers' own handlers just set — defer to them when a dot is present.
+        if (map.current.queryRenderedFeatures(e.point, { layers: ["report-dots", "contribution-dots"] }).length > 0) {
+          return;
+        }
         const hoverState = e.features[0].state as { claim_owned?: boolean; claim_is_group?: boolean };
         if (!territoryFeatureToggledOn(hoverState, layerToggleRef.current)) {
           map.current.getCanvas().style.cursor = "";
@@ -4855,8 +4872,11 @@ export default function CampaignMap({
                 <span className="text-zinc-300">Ad-hoc route</span>
               </LegendToggle>
               <LegendToggle checked={showReports} onChange={setShowReports}>
-                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
-                <span className="text-zinc-300">Open report</span>
+                <span className="flex items-center gap-1 flex-shrink-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500 border border-purple-600 flex-shrink-0" />
+                </span>
+                <span className="text-zinc-300">Report (open · claimed)</span>
               </LegendToggle>
               <LegendToggle checked={showPartners} onChange={setShowPartners}>
                 <span className="flex items-center gap-0.5 flex-shrink-0">
