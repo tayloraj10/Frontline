@@ -1,7 +1,7 @@
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -118,8 +118,8 @@ async def delete_account(user_id: UUID, db: AsyncSession = Depends(get_db)):
         await db.execute(
             text("""
                 UPDATE problem_reports
-                SET reported_by = NULL, claimed_by_user_id = NULL, resolved_by_user_id = NULL, submitted_by_user_id = NULL
-                WHERE reported_by = :id OR claimed_by_user_id = :id OR resolved_by_user_id = :id OR submitted_by_user_id = :id
+                SET claimed_by_user_id = NULL, resolved_by_user_id = NULL, submitted_by_user_id = NULL
+                WHERE claimed_by_user_id = :id OR resolved_by_user_id = :id OR submitted_by_user_id = :id
             """),
             {"id": uid},
         )
@@ -158,8 +158,12 @@ async def delete_account(user_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{user_id}/export")
-async def export_account_data(user_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Read-only export of all data tied to a user, returned as a downloadable JSON file."""
+async def export_account_data(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    format: str = Query("json", pattern="^(json|csv)$"),
+):
+    """Read-only export of all data tied to a user, returned as a downloadable JSON or CSV (zip) file."""
     uid = str(user_id)
 
     profile_row = await db.execute(
@@ -198,7 +202,7 @@ async def export_account_data(user_id: UUID, db: AsyncSession = Depends(get_db))
         text("""
             SELECT id, campaign_id, severity, status, reported_at
             FROM problem_reports
-            WHERE reported_by = :id OR claimed_by_user_id = :id OR resolved_by_user_id = :id OR submitted_by_user_id = :id
+            WHERE claimed_by_user_id = :id OR resolved_by_user_id = :id OR submitted_by_user_id = :id
         """),
         {"id": uid},
     )
@@ -249,6 +253,13 @@ async def export_account_data(user_id: UUID, db: AsyncSession = Depends(get_db))
         "cleanup_rsvps": rows_to_dicts(cleanup_rsvps),
     }
 
+    if format == "csv":
+        return Response(
+            content=_export_to_csv_zip(export),
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="frontline-account-export.zip"'},
+        )
+
     import json
 
     return Response(
@@ -256,6 +267,36 @@ async def export_account_data(user_id: UUID, db: AsyncSession = Depends(get_db))
         media_type="application/json",
         headers={"Content-Disposition": 'attachment; filename="frontline-account-export.json"'},
     )
+
+
+def _export_to_csv_zip(export: dict) -> bytes:
+    """Each top-level section becomes its own CSV inside a zip (profile is a single-row CSV)."""
+    import csv
+    import io
+    import json
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for section, value in export.items():
+            rows = [value] if isinstance(value, dict) else value
+            csv_buffer = io.StringIO()
+            if rows:
+                fieldnames: list[str] = []
+                for row in rows:
+                    for key in row:
+                        if key not in fieldnames:
+                            fieldnames.append(key)
+                writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow({
+                        k: json.dumps(v) if isinstance(v, (list, dict)) else v
+                        for k, v in row.items()
+                    })
+            zf.writestr(f"{section}.csv", csv_buffer.getvalue())
+
+    return buffer.getvalue()
 
 
 def _jsonify(d: dict) -> dict:
