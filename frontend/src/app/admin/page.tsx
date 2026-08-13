@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "./AdminPanel";
-import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink, AdminGroup, GameSetting } from "./AdminPanel";
+import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink, PartnerBusinessLocation, AdminGroup, GameSetting } from "./AdminPanel";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -48,13 +48,13 @@ export default async function AdminPage() {
       .schema("public")
       .from("partner_businesses")
       .select(
-        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
       )
       .order("created_at", { ascending: false }),
     supabase
       .schema("public")
       .from("partner_offers")
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
       .order("created_at", { ascending: false }),
     supabase
       .schema("public")
@@ -75,6 +75,12 @@ export default async function AdminPage() {
     .schema("public")
     .from("campaign_partner_businesses")
     .select("business_id, campaign_id");
+
+  const { data: businessLocations } = await supabase
+    .schema("public")
+    .from("partner_business_locations")
+    .select("id, business_id, label, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, status, created_at")
+    .order("created_at");
 
   const applicantIds = [...new Set((groups ?? []).map((g) => g.created_by).filter(Boolean) as string[])];
   const { data: applicantProfiles } = applicantIds.length > 0
@@ -117,6 +123,7 @@ export default async function AdminPage() {
         initialOffers={(offers ?? []) as PartnerOffer[]}
         initialOfferRedemptions={(redemptions ?? []) as OfferRedemption[]}
         initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
+        initialBusinessLocations={(businessLocations ?? []) as PartnerBusinessLocation[]}
         initialGroups={groupsWithApplicant as AdminGroup[]}
         currentUserId={user.id}
         initialSettings={(gameSettings ?? []) as GameSetting[]}

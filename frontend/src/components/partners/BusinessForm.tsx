@@ -6,6 +6,41 @@ import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 
 const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 focus:outline-none focus:border-zinc-500";
 
+let nextLocalLocationId = 0;
+
+export type LocationEntry = {
+  key: string;
+  id: string | null;
+  label: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  lat: number | null;
+  lng: number | null;
+  google_maps_url: string | null;
+};
+
+function emptyLocation(): LocationEntry {
+  nextLocalLocationId += 1;
+  return {
+    key: `new-${nextLocalLocationId}`,
+    id: null,
+    label: null,
+    address_line1: null,
+    address_line2: null,
+    city: null,
+    state: null,
+    postal_code: null,
+    country: null,
+    lat: null,
+    lng: null,
+    google_maps_url: null,
+  };
+}
+
 function toSlug(name: string) {
   return name.toLowerCase().trim()
     .replace(/[^a-z0-9\s-]/g, "")
@@ -22,12 +57,9 @@ export type BusinessSocialLinks = {
   twitter?: string | null;
 };
 
-export type BusinessFormInitial = {
-  name: string;
-  slug: string;
-  description: string | null;
-  logo_url: string | null;
-  website_url: string | null;
+export type LocationFormInitial = {
+  id: string;
+  label: string | null;
   address_line1: string | null;
   address_line2: string | null;
   city: string | null;
@@ -37,7 +69,30 @@ export type BusinessFormInitial = {
   lat: number | null;
   lng: number | null;
   google_maps_url: string | null;
+};
+
+export type LocationPayload = {
+  id: string | null;
+  label: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  lat: number | null;
+  lng: number | null;
+  google_maps_url: string | null;
+};
+
+export type BusinessFormInitial = {
+  name: string;
+  slug: string;
+  description: string | null;
+  logo_url: string | null;
+  website_url: string | null;
   social_links: BusinessSocialLinks | null;
+  locations?: LocationFormInitial[];
 };
 
 export type BusinessFormPayload = {
@@ -46,16 +101,8 @@ export type BusinessFormPayload = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  city: string | null;
-  state: string | null;
-  postal_code: string | null;
-  country: string | null;
-  lat: number | null;
-  lng: number | null;
-  google_maps_url: string | null;
   social_links: BusinessSocialLinks | null;
+  locations: LocationPayload[];
   campaignIds: string[];
 };
 
@@ -97,15 +144,22 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
   const [slugEdited, setSlugEdited] = useState(!!initial);
   const [description, setDescription] = useState(initial?.description ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initial?.website_url ?? "");
-  const [addressLine1, setAddressLine1] = useState(initial?.address_line1 ?? "");
-  const [addressLine2, setAddressLine2] = useState(initial?.address_line2 ?? "");
-  const [city, setCity] = useState(initial?.city ?? "");
-  const [state, setState] = useState(initial?.state ?? "");
-  const [postalCode, setPostalCode] = useState(initial?.postal_code ?? "");
-  const [country, setCountry] = useState(initial?.country ?? "");
-  const [lat, setLat] = useState<number | null>(initial?.lat ?? null);
-  const [lng, setLng] = useState<number | null>(initial?.lng ?? null);
-  const [googleMapsUrl, setGoogleMapsUrl] = useState(initial?.google_maps_url ?? "");
+  const [locations, setLocations] = useState<LocationEntry[]>(() =>
+    (initial?.locations ?? []).map((l) => ({
+      key: l.id,
+      id: l.id,
+      label: l.label,
+      address_line1: l.address_line1,
+      address_line2: l.address_line2,
+      city: l.city,
+      state: l.state,
+      postal_code: l.postal_code,
+      country: l.country,
+      lat: l.lat,
+      lng: l.lng,
+      google_maps_url: l.google_maps_url,
+    }))
+  );
   const [handles, setHandles] = useState<Record<string, string>>(
     Object.fromEntries(SOCIAL_PLATFORMS.map((p) => [p.key, extractHandle(initial?.social_links?.[p.key], p.baseUrl)]))
   );
@@ -137,9 +191,27 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
     });
   };
 
+  const updateLocation = (key: string, patch: Partial<LocationEntry>) => {
+    setLocations((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  };
+  const addLocation = () => setLocations((prev) => [...prev, emptyLocation()]);
+  const removeLocation = (key: string) => setLocations((prev) => prev.filter((l) => l.key !== key));
+
+  const isLocationFilled = (l: LocationEntry) =>
+    !!(l.label?.trim() || l.address_line1?.trim() || l.city?.trim() || l.state?.trim() ||
+      l.postal_code?.trim() || l.google_maps_url?.trim() || l.lat != null || l.lng != null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !slug.trim()) return;
+
+    const filledLocations = locations.filter(isLocationFilled);
+    const missingCoords = filledLocations.some((l) => l.lat == null || l.lng == null);
+    if (missingCoords) {
+      setError("Each location needs a map position — pick an address suggestion or drop the pin on the map.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -167,16 +239,20 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
         description: description.trim() || null,
         logo_url: logoUrl,
         website_url: websiteUrl.trim() || null,
-        address_line1: addressLine1.trim() || null,
-        address_line2: addressLine2.trim() || null,
-        city: city.trim() || null,
-        state: state.trim() || null,
-        postal_code: postalCode.trim() || null,
-        country: country.trim() || null,
-        lat,
-        lng,
-        google_maps_url: googleMapsUrl.trim() || null,
         social_links: hasSocial ? socialLinks : null,
+        locations: filledLocations.map((l) => ({
+          id: l.id,
+          label: l.label?.trim() || null,
+          address_line1: l.address_line1?.trim() || null,
+          address_line2: l.address_line2?.trim() || null,
+          city: l.city?.trim() || null,
+          state: l.state?.trim() || null,
+          postal_code: l.postal_code?.trim() || null,
+          country: l.country?.trim() || null,
+          lat: l.lat,
+          lng: l.lng,
+          google_maps_url: l.google_maps_url?.trim() || null,
+        })),
         campaignIds: Array.from(campaignIds),
       });
 
@@ -242,57 +318,95 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
       </div>
 
       <div className="space-y-3 border-t border-zinc-800 pt-4">
-        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Location</p>
-        {(lat == null || lng == null) && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Locations</p>
+          <button
+            type="button"
+            onClick={addLocation}
+            className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            + Add location
+          </button>
+        </div>
+        {locations.length === 0 && (
           <p className="text-xs text-amber-400 bg-amber-950/30 border border-amber-900/50 rounded-lg px-3 py-2">
-            No location set — this business won't show up on the map until an address is
-            selected from the suggestions (or coordinates are set on the map below).
+            No locations set — this business won't show up on the map until at least one
+            location is added with an address (or coordinates set on the map).
           </p>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2 space-y-1">
-            <label className="text-xs text-zinc-500">Address line 1</label>
-            <AddressAutocomplete
-              value={addressLine1}
-              onChange={setAddressLine1}
-              onSelect={(s) => {
-                setAddressLine1(s.addressLine1);
-                if (s.city) setCity(s.city);
-                if (s.state) setState(s.state);
-                if (s.postalCode) setPostalCode(s.postalCode);
-                if (s.country) setCountry(s.country);
-                setLat(s.lat);
-                setLng(s.lng);
-              }}
-              placeholder="Start typing a street address..."
+        {locations.map((loc, idx) => (
+          <div key={loc.key} className="space-y-3 border border-zinc-800 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-zinc-500">Location {idx + 1}</p>
+              <button
+                type="button"
+                onClick={() => removeLocation(loc.key)}
+                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-zinc-500">Label (optional)</label>
+              <input
+                className={inputCls}
+                value={loc.label ?? ""}
+                onChange={(e) => updateLocation(loc.key, { label: e.target.value })}
+                placeholder="e.g. Downtown"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs text-zinc-500">Address line 1</label>
+                <AddressAutocomplete
+                  value={loc.address_line1 ?? ""}
+                  onChange={(v) => updateLocation(loc.key, { address_line1: v })}
+                  onSelect={(s) => {
+                    updateLocation(loc.key, {
+                      address_line1: s.addressLine1,
+                      city: s.city || loc.city,
+                      state: s.state || loc.state,
+                      postal_code: s.postalCode || loc.postal_code,
+                      country: s.country || loc.country,
+                      lat: s.lat,
+                      lng: s.lng,
+                    });
+                  }}
+                  placeholder="Start typing a street address..."
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs text-zinc-500">Address line 2</label>
+                <input className={inputCls} value={loc.address_line2 ?? ""} onChange={e => updateLocation(loc.key, { address_line2: e.target.value })} placeholder="Suite, unit, etc." />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500">City</label>
+                <input className={inputCls} value={loc.city ?? ""} onChange={e => updateLocation(loc.key, { city: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500">State</label>
+                <input className={inputCls} value={loc.state ?? ""} onChange={e => updateLocation(loc.key, { state: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500">Postal code</label>
+                <input className={inputCls} value={loc.postal_code ?? ""} onChange={e => updateLocation(loc.key, { postal_code: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500">Country</label>
+                <input className={inputCls} value={loc.country ?? ""} onChange={e => updateLocation(loc.key, { country: e.target.value })} />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs text-zinc-500">Google Maps URL</label>
+                <input className={inputCls} value={loc.google_maps_url ?? ""} onChange={e => updateLocation(loc.key, { google_maps_url: e.target.value })} placeholder="https://maps.google.com/..." />
+              </div>
+            </div>
+            <BusinessLocationMapPicker
+              lat={loc.lat}
+              lng={loc.lng}
+              onChange={(newLat, newLng) => updateLocation(loc.key, { lat: newLat, lng: newLng })}
             />
           </div>
-          <div className="col-span-2 space-y-1">
-            <label className="text-xs text-zinc-500">Address line 2</label>
-            <input className={inputCls} value={addressLine2} onChange={e => setAddressLine2(e.target.value)} placeholder="Suite, unit, etc." />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">City</label>
-            <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">State</label>
-            <input className={inputCls} value={state} onChange={e => setState(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">Postal code</label>
-            <input className={inputCls} value={postalCode} onChange={e => setPostalCode(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">Country</label>
-            <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} />
-          </div>
-          <div className="col-span-2 space-y-1">
-            <label className="text-xs text-zinc-500">Google Maps URL</label>
-            <input className={inputCls} value={googleMapsUrl} onChange={e => setGoogleMapsUrl(e.target.value)} placeholder="https://maps.google.com/..." />
-          </div>
-        </div>
-        <BusinessLocationMapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
+        ))}
       </div>
 
       <div className="space-y-3 border-t border-zinc-800 pt-4">

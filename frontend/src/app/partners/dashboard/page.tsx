@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import PartnerDashboardClient, { type DashboardBusiness, type DashboardOffer } from "./PartnerDashboardClient";
+import PartnerDashboardClient, { type DashboardBusiness, type DashboardOffer, type DashboardLocation } from "./PartnerDashboardClient";
 
 export default async function PartnerDashboardPage() {
   const supabase = await createClient();
@@ -23,7 +23,7 @@ export default async function PartnerDashboardPage() {
     .schema("public")
     .from("partner_business_admins")
     .select(
-      "business_id, partner_businesses(id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at)"
+      "business_id, partner_businesses(id, name, slug, description, logo_url, website_url, social_links, status, created_at)"
     )
     .eq("user_id", user.id);
 
@@ -32,6 +32,15 @@ export default async function PartnerDashboardPage() {
     .filter((b): b is DashboardBusiness => !!b));
 
   const businessIds = businesses.map((b) => b.id);
+
+  const { data: businessLocations } = businessIds.length > 0
+    ? await supabase
+        .schema("public")
+        .from("partner_business_locations")
+        .select("id, business_id, label, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, status, created_at")
+        .in("business_id", businessIds)
+        .order("created_at")
+    : { data: [] as DashboardLocation[] };
 
   const { data: campaignLinks } = businessIds.length > 0
     ? await supabase
@@ -57,7 +66,7 @@ export default async function PartnerDashboardPage() {
     ? await supabase
         .schema("public")
         .from("partner_offers")
-        .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
+        .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
         .in("business_id", businessIds)
         .order("created_at", { ascending: false })
     : { data: [] as DashboardOffer[] };
@@ -87,6 +96,7 @@ export default async function PartnerDashboardPage() {
       <PartnerDashboardClient
         initialBusinesses={businesses}
         initialOffers={(offers ?? []) as DashboardOffer[]}
+        initialLocations={(businessLocations ?? []) as DashboardLocation[]}
         redemptionCounts={redemptionCounts}
         allCampaigns={allCampaigns}
         initialCampaignIdsByBusiness={campaignIdsByBusiness}

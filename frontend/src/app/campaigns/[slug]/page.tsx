@@ -6,7 +6,7 @@ import CampaignPageClient, { CampaignStatBar } from "./CampaignPageClient";
 import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
 import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
-import type { MapBusiness, MapCleanupEvent } from "@/components/map/CampaignMap";
+import type { MapBusiness, MapBusinessLocation, MapCleanupEvent } from "@/components/map/CampaignMap";
 import CampaignInstructionsModal from "@/components/CampaignInstructionsModal";
 import BackButton from "@/components/ui/BackButton";
 import ShareButton from "@/components/ShareButton";
@@ -49,9 +49,10 @@ type RawLbEntry = {
 };
 type PartnerBusinessRow = {
   id: string; name: string; slug: string; description: string | null; logo_url: string | null;
-  website_url: string | null; google_maps_url: string | null; lat: number | null; lng: number | null; status: string;
+  website_url: string | null; status: string;
+  partner_business_locations: { id: string; label: string | null; lat: number; lng: number; google_maps_url: string | null; status: string }[];
 };
-type OfferRequirement = { title: string; mode: "spend" | "threshold"; requirement: number };
+type OfferRequirement = { title: string; mode: "spend" | "threshold"; requirement: number; location_id: string | null };
 
 // Everything here is public, RLS-open data (or FastAPI-computed data with no
 // per-user variance), so it's safe to share one cache entry across all
@@ -118,57 +119,68 @@ const getCampaignPageData = unstable_cache(
     const { data: businessLinkRows } = await supabase
       .from("campaign_partner_businesses")
       .select(
-        "partner_businesses(id, name, slug, description, logo_url, website_url, google_maps_url, lat, lng, status)"
+        "partner_businesses(id, name, slug, description, logo_url, website_url, status, partner_business_locations(id, label, lat, lng, google_maps_url, status))"
       )
       .eq("campaign_id", campaign.id);
     const linkedBusinesses = (businessLinkRows ?? [])
       .map((row) => row.partner_businesses as unknown as PartnerBusinessRow | null)
-      .filter((b): b is PartnerBusinessRow => !!b && b.status === "active" && b.lat !== null && b.lng !== null);
+      .filter((b): b is PartnerBusinessRow => !!b && b.status === "active" && b.partner_business_locations.some((l) => l.status === "active"));
 
     const businessIds = linkedBusinesses.map((b) => b.id);
     const { data: activeOfferRows } = businessIds.length > 0
       ? await supabase
           .from("partner_offers")
-          .select("business_id, title, starts_at, ends_at, redemption_mode, points_cost, points_threshold")
+          .select("business_id, title, starts_at, ends_at, redemption_mode, points_cost, points_threshold, location_id")
           .in("business_id", businessIds)
           .eq("status", "active")
       : {
           data: [] as {
             business_id: string; title: string; starts_at: string; ends_at: string | null;
             redemption_mode: "spend" | "threshold"; points_cost: number | null; points_threshold: number | null;
+            location_id: string | null;
           }[],
         };
     const nowIso = new Date().toISOString();
-    const activeOfferTitleByBusiness = new Map<string, string>();
     // Full active-offer catalog is public data (same rows /partners already exposes), so it's
     // safe to keep inside the shared cache. Per-viewer affordability is computed from this
-    // afterward, outside the cache boundary — see the comment on getCampaignPageData.
+    // afterward, outside the cache boundary — see the comment on getCampaignPageData. Each
+    // offer carries its own location_id (null = valid at every location of the business), so
+    // per-location filtering happens where MapBusiness.locations is built below.
     const activeOffersByBusiness = new Map<string, OfferRequirement[]>();
     for (const row of activeOfferRows ?? []) {
       if (row.starts_at > nowIso) continue;
       if (row.ends_at && row.ends_at <= nowIso) continue;
-      if (!activeOfferTitleByBusiness.has(row.business_id)) {
-        activeOfferTitleByBusiness.set(row.business_id, row.title);
-      }
       const requirement = row.redemption_mode === "spend" ? row.points_cost ?? 0 : row.points_threshold ?? 0;
       const list = activeOffersByBusiness.get(row.business_id) ?? [];
-      list.push({ title: row.title, mode: row.redemption_mode, requirement });
+      list.push({ title: row.title, mode: row.redemption_mode, requirement, location_id: row.location_id });
       activeOffersByBusiness.set(row.business_id, list);
     }
 
-    const partnerBusinesses: MapBusiness[] = linkedBusinesses.map((b) => ({
-      id: b.id,
-      name: b.name,
-      slug: b.slug,
-      description: b.description,
-      logo_url: b.logo_url,
-      website_url: b.website_url,
-      google_maps_url: b.google_maps_url,
-      lat: b.lat as number,
-      lng: b.lng as number,
-      activeOfferTitle: activeOfferTitleByBusiness.get(b.id) ?? null,
-      offers: activeOffersByBusiness.get(b.id) ?? [],
-    }));
+    const partnerBusinesses: MapBusiness[] = linkedBusinesses.map((b) => {
+      const businessOffers = activeOffersByBusiness.get(b.id) ?? [];
+      return {
+        id: b.id,
+        name: b.name,
+        slug: b.slug,
+        description: b.description,
+        logo_url: b.logo_url,
+        website_url: b.website_url,
+        locations: b.partner_business_locations
+          .filter((l) => l.status === "active")
+          .map((l): MapBusinessLocation => {
+            const offersForLocation = businessOffers.filter((o) => o.location_id === null || o.location_id === l.id);
+            return {
+              id: l.id,
+              label: l.label,
+              lat: l.lat,
+              lng: l.lng,
+              google_maps_url: l.google_maps_url,
+              activeOfferTitle: offersForLocation[0]?.title ?? null,
+              offers: offersForLocation,
+            };
+          }),
+      };
+    });
 
     const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number } = lbRes?.ok
       ? await lbRes.json()
@@ -247,17 +259,20 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   // Per-viewer, so computed here rather than inside getCampaignPageData's shared cache
   // (see the cache-boundary comment above it) — otherwise one visitor's eligibility would
   // leak onto the cached response served to every other visitor of this campaign page.
-  const partnerBusinessesWithEligibility: MapBusiness[] = partnerBusinesses.map((b) => {
-    const offers = b.offers ?? [];
-    const affordable = adminProfile
-      ? offers.find((o) =>
-          o.mode === "spend"
-            ? adminProfile.spendable_points >= o.requirement
-            : adminProfile.points >= o.requirement
-        )
-      : undefined;
-    return { ...b, affordableOfferTitle: affordable?.title ?? null };
-  });
+  const partnerBusinessesWithEligibility: MapBusiness[] = partnerBusinesses.map((b) => ({
+    ...b,
+    locations: b.locations.map((l) => {
+      const offers = l.offers ?? [];
+      const affordable = adminProfile
+        ? offers.find((o) =>
+            o.mode === "spend"
+              ? adminProfile.spendable_points >= o.requirement
+              : adminProfile.points >= o.requirement
+          )
+        : undefined;
+      return { ...l, affordableOfferTitle: affordable?.title ?? null };
+    }),
+  }));
 
   const tractsCount = claims.length;
   const totalBags = Math.round(

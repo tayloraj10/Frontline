@@ -19,14 +19,14 @@ export default async function PartnersPage() {
       .schema("public")
       .from("partner_businesses")
       .select(
-        "id, name, slug, description, logo_url, website_url, city, state, address_line1, address_line2, postal_code, country, lat, lng, google_maps_url, social_links"
+        "id, name, slug, description, logo_url, website_url, social_links, partner_business_locations(id, label, city, state, status)"
       )
       .eq("status", "active")
       .order("name"),
     supabase
       .schema("public")
       .from("partner_offers")
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, starts_at, ends_at")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, starts_at, ends_at, location_id")
       .eq("status", "active")
       .lte("starts_at", nowIso)
       .or(`ends_at.is.null,ends_at.gt.${nowIso}`)
@@ -45,7 +45,25 @@ export default async function PartnersPage() {
     offersByBusiness.set(offer.business_id, list);
   }
 
-  const businessesWithOffers = ((businesses ?? []) as BrowseBusiness[]).filter(
+  type RawBusinessRow = {
+    id: string; name: string; slug: string; description: string | null; logo_url: string | null;
+    website_url: string | null; social_links: Record<string, string> | null;
+    partner_business_locations: { id: string; label: string | null; city: string | null; state: string | null; status: string }[];
+  };
+  const businessesWithLocations: BrowseBusiness[] = ((businesses ?? []) as unknown as RawBusinessRow[]).map((b) => ({
+    id: b.id,
+    name: b.name,
+    slug: b.slug,
+    description: b.description,
+    logo_url: b.logo_url,
+    website_url: b.website_url,
+    social_links: b.social_links,
+    locations: b.partner_business_locations
+      .filter((l) => l.status === "active")
+      .map((l) => ({ id: l.id, label: l.label, city: l.city, state: l.state })),
+  }));
+
+  const businessesWithOffers = businessesWithLocations.filter(
     (b) => (offersByBusiness.get(b.id) ?? []).length > 0
   );
 

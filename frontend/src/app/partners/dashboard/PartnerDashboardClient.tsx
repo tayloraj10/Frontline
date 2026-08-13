@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { reconcileBusinessLocations } from "@/lib/partnerLocations";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
-import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
+import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import { OfferRow } from "@/app/admin/AdminPanel";
 
 export type DashboardBusiness = {
@@ -14,6 +15,15 @@ export type DashboardBusiness = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
+  social_links: BusinessSocialLinks | null;
+  status: string;
+  created_at: string;
+};
+
+export type DashboardLocation = {
+  id: string;
+  business_id: string;
+  label: string | null;
   address_line1: string | null;
   address_line2: string | null;
   city: string | null;
@@ -23,7 +33,6 @@ export type DashboardBusiness = {
   lat: number | null;
   lng: number | null;
   google_maps_url: string | null;
-  social_links: BusinessSocialLinks | null;
   status: string;
   created_at: string;
 };
@@ -43,6 +52,7 @@ export type DashboardOffer = {
   starts_at: string;
   ends_at: string | null;
   created_at: string;
+  location_id: string | null;
 };
 
 function BusinessPanel({
@@ -51,6 +61,8 @@ function BusinessPanel({
   setOffers,
   businesses,
   setBusinesses,
+  locations,
+  setLocations,
   redemptionCounts,
   allCampaigns,
   campaignIds,
@@ -62,6 +74,8 @@ function BusinessPanel({
   setOffers: (o: DashboardOffer[]) => void;
   businesses: DashboardBusiness[];
   setBusinesses: (b: DashboardBusiness[]) => void;
+  locations: DashboardLocation[];
+  setLocations: (l: DashboardLocation[]) => void;
   redemptionCounts: Record<string, number>;
   allCampaigns: { id: string; title: string; slug: string }[];
   campaignIds: string[];
@@ -71,13 +85,14 @@ function BusinessPanel({
   const [editing, setEditing] = useState(false);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const businessOffers = offers.filter((o) => o.business_id === business.id);
+  const businessLocations = locations.filter((l) => l.business_id === business.id);
   const linkedCampaigns = campaignIds
     .map((id) => allCampaigns.find((c) => c.id === id))
     .filter((c): c is { id: string; title: string; slug: string } => !!c);
 
   const handleEditBusiness = async (payload: BusinessFormPayload): Promise<string | null> => {
     const supabase = createClient();
-    const { campaignIds: submittedCampaignIds, ...rest } = payload;
+    const { campaignIds: submittedCampaignIds, locations: submittedLocations, ...rest } = payload;
     // Non-admins never see the Campaigns selector (only Trash War is live on the map
     // right now), so always pin their businesses to it regardless of prior linkage.
     const trashWarCampaignId = allCampaigns.find((c) => c.slug === "trash-war")?.id;
@@ -92,11 +107,25 @@ function BusinessPanel({
       .update(rest)
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
       )
       .single();
 
     if (updateErr) return updateErr.code === "23505" ? "Slug already taken." : updateErr.message;
+
+    const locationsResult = await reconcileBusinessLocations<DashboardLocation>(
+      supabase,
+      business.id,
+      businessLocations,
+      submittedLocations,
+      "id, business_id, label, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, status, created_at"
+    );
+    if (locationsResult.rows === null) return locationsResult.error;
+
+    setLocations([
+      ...locations.filter((l) => l.business_id !== business.id),
+      ...locationsResult.rows,
+    ]);
 
     const currentLinked = new Set(campaignIds);
     const nextLinked = new Set(nextCampaignIds);
@@ -134,7 +163,7 @@ function BusinessPanel({
       .schema("public")
       .from("partner_offers")
       .insert({ ...payload, business_id: business.id, status: "active" })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
       .single();
 
     if (insertErr) return insertErr.message;
@@ -157,14 +186,16 @@ function BusinessPanel({
           )}
           <div className="min-w-0">
             <p className="text-sm font-semibold text-zinc-200 truncate">{business.name}</p>
-            <p className="text-xs text-zinc-600">{businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""}</p>
+            <p className="text-xs text-zinc-600">
+              {businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""} · {businessLocations.length} location{businessLocations.length !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
         <div className="flex items-center flex-wrap gap-x-1 gap-y-1 shrink-0">
-          {business.lat != null && business.lng != null && linkedCampaigns.map((c) => (
+          {businessLocations.length > 0 && linkedCampaigns.map((c) => (
             <Link
               key={c.id}
-              href={`/campaigns/${c.slug}?lat=${business.lat}&lng=${business.lng}`}
+              href={`/campaigns/${c.slug}?lat=${businessLocations[0].lat}&lng=${businessLocations[0].lng}`}
               className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150 px-2 py-1"
             >
               {linkedCampaigns.length > 1 ? `View on map (${c.title})` : "View on map"}
@@ -181,7 +212,22 @@ function BusinessPanel({
       <div className="border-t border-zinc-800 px-5 py-4 space-y-3 bg-zinc-950/40">
         {editing && (
           <BusinessForm
-            initial={business}
+            initial={{
+              ...business,
+              locations: businessLocations.map((l) => ({
+                id: l.id,
+                label: l.label,
+                address_line1: l.address_line1,
+                address_line2: l.address_line2,
+                city: l.city,
+                state: l.state,
+                postal_code: l.postal_code,
+                country: l.country,
+                lat: l.lat,
+                lng: l.lng,
+                google_maps_url: l.google_maps_url,
+              })),
+            }}
             initialCampaignIds={campaignIds}
             campaigns={isSiteAdmin ? allCampaigns : undefined}
             onSubmit={handleEditBusiness}
@@ -194,6 +240,7 @@ function BusinessPanel({
             key={o.id}
             offer={o}
             redemptionCount={redemptionCounts[o.id] ?? 0}
+            locations={businessLocations}
             onUpdated={(updated) => setOffers(offers.map((existing) => (existing.id === updated.id ? (updated as DashboardOffer) : existing)))}
             onCancelled={(id) => setOffers(offers.map((existing) => (existing.id === id ? { ...existing, status: "cancelled" } : existing)))}
           />
@@ -208,7 +255,7 @@ function BusinessPanel({
           {showCreateOffer ? "Cancel" : "+ New Offer"}
         </button>
         {showCreateOffer && (
-          <OfferForm onSubmit={handleCreateOffer} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
+          <OfferForm locations={businessLocations} onSubmit={handleCreateOffer} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
         )}
       </div>
     </div>
@@ -218,6 +265,7 @@ function BusinessPanel({
 export default function PartnerDashboardClient({
   initialBusinesses,
   initialOffers,
+  initialLocations,
   redemptionCounts,
   allCampaigns,
   initialCampaignIdsByBusiness,
@@ -225,6 +273,7 @@ export default function PartnerDashboardClient({
 }: {
   initialBusinesses: DashboardBusiness[];
   initialOffers: DashboardOffer[];
+  initialLocations: DashboardLocation[];
   redemptionCounts: Record<string, number>;
   allCampaigns: { id: string; title: string; slug: string }[];
   initialCampaignIdsByBusiness: Record<string, string[]>;
@@ -232,6 +281,7 @@ export default function PartnerDashboardClient({
 }) {
   const [businesses, setBusinesses] = useState(initialBusinesses);
   const [offers, setOffers] = useState(initialOffers);
+  const [locations, setLocations] = useState(initialLocations);
   const [campaignIdsByBusiness, setCampaignIdsByBusiness] = useState(initialCampaignIdsByBusiness);
 
   if (businesses.length === 0) {
@@ -253,6 +303,8 @@ export default function PartnerDashboardClient({
           setOffers={setOffers}
           businesses={businesses}
           setBusinesses={setBusinesses}
+          locations={locations}
+          setLocations={setLocations}
           redemptionCounts={redemptionCounts}
           allCampaigns={allCampaigns}
           campaignIds={campaignIdsByBusiness[b.id] ?? []}

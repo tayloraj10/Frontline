@@ -14,6 +14,7 @@ export type OfferFormInitial = {
   max_total_redemptions: number | null;
   code: string | null;
   ends_at: string | null;
+  location_id: string | null;
 };
 
 export type OfferFormPayload = {
@@ -26,6 +27,12 @@ export type OfferFormPayload = {
   max_total_redemptions: number | null;
   code: string | null;
   ends_at: string | null;
+  location_id: string | null;
+};
+
+export type OfferFormLocation = {
+  id: string;
+  label: string | null;
 };
 
 function toDateInputValue(iso: string | null): string {
@@ -33,8 +40,9 @@ function toDateInputValue(iso: string | null): string {
   return iso.slice(0, 10);
 }
 
-export default function OfferForm({ initial, onSubmit, onCancel, submitLabel }: {
+export default function OfferForm({ initial, locations, onSubmit, onCancel, submitLabel }: {
   initial?: OfferFormInitial;
+  locations?: OfferFormLocation[];
   onSubmit: (payload: OfferFormPayload) => Promise<string | null>;
   onCancel?: () => void;
   submitLabel: string;
@@ -48,6 +56,7 @@ export default function OfferForm({ initial, onSubmit, onCancel, submitLabel }: 
   const [maxTotal, setMaxTotal] = useState<string>(initial?.max_total_redemptions != null ? String(initial.max_total_redemptions) : "");
   const [code, setCode] = useState(initial?.code ?? "");
   const [endsAt, setEndsAt] = useState(toDateInputValue(initial?.ends_at ?? null));
+  const [locationId, setLocationId] = useState<string>(initial?.location_id ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +76,7 @@ export default function OfferForm({ initial, onSubmit, onCancel, submitLabel }: 
       max_total_redemptions: maxTotal.trim() ? Number(maxTotal) : null,
       code: code.trim() || null,
       ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+      location_id: locationId || null,
     });
 
     setLoading(false);
@@ -118,6 +128,17 @@ export default function OfferForm({ initial, onSubmit, onCancel, submitLabel }: 
           <label className="text-xs text-zinc-500">Ends</label>
           <input type="date" className={inputCls} value={endsAt} onChange={e => setEndsAt(e.target.value)} />
         </div>
+        {locations && locations.length > 1 && (
+          <div className="col-span-2 space-y-1">
+            <label className="text-xs text-zinc-500">Location</label>
+            <select className={inputCls} value={locationId} onChange={e => setLocationId(e.target.value)}>
+              <option value="">All locations</option>
+              {locations.map((l, i) => (
+                <option key={l.id} value={l.id}>{l.label ?? `Location ${i + 1}`}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       {error && <p className="text-red-400 text-xs">{error}</p>}
       <div className="flex items-center gap-2">

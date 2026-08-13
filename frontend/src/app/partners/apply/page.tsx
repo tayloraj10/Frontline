@@ -9,14 +9,27 @@ export default function PartnerApplyPage() {
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (payload: BusinessFormPayload): Promise<string | null> => {
-    const { campaignIds: _campaignIds, ...rest } = payload;
+    const { campaignIds: _campaignIds, locations, ...rest } = payload;
     const supabase = createClient();
-    const { error } = await supabase
+    const { data: business, error } = await supabase
       .schema("public")
       .from("partner_businesses")
-      .insert({ ...rest, status: "pending" });
+      .insert({ ...rest, status: "pending" })
+      .select("id")
+      .single();
 
     if (error) return error.message;
+
+    if (locations.length > 0) {
+      const { error: locationsError } = await supabase
+        .schema("public")
+        .from("partner_business_locations")
+        .insert(
+          locations.map(({ id: _id, ...loc }) => ({ ...loc, business_id: business.id }))
+        );
+      if (locationsError) return locationsError.message;
+    }
+
     setSubmitted(true);
     return null;
   };
