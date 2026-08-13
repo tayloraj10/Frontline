@@ -28,6 +28,10 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
   const [logoutMsg, setLogoutMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
 
+  const [exportLoading, setExportLoading] = useState<"json" | "csv" | null>(null);
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const supabase = createClient();
 
   async function handleEmailChange(e: React.FormEvent) {
@@ -77,6 +81,54 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
         setDeleteError(err instanceof Error ? err.message : "Failed to delete account.");
       }
     });
+  }
+
+  async function handleDownloadData(format: "json" | "csv") {
+    setExportError(null);
+    setExportProgress(null);
+    setExportLoading(format);
+    try {
+      const res = await fetch(`/api/account/export?format=${format}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail ?? "Failed to export account data.");
+      }
+
+      const totalStr = res.headers.get("Content-Length");
+      const total = totalStr ? parseInt(totalStr, 10) : null;
+      const mimeType = format === "csv" ? "application/zip" : "application/json";
+
+      let blob: Blob;
+      if (res.body && total) {
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          setExportProgress(Math.min(100, Math.round((received / total) * 100)));
+        }
+        blob = new Blob(chunks as BlobPart[], { type: mimeType });
+      } else {
+        blob = await res.blob();
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `frontline-account-export.${format === "csv" ? "zip" : "json"}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setExportError(err instanceof Error ? err.message : "Failed to export account data.");
+    } finally {
+      setExportLoading(null);
+      setExportProgress(null);
+    }
   }
 
   async function handleLogoutEverywhere() {
@@ -178,13 +230,36 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
           <h2 className="text-sm font-semibold text-zinc-100">Data &amp; sessions</h2>
         </div>
         <div className="flex flex-wrap gap-3">
-          <a
-            href="/api/account/export"
-            download="frontline-account-export.json"
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
+          <button
+            type="button"
+            onClick={() => handleDownloadData("json")}
+            disabled={exportLoading !== null}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
           >
-            Download my data
-          </a>
+            {exportLoading === "json" && (
+              <span className="h-3.5 w-3.5 rounded-full border-2 border-zinc-500 border-t-zinc-100 animate-spin" />
+            )}
+            {exportLoading === "json"
+              ? exportProgress != null
+                ? `Preparing… ${exportProgress}%`
+                : "Preparing…"
+              : "Download my data (JSON)"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDownloadData("csv")}
+            disabled={exportLoading !== null}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
+          >
+            {exportLoading === "csv" && (
+              <span className="h-3.5 w-3.5 rounded-full border-2 border-zinc-500 border-t-zinc-100 animate-spin" />
+            )}
+            {exportLoading === "csv"
+              ? exportProgress != null
+                ? `Preparing… ${exportProgress}%`
+                : "Preparing…"
+              : "Download my data (CSV)"}
+          </button>
           <button
             type="button"
             onClick={handleLogoutEverywhere}
@@ -194,6 +269,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
             {logoutLoading ? "Logging out…" : "Log out of all devices"}
           </button>
         </div>
+        {exportError && <p className="text-xs text-red-400">{exportError}</p>}
         {logoutMsg && !logoutMsg.ok && <p className="text-xs text-red-400">{logoutMsg.text}</p>}
       </section>
 
