@@ -27,7 +27,7 @@ export default async function AccountSettingsPage() {
         </Link>
       </div>
 
-      <AccountSettingsForm email={user.email!} isOAuthUser={isOAuthUser} userId={user.id} />
+      <AccountSettingsForm email={user.email!} isOAuthUser={isOAuthUser} />
 
       <div className="mt-12 pt-6 border-t border-zinc-800">
         <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Legal</h2>
