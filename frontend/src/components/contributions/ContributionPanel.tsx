@@ -1829,13 +1829,16 @@ function severityMeta(severity: string) {
 // Live mm:ss countdown to a deadline timestamp — ticks locally rather than re-fetching,
 // since the backend uses a check-on-read expiry pattern (no push/websocket for this).
 function useCountdownLabel(deadline: string | null): { label: string; expired: boolean } {
-  const [now, setNow] = useState(() => Date.now());
+  // now starts null so the server render and the pre-hydration client render agree exactly;
+  // the real clock is only read after mount, avoiding a hydration mismatch on the live seconds.
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
+    setNow(Date.now());
     if (!deadline) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [deadline]);
-  if (!deadline) return { label: "", expired: false };
+  if (!deadline || now === null) return { label: "", expired: false };
   const diffMs = new Date(deadline).getTime() - now;
   if (diffMs <= 0) return { label: "0:00", expired: true };
   const totalSec = Math.floor(diffMs / 1000);
@@ -2216,8 +2219,11 @@ function ClaimReportModal({
     );
   }
 
-  // Claimed by someone else — read-only info state.
-  if (localReport.claimed_by_user_id && !isMine) {
+  // Claimed by someone else — read-only info state. claimed_by_user_id is left in place after a
+  // claim is released or expires (so the reclaim cooldown can key off it), so this must also check
+  // status is still actively claimed — otherwise a report that reverted to "open" weeks ago would
+  // permanently show as claimed to everyone but the original claimant.
+  if (localReport.claimed_by_user_id && !isMine && (localReport.status === "scheduled" || localReport.status === "in_progress")) {
     return (
       <ModalShell title="Report Claimed" badge="Beta" onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">

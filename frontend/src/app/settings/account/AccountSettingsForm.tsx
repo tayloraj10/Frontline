@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteAccount } from "./actions";
 
 interface Props {
   email: string;
   isOAuthUser: boolean;
+  userId: string;
 }
 
-export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
+export default function AccountSettingsForm({ email, isOAuthUser, userId }: Props) {
+  const router = useRouter();
   const [newEmail, setNewEmail] = useState("");
   const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
@@ -22,6 +25,9 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [logoutMsg, setLogoutMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   const supabase = createClient();
 
@@ -72,6 +78,18 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
         setDeleteError(err instanceof Error ? err.message : "Failed to delete account.");
       }
     });
+  }
+
+  async function handleLogoutEverywhere() {
+    setLogoutLoading(true);
+    setLogoutMsg(null);
+    const { error } = await supabase.auth.signOut({ scope: "global" });
+    setLogoutLoading(false);
+    if (error) {
+      setLogoutMsg({ ok: false, text: error.message });
+      return;
+    }
+    router.push("/login");
   }
 
   return (
@@ -154,6 +172,31 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
           </p>
         </section>
       )}
+
+      {/* Data & sessions */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Data &amp; sessions</h2>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href={`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/account/${userId}/export`}
+            download="frontline-account-export.json"
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
+          >
+            Download my data
+          </a>
+          <button
+            type="button"
+            onClick={handleLogoutEverywhere}
+            disabled={logoutLoading}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
+          >
+            {logoutLoading ? "Logging out…" : "Log out of all devices"}
+          </button>
+        </div>
+        {logoutMsg && !logoutMsg.ok && <p className="text-xs text-red-400">{logoutMsg.text}</p>}
+      </section>
 
       {/* Danger zone */}
       <section className="space-y-4 border border-red-900/40 rounded-xl p-5 shadow-elevation-2">

@@ -150,6 +150,31 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
     return {"geo_unit_id": geo_unit_id, "status": "submitted", "hotspot_triggered": hotspot_triggered}
 
 
+@router.delete("/{report_id}")
+async def delete_problem_report(report_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Delete a user's own submitted trash report. problem_report_flags cascades via FK;
+    campaign_events/other reports are unaffected since only this report's row is removed."""
+    result = await db.execute(
+        text("SELECT submitted_by_user_id, status FROM problem_reports WHERE id = :id"),
+        {"id": str(report_id)},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if str(row.submitted_by_user_id) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if row.status in ("scheduled", "in_progress"):
+        raise HTTPException(
+            status_code=409, detail="Report is currently claimed by another user and can't be deleted"
+        )
+
+    await db.execute(text("DELETE FROM problem_reports WHERE id = :id"), {"id": str(report_id)})
+    await db.commit()
+    return {"deleted": True}
+
+
 @router.get("/campaign/{campaign_id}/pending-challenge-completion")
 async def get_pending_challenge_completion(campaign_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
     """A claim challenge resolves the report (POST .../claim/after-photo) before the user logs

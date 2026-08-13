@@ -605,14 +605,14 @@ async def get_geo_unit_at_point(
 async def delete_contribution(contribution_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
     """Delete a user's own contribution and recalculate territory scores from remaining contributions."""
     result = await db.execute(
-        text("SELECT campaign_id, geo_unit_id, user_id FROM contributions WHERE id = :id"),
+        text("SELECT campaign_id, geo_unit_id, user_id, cleanup_id FROM contributions WHERE id = :id"),
         {"id": str(contribution_id)},
     )
     row = result.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Contribution not found")
 
-    campaign_id, geo_unit_id, owner_id = row
+    campaign_id, geo_unit_id, owner_id, cleanup_id = row
 
     if str(owner_id) != str(user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -621,6 +621,17 @@ async def delete_contribution(contribution_id: UUID, user_id: UUID, db: AsyncSes
         text("DELETE FROM contributions WHERE id = :id"),
         {"id": str(contribution_id)},
     )
+
+    if cleanup_id:
+        # Each cleanup-type contribution creates its own dedicated cleanups row
+        # (see submit_contribution), so it's safe to delete it here rather than
+        # leaving it orphaned. problem_reports.resolved_by_cleanup_id and
+        # cleanup_rsvps.contribution_id are both ON DELETE SET NULL, so those
+        # related rows survive with their link cleared.
+        await db.execute(
+            text("DELETE FROM cleanups WHERE id = :cleanup_id"),
+            {"cleanup_id": str(cleanup_id)},
+        )
 
     total: float | None = None
     if geo_unit_id:

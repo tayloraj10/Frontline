@@ -25,20 +25,13 @@ export async function deleteAccount() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceRoleKey) {
-    throw new Error("Account deletion is not configured. Contact frontlinemapsapp@gmail.com.");
+  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/account/${user.id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? "Failed to delete account. Please try again.");
   }
-
-  const { createClient } = await import("@supabase/supabase-js");
-  const adminClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-
-  const { error } = await adminClient.auth.admin.deleteUser(user.id);
-  if (error) throw new Error(error.message);
 
   await supabase.auth.signOut();
   redirect("/?deleted=1");
