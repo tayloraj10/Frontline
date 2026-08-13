@@ -47,6 +47,7 @@ export default async function UserProfilePage({ params }: Props) {
     { data: membersData },
     { data: allContribsData },
     { data: tractsData },
+    { data: reportsData },
   ] = await Promise.all([
     supabase
       .from("contributions")
@@ -69,6 +70,12 @@ export default async function UserProfilePage({ params }: Props) {
       .from("territory_claims")
       .select("campaign_id")
       .eq("claimed_by_user", profile.id),
+    supabase
+      .from("problem_reports")
+      .select("id, campaign_id, severity, status, reported_at")
+      .eq("submitted_by_user_id", profile.id)
+      .order("reported_at", { ascending: false })
+      .limit(15),
   ]);
 
   const { data: achievementsData } = isOwn
@@ -110,7 +117,8 @@ export default async function UserProfilePage({ params }: Props) {
   const allCampaignIds = [...campaignStats.keys()];
   const groupIds = (membersData ?? []).map((m) => m.group_id);
   const contribCampaignIds = [...new Set((contribsData ?? []).map((c) => c.campaign_id).filter(Boolean) as string[])];
-  const allNeededCampaignIds = [...new Set([...allCampaignIds, ...contribCampaignIds])];
+  const reportCampaignIds = [...new Set((reportsData ?? []).map((r) => r.campaign_id).filter(Boolean) as string[])];
+  const allNeededCampaignIds = [...new Set([...allCampaignIds, ...contribCampaignIds, ...reportCampaignIds])];
 
   const [{ data: groupsData }, { data: campaignsData }] = await Promise.all([
     groupIds.length > 0
@@ -313,9 +321,11 @@ export default async function UserProfilePage({ params }: Props) {
         </div>
         <UserActivityList
           initialContribs={contribs}
+          initialReports={reportsData ?? []}
           campaigns={campaignsData ?? []}
           isOwn={isOwn}
           userId={currentUser?.id ?? null}
+          profileId={profile.id}
         />
       </div>
     </main>
