@@ -309,6 +309,25 @@ function hexEntryToFeature(entry: HexBloomEntry): GeoJSON.Feature<GeoJSON.Polygo
   };
 }
 
+export type MapBusinessLocation = {
+  id: string;
+  label: string | null;
+  lat: number;
+  lng: number;
+  google_maps_url: string | null;
+  // Offers are location-scoped (an offer with location_id === null applies to every
+  // location of the business; one with a specific location_id applies only there), so
+  // the gift-icon/eligibility fields live on the location, not the business.
+  activeOfferTitle?: string | null;
+  // Public offer catalog (safe to cache); used server-side, after the cache read, to
+  // derive affordableOfferTitle below for the current viewer. Not otherwise rendered.
+  offers?: { title: string; mode: "spend" | "threshold"; requirement: number }[];
+  // Server-computed per-viewer (never cached alongside the rest of this object — see
+  // campaigns/[slug]/page.tsx's cache-boundary comment): set when the signed-in viewer
+  // currently has enough points for at least one of this location's active offers.
+  affordableOfferTitle?: string | null;
+};
+
 export type MapBusiness = {
   id: string;
   name: string;
@@ -316,17 +335,7 @@ export type MapBusiness = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
-  google_maps_url: string | null;
-  lat: number;
-  lng: number;
-  activeOfferTitle?: string | null;
-  // Public offer catalog (safe to cache); used server-side, after the cache read, to
-  // derive affordableOfferTitle below for the current viewer. Not otherwise rendered.
-  offers?: { title: string; mode: "spend" | "threshold"; requirement: number }[];
-  // Server-computed per-viewer (never cached alongside the rest of this object — see
-  // campaigns/[slug]/page.tsx's cache-boundary comment): set when the signed-in viewer
-  // currently has enough points for at least one of this business's active offers.
-  affordableOfferTitle?: string | null;
+  locations: MapBusinessLocation[];
 };
 
 export type MapCleanupEvent = {
@@ -1657,7 +1666,7 @@ export default function CampaignMap({
   const [hexPhotoVersion, setHexPhotoVersion] = useState(0);
   const [outOfZoneWarning, setOutOfZoneWarning] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<SelectablePhoto | null>(null);
-  const [selectedBusiness, setSelectedBusiness] = useState<MapBusiness | null>(null);
+  const [selectedBusiness, setSelectedBusiness] = useState<{ business: MapBusiness; location: MapBusinessLocation } | null>(null);
   const [selectedCleanupEvent, setSelectedCleanupEvent] = useState<MapCleanupEvent | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CampaignEvent | null>(null);
   const [liveReports, setLiveReports] = useState<ProblemReports | null>(problemReports ?? null);
@@ -2025,62 +2034,66 @@ export default function CampaignMap({
     businessMarkerScaleElsRef.current = [];
 
     for (const business of businesses) {
-      const hasOffer = !!business.activeOfferTitle;
-      const affordable = !!business.affordableOfferTitle;
-      // MapLibre sets `transform` on `el` for geo-positioning, so GSAP must never touch
-      // `el` directly (see the same isolation pattern on event markers above) — the pulse
-      // tween below targets `innerEl`, a separate nested element, instead.
-      const el = document.createElement("div");
-      const size = hasOffer ? 30 : 26;
-      el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;z-index:${hasOffer ? 6 : 5}`;
+      for (const location of business.locations) {
+        const hasOffer = !!location.activeOfferTitle;
+        const affordable = !!location.affordableOfferTitle;
 
-      const scaleWrapper = document.createElement("div");
-      scaleWrapper.style.cssText =
-        `width:100%;height:100%;position:relative;transform-origin:center;` +
-        `transform:scale(${map.current ? getBusinessMarkerScale(map.current.getZoom()) : 1});transition:transform 0.15s ease-out`;
-      el.appendChild(scaleWrapper);
-      businessMarkerScaleElsRef.current.push(scaleWrapper);
+        // MapLibre sets `transform` on `el` for geo-positioning, so GSAP must never touch
+        // `el` directly (see the same isolation pattern on event markers above) — the pulse
+        // tween below targets `innerEl`, a separate nested element, instead.
+        const el = document.createElement("div");
+        const size = hasOffer ? 30 : 26;
+        el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;z-index:${hasOffer ? 6 : 5}`;
 
-      const innerEl = document.createElement("div");
-      innerEl.style.cssText = hasOffer
-        ? `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-        `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6);` +
-        "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9);transform-origin:center"
-        : `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-        "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
-        "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
-      scaleWrapper.appendChild(innerEl);
-      if (affordable) {
-        const pulseTween = gsap.to(innerEl, { scale: 1.08, duration: 1.6, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.4 });
-        businessTweensRef.current.push(pulseTween);
+        const scaleWrapper = document.createElement("div");
+        scaleWrapper.style.cssText =
+          `width:100%;height:100%;position:relative;transform-origin:center;` +
+          `transform:scale(${map.current ? getBusinessMarkerScale(map.current.getZoom()) : 1});transition:transform 0.15s ease-out`;
+        el.appendChild(scaleWrapper);
+        businessMarkerScaleElsRef.current.push(scaleWrapper);
+
+        const innerEl = document.createElement("div");
+        innerEl.style.cssText = hasOffer
+          ? `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
+          `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6);` +
+          "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9);transform-origin:center"
+          : `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
+          "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+          "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
+        scaleWrapper.appendChild(innerEl);
+        if (affordable) {
+          const pulseTween = gsap.to(innerEl, { scale: 1.08, duration: 1.6, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.4 });
+          businessTweensRef.current.push(pulseTween);
+        }
+
+        if (business.logo_url) {
+          const img = document.createElement("img");
+          img.src = business.logo_url;
+          img.style.cssText = "width:100%;height:100%;object-fit:cover";
+          innerEl.appendChild(img);
+        } else {
+          innerEl.textContent = hasOffer ? "🎁" : "🏪";
+          innerEl.style.fontSize = hasOffer ? "15px" : "13px";
+        }
+        const locationSuffix = location.label ? ` (${location.label})` : "";
+        el.title = affordable
+          ? `${business.name}${locationSuffix} — you have enough points for ${location.affordableOfferTitle}!`
+          : hasOffer
+            ? `${business.name}${locationSuffix} — ${location.activeOfferTitle}`
+            : `${business.name}${locationSuffix}`;
+
+        if (!layerToggleRef.current.showPartners) {
+          el.style.display = "none";
+        }
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([location.lng, location.lat])
+          .addTo(map.current!);
+
+        el.onclick = () => setSelectedBusiness({ business, location });
+
+        businessMarkersRef.current.push(marker);
       }
-
-      if (business.logo_url) {
-        const img = document.createElement("img");
-        img.src = business.logo_url;
-        img.style.cssText = "width:100%;height:100%;object-fit:cover";
-        innerEl.appendChild(img);
-      } else {
-        innerEl.textContent = hasOffer ? "🎁" : "🏪";
-        innerEl.style.fontSize = hasOffer ? "15px" : "13px";
-      }
-      el.title = affordable
-        ? `${business.name} — you have enough points for ${business.affordableOfferTitle}!`
-        : hasOffer
-          ? `${business.name} — ${business.activeOfferTitle}`
-          : business.name;
-
-      if (!layerToggleRef.current.showPartners) {
-        el.style.display = "none";
-      }
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([business.lng, business.lat])
-        .addTo(map.current!);
-
-      el.onclick = () => setSelectedBusiness(business);
-
-      businessMarkersRef.current.push(marker);
     }
   }, []);
 
@@ -4983,11 +4996,11 @@ export default function CampaignMap({
               ×
             </IconButton>
             <div className="flex items-center gap-3 mb-3">
-              {selectedBusiness.logo_url ? (
+              {selectedBusiness.business.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={selectedBusiness.logo_url}
-                  alt={selectedBusiness.name}
+                  src={selectedBusiness.business.logo_url}
+                  alt={selectedBusiness.business.name}
                   className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
                 />
               ) : (
@@ -4995,30 +5008,35 @@ export default function CampaignMap({
                   🏪
                 </div>
               )}
-              <h3 className="text-lg font-semibold text-white">{selectedBusiness.name}</h3>
+              <div>
+                <h3 className="text-lg font-semibold text-white">{selectedBusiness.business.name}</h3>
+                {selectedBusiness.location.label && (
+                  <p className="text-xs text-zinc-500">{selectedBusiness.location.label}</p>
+                )}
+              </div>
             </div>
-            {selectedBusiness.description && (
-              <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.description}</p>
+            {selectedBusiness.business.description && (
+              <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.business.description}</p>
             )}
-            {selectedBusiness.affordableOfferTitle ? (
+            {selectedBusiness.location.affordableOfferTitle ? (
               <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/70 shadow-[0_0_10px_rgba(251,191,36,0.35)] flex items-center gap-2">
                 <span className="text-base leading-none animate-pulse">🎁</span>
                 <p className="text-sm text-amber-100">
-                  <span className="font-semibold">You have enough points!</span> Redeem {selectedBusiness.affordableOfferTitle} now.
+                  <span className="font-semibold">You have enough points!</span> Redeem {selectedBusiness.location.affordableOfferTitle} now.
                 </p>
               </div>
-            ) : selectedBusiness.activeOfferTitle && (
+            ) : selectedBusiness.location.activeOfferTitle && (
               <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50 flex items-center gap-2">
                 <span className="text-base leading-none">🎁</span>
                 <p className="text-sm text-amber-200">
-                  <span className="font-semibold">Active offer:</span> {selectedBusiness.activeOfferTitle}
+                  <span className="font-semibold">Active offer:</span> {selectedBusiness.location.activeOfferTitle}
                 </p>
               </div>
             )}
             <div className="flex flex-col gap-1.5 text-sm">
-              {selectedBusiness.website_url && (
+              {selectedBusiness.business.website_url && (
                 <a
-                  href={selectedBusiness.website_url}
+                  href={selectedBusiness.business.website_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
@@ -5026,9 +5044,9 @@ export default function CampaignMap({
                   Visit website
                 </a>
               )}
-              {selectedBusiness.google_maps_url && (
+              {selectedBusiness.location.google_maps_url && (
                 <a
-                  href={selectedBusiness.google_maps_url}
+                  href={selectedBusiness.location.google_maps_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
@@ -5037,7 +5055,7 @@ export default function CampaignMap({
                 </a>
               )}
               <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.lat},${selectedBusiness.lng}`)}`}
+                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.location.lat},${selectedBusiness.location.lng}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
@@ -5046,7 +5064,7 @@ export default function CampaignMap({
               </a>
             </div>
             <Link
-              href={`/partners/${selectedBusiness.slug}`}
+              href={`/partners/${selectedBusiness.business.slug}`}
               className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-400 active:scale-[0.97] text-emerald-950 text-sm font-semibold shadow-sm transition-[background-color,transform] duration-150 touch-manipulation"
             >
               View offer & redeem

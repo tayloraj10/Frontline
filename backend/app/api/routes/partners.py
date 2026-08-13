@@ -1,4 +1,5 @@
 from uuid import UUID
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ router = APIRouter(prefix="/partners", tags=["partners"])
 
 class RedeemRequest(BaseModel):
     user_id: UUID
+    location_id: Optional[UUID] = None
 
 
 class AddBusinessAdminRequest(BaseModel):
@@ -38,7 +40,7 @@ async def redeem_offer(
     """
     offer_result = await db.execute(
         text("""
-            SELECT o.id, o.business_id, o.title, o.code, o.redemption_mode, o.points_cost,
+            SELECT o.id, o.business_id, o.location_id, o.title, o.code, o.redemption_mode, o.points_cost,
                    o.points_threshold, o.max_redemptions_per_user, o.max_total_redemptions,
                    o.status, o.starts_at, o.ends_at, b.status AS business_status, b.name AS business_name
             FROM partner_offers o
@@ -53,6 +55,34 @@ async def redeem_offer(
 
     if offer.status != "active" or offer.business_status != "active":
         raise HTTPException(status_code=409, detail="This offer is not currently available")
+
+    if offer.location_id is not None:
+        if payload.location_id is not None and payload.location_id != offer.location_id:
+            raise HTTPException(status_code=400, detail="This offer is only valid at a specific location")
+        location_status_result = await db.execute(
+            text("SELECT status FROM partner_business_locations WHERE id = :location_id"),
+            {"location_id": str(offer.location_id)},
+        )
+        location_row = location_status_result.fetchone()
+        if not location_row or location_row.status != "active":
+            raise HTTPException(status_code=409, detail="This offer's location is no longer available")
+        redemption_location_id = offer.location_id
+    else:
+        locations_result = await db.execute(
+            text("SELECT id FROM partner_business_locations WHERE business_id = :business_id AND status = 'active'"),
+            {"business_id": str(offer.business_id)},
+        )
+        location_ids = [row.id for row in locations_result.fetchall()]
+        if payload.location_id is not None:
+            if payload.location_id not in location_ids:
+                raise HTTPException(status_code=400, detail="That location doesn't belong to this business")
+            redemption_location_id = payload.location_id
+        elif len(location_ids) == 1:
+            redemption_location_id = location_ids[0]
+        elif len(location_ids) == 0:
+            redemption_location_id = None
+        else:
+            raise HTTPException(status_code=400, detail="This business has multiple locations — pick one to redeem at")
 
     now_result = await db.execute(text("SELECT now()"))
     now = now_result.scalar()
@@ -110,15 +140,16 @@ async def redeem_offer(
     insert_result = await db.execute(
         text("""
             INSERT INTO partner_redemptions
-                (user_id, offer_id, business_id, code, points_spent)
+                (user_id, offer_id, business_id, location_id, code, points_spent)
             VALUES
-                (:user_id, :offer_id, :business_id, :code, :points_spent)
+                (:user_id, :offer_id, :business_id, :location_id, :code, :points_spent)
             RETURNING id
         """),
         {
             "user_id": str(payload.user_id),
             "offer_id": str(offer_id),
             "business_id": str(offer.business_id),
+            "location_id": str(redemption_location_id) if redemption_location_id else None,
             "code": offer.code,
             "points_spent": points_spent,
         },

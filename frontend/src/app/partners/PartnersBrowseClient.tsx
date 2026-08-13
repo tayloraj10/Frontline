@@ -5,6 +5,13 @@ import Link from "next/link";
 import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { type RedemptionProof } from "./RedemptionConfirmationModal";
 
+export type BrowseLocation = {
+  id: string;
+  label: string | null;
+  city: string | null;
+  state: string | null;
+};
+
 export type BrowseBusiness = {
   id: string;
   name: string;
@@ -12,15 +19,7 @@ export type BrowseBusiness = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
-  city: string | null;
-  state: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  postal_code: string | null;
-  country: string | null;
-  lat: number | null;
-  lng: number | null;
-  google_maps_url: string | null;
+  locations: BrowseLocation[];
   social_links: Record<string, string> | null;
   campaigns?: { slug: string; title: string }[];
 };
@@ -36,6 +35,7 @@ export type BrowseOffer = {
   max_redemptions_per_user: number | null;
   starts_at: string;
   ends_at: string | null;
+  location_id: string | null;
 };
 
 type Redemption = { id: string; code: string; points_spent: number; redeemed_at: string | null; used_at: string | null };
@@ -44,6 +44,7 @@ export function OfferCard({
   offer,
   businessName,
   businessSlug,
+  locations,
   userId,
   userPoints,
   onRedeemed,
@@ -51,6 +52,7 @@ export function OfferCard({
   offer: BrowseOffer;
   businessName: string;
   businessSlug: string;
+  locations: BrowseLocation[];
   userId: string | null;
   userPoints: number | null;
   onRedeemed: (offerId: string, spent: number) => void;
@@ -60,6 +62,11 @@ export function OfferCard({
   const [error, setError] = useState<string | null>(null);
   const [proof, setProof] = useState<RedemptionProof | null>(null);
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+
+  // Location resolution: offer.location_id pins it to one location; otherwise, if the
+  // business has more than one, the redeemer must pick which one they're at.
+  const needsLocationPicker = offer.location_id === null && locations.length > 1;
+  const [pickedLocationId, setPickedLocationId] = useState<string>("");
 
   useEffect(() => {
     if (!userId) {
@@ -92,13 +99,18 @@ export function OfferCard({
 
   const handleRedeem = async () => {
     if (!userId) return;
+    if (needsLocationPicker && !pickedLocationId) {
+      setError("Choose a location first");
+      return;
+    }
     setRedeeming(true);
     setError(null);
     try {
+      const locationId = offer.location_id ?? (needsLocationPicker ? pickedLocationId : locations[0]?.id ?? null);
       const res = await fetch(`${fastapiUrl}/api/partners/offers/${offer.id}/redeem`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId }),
+        body: JSON.stringify({ user_id: userId, location_id: locationId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to redeem offer");
@@ -168,13 +180,27 @@ export function OfferCard({
             Redeemed{redemptions[0]?.code ? ` — code ${redemptions[0].code}` : ""}
           </button>
         ) : (
-          <button
-            onClick={handleRedeem}
-            disabled={!eligible || redeeming}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 text-white shadow-elevation-1 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 transition-[background-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
-          >
-            {redeeming ? "Redeeming…" : eligible ? "Redeem" : "Not enough points"}
-          </button>
+          <>
+            {needsLocationPicker && eligible && (
+              <select
+                value={pickedLocationId}
+                onChange={(e) => setPickedLocationId(e.target.value)}
+                className="text-xs bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-500"
+              >
+                <option value="">Choose a location…</option>
+                {locations.map((l, i) => (
+                  <option key={l.id} value={l.id}>{l.label ?? `Location ${i + 1}`}</option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={handleRedeem}
+              disabled={!eligible || redeeming || (needsLocationPicker && !pickedLocationId)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 text-white shadow-elevation-1 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 transition-[background-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
+            >
+              {redeeming ? "Redeeming…" : eligible ? "Redeem" : "Not enough points"}
+            </button>
+          </>
         )}
         {redemptions && redemptions.length > 0 && !maxedOut && (
           <button
@@ -238,10 +264,13 @@ export default function PartnersBrowseClient({
             )}
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-bold text-zinc-100 truncate">{business.name}</h2>
-              {(business.city || business.state) && (
+              {business.locations.length === 1 && (business.locations[0].city || business.locations[0].state) && (
                 <p className="text-xs text-zinc-500 truncate">
-                  {[business.city, business.state].filter(Boolean).join(", ")}
+                  {[business.locations[0].city, business.locations[0].state].filter(Boolean).join(", ")}
                 </p>
+              )}
+              {business.locations.length > 1 && (
+                <p className="text-xs text-zinc-500 truncate">{business.locations.length} locations</p>
               )}
             </div>
             <ShareButton
@@ -266,6 +295,7 @@ export default function PartnersBrowseClient({
                 offer={offer}
                 businessName={business.name}
                 businessSlug={business.slug}
+                locations={business.locations}
                 userId={userId}
                 userPoints={points}
                 onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}

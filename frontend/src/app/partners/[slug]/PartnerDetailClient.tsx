@@ -8,11 +8,27 @@ import { OfferCard, type BrowseBusiness, type BrowseOffer } from "../PartnersBro
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), { ssr: false });
 
-function formatAddress(business: BrowseBusiness): string | null {
-  const line1 = [business.address_line1, business.address_line2].filter(Boolean).join(", ");
-  const cityState = [business.city, business.state].filter(Boolean).join(", ");
-  const line2 = [cityState, business.postal_code].filter(Boolean).join(" ");
-  const parts = [line1, line2, business.country].filter(Boolean);
+export type DetailLocation = {
+  id: string;
+  label: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  lat: number;
+  lng: number;
+  google_maps_url: string | null;
+};
+
+export type DetailBusiness = Omit<BrowseBusiness, "locations"> & { locations: DetailLocation[] };
+
+function formatAddress(location: DetailLocation): string | null {
+  const line1 = [location.address_line1, location.address_line2].filter(Boolean).join(", ");
+  const cityState = [location.city, location.state].filter(Boolean).join(", ");
+  const line2 = [cityState, location.postal_code].filter(Boolean).join(" ");
+  const parts = [line1, line2, location.country].filter(Boolean);
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
@@ -22,14 +38,13 @@ export default function PartnerDetailClient({
   userId,
   userPoints,
 }: {
-  business: BrowseBusiness;
+  business: DetailBusiness;
   offers: BrowseOffer[];
   userId: string | null;
   userPoints: number | null;
 }) {
   const [points, setPoints] = useState(userPoints);
-  const address = formatAddress(business);
-  const hasLocation = business.lat != null && business.lng != null;
+  const locations = business.locations;
   const socialLinks = business.social_links ?? {};
   const socialEntries = Object.entries(socialLinks).filter(([platform, url]) => !!url && platform !== "website");
 
@@ -43,7 +58,9 @@ export default function PartnerDetailClient({
           )}
           <div className="min-w-0">
             <h1 className="text-2xl font-black text-zinc-100">{business.name}</h1>
-            {address && <p className="text-sm text-zinc-500 mt-1">{address}</p>}
+            {locations.length === 1 && formatAddress(locations[0]) && (
+              <p className="text-sm text-zinc-500 mt-1">{formatAddress(locations[0])}</p>
+            )}
           </div>
         </div>
         <ShareButton
@@ -56,38 +73,42 @@ export default function PartnerDetailClient({
         <p className="text-sm text-zinc-300 whitespace-pre-wrap">{business.description}</p>
       )}
 
-      {hasLocation && (
-        <MiniMapPreview
-          lat={business.lat as number}
-          lng={business.lng as number}
-          interactive
-          heightClassName="h-[260px]"
-        />
-      )}
-
-      {hasLocation && (
-        <div className="flex flex-wrap items-center gap-4">
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address ?? `${business.lat},${business.lng}`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
-          >
-            <span aria-hidden="true">🧭</span>
-            Get directions
-          </a>
-          {(business.campaigns ?? []).map((c) => (
-            <Link
-              key={c.slug}
-              href={`/campaigns/${c.slug}?lat=${business.lat}&lng=${business.lng}`}
-              className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
-            >
-              <span aria-hidden="true">📍</span>
-              {(business.campaigns?.length ?? 0) > 1 ? `Show on map (${c.title})` : "Show on map"}
-            </Link>
-          ))}
-        </div>
-      )}
+      {locations.map((location) => {
+        const address = formatAddress(location);
+        return (
+          <div key={location.id} className="space-y-3">
+            {locations.length > 1 && (
+              <h3 className="text-sm font-semibold text-zinc-200">{location.label ?? "Location"}</h3>
+            )}
+            <MiniMapPreview lat={location.lat} lng={location.lng} interactive heightClassName="h-[260px]" />
+            <div className="flex flex-wrap items-center gap-4">
+              <a
+                href={
+                  location.google_maps_url ??
+                  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address ?? `${location.lat},${location.lng}`)}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
+              >
+                <span aria-hidden="true">🧭</span>
+                Get directions
+              </a>
+              {locations.length > 1 && address && <span className="text-sm text-zinc-500">{address}</span>}
+              {(business.campaigns ?? []).map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/campaigns/${c.slug}?lat=${location.lat}&lng=${location.lng}`}
+                  className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
+                >
+                  <span aria-hidden="true">📍</span>
+                  {(business.campaigns?.length ?? 0) > 1 ? `Show on map (${c.title})` : "Show on map"}
+                </Link>
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       <div className="flex flex-wrap gap-4 text-sm">
         {business.website_url && (
@@ -129,6 +150,7 @@ export default function PartnerDetailClient({
               offer={offer}
               businessName={business.name}
               businessSlug={business.slug}
+              locations={locations}
               userId={userId}
               userPoints={points}
               onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}

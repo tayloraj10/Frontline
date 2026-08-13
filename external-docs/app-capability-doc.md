@@ -49,8 +49,8 @@ Last updated: 2026-08-03.
 - View a group's public page: members, description, logo, social links, upcoming events, event history **(Beta)**.
 
 ### Partners (Businesses)
-- Browse partner businesses (`/partners`) and view detail pages (`/partners/[slug]`) — linked campaign, map location, active offers.
-- Redeem offers: "spend" mode deducts `points_cost` from `spendable_points`; "threshold" mode just requires reaching cumulative `points_threshold` without spending; `max_redemptions_per_user` enforced. Redemption yields a unique code with tap-to-copy; used redemptions show a crossed-out state once a merchant marks them used.
+- Browse partner businesses (`/partners`) and view detail pages (`/partners/[slug]`) — linked campaign, map location(s), active offers. A business can have any number of physical locations (`partner_business_locations`), each shown as its own map marker.
+- Redeem offers: "spend" mode deducts `points_cost` from `spendable_points`; "threshold" mode just requires reaching cumulative `points_threshold` without spending; `max_redemptions_per_user` enforced. Offers can optionally be restricted to one location; if not, and the business has multiple locations, the redeemer picks which one they're at. Redemption yields a unique code with tap-to-copy; used redemptions show a crossed-out state once a merchant marks them used.
 - Apply to become a partner business (`/partners/apply`) — public form, goes to admin review.
 
 ### Legal

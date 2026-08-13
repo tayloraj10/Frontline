@@ -12,12 +12,13 @@ import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
 import AddressAutocomplete from "./AddressAutocomplete";
 import TimedEventForm from "@/components/events/TimedEventForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
-import OfferForm, { type OfferFormPayload } from "@/components/partners/OfferForm";
+import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { updateEvent } from "@/lib/events";
 import { deleteGroup } from "@/lib/groups";
+import { reconcileBusinessLocations } from "@/lib/partnerLocations";
 import type { Json, Database } from "@/types/database";
 
 export type Campaign = {
@@ -66,6 +67,15 @@ export type PartnerBusiness = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
+  social_links: BusinessSocialLinks | null;
+  status: string;
+  created_at: string;
+};
+
+export type PartnerBusinessLocation = {
+  id: string;
+  business_id: string;
+  label: string | null;
   address_line1: string | null;
   address_line2: string | null;
   city: string | null;
@@ -75,7 +85,6 @@ export type PartnerBusiness = {
   lat: number | null;
   lng: number | null;
   google_maps_url: string | null;
-  social_links: BusinessSocialLinks | null;
   status: string;
   created_at: string;
 };
@@ -95,6 +104,7 @@ export type PartnerOffer = {
   starts_at: string;
   ends_at: string | null;
   created_at: string;
+  location_id: string | null;
 };
 
 export type OfferRedemption = {
@@ -1667,9 +1677,10 @@ type RedemptionDetail = {
   profiles: { username: string | null; display_name: string | null } | null;
 };
 
-export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
+export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCancelled }: {
   offer: PartnerOffer;
   redemptionCount: number;
+  locations?: OfferFormLocation[];
   onUpdated: (o: PartnerOffer) => void;
   onCancelled: (id: string) => void;
 }) {
@@ -1706,7 +1717,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
       .from("partner_offers")
       .update(payload)
       .eq("id", offer.id)
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
       .single();
 
     if (updateErr) return updateErr.message;
@@ -1737,6 +1748,7 @@ export function OfferRow({ offer, redemptionCount, onUpdated, onCancelled }: {
     return (
       <OfferForm
         initial={offer}
+        locations={locations}
         onSubmit={handleEditOffer}
         onCancel={() => setEditing(false)}
         submitLabel="Save changes"
@@ -2015,6 +2027,8 @@ function BusinessCard({
   setBusinesses,
   businessCampaignLinks,
   setBusinessCampaignLinks,
+  businessLocations,
+  setBusinessLocations,
 }: {
   business: PartnerBusiness;
   offers: PartnerOffer[];
@@ -2025,6 +2039,8 @@ function BusinessCard({
   setBusinesses: (b: PartnerBusiness[]) => void;
   businessCampaignLinks: BusinessCampaignLink[];
   setBusinessCampaignLinks: (l: BusinessCampaignLink[]) => void;
+  businessLocations: PartnerBusinessLocation[];
+  setBusinessLocations: (l: PartnerBusinessLocation[]) => void;
 }) {
   const isPending = business.status === "pending";
   const isRejected = business.status === "rejected";
@@ -2042,7 +2058,7 @@ function BusinessCard({
       .schema("public")
       .from("partner_offers")
       .insert({ ...payload, business_id: business.id, status: "active" })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
       .single();
 
     if (insertErr) return insertErr.message;
@@ -2053,17 +2069,18 @@ function BusinessCard({
   };
 
   const businessCampaignIds = businessCampaignLinks.filter(l => l.business_id === business.id).map(l => l.campaign_id);
+  const businessLocationRows = businessLocations.filter(l => l.business_id === business.id);
 
   const handleEditSubmit = async (payload: BusinessFormPayload): Promise<string | null> => {
     const supabase = createClient();
-    const { campaignIds, ...rest } = payload;
+    const { campaignIds, locations, ...rest } = payload;
     const { data, error: updateErr } = await supabase
       .schema("public")
       .from("partner_businesses")
       .update({ ...rest, status: isPending ? "active" : business.status })
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
       )
       .single();
 
@@ -2071,6 +2088,20 @@ function BusinessCard({
 
     const updated = data as PartnerBusiness;
     setBusinesses(businesses.map(b => (b.id === updated.id ? updated : b)));
+
+    const locationsResult = await reconcileBusinessLocations<PartnerBusinessLocation>(
+      supabase,
+      business.id,
+      businessLocationRows,
+      locations,
+      "id, business_id, label, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, status, created_at"
+    );
+    if (locationsResult.rows === null) return locationsResult.error;
+
+    setBusinessLocations([
+      ...businessLocations.filter(l => l.business_id !== business.id),
+      ...locationsResult.rows,
+    ]);
 
     const currentLinked = new Set(businessCampaignIds);
     const nextLinked = new Set(campaignIds);
@@ -2112,7 +2143,7 @@ function BusinessCard({
       .update({ status: "rejected" })
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
       )
       .single();
     setRejecting(false);
@@ -2178,7 +2209,22 @@ function BusinessCard({
           )}
           {editing && (
             <BusinessForm
-              initial={business}
+              initial={{
+                ...business,
+                locations: businessLocationRows.map(l => ({
+                  id: l.id,
+                  label: l.label,
+                  address_line1: l.address_line1,
+                  address_line2: l.address_line2,
+                  city: l.city,
+                  state: l.state,
+                  postal_code: l.postal_code,
+                  country: l.country,
+                  lat: l.lat,
+                  lng: l.lng,
+                  google_maps_url: l.google_maps_url,
+                })),
+              }}
               initialCampaignIds={businessCampaignIds}
               campaigns={campaigns}
               onSubmit={handleEditSubmit}
@@ -2191,6 +2237,7 @@ function BusinessCard({
               key={o.id}
               offer={o}
               redemptionCount={redemptionCounts[o.id] ?? 0}
+              locations={businessLocationRows}
               onUpdated={(updated) => setOffers(offers.map(existing => existing.id === updated.id ? updated : existing))}
               onCancelled={(id) => setOffers(offers.map(existing => existing.id === id ? { ...existing, status: "cancelled" } : existing))}
             />
@@ -2205,7 +2252,7 @@ function BusinessCard({
             {showCreateOffer ? "Cancel" : "+ New Offer"}
           </button>
           {showCreateOffer && (
-            <OfferForm onSubmit={handleCreateOffer} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
+            <OfferForm onSubmit={handleCreateOffer} locations={businessLocationRows} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
           )}
           {!isPending && <BusinessAdminsManager businessId={business.id} />}
         </div>
@@ -2231,6 +2278,8 @@ function PartnersTab({
   campaigns,
   businessCampaignLinks,
   setBusinessCampaignLinks,
+  businessLocations,
+  setBusinessLocations,
 }: {
   businesses: PartnerBusiness[];
   setBusinesses: (b: PartnerBusiness[]) => void;
@@ -2240,6 +2289,8 @@ function PartnersTab({
   campaigns: Campaign[];
   businessCampaignLinks: BusinessCampaignLink[];
   setBusinessCampaignLinks: (l: BusinessCampaignLink[]) => void;
+  businessLocations: PartnerBusinessLocation[];
+  setBusinessLocations: (l: PartnerBusinessLocation[]) => void;
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -2249,13 +2300,13 @@ function PartnersTab({
 
   const handleCreateSubmit = async (payload: BusinessFormPayload): Promise<string | null> => {
     const supabase = createClient();
-    const { campaignIds, ...rest } = payload;
+    const { campaignIds, locations, ...rest } = payload;
     const { data, error: insertErr } = await supabase
       .schema("public")
       .from("partner_businesses")
       .insert({ ...rest, status: "active" })
       .select(
-        "id, name, slug, description, logo_url, website_url, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
       )
       .single();
 
@@ -2263,6 +2314,19 @@ function PartnersTab({
 
     const newBusiness = data as PartnerBusiness;
     setBusinesses([newBusiness, ...businesses]);
+
+    if (locations.length > 0) {
+      const { data: newLocations, error: locationsErr } = await supabase
+        .schema("public")
+        .from("partner_business_locations")
+        .insert(locations.map(({ id: _id, ...loc }) => ({ ...loc, business_id: newBusiness.id })))
+        .select("id, business_id, label, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, status, created_at");
+      if (locationsErr) {
+        setShowCreate(false);
+        return `Business created, but failed to save locations: ${locationsErr.message}`;
+      }
+      setBusinessLocations([...businessLocations, ...(newLocations as PartnerBusinessLocation[])]);
+    }
 
     if (campaignIds.length > 0) {
       const { error: linkErr } = await supabase
@@ -2345,6 +2409,8 @@ function PartnersTab({
               setBusinesses={setBusinesses}
               businessCampaignLinks={businessCampaignLinks}
               setBusinessCampaignLinks={setBusinessCampaignLinks}
+              businessLocations={businessLocations}
+              setBusinessLocations={setBusinessLocations}
             />
           ))}
         </div>
@@ -2367,6 +2433,8 @@ function PartnersTab({
               setBusinesses={setBusinesses}
               businessCampaignLinks={businessCampaignLinks}
               setBusinessCampaignLinks={setBusinessCampaignLinks}
+              businessLocations={businessLocations}
+              setBusinessLocations={setBusinessLocations}
             />
           ))}
         </div>
@@ -2390,6 +2458,8 @@ function PartnersTab({
             setBusinesses={setBusinesses}
             businessCampaignLinks={businessCampaignLinks}
             setBusinessCampaignLinks={setBusinessCampaignLinks}
+            businessLocations={businessLocations}
+            setBusinessLocations={setBusinessLocations}
           />
         ))}
       </div>
@@ -3519,6 +3589,7 @@ export default function AdminPanel({
   initialOffers,
   initialOfferRedemptions,
   initialBusinessCampaignLinks,
+  initialBusinessLocations,
   initialGroups,
   currentUserId,
   initialSettings,
@@ -3530,6 +3601,7 @@ export default function AdminPanel({
   initialOffers: PartnerOffer[];
   initialOfferRedemptions: OfferRedemption[];
   initialBusinessCampaignLinks: BusinessCampaignLink[];
+  initialBusinessLocations: PartnerBusinessLocation[];
   initialGroups: AdminGroup[];
   currentUserId: string;
   initialSettings: GameSetting[];
@@ -3561,6 +3633,7 @@ export default function AdminPanel({
     return acc;
   }, {});
   const [businessCampaignLinks, setBusinessCampaignLinks] = useState(initialBusinessCampaignLinks);
+  const [businessLocations, setBusinessLocations] = useState(initialBusinessLocations);
   const [groups, setGroups] = useState(initialGroups);
   const [settings, setSettings] = useState(initialSettings);
   const hotspotMultiplier = settings.find(s => s.key === "hotspot_multiplier")?.value ?? 1;
@@ -3703,6 +3776,8 @@ export default function AdminPanel({
           campaigns={activeCampaigns}
           businessCampaignLinks={businessCampaignLinks}
           setBusinessCampaignLinks={setBusinessCampaignLinks}
+          businessLocations={businessLocations}
+          setBusinessLocations={setBusinessLocations}
         />
       )}
       {tab === "groups" && <GroupsTab groups={groups} setGroups={setGroups} currentUserId={currentUserId} />}
