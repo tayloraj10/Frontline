@@ -52,9 +52,40 @@ async def get_presigned_url(
     return {"upload_url": upload_url, "public_url": public_url, "key": key}
 
 
-def delete_r2_object(public_url: str) -> None:
+def _key_from_public_url(public_url: str) -> str | None:
     prefix = f"{settings.r2_public_url.rstrip('/')}/"
     if not public_url.startswith(prefix):
+        return None
+    return public_url[len(prefix):]
+
+
+def delete_r2_object(public_url: str) -> None:
+    key = _key_from_public_url(public_url)
+    if key is None:
         raise ValueError(f"URL {public_url!r} does not match configured r2_public_url prefix")
-    key = public_url[len(prefix):]
     _r2_client().delete_object(Bucket=settings.r2_bucket_name, Key=key)
+
+
+def delete_r2_objects_batch(public_urls: list[str]) -> list[str]:
+    """Best-effort batch delete. Returns a list of error strings (empty on full success)."""
+    keys = {k for u in public_urls if (k := _key_from_public_url(u)) is not None}
+    if not keys:
+        return []
+    errors: list[str] = []
+    try:
+        client = _r2_client()
+    except HTTPException as e:
+        return [str(e.detail)]
+    keys_list = sorted(keys)
+    for i in range(0, len(keys_list), 1000):
+        batch = keys_list[i : i + 1000]
+        try:
+            result = client.delete_objects(
+                Bucket=settings.r2_bucket_name,
+                Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+            )
+            for err in result.get("Errors", []):
+                errors.append(f"{err.get('Key')}: {err.get('Message')}")
+        except Exception as e:
+            errors.append(str(e))
+    return errors
