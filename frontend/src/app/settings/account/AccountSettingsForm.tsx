@@ -8,10 +8,9 @@ import { deleteAccount } from "./actions";
 interface Props {
   email: string;
   isOAuthUser: boolean;
-  userId: string;
 }
 
-export default function AccountSettingsForm({ email, isOAuthUser, userId }: Props) {
+export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
   const router = useRouter();
   const [newEmail, setNewEmail] = useState("");
   const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -180,7 +179,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, userId }: Prop
         </div>
         <div className="flex flex-wrap gap-3">
           <a
-            href={`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/account/${userId}/export`}
+            href="/api/account/export"
             download="frontline-account-export.json"
             className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
           >
