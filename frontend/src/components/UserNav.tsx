@@ -16,11 +16,13 @@ export default function UserNav({
   points = 0,
   spendablePoints = 0,
   avatarUrl = null,
+  displayName: profileDisplayName = null,
 }: {
   user: User | null;
   points?: number;
   spendablePoints?: number;
   avatarUrl?: string | null;
+  displayName?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -86,7 +88,7 @@ export default function UserNav({
   }
 
   const displayName =
-    user.user_metadata?.username || user.email?.split("@")[0] || "User";
+    profileDisplayName || user.user_metadata?.username || user.email?.split("@")[0] || "User";
 
   const formatCompact = (value: number) =>
     value >= 1000
