@@ -75,7 +75,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
       setCurrentAvatar(newAvatarUrl);
       setAvatarFile(null);
       setAvatarPreview(null);
-      router.push(`/users/${username}`);
+      router.push(`/users/${encodeURIComponent(username)}`);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -173,7 +173,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
         </button>
         <button
           type="button"
-          onClick={() => router.push(`/users/${username}`)}
+          onClick={() => router.push(`/users/${encodeURIComponent(username)}`)}
           className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.96] touch-manipulation"
         >
           Cancel

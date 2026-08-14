@@ -663,7 +663,7 @@ export default function CleanupEventDetail({
                         size="xs"
                       />
                       {r.username ? (
-                        <Link href={`/users/${r.username}`} className="text-sm text-zinc-200 truncate hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
+                        <Link href={`/users/${encodeURIComponent(r.username)}`} className="text-sm text-zinc-200 truncate hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
                           {r.display_name ?? r.username}
                         </Link>
                       ) : (

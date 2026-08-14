@@ -105,7 +105,7 @@ export default function EntityLeaderboardTabs({
                 <EntityRow
                   key={p.id}
                   rank={profileRanks[i]}
-                  href={`/users/${p.username}`}
+                  href={`/users/${encodeURIComponent(p.username)}`}
                   avatarUrl={p.avatar_url}
                   name={p.display_name ?? p.username}
                   points={p.points ?? 0}

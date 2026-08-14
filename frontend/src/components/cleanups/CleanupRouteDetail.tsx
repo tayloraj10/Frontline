@@ -51,7 +51,7 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
         />
         <div>
           {route.submitted_by.username ? (
-            <Link href={`/users/${route.submitted_by.username}`} className="text-sm text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
+            <Link href={`/users/${encodeURIComponent(route.submitted_by.username)}`} className="text-sm text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
               {submitterName}
             </Link>
           ) : (

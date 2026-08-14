@@ -46,7 +46,7 @@ export default function Avatar({
 }) {
   if (username) {
     return (
-      <Link href={`/users/${username}`} className={`shrink-0 ${className}`}>
+      <Link href={`/users/${encodeURIComponent(username)}`} className={`shrink-0 ${className}`}>
         <AvatarCircle avatarUrl={avatarUrl} name={name} size={size} />
       </Link>
     );

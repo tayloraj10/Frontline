@@ -96,7 +96,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
                 </div>
                 <div className="min-w-0">
                   <Link
-                    href={`/users/${m.username}`}
+                    href={`/users/${encodeURIComponent(m.username)}`}
                     className="text-sm text-zinc-200 hover:text-zinc-100 transition-[color,transform] duration-150 active:scale-[0.97] touch-manipulation font-medium"
                   >
                     {m.displayName ?? m.username}

@@ -386,7 +386,7 @@ function LeaderboardRow({
       <RankBadge rank={rank} />
       {avatarNode}
       {variant === "user" && entry.username ? (
-        <Link href={`/users/${entry.username}`} className="flex-1 min-w-0 text-xs text-zinc-200 break-words hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
+        <Link href={`/users/${encodeURIComponent(entry.username)}`} className="flex-1 min-w-0 text-xs text-zinc-200 break-words hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
           {entry.name}
         </Link>
       ) : (
@@ -631,7 +631,7 @@ function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { ite
               <div className="flex items-baseline gap-1 flex-wrap">
                 {item.actorUsername ? (
                   <Link
-                    href={`/users/${item.actorUsername}`}
+                    href={`/users/${encodeURIComponent(item.actorUsername)}`}
                     className="text-xs font-semibold text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150"
                   >
                     {item.actorName}
@@ -773,7 +773,7 @@ function PanelContent({
             {userUsername && (
               <div className="px-4 pt-3 pb-1 flex items-center justify-between border-b border-zinc-800/60">
                 <span className="text-xs text-zinc-500">Your submissions</span>
-                <Link href={`/users/${userUsername}`} className="text-xs text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+                <Link href={`/users/${encodeURIComponent(userUsername)}`} className="text-xs text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
                   Manage on profile →
                 </Link>
               </div>

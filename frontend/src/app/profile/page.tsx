@@ -14,5 +14,5 @@ export default async function ProfileRedirectPage() {
     .single();
 
   if (!profile?.username) redirect("/login");
-  redirect(`/users/${profile.username}`);
+  redirect(`/users/${encodeURIComponent(profile.username)}`);
 }

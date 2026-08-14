@@ -29,7 +29,8 @@ interface Props {
 
 
 export default async function UserProfilePage({ params }: Props) {
-  const { username } = await params;
+  const { username: rawUsername } = await params;
+  const username = decodeURIComponent(rawUsername);
   const supabase = await createClient();
 
   const [{ data: { user: currentUser } }, { data: profileData }] = await Promise.all([

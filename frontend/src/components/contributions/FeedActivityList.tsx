@@ -100,7 +100,7 @@ export default function FeedActivityList({
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5 flex-wrap">
                 <Link
-                  href={`/users/${profile?.username ?? ""}`}
+                  href={`/users/${encodeURIComponent(profile?.username ?? "")}`}
                   className="text-sm font-semibold text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150"
                 >
                   {actorName}
