@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isNativePlatform } from "@/lib/capacitor";
 import { acceptLegal } from "@/app/legal/actions";
+import { applyAppleProfileName } from "@/lib/applyAppleProfileName";
 import { Card } from "@/components/ui/Card";
 
 export default function SignupPage() {
@@ -91,7 +92,7 @@ export default function SignupPage() {
           return;
         }
 
-        const { error } = await supabase.auth.signInWithIdToken({
+        const { data: signInData, error } = await supabase.auth.signInWithIdToken({
           provider: "apple",
           token: idToken,
           nonce: rawNonce,
@@ -99,6 +100,11 @@ export default function SignupPage() {
         if (error) {
           setError(error.message);
           return;
+        }
+
+        const profile = "result" in result ? result.result.profile : undefined;
+        if (signInData.user && profile) {
+          await applyAppleProfileName(supabase, signInData.user.id, profile);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Apple sign-in failed.");
