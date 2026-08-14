@@ -1,12 +1,9 @@
-import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import PartnersBrowseClient, { type BrowseBusiness, type BrowseOffer } from "./PartnersBrowseClient";
 import BusinessApplyPrompt from "./BusinessApplyPrompt";
 
 export default async function PartnersPage() {
   const supabase = await createClient();
-  const userAgent = (await headers()).get("user-agent") ?? "";
-  const isNativeApp = userAgent.includes("FrontlineNativeApp");
 
   const {
     data: { user },
@@ -68,7 +65,7 @@ export default async function PartnersPage() {
   );
 
   return (
-    <main className={`max-w-4xl mx-auto px-6 pt-10 pb-24 sm:pb-10 w-full ${isNativeApp ? "min-h-[100.5dvh]" : ""}`}>
+    <main className="max-w-4xl mx-auto px-6 pt-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6">
         <h1 className="text-2xl font-black text-zinc-100">Partner Perks</h1>
         <p className="text-sm text-zinc-500 mt-1">
