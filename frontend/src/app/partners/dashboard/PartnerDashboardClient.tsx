@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { reconcileBusinessLocations } from "@/lib/partnerLocations";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import { OfferRow } from "@/app/admin/AdminPanel";
+import BusinessRadiusView, { MIN_TIER_ACTIVITY } from "@/components/partners/BusinessRadiusView";
+import RedemptionHistoryTable from "@/components/partners/RedemptionHistoryTable";
 
 export type DashboardBusiness = {
   id: string;
@@ -68,6 +70,8 @@ function BusinessPanel({
   campaignIds,
   setCampaignIdsByBusiness,
   isSiteAdmin,
+  fastapiUrl,
+  viewerUserId,
 }: {
   business: DashboardBusiness;
   offers: DashboardOffer[];
@@ -81,11 +85,48 @@ function BusinessPanel({
   campaignIds: string[];
   setCampaignIdsByBusiness: (updater: (prev: Record<string, string[]>) => Record<string, string[]>) => void;
   isSiteAdmin: boolean;
+  fastapiUrl: string;
+  viewerUserId: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [activeTab, setActiveTab] = useState<"offers" | "redemptions" | "radius">("offers");
   const businessOffers = offers.filter((o) => o.business_id === business.id);
   const businessLocations = locations.filter((l) => l.business_id === business.id);
+  const businessLocationIds = businessLocations.map((l) => l.id).join(",");
+
+  // Gate the "Radius of influence" tab itself on whether ANY location has something nearby to
+  // show — checking only the first location would hide the tab for a multi-location business
+  // whose first-listed spot just happens to be quiet. Fetched independently of BusinessRadiusView
+  // so the tab can be hidden before it's ever opened.
+  const [radiusTabVisible, setRadiusTabVisible] = useState(true);
+  useEffect(() => {
+    if (businessLocations.length === 0) {
+      setRadiusTabVisible(false);
+      return;
+    }
+    let cancelled = false;
+    const params = new URLSearchParams({ viewer_user_id: viewerUserId });
+    Promise.all(
+      businessLocations.map((loc) =>
+        fetch(`${fastapiUrl}/api/partners/businesses/${business.id}/locations/${loc.id}/tier-activity?${params}`)
+          .then((res) => res.json())
+          .catch(() => ({}) as Record<string, number>)
+      )
+    ).then((results: Record<"block" | "neighborhood" | "wide", number>[]) => {
+      if (cancelled) return;
+      setRadiusTabVisible(results.some((json) => Object.values(json).some((n) => n >= MIN_TIER_ACTIVITY)));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business.id, businessLocationIds, fastapiUrl, viewerUserId]);
+
+  useEffect(() => {
+    if (activeTab === "radius" && !radiusTabVisible) setActiveTab("offers");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [radiusTabVisible]);
   const linkedCampaigns = campaignIds
     .map((id) => allCampaigns.find((c) => c.id === id))
     .filter((c): c is { id: string; title: string; slug: string } => !!c);
@@ -209,53 +250,103 @@ function BusinessPanel({
           </button>
         </div>
       </div>
-      <div className="border-t border-zinc-800 px-5 py-4 space-y-3 bg-zinc-950/40">
-        {editing && (
-          <BusinessForm
-            initial={{
-              ...business,
-              locations: businessLocations.map((l) => ({
-                id: l.id,
-                label: l.label,
-                address_line1: l.address_line1,
-                address_line2: l.address_line2,
-                city: l.city,
-                state: l.state,
-                postal_code: l.postal_code,
-                country: l.country,
-                lat: l.lat,
-                lng: l.lng,
-                google_maps_url: l.google_maps_url,
-              })),
-            }}
-            initialCampaignIds={campaignIds}
-            campaigns={isSiteAdmin ? allCampaigns : undefined}
-            onSubmit={handleEditBusiness}
-            onCancel={() => setEditing(false)}
-            submitLabel="Save changes"
-          />
-        )}
-        {businessOffers.map((o) => (
-          <OfferRow
-            key={o.id}
-            offer={o}
-            redemptionCount={redemptionCounts[o.id] ?? 0}
-            locations={businessLocations}
-            onUpdated={(updated) => setOffers(offers.map((existing) => (existing.id === updated.id ? (updated as DashboardOffer) : existing)))}
-            onCancelled={(id) => setOffers(offers.map((existing) => (existing.id === id ? { ...existing, status: "cancelled" } : existing)))}
-          />
+      <div className="flex items-center gap-1 border-t border-zinc-800 px-5 py-2.5 bg-zinc-950/60">
+        {(
+          [
+            { key: "offers", label: "Offers", count: businessOffers.length },
+            { key: "redemptions", label: "Redemptions", count: null },
+            ...(radiusTabVisible ? [{ key: "radius", label: "Radius of influence", count: null }] : []),
+          ] as { key: "offers" | "redemptions" | "radius"; label: string; count: number | null }[]
+        ).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors duration-150 ${
+              activeTab === tab.key
+                ? "bg-emerald-700 text-white shadow-elevation-1"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+            }`}
+          >
+            {tab.label}
+            {tab.count !== null && (
+              <span
+                className={`text-[10px] rounded-full px-1.5 leading-4 ${
+                  activeTab === tab.key ? "bg-emerald-900/60 text-emerald-100" : "bg-zinc-800 text-zinc-400"
+                }`}
+              >
+                {tab.count}
+              </span>
+            )}
+          </button>
         ))}
-        {businessOffers.length === 0 && !showCreateOffer && (
-          <p className="text-xs text-zinc-600">No offers yet.</p>
+      </div>
+      <div className="px-5 py-4 space-y-3 bg-zinc-950/40">
+        {activeTab === "offers" && (
+          <>
+            {editing && (
+              <BusinessForm
+                initial={{
+                  ...business,
+                  locations: businessLocations.map((l) => ({
+                    id: l.id,
+                    label: l.label,
+                    address_line1: l.address_line1,
+                    address_line2: l.address_line2,
+                    city: l.city,
+                    state: l.state,
+                    postal_code: l.postal_code,
+                    country: l.country,
+                    lat: l.lat,
+                    lng: l.lng,
+                    google_maps_url: l.google_maps_url,
+                  })),
+                }}
+                initialCampaignIds={campaignIds}
+                campaigns={isSiteAdmin ? allCampaigns : undefined}
+                onSubmit={handleEditBusiness}
+                onCancel={() => setEditing(false)}
+                submitLabel="Save changes"
+              />
+            )}
+            {businessOffers.map((o) => (
+              <OfferRow
+                key={o.id}
+                offer={o}
+                redemptionCount={redemptionCounts[o.id] ?? 0}
+                locations={businessLocations}
+                onUpdated={(updated) => setOffers(offers.map((existing) => (existing.id === updated.id ? (updated as DashboardOffer) : existing)))}
+                onCancelled={(id) => setOffers(offers.map((existing) => (existing.id === id ? { ...existing, status: "cancelled" } : existing)))}
+              />
+            ))}
+            {businessOffers.length === 0 && !showCreateOffer && (
+              <p className="text-xs text-zinc-600">No offers yet.</p>
+            )}
+            <button
+              onClick={() => setShowCreateOffer(!showCreateOffer)}
+              className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
+            >
+              {showCreateOffer ? "Cancel" : "+ New Offer"}
+            </button>
+            {showCreateOffer && (
+              <OfferForm locations={businessLocations} onSubmit={handleCreateOffer} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
+            )}
+          </>
         )}
-        <button
-          onClick={() => setShowCreateOffer(!showCreateOffer)}
-          className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
-        >
-          {showCreateOffer ? "Cancel" : "+ New Offer"}
-        </button>
-        {showCreateOffer && (
-          <OfferForm locations={businessLocations} onSubmit={handleCreateOffer} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
+        {activeTab === "redemptions" && (
+          <RedemptionHistoryTable
+            businessId={business.id}
+            offers={businessOffers}
+            fastapiUrl={fastapiUrl}
+            viewerUserId={viewerUserId}
+          />
+        )}
+        {activeTab === "radius" && (
+          <BusinessRadiusView
+            businessId={business.id}
+            locations={businessLocations}
+            fastapiUrl={fastapiUrl}
+            viewerUserId={viewerUserId}
+          />
         )}
       </div>
     </div>
@@ -270,6 +361,8 @@ export default function PartnerDashboardClient({
   allCampaigns,
   initialCampaignIdsByBusiness,
   isSiteAdmin,
+  fastapiUrl,
+  viewerUserId,
 }: {
   initialBusinesses: DashboardBusiness[];
   initialOffers: DashboardOffer[];
@@ -278,6 +371,8 @@ export default function PartnerDashboardClient({
   allCampaigns: { id: string; title: string; slug: string }[];
   initialCampaignIdsByBusiness: Record<string, string[]>;
   isSiteAdmin: boolean;
+  fastapiUrl: string;
+  viewerUserId: string;
 }) {
   const [businesses, setBusinesses] = useState(initialBusinesses);
   const [offers, setOffers] = useState(initialOffers);
@@ -310,6 +405,8 @@ export default function PartnerDashboardClient({
           campaignIds={campaignIdsByBusiness[b.id] ?? []}
           setCampaignIdsByBusiness={setCampaignIdsByBusiness}
           isSiteAdmin={isSiteAdmin}
+          fastapiUrl={fastapiUrl}
+          viewerUserId={viewerUserId}
         />
       ))}
     </div>

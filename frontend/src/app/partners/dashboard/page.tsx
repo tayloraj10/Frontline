@@ -11,6 +11,8 @@ export default async function PartnerDashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
+
   const { data: profile } = await supabase
     .schema("public")
     .from("profiles")
@@ -59,6 +61,7 @@ export default async function PartnerDashboardPage() {
     .schema("public")
     .from("campaigns")
     .select("id, title, slug")
+    .eq("status", "active")
     .order("title");
   const allCampaigns = allCampaignsRaw ?? [];
 
@@ -101,6 +104,8 @@ export default async function PartnerDashboardPage() {
         allCampaigns={allCampaigns}
         initialCampaignIdsByBusiness={campaignIdsByBusiness}
         isSiteAdmin={isSiteAdmin}
+        fastapiUrl={fastapiUrl}
+        viewerUserId={user.id}
       />
     </main>
   );

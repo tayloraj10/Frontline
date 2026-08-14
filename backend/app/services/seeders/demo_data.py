@@ -800,6 +800,133 @@ class DemoDataSeeder(Seeder):
         except Exception as exc:
             result.errors.append(f"event_trigger trash: {exc}")
 
+        # 12. Partner business (radius-of-influence + redemption-history demo data)
+        # Location sits ~350m from the Chicago 60601 _TRASH cluster so the "block" tier
+        # (250m) stays near-empty while "neighborhood" (800m) and "wide" (2400m) pick up
+        # the seeded Trash War contributions there.
+        biz_id = _uid("business_demo1")
+        loc_id = _uid("business_demo1_loc1")
+        marcus_id = user_ids.get("marcus")
+        try:
+            await db.execute(
+                text("""
+                    INSERT INTO partner_businesses (id, name, slug, description, status, created_at)
+                    VALUES (:id, :name, :slug, :desc, 'active', :ts)
+                    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
+                """),
+                {"id": biz_id, "name": "Loop Coffee Co.", "slug": "loop-coffee-co",
+                 "desc": "Neighborhood coffee shop backing Clean Cities Collective's downtown Chicago push.",
+                 "ts": _ts(30, 9)},
+            )
+            await db.execute(
+                text("""
+                    INSERT INTO partner_business_locations
+                        (id, business_id, label, address_line1, city, state, postal_code, country,
+                         lat, lng, status, created_at)
+                    VALUES
+                        (:id, :bid, :label, :addr, 'Chicago', 'IL', '60601', 'US',
+                         :lat, :lng, 'active', :ts)
+                    ON CONFLICT (id) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, label = EXCLUDED.label
+                """),
+                {"id": loc_id, "bid": biz_id, "label": "Loop Coffee Co. - Wabash Ave",
+                 "addr": "214 S Wabash Ave", "lat": 41.8829 + 0.003, "lng": -87.6236 + 0.003,
+                 "ts": _ts(30, 9)},
+            )
+            if marcus_id:
+                await db.execute(
+                    text("""
+                        INSERT INTO partner_business_admins (id, business_id, user_id)
+                        VALUES (:id, :bid, :uid)
+                        ON CONFLICT (business_id, user_id) DO NOTHING
+                    """),
+                    {"id": _uid("business_demo1_admin_marcus"), "bid": biz_id, "uid": marcus_id},
+                )
+            await db.execute(
+                text("""
+                    INSERT INTO campaign_partner_businesses (id, campaign_id, business_id)
+                    VALUES (:id, :cid, :bid)
+                    ON CONFLICT (campaign_id, business_id) DO NOTHING
+                """),
+                {"id": _uid("business_demo1_campaign_link"), "cid": TRASH_WAR_ID, "bid": biz_id},
+            )
+            result.inserted += 1
+        except Exception as exc:
+            result.errors.append(f"partner business: {exc}")
+
+        offer_ids = {
+            "coffee": _uid("business_demo1_offer_coffee"),
+            "discount": _uid("business_demo1_offer_discount"),
+            "expired": _uid("business_demo1_offer_expired"),
+        }
+        offers = [
+            {"id": offer_ids["coffee"], "title": "Free coffee for 5 bags logged",
+             "description": "Log 5 bags in Trash War, redeem for a free drip coffee.",
+             "mode": "spend", "points_cost": 50, "points_threshold": None,
+             "max_per_user": 1, "max_total": None, "status": "active"},
+            {"id": offer_ids["discount"], "title": "20% off any drink",
+             "description": "Hit the neighborhood contribution threshold for 20% off.",
+             "mode": "threshold", "points_cost": None, "points_threshold": 100,
+             "max_per_user": 3, "max_total": None, "status": "active"},
+            {"id": offer_ids["expired"], "title": "Founders Week Discount",
+             "description": "Limited-run launch promo, no longer active.",
+             "mode": "spend", "points_cost": 30, "points_threshold": None,
+             "max_per_user": 1, "max_total": 20, "status": "expired"},
+        ]
+        for o in offers:
+            try:
+                await db.execute(
+                    text("""
+                        INSERT INTO partner_offers
+                            (id, business_id, location_id, title, description, redemption_mode,
+                             points_cost, points_threshold, max_redemptions_per_user,
+                             max_total_redemptions, status, created_at)
+                        VALUES
+                            (:id, :bid, :lid, :title, :desc, :mode,
+                             :points_cost, :points_threshold, :max_per_user,
+                             :max_total, :status, :ts)
+                        ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status
+                    """),
+                    {"id": o["id"], "bid": biz_id, "lid": loc_id, "title": o["title"],
+                     "desc": o["description"], "mode": o["mode"], "points_cost": o["points_cost"],
+                     "points_threshold": o["points_threshold"], "max_per_user": o["max_per_user"],
+                     "max_total": o["max_total"], "status": o["status"], "ts": _ts(25, 10)},
+                )
+                result.inserted += 1
+            except Exception as exc:
+                result.errors.append(f"partner offer {o['id']}: {exc}")
+
+        # (user_key, offer_key, points_spent, days_back, used_days_back_or_None)
+        _REDEMPTIONS = [
+            ("sarah",  "coffee",   50, 6.0, 5.5),
+            ("jordan", "coffee",   50, 4.0, None),
+            ("priya",  "discount", 0,  3.0, 2.5),
+            ("tyler",  "discount", 0,  1.5, None),
+            ("maya",   "expired",  30, 20.0, 19.5),
+        ]
+        for i, (ukey, okey, points, d_back, used_d_back) in enumerate(_REDEMPTIONS):
+            uid = user_ids.get(ukey)
+            if not uid:
+                continue
+            try:
+                await db.execute(
+                    text("""
+                        INSERT INTO partner_redemptions
+                            (id, user_id, offer_id, business_id, location_id, code,
+                             points_spent, redeemed_at, used_at)
+                        VALUES
+                            (:id, :uid, :oid, :bid, :lid, :code,
+                             :points, :redeemed_at, :used_at)
+                        ON CONFLICT (id) DO NOTHING
+                    """),
+                    {"id": _uid(f"business_demo1_redemption_{i}"), "uid": uid,
+                     "oid": offer_ids[okey], "bid": biz_id, "lid": loc_id,
+                     "code": f"DEMO{i:03d}", "points": points, "redeemed_at": _ts(d_back, 12),
+                     "used_at": _ts(used_d_back, 12) if used_d_back is not None else None},
+                )
+                result.inserted += 1
+            except Exception as exc:
+                result.errors.append(f"partner redemption {i}: {exc}")
+
         await db.commit()
         return result
 
