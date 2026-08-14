@@ -431,6 +431,7 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
       {campaigns && (
         <div className="space-y-2 border-t border-zinc-800 pt-4">
           <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Campaigns</p>
+          <p className="text-xs text-zinc-600">Only visible to site admins &mdash; other partner admins won&apos;t see this section.</p>
           {campaigns.length === 0 && <p className="text-xs text-zinc-600">No campaigns yet.</p>}
           <div className="flex flex-wrap gap-2">
             {campaigns.map((c) => (
