@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isNativePlatform } from "@/lib/capacitor";
 import { acceptLegal } from "@/app/legal/actions";
 import { Card } from "@/components/ui/Card";
 
@@ -16,7 +17,9 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const appleSignupInFlight = useRef(false);
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +52,68 @@ export default function SignupPage() {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+  }
+
+  async function handleAppleSignup() {
+    if (appleSignupInFlight.current) return;
+    appleSignupInFlight.current = true;
+    setAppleLoading(true);
+    const supabase = createClient();
+
+    if (isNativePlatform()) {
+      try {
+        const { SocialLogin } = await import("@capgo/capacitor-social-login");
+        await SocialLogin.initialize({
+          apple: {
+            clientId: "com.frontlinemaps.app.signin",
+            redirectUrl: "",
+            useBroadcastChannel: true,
+          },
+        });
+
+        const rawNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawNonce));
+        const nonceDigest = Array.from(new Uint8Array(digest))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
+        const result = await SocialLogin.login({
+          provider: "apple",
+          options: { scopes: ["name", "email"], nonce: nonceDigest },
+        });
+        const idToken = "result" in result ? result.result.idToken : undefined;
+        if (!idToken) {
+          setError("Apple sign-in didn't return a token.");
+          return;
+        }
+
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: "apple",
+          token: idToken,
+          nonce: rawNonce,
+        });
+        if (error) {
+          setError(error.message);
+          return;
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Apple sign-in failed.");
+        return;
+      } finally {
+        appleSignupInFlight.current = false;
+        setAppleLoading(false);
+      }
+
+      window.location.href = "/campaigns";
+      return;
+    }
+
+    await supabase.auth.signInWithOAuth({
+      provider: "apple",
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
   }
@@ -95,6 +160,19 @@ export default function SignupPage() {
             </svg>
           )}
           {googleLoading ? "Redirecting…" : "Continue with Google"}
+        </button>
+
+        <button
+          onClick={handleAppleSignup}
+          disabled={appleLoading}
+          className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-black hover:bg-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm font-medium text-white"
+        >
+          {!appleLoading && (
+            <svg width="16" height="18" viewBox="0 0 814 1000" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+              <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155 123.1s-85-39.1-163-39.1c-76 0-103 40.4-164.7 40.4s-104.4-56.9-153.9-126.8c-57.7-82.5-104.4-210.3-104.4-331.5 0-194.7 126.6-297.9 251.1-297.9 65.9 0 120.8 43.3 162.2 43.3 39.4 0 100.9-45.9 176-45.9 28.5 0 131 2.6 198.4 99.9zM554.1 159.4c31.2-37.1 53.3-88.6 53.3-140.1 0-7.1-.6-14.3-1.9-20.1-50.8 1.9-111.2 33.9-147.6 76.3-28.5 32.5-55.3 84-55.3 136.2 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 136-71.7z"/>
+            </svg>
+          )}
+          {appleLoading ? "Redirecting…" : "Continue with Apple"}
         </button>
 
         <div className="flex items-center gap-3">
