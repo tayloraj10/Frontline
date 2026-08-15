@@ -3370,6 +3370,65 @@ function ModerationTab() {
           </div>
         )}
       </div>
+
+      <BlockedUsersSection />
+    </div>
+  );
+}
+
+type BlockedUserEntry = {
+  id: string;
+  reason: string | null;
+  created_at: string;
+  blocker: { id: string; username: string | null; display_name: string | null };
+  blocked: { id: string; username: string | null; display_name: string | null };
+};
+
+function BlockedUsersSection() {
+  const [blocks, setBlocks] = useState<BlockedUserEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/admin/blocked-users");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail ?? "Failed to load blocked users");
+        setBlocks(data ?? []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load blocked users");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const label = (p: { username: string | null; display_name: string | null }) =>
+    p.display_name || (p.username ? `@${p.username}` : "Unknown user");
+
+  return (
+    <div className="pt-4 border-t border-zinc-800 space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-300">User blocks</h3>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      {loading && <p className="text-sm text-zinc-500">Loading…</p>}
+      {!loading && blocks.length === 0 && !error && (
+        <p className="text-sm text-zinc-500">No users have blocked anyone yet.</p>
+      )}
+      {blocks.length > 0 && (
+        <div className="space-y-2">
+          {blocks.map((b) => (
+            <div key={b.id} className="flex flex-wrap items-center gap-2 border border-zinc-800/60 rounded-lg px-3 py-2 text-sm">
+              <span className="text-zinc-200">{label(b.blocker)}</span>
+              <span className="text-zinc-600">blocked</span>
+              <span className="text-zinc-200">{label(b.blocked)}</span>
+              <span className="text-xs text-zinc-500 ml-auto">{new Date(b.created_at).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

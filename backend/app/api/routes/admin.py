@@ -1352,6 +1352,55 @@ async def list_resolved_content_flags(db: AsyncSession, limit: int = 50) -> list
     return merged[:limit]
 
 
+@router.get("/blocked-users")
+async def get_blocked_users(db: AsyncSession = Depends(get_db), limit: int = 100):
+    return await list_blocked_users(db, limit)
+
+
+async def list_blocked_users(db: AsyncSession, limit: int = 100) -> list[dict]:
+    rows = (
+        await db.execute(
+            text("""
+                SELECT
+                    b.id,
+                    b.reason,
+                    b.created_at,
+                    blocker.id AS blocker_id,
+                    blocker.username AS blocker_username,
+                    blocker.display_name AS blocker_display_name,
+                    blocked.id AS blocked_id,
+                    blocked.username AS blocked_username,
+                    blocked.display_name AS blocked_display_name
+                FROM blocked_users b
+                JOIN profiles blocker ON blocker.id = b.blocker_id
+                JOIN profiles blocked ON blocked.id = b.blocked_id
+                ORDER BY b.created_at DESC
+                LIMIT :limit
+            """),
+            {"limit": limit},
+        )
+    ).fetchall()
+
+    return [
+        {
+            "id": str(r.id),
+            "reason": r.reason,
+            "created_at": r.created_at.isoformat(),
+            "blocker": {
+                "id": str(r.blocker_id),
+                "username": r.blocker_username,
+                "display_name": r.blocker_display_name,
+            },
+            "blocked": {
+                "id": str(r.blocked_id),
+                "username": r.blocked_username,
+                "display_name": r.blocked_display_name,
+            },
+        }
+        for r in rows
+    ]
+
+
 class ResolveContentFlagRequest(BaseModel):
     content_type: str
     content_id: UUID

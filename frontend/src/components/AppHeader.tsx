@@ -74,7 +74,7 @@ export default async function AppHeader() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
+                className={`px-3 py-1.5 text-sm rounded-lg whitespace-nowrap shrink-0 transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
                   link.highlight
                     ? "text-amber-500 hover:text-amber-400 active:text-amber-400"
                     : "text-zinc-400 hover:text-zinc-100 active:text-zinc-100"

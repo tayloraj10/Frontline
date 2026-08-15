@@ -110,7 +110,7 @@ export default function UserNav({
             <span className="text-xs font-bold text-zinc-400">{displayName[0]?.toUpperCase()}</span>
           )}
         </span>
-        <span className="hidden sm:inline">{displayName}</span>
+        <span className="hidden sm:inline truncate max-w-[8rem]">{displayName}</span>
         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 shadow-glow-emerald text-emerald-400 text-[10px] font-bold leading-none tabular-nums">
           {compactPoints}
         </span>

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.admin import (
     ResolveContentFlagRequest,
+    list_blocked_users,
     list_content_flags_queue,
     list_resolved_content_flags,
     preview_campaign_spendable_points_impact,
@@ -112,6 +113,15 @@ async def get_content_flags_history(
 ):
     _check_secret(x_admin_api_secret)
     return await list_resolved_content_flags(db)
+
+
+@router.get("/blocked-users")
+async def get_blocked_users(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_secret(x_admin_api_secret)
+    return await list_blocked_users(db)
 
 
 @router.post("/content-flags/resolve")

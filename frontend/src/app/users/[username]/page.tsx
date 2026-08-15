@@ -6,6 +6,7 @@ import type { Database } from "@/types/database";
 import UserActivityList from "@/components/contributions/UserActivityList";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import ShareButton from "@/components/ShareButton";
+import BlockUserButton from "@/components/BlockUserButton";
 
 const CAMPAIGN_UNIT: Record<string, string> = {
   territory: "pts",
@@ -42,6 +43,16 @@ export default async function UserProfilePage({ params }: Props) {
   if (!profile) notFound();
 
   const isOwn = currentUser?.id === profile.id;
+
+  const { data: existingBlock } =
+    !isOwn && currentUser
+      ? await supabase
+          .from("blocked_users")
+          .select("id")
+          .eq("blocker_id", currentUser.id)
+          .eq("blocked_id", profile.id)
+          .maybeSingle()
+      : { data: null };
 
   const [
     { data: contribsData, count: contribCount },
@@ -161,7 +172,7 @@ export default async function UserProfilePage({ params }: Props) {
   return (
     <main className="max-w-3xl mx-auto px-6 py-10 w-full">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
           <div className="shrink-0">
             <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 shadow-elevation-1 overflow-hidden flex items-center justify-center">
@@ -194,7 +205,7 @@ export default async function UserProfilePage({ params }: Props) {
             <p className="mt-1 text-xs text-zinc-600">Member since {joinedDate}</p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
           <ShareButton
             variant="icon"
             content={{ title: profile.display_name ?? profile.username, text: profile.bio ?? undefined }}
@@ -206,6 +217,13 @@ export default async function UserProfilePage({ params }: Props) {
             >
               Edit profile
             </Link>
+          )}
+          {!isOwn && currentUser && (
+            <BlockUserButton
+              blockedUserId={profile.id}
+              blockedUsername={profile.username}
+              initiallyBlocked={!!existingBlock}
+            />
           )}
         </div>
       </div>

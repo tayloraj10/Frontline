@@ -5,8 +5,7 @@ import LegalAcceptForm from "./LegalAcceptForm";
 
 const SKIP_PREFIXES = ["/legal", "/login", "/signup", "/forgot-password", "/auth/"];
 
-// TODO: re-enable once we're ready to require re-acceptance (turned off 2026-08-02, see dev-backlog-2026-07-24.md #10)
-const LEGAL_GATE_ENABLED = false;
+const LEGAL_GATE_ENABLED = true;
 
 export default async function LegalGate() {
   if (!LEGAL_GATE_ENABLED) return null;
