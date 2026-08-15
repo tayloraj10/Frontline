@@ -318,7 +318,7 @@ interface Props {
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
-  focusCoords?: { latitude: number; longitude: number } | null;
+  focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   bagMetrics?: { small: number; large: number; pounds: number };
   contributionCount?: number;
 }

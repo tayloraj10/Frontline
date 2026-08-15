@@ -4,7 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import Lightbox from "@/components/Lightbox";
-import BackButton from "@/components/ui/BackButton";
+import BackToCampaignButton from "@/components/ui/BackToCampaignButton";
 import Avatar from "@/components/ui/Avatar";
 import ShareButton from "@/components/ShareButton";
 import type { CleanupRouteDetailData } from "@/lib/cleanupRoutes";
@@ -104,7 +104,7 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
 
       {route.campaign_slug && (
         <div className="mt-6">
-          <BackButton href={`/campaigns/${route.campaign_slug}`} label={`Back to ${route.campaign_title ?? "campaign"}`} />
+          <BackToCampaignButton campaignSlug={route.campaign_slug} campaignTitle={route.campaign_title} />
         </div>
       )}
 

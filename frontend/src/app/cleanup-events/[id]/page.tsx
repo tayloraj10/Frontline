@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCleanupEvent } from "@/lib/cleanupEvents";
 import CleanupEventDetail from "@/components/cleanups/CleanupEventDetail";
-import BackButton from "@/components/ui/BackButton";
+import BackToCampaignButton from "@/components/ui/BackToCampaignButton";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -22,7 +22,7 @@ export default async function CleanupEventPage({ params }: Props) {
   return (
     <main className="max-w-lg mx-auto px-6 py-10 w-full">
       <div className="mb-2">
-        <BackButton href={`/campaigns/${event.campaign_slug}`} label="Back to campaign" />
+        <BackToCampaignButton campaignSlug={event.campaign_slug} />
       </div>
       <div className="mt-6">
         <CleanupEventDetail initialEvent={event} userId={user?.id ?? null} />

@@ -32,7 +32,7 @@ interface Props {
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
-  focusCoords?: { latitude: number; longitude: number } | null;
+  focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   activeStyle?: string;
   problemReports?: ProblemReports | null;
   onReportClick?: (report: ProblemReportMapData) => void;
