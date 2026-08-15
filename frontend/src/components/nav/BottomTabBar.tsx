@@ -13,6 +13,7 @@ const MAX_PRIMARY_TABS = 4;
 
 const ICONS_BY_HREF: Record<string, LucideIcon> = {
   "/campaigns": Flag,
+  "/campaigns/trash-war": Flag,
   "/leaderboard": Trophy,
   "/partners": Handshake,
   "/partners/dashboard": Store,
@@ -28,6 +29,7 @@ type TabColor = "emerald" | "amber" | "sky" | "violet" | "rose" | "orange";
 
 const COLOR_BY_HREF: Record<string, TabColor> = {
   "/campaigns": "emerald",
+  "/campaigns/trash-war": "emerald",
   "/leaderboard": "amber",
   "/partners": "sky",
   "/partners/dashboard": "orange",

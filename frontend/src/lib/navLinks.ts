@@ -22,7 +22,7 @@ export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin }: Buil
         ...(isAdmin ? [{ href: "/admin", label: "Admin", shortLabel: "Admin", highlight: true }] : []),
       ]
     : [
-        { href: "/campaigns", label: "Campaigns", shortLabel: "Campaigns" },
+        { href: "/campaigns/trash-war", label: "Campaigns", shortLabel: "Campaigns" },
         { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard" },
         { href: "/partners", label: "Partners", shortLabel: "Partners" },
         { href: "/groups", label: "Groups", shortLabel: "Groups" },

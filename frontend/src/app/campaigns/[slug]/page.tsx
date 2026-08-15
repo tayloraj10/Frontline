@@ -17,7 +17,7 @@ type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ lat?: string; lng?: string }>;
+  searchParams: Promise<{ lat?: string; lng?: string; zoom?: string }>;
 }
 
 type ProblemReportMapData = {
@@ -215,10 +215,14 @@ const getCampaignPageData = unstable_cache(
 
 export default async function CampaignPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { lat, lng } = await searchParams;
+  const { lat, lng, zoom } = await searchParams;
   const focusCoords =
     lat && lng && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lng))
-      ? { latitude: Number(lat), longitude: Number(lng) }
+      ? {
+          latitude: Number(lat),
+          longitude: Number(lng),
+          zoom: zoom && !Number.isNaN(Number(zoom)) ? Number(zoom) : undefined,
+        }
       : null;
   const supabase = await createClient();
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";

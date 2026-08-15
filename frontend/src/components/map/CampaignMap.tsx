@@ -15,6 +15,7 @@ import type { Feature, Point } from "geojson";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { getCleanupRoute, type CampaignCleanupRoute } from "@/lib/cleanupRoutes";
 import { formatPoints } from "@/lib/formatPoints";
+import { saveMapPosition } from "@/lib/mapPosition";
 import IconButton from "@/components/ui/IconButton";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 
@@ -385,7 +386,7 @@ interface Props {
   newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
-  focusCoords?: { latitude: number; longitude: number } | null;
+  focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   activeStyle?: StyleId;
   problemReports?: ProblemReports | null;
   onReportClick?: (report: ProblemReportMapData) => void;
@@ -3619,6 +3620,17 @@ export default function CampaignMap({
     updateIsUkViewport();
     map.current.on("moveend", updateIsUkViewport);
 
+    // Continuously remember where the user last left the map, keyed by campaign slug, so
+    // "back to campaign" links can pass it back as a focusCoords-style deep link
+    // (?lat&lng&zoom) instead of re-fitting the default bounds. See src/lib/mapPosition.ts.
+    const persistPosition = () => {
+      const m = map.current;
+      if (!m) return;
+      const c = m.getCenter();
+      saveMapPosition(campaign.slug, { lat: c.lat, lng: c.lng, zoom: m.getZoom() });
+    };
+    map.current.on("moveend", persistPosition);
+
     // Watch "idle" only once per load/style-swap rather than for the map's whole
     // lifetime — the report-radius pulse animation repaints continuously, which
     // would otherwise keep the map perpetually "busy" and the spinner stuck on.
@@ -4168,14 +4180,18 @@ export default function CampaignMap({
     };
   }, [activeEvents, eventGeoUnitIds, updateEventMarkers, campaign.id]);
 
-  // Focus coords: fly to a deep-linked location (e.g. from an event page "log your cleanup" link)
+  // Focus coords: fly to a deep-linked location — either a specific point (e.g. from an
+  // event page "log your cleanup" link, zoom defaults to 15) or a restored position from
+  // a "back to campaign" link (zoom included explicitly). Also suppresses the geolocation
+  // auto-fly-to-user-location behavior below, so a restored position isn't immediately
+  // overridden by the user's current location.
   useEffect(() => {
     if (!focusCoords || !map.current) return;
 
     const flyToFocus = () => {
       map.current?.flyTo({
         center: [focusCoords.longitude, focusCoords.latitude],
-        zoom: 15,
+        zoom: focusCoords.zoom ?? 15,
         duration: 700,
       });
     };
