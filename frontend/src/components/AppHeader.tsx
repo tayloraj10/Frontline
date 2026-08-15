@@ -21,6 +21,7 @@ export default async function AppHeader() {
   let spendablePoints = 0;
   let avatarUrl: string | null = null;
   let displayName: string | null = null;
+  let username: string | null = null;
   if (user) {
     const [{ data: profile }, { data: businessAdminRows }] = await Promise.all([
       supabase
@@ -41,6 +42,7 @@ export default async function AppHeader() {
     spendablePoints = profile?.spendable_points ?? 0;
     avatarUrl = profile?.avatar_url ?? null;
     displayName = profile?.display_name ?? profile?.username ?? null;
+    username = profile?.username ?? null;
     isBusinessAdmin = (businessAdminRows?.length ?? 0) > 0;
     isBusinessOnly = profile?.is_business_only ?? false;
   }
@@ -74,7 +76,7 @@ export default async function AppHeader() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
+                className={`px-3 py-1.5 text-sm rounded-lg whitespace-nowrap shrink-0 transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
                   link.highlight
                     ? "text-amber-500 hover:text-amber-400 active:text-amber-400"
                     : "text-zinc-400 hover:text-zinc-100 active:text-zinc-100"
@@ -89,7 +91,7 @@ export default async function AppHeader() {
           <SupportButton />
           {user && <NotificationBellWrapper userId={user.id} />}
           {user && <AchievementModalWrapper userId={user.id} />}
-          <UserNav user={user} points={points} spendablePoints={spendablePoints} avatarUrl={avatarUrl} displayName={displayName} />
+          <UserNav user={user} points={points} spendablePoints={spendablePoints} avatarUrl={avatarUrl} displayName={displayName} username={username} />
         </div>
       </div>
     </header>

@@ -31,7 +31,12 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
   if (!campaignData) notFound();
 
-  const { data: contribsData, count } = await supabase
+  const { data: blockedRows } = currentUser
+    ? await supabase.from("blocked_users").select("blocked_id").eq("blocker_id", currentUser.id)
+    : { data: [] as { blocked_id: string }[] };
+  const blockedIds = (blockedRows ?? []).map((b) => b.blocked_id);
+
+  let feedQuery = supabase
     .from("contributions")
     .select(
       "id, user_id, group_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)",
@@ -40,6 +45,10 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
     .eq("campaign_id", campaignData.id)
     .order("submitted_at", { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1);
+  if (blockedIds.length > 0) {
+    feedQuery = feedQuery.not("user_id", "in", `(${blockedIds.join(",")})`);
+  }
+  const { data: contribsData, count } = await feedQuery;
 
   const contribs = (contribsData ?? []) as unknown as (Contribution & {
     cleanup_id: string | null;

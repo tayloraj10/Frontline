@@ -17,12 +17,14 @@ export default function UserNav({
   spendablePoints = 0,
   avatarUrl = null,
   displayName: profileDisplayName = null,
+  username = null,
 }: {
   user: User | null;
   points?: number;
   spendablePoints?: number;
   avatarUrl?: string | null;
   displayName?: string | null;
+  username?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -110,7 +112,7 @@ export default function UserNav({
             <span className="text-xs font-bold text-zinc-400">{displayName[0]?.toUpperCase()}</span>
           )}
         </span>
-        <span className="hidden sm:inline">{displayName}</span>
+        <span className="hidden sm:inline truncate max-w-[8rem]">{displayName}</span>
         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 shadow-glow-emerald text-emerald-400 text-[10px] font-bold leading-none tabular-nums">
           {compactPoints}
         </span>
@@ -157,13 +159,15 @@ export default function UserNav({
               </div>
             </div>
             <div className="border-t border-zinc-800 my-1" />
-            <Link
-              href="/profile"
-              onClick={() => setOpen(false)}
-              className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 hover:text-zinc-100 transition-colors"
-            >
-              My profile
-            </Link>
+            {username && (
+              <Link
+                href={`/users/${username}`}
+                onClick={() => setOpen(false)}
+                className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 hover:text-zinc-100 transition-colors"
+              >
+                My profile
+              </Link>
+            )}
             <Link
               href="/settings/profile"
               onClick={() => setOpen(false)}

@@ -928,12 +928,26 @@ function TerritoryPanel({
     }
 
     const supabase = createClient();
-    (supabase
-      .from("contributions")
-      .select("value, submitted_at, group_id, user_id, cleanup_id, groups(name), cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
-      .eq("geo_unit_id", geoUnitId)
-      .order("submitted_at", { ascending: false })
-      .limit(20) as unknown as Promise<{ data: Omit<ContribRow, "profiles">[] | null }>)
+    (async () => {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+      const { data: blockedRows } = currentUser
+        ? await supabase.from("blocked_users").select("blocked_id").eq("blocker_id", currentUser.id)
+        : { data: [] as { blocked_id: string }[] };
+      const blockedIds = (blockedRows ?? []).map((b) => b.blocked_id);
+
+      let contribsQuery = supabase
+        .from("contributions")
+        .select("value, submitted_at, group_id, user_id, cleanup_id, groups(name), cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
+        .eq("geo_unit_id", geoUnitId)
+        .order("submitted_at", { ascending: false })
+        .limit(20);
+      if (blockedIds.length > 0) {
+        contribsQuery = contribsQuery.not("user_id", "in", `(${blockedIds.join(",")})`);
+      }
+      return (contribsQuery as unknown as Promise<{ data: Omit<ContribRow, "profiles">[] | null }>);
+    })()
       .then(async ({ data }) => {
         const rows = data ?? [];
         const userIds = [...new Set(rows.map((r) => r.user_id).filter((id): id is string => !!id))];
