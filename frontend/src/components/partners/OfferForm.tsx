@@ -40,6 +40,10 @@ function toDateInputValue(iso: string | null): string {
   return iso.slice(0, 10);
 }
 
+function isPositiveInteger(value: string): boolean {
+  return /^\d+$/.test(value.trim()) && Number(value) > 0;
+}
+
 export default function OfferForm({ initial, locations, onSubmit, onCancel, submitLabel }: {
   initial?: OfferFormInitial;
   locations?: OfferFormLocation[];
@@ -50,7 +54,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [redemptionMode, setRedemptionMode] = useState<"spend" | "threshold">(initial?.redemption_mode ?? "spend");
-  const [pointsCost, setPointsCost] = useState(initial?.points_cost ?? 100);
+  const [pointsCost, setPointsCost] = useState<string>(initial?.points_cost != null ? String(initial.points_cost) : "");
   const [pointsThreshold, setPointsThreshold] = useState(initial?.points_threshold ?? 500);
   const [maxPerUser, setMaxPerUser] = useState<string>(initial?.max_redemptions_per_user != null ? String(initial.max_redemptions_per_user) : "1");
   const [maxTotal, setMaxTotal] = useState<string>(initial?.max_total_redemptions != null ? String(initial.max_total_redemptions) : "");
@@ -63,6 +67,18 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (redemptionMode === "spend" && !isPositiveInteger(pointsCost)) {
+      setError("Points cost must be a whole number greater than 0");
+      return;
+    }
+    if (maxPerUser.trim() && !isPositiveInteger(maxPerUser)) {
+      setError("Max redemptions / user must be a whole number greater than 0");
+      return;
+    }
+    if (maxTotal.trim() && !isPositiveInteger(maxTotal)) {
+      setError("Max total redemptions must be a whole number greater than 0");
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -70,7 +86,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
       title: title.trim(),
       description: description.trim() || null,
       redemption_mode: redemptionMode,
-      points_cost: redemptionMode === "spend" ? pointsCost : null,
+      points_cost: redemptionMode === "spend" ? Number(pointsCost) : null,
       points_threshold: redemptionMode === "threshold" ? pointsThreshold : null,
       max_redemptions_per_user: maxPerUser.trim() ? Number(maxPerUser) : null,
       max_total_redemptions: maxTotal.trim() ? Number(maxTotal) : null,
@@ -104,7 +120,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
         {redemptionMode === "spend" ? (
           <div className="space-y-1">
             <label className="text-xs text-zinc-500">Points cost</label>
-            <input type="number" min={0} className={inputCls} value={pointsCost} onChange={e => setPointsCost(Number(e.target.value))} />
+            <input type="number" min={1} step={1} className={inputCls} value={pointsCost} onChange={e => setPointsCost(e.target.value)} placeholder="Required" />
           </div>
         ) : (
           <div className="space-y-1">
@@ -114,11 +130,11 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
         )}
         <div className="space-y-1">
           <label className="text-xs text-zinc-500">Max redemptions / user</label>
-          <input type="number" min={1} className={inputCls} value={maxPerUser} onChange={e => setMaxPerUser(e.target.value)} placeholder="Blank = unlimited" />
+          <input type="number" min={1} step={1} className={inputCls} value={maxPerUser} onChange={e => setMaxPerUser(e.target.value)} placeholder="Blank = unlimited" />
         </div>
         <div className="space-y-1">
           <label className="text-xs text-zinc-500">Max total redemptions</label>
-          <input type="number" min={1} className={inputCls} value={maxTotal} onChange={e => setMaxTotal(e.target.value)} placeholder="Blank = unlimited" />
+          <input type="number" min={1} step={1} className={inputCls} value={maxTotal} onChange={e => setMaxTotal(e.target.value)} placeholder="Blank = unlimited" />
         </div>
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">Code</label>
@@ -144,7 +160,13 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          disabled={loading || !title.trim()}
+          disabled={
+            loading ||
+            !title.trim() ||
+            (redemptionMode === "spend" && !isPositiveInteger(pointsCost)) ||
+            (!!maxPerUser.trim() && !isPositiveInteger(maxPerUser)) ||
+            (!!maxTotal.trim() && !isPositiveInteger(maxTotal))
+          }
           className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-white text-sm rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
         >
           {loading ? "Saving…" : submitLabel}
