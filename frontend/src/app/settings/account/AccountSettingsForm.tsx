@@ -8,9 +8,16 @@ import { deleteAccount } from "./actions";
 interface Props {
   email: string;
   isOAuthUser: boolean;
+  provider: string;
 }
 
-export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
+const PROVIDER_LABELS: Record<string, string> = {
+  google: "Google",
+  apple: "Apple",
+};
+
+export default function AccountSettingsForm({ email, isOAuthUser, provider }: Props) {
+  const providerLabel = PROVIDER_LABELS[provider] ?? provider;
   const router = useRouter();
   const [newEmail, setNewEmail] = useState("");
   const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -219,7 +226,7 @@ export default function AccountSettingsForm({ email, isOAuthUser }: Props) {
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-zinc-100">Sign-in method</h2>
           <p className="text-xs text-zinc-500">
-            Your account uses Google sign-in. Email and password changes are managed through Google.
+            Your account uses {providerLabel} sign-in. Email and password changes are managed through {providerLabel}.
           </p>
         </section>
       )}

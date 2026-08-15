@@ -10,7 +10,8 @@ export default async function AccountSettingsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/settings/account");
 
-  const isOAuthUser = user.app_metadata?.provider !== "email";
+  const provider = user.app_metadata?.provider ?? "email";
+  const isOAuthUser = provider !== "email";
 
   return (
     <main className="max-w-lg mx-auto px-6 py-10 w-full">
@@ -27,7 +28,7 @@ export default async function AccountSettingsPage() {
         </Link>
       </div>
 
-      <AccountSettingsForm email={user.email!} isOAuthUser={isOAuthUser} />
+      <AccountSettingsForm email={user.email!} isOAuthUser={isOAuthUser} provider={provider} />
 
       <div className="mt-12 pt-6 border-t border-zinc-800">
         <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Legal</h2>
