@@ -17,12 +17,14 @@ export default function UserNav({
   spendablePoints = 0,
   avatarUrl = null,
   displayName: profileDisplayName = null,
+  username = null,
 }: {
   user: User | null;
   points?: number;
   spendablePoints?: number;
   avatarUrl?: string | null;
   displayName?: string | null;
+  username?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -157,13 +159,15 @@ export default function UserNav({
               </div>
             </div>
             <div className="border-t border-zinc-800 my-1" />
-            <Link
-              href="/profile"
-              onClick={() => setOpen(false)}
-              className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 hover:text-zinc-100 transition-colors"
-            >
-              My profile
-            </Link>
+            {username && (
+              <Link
+                href={`/users/${username}`}
+                onClick={() => setOpen(false)}
+                className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 hover:text-zinc-100 transition-colors"
+              >
+                My profile
+              </Link>
+            )}
             <Link
               href="/settings/profile"
               onClick={() => setOpen(false)}
