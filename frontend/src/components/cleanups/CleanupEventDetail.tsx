@@ -15,11 +15,15 @@ import {
   demoteOrganizer,
   addEventPhotos,
   uploadEventPhoto,
+  getNearbyReports,
   type CleanupEventDetailData,
   type TeamTotalLogEntry,
+  type NearbyReport,
 } from "@/lib/cleanupEvents";
+import type { RouteLineString } from "@/lib/cleanupRoutes";
 import { searchUsers, type UserSearchResult } from "@/lib/users";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
+import NearbyReportsMap from "@/components/map/NearbyReportsMap";
 import Lightbox from "@/components/Lightbox";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import Avatar from "@/components/ui/Avatar";
@@ -443,7 +447,9 @@ export default function CleanupEventDetail({
             )}
           </div>
         )}
-        {(event.total_small_bags + event.total_large_bags > 0 || event.total_pounds > 0) && (
+        {(event.total_small_bags + event.total_large_bags > 0 ||
+          event.total_pounds > 0 ||
+          event.reports_cleared_count > 0) && (
           <div className="mt-3 rounded-xl border border-emerald-800/50 bg-gradient-to-br from-emerald-950/40 to-emerald-950/10 px-4 py-3.5 shadow-elevation-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 mb-3">
               Logged so far
@@ -494,6 +500,12 @@ export default function CleanupEventDetail({
                 </div>
               )}
             </div>
+            {event.reports_cleared_count > 0 && (
+              <p className="mt-3 text-xs font-semibold text-orange-400">
+                🧹 Cleared {event.reports_cleared_count} trash report{event.reports_cleared_count === 1 ? "" : "s"}{" "}
+                (+{event.report_clear_bonus_value} pts)
+              </p>
+            )}
             {event.volume_bonus_tiers > 0 && event.volume_bonus_applied && (
               <p className="mt-3 text-xs font-semibold text-amber-400">
                 🎉 Volume bonus:{" "}
@@ -643,7 +655,16 @@ export default function CleanupEventDetail({
       )}
 
       {event.is_organizer && !isCancelled && event.logging_mode === "organizer_total" && (
-        <LogTeamTotalForm cleanupId={event.id} organizerUserId={userId!} rsvps={event.rsvps} onLogged={refresh} />
+        <LogTeamTotalForm
+          cleanupId={event.id}
+          organizerUserId={userId!}
+          rsvps={event.rsvps}
+          eventLat={event.lat}
+          eventLng={event.lng}
+          eventRoute={event.route}
+          persistedReportsClearedCount={event.reports_cleared_count}
+          onLogged={refresh}
+        />
       )}
 
       <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
@@ -1222,11 +1243,19 @@ function LogTeamTotalForm({
   cleanupId,
   organizerUserId,
   rsvps,
+  eventLat,
+  eventLng,
+  eventRoute,
+  persistedReportsClearedCount,
   onLogged,
 }: {
   cleanupId: string;
   organizerUserId: string;
   rsvps: CleanupEventDetailData["rsvps"];
+  eventLat: number;
+  eventLng: number;
+  eventRoute: RouteLineString | null;
+  persistedReportsClearedCount: number;
   onLogged: () => Promise<void>;
 }) {
   const [smallBags, setSmallBags] = useState("");
@@ -1246,6 +1275,8 @@ function LogTeamTotalForm({
   const [logsOpen, setLogsOpen] = useState(false);
   const [warningOpen, setWarningOpen] = useState(false);
   const [emptyPoolOpen, setEmptyPoolOpen] = useState(false);
+  const [nearbyReports, setNearbyReports] = useState<NearbyReport[]>([]);
+  const [clearNearbyReports, setClearNearbyReports] = useState(false);
 
   const loadLogs = async () => {
     try {
@@ -1255,9 +1286,19 @@ function LogTeamTotalForm({
     }
   };
 
+  const loadNearbyReports = async () => {
+    try {
+      const { reports } = await getNearbyReports({ cleanupId, organizerUserId });
+      setNearbyReports(reports);
+    } catch {
+      // Non-critical — preview only, don't block the form on it.
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount, no external system to subscribe to instead
     loadLogs();
+    loadNearbyReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleanupId]);
 
@@ -1276,6 +1317,7 @@ function LogTeamTotalForm({
     "cleanup_event_volume_bonus_tier_points",
     "cleanup_event_volume_bonus_per_tier",
     "cleanup_event_volume_bonus_max_multiplier",
+    "cleanup_event_report_clear_bonus_points",
   ] as const);
   const bagValuesReady = pointValues.small_bag_value !== undefined && pointValues.large_bag_value !== undefined;
   const poundValueReady = pointValues.pound_value !== undefined;
@@ -1284,13 +1326,25 @@ function LogTeamTotalForm({
     : 0;
   const poundPoints = poundValueReady ? (Number(pounds) || 0) * pointValues.pound_value! : 0;
   const totalPoints = scoringMethod === "pounds" ? poundPoints : bagPoints;
+  const reportClearBonusPerReport = pointValues.cleanup_event_report_clear_bonus_points ?? 0;
+  // The backend recomputes the report-clear bonus from every report this event has ever
+  // closed (resolved_by_cleanup_id), not just reports closed in this submission — so a
+  // relog keeps counting reports cleared on a prior submission even if the checkbox isn't
+  // checked again this time. Mirror that here: persisted count always counts, plus
+  // whatever's newly about to be closed if the checkbox is checked.
+  const reportsCountedThisSubmit = persistedReportsClearedCount + (clearNearbyReports ? nearbyReports.length : 0);
+  const reportClearBonusTotal = reportsCountedThisSubmit * reportClearBonusPerReport;
+  // Report-clear bonus is folded into the base before the volume-bonus multiplier below,
+  // mirroring the backend's log_team_total ordering — a big report haul can itself help
+  // unlock a tier, and the bonus gets multiplied along with the rest of the total.
+  const baseWithReportBonus = totalPoints + reportClearBonusTotal;
   const tierPoints = pointValues.cleanup_event_volume_bonus_tier_points ?? 50;
   const perTierBonus = pointValues.cleanup_event_volume_bonus_per_tier ?? 0.1;
   const maxMultiplier = pointValues.cleanup_event_volume_bonus_max_multiplier ?? 2;
-  const volumeBonusTiers = tierPoints > 0 ? Math.floor(totalPoints / tierPoints) : 0;
+  const volumeBonusTiers = tierPoints > 0 ? Math.floor(baseWithReportBonus / tierPoints) : 0;
   const volumeBonusMultiplier = Math.min(1 + volumeBonusTiers * perTierBonus, maxMultiplier);
-  const bonusedTotalPoints = totalPoints * volumeBonusMultiplier;
-  const perAttendee = candidates.length > 0 ? roundHalf(bonusedTotalPoints / candidates.length) : 0;
+  const grandTotalPoints = baseWithReportBonus * volumeBonusMultiplier;
+  const perAttendee = candidates.length > 0 ? roundHalf(grandTotalPoints / candidates.length) : 0;
   const tierUnits = [
     poundValueReady ? `${(tierPoints / pointValues.pound_value!).toLocaleString()} lbs` : null,
     bagValuesReady ? `${(tierPoints / pointValues.small_bag_value!).toLocaleString()} small bags` : null,
@@ -1343,22 +1397,30 @@ function LogTeamTotalForm({
         scoringMethod,
         overrides: Object.keys(overridesPayload).length ? overridesPayload : undefined,
         alsoCheckIn: pool === "going" && alsoCheckIn,
+        clearNearbyReports,
       });
       await onLogged();
       await loadLogs();
+      await loadNearbyReports();
       refreshUserPoints(organizerUserId);
       setSmallBags("");
       setLargeBags("");
       setPounds("");
       setOverrides({});
+      setClearNearbyReports(false);
       const checkinNote = res.newly_checked_in_count
         ? ` ${res.newly_checked_in_count} newly checked in and awarded check-in points.`
         : "";
       const bonusNote = res.volume_bonus_tiers
         ? ` Volume bonus: +${Math.round((res.volume_bonus_multiplier - 1) * 100)}% (${res.volume_bonus_tiers} tier${res.volume_bonus_tiers === 1 ? "" : "s"}) applied to the total!`
         : "";
+      const reportsNote = res.reports_newly_cleared_count
+        ? ` Cleared ${res.reports_newly_cleared_count} nearby trash report${res.reports_newly_cleared_count === 1 ? "" : "s"} (${res.reports_cleared_count} total for this event, +${res.report_clear_bonus_value} pts).`
+        : res.reports_cleared_count
+        ? ` ${res.reports_cleared_count} previously-cleared report${res.reports_cleared_count === 1 ? "" : "s"} still counted (+${res.report_clear_bonus_value} pts).`
+        : "";
       setResult(
-        `Credited ${res.credited_count} attendee${res.credited_count === 1 ? "" : "s"}.${checkinNote}${bonusNote}`
+        `Credited ${res.credited_count} attendee${res.credited_count === 1 ? "" : "s"}.${checkinNote}${bonusNote}${reportsNote}`
       );
     } catch (err) {
       setError(extractErrorMessage(err, "Failed to log team total"));
@@ -1468,6 +1530,54 @@ function LogTeamTotalForm({
         </label>
       )}
 
+      {(nearbyReports.length > 0 || persistedReportsClearedCount > 0) && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
+          {persistedReportsClearedCount > 0 && (
+            <p className="text-[11px] text-zinc-500">
+              🧹 {persistedReportsClearedCount} report{persistedReportsClearedCount === 1 ? "" : "s"} already
+              cleared for this event — that bonus is kept and re-counted on every relog, checkbox or not.
+            </p>
+          )}
+          {nearbyReports.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-zinc-300">
+                {nearbyReports.length} nearby trash report{nearbyReports.length === 1 ? "" : "s"}
+              </p>
+              <NearbyReportsMap
+                eventLat={eventLat}
+                eventLng={eventLng}
+                eventRoute={eventRoute}
+                reports={nearbyReports}
+              />
+              <label className="flex items-start gap-2 text-[11px] text-zinc-500 pl-0.5">
+                <input
+                  type="checkbox"
+                  checked={clearNearbyReports}
+                  onChange={(e) => setClearNearbyReports(e.target.checked)}
+                  className="mt-0.5 accent-emerald-600"
+                />
+                <span>
+                  Also mark all {nearbyReports.length} report{nearbyReports.length === 1 ? "" : "s"} above as
+                  cleaned up, awarding{" "}
+                  <SettingValue
+                    value={pointValues.cleanup_event_report_clear_bonus_points}
+                    loading={pointValuesLoading}
+                  />
+                  {" "}pts per report on top of the team total
+                  {!pointValuesLoading && (
+                    <>
+                      {" "}
+                      (+{(nearbyReports.length * reportClearBonusPerReport).toLocaleString()} pts total)
+                    </>
+                  )}
+                  .
+                </span>
+              </label>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
         <p className="text-[11px] text-zinc-600">
           Bags and pounds are two ways of estimating the same haul — pick which one determines points for
@@ -1511,7 +1621,7 @@ function LogTeamTotalForm({
           Total:{" "}
           <span className="font-semibold text-zinc-100">
             {(scoringMethod === "pounds" ? poundValueReady : bagValuesReady)
-              ? `${(volumeBonusTiers > 0 ? bonusedTotalPoints : totalPoints).toLocaleString()} pts`
+              ? `${(volumeBonusTiers > 0 || reportClearBonusTotal > 0 ? grandTotalPoints : totalPoints).toLocaleString()} pts`
               : "— pts"}
           </span>
           {candidates.length > 0 && (scoringMethod === "pounds" ? poundValueReady : bagValuesReady) && (
@@ -1521,18 +1631,26 @@ function LogTeamTotalForm({
             </>
           )}
         </p>
-        {totalPoints > 0 &&
+        {reportClearBonusTotal > 0 && (
+          <p className="text-[11px] font-semibold text-amber-400">
+            🧹 Report clear bonus: +{reportClearBonusTotal.toLocaleString()} pts ({reportsCountedThisSubmit} report
+            {reportsCountedThisSubmit === 1 ? "" : "s"} × {reportClearBonusPerReport} pts, including{" "}
+            {persistedReportsClearedCount} already cleared) — {totalPoints.toLocaleString()} pts base
+            → {baseWithReportBonus.toLocaleString()} pts, before the volume bonus below
+          </p>
+        )}
+        {baseWithReportBonus > 0 &&
           (scoringMethod === "pounds" ? poundValueReady : bagValuesReady) &&
           (volumeBonusTiers > 0 ? (
             <p className="text-[11px] font-semibold text-amber-400">
               🎉 Volume bonus: +{Math.round((volumeBonusMultiplier - 1) * 100)}% ({volumeBonusTiers} tier
-              {volumeBonusTiers === 1 ? "" : "s"}) — {totalPoints.toLocaleString()} pts base →{" "}
-              {bonusedTotalPoints.toLocaleString()} pts
+              {volumeBonusTiers === 1 ? "" : "s"}) — {baseWithReportBonus.toLocaleString()} pts →{" "}
+              {grandTotalPoints.toLocaleString()} pts
             </p>
           ) : (
             <p className="text-[11px] text-zinc-500">
-              {Math.max(0, tierPoints - totalPoints).toLocaleString()} more points&apos; worth to unlock a volume
-              bonus
+              {Math.max(0, tierPoints - baseWithReportBonus).toLocaleString()} more points&apos; worth to unlock a
+              volume bonus
             </p>
           ))}
         {candidates.length === 0 && (

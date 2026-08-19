@@ -82,6 +82,8 @@ export type CleanupEventDetailData = {
   volume_bonus_multiplier: number;
   volume_bonus_tier_points: number;
   volume_bonus_applied: boolean;
+  reports_cleared_count: number;
+  report_clear_bonus_value: number;
   photos: FlaggablePhoto[];
   external_link: string | null;
   check_in_window_start: string | null;
@@ -373,6 +375,7 @@ export async function logTeamTotal({
   scoringMethod = "bags",
   overrides,
   alsoCheckIn = false,
+  clearNearbyReports = false,
 }: {
   cleanupId: string;
   organizerUserId: string;
@@ -384,6 +387,7 @@ export async function logTeamTotal({
   scoringMethod?: "bags" | "pounds";
   overrides?: Record<string, number>;
   alsoCheckIn?: boolean;
+  clearNearbyReports?: boolean;
 }): Promise<{
   credited_count: number;
   total_value: number;
@@ -391,6 +395,9 @@ export async function logTeamTotal({
   newly_checked_in_count: number;
   volume_bonus_tiers: number;
   volume_bonus_multiplier: number;
+  reports_newly_cleared_count: number;
+  reports_cleared_count: number;
+  report_clear_bonus_value: number;
 }> {
   return postJson(`/cleanup-events/${cleanupId}/log-team-total`, {
     organizer_user_id: organizerUserId,
@@ -402,6 +409,7 @@ export async function logTeamTotal({
     scoring_method: scoringMethod,
     overrides,
     also_check_in: alsoCheckIn,
+    clear_nearby_reports: clearNearbyReports,
   });
 }
 
@@ -486,6 +494,31 @@ export async function demoteOrganizer({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ organizer_user_id: organizerUserId, target_user_id: targetUserId }),
   });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export type NearbyReport = {
+  id: string;
+  severity: "low" | "medium" | "high";
+  reported_at: string;
+  photo_url: string | null;
+  latitude: number;
+  longitude: number;
+  distance_m: number;
+};
+
+export async function getNearbyReports({
+  cleanupId,
+  organizerUserId,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+}): Promise<{ reports: NearbyReport[] }> {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/cleanup-events/${cleanupId}/nearby-reports?organizer_user_id=${encodeURIComponent(organizerUserId)}`,
+    { cache: "no-store" }
+  );
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
