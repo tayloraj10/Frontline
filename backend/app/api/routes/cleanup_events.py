@@ -288,6 +288,17 @@ async def _group_for_credit(db: AsyncSession, primary_group_id: UUID, cleanup_id
     return row.group_id if row else primary_group_id
 
 
+def _compute_volume_bonus(base_value: float, settings: dict) -> tuple[int, float]:
+    """Tiers crossed and resulting capped multiplier for a team-total's raw value.
+    Shared by log_team_total (applies it) and get_cleanup_event (previews it)."""
+    tier_points = settings.get("cleanup_event_volume_bonus_tier_points", 50)
+    per_tier = settings.get("cleanup_event_volume_bonus_per_tier", 0.1)
+    max_multiplier = settings.get("cleanup_event_volume_bonus_max_multiplier", 2.0)
+    tiers = int(base_value // tier_points) if tier_points > 0 else 0
+    multiplier = min(1 + tiers * per_tier, max_multiplier)
+    return tiers, multiplier
+
+
 async def _generate_join_code(db: AsyncSession) -> str:
     for _ in range(10):
         code = "".join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
@@ -654,6 +665,37 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     total_large_bags = sum(v["large_bags"] for v in bags_by_user.values()) + (row.metrics_large_bags or 0)
     total_pounds = sum(v["pounds"] for v in bags_by_user.values()) + float(row.metrics_pounds or 0)
 
+    # Volume bonus only applies to the team-total path (see log_team_total), so this
+    # previews it off the event's own metrics_* columns, not the full aggregate above
+    # which also includes individually self-logged contributions.
+    team_total_base_value = (
+        float(row.metrics_pounds or 0) * settings.get("pound_value", 0.5)
+        + float(row.metrics_small_bags or 0) * settings.get("small_bag_value", 1)
+        + float(row.metrics_large_bags or 0) * settings.get("large_bag_value", 3)
+    )
+    volume_bonus_tiers, volume_bonus_multiplier = _compute_volume_bonus(team_total_base_value, settings)
+    volume_bonus_tier_points = settings.get("cleanup_event_volume_bonus_tier_points", 50)
+
+    # A log's stored total_value already has any volume bonus baked in (see log_team_total).
+    # Comparing it to the base value recomputed from today's point-values tells us whether
+    # the credit actually on the books reflects a bonus, vs. a log made before this feature
+    # existed where nobody was ever actually credited the bonus shown above.
+    latest_log_result = await db.execute(
+        text("""
+            SELECT total_value FROM cleanup_team_total_logs
+            WHERE cleanup_id = :cleanup_id
+            ORDER BY created_at DESC
+            LIMIT 1
+        """),
+        {"cleanup_id": str(cleanup_id)},
+    )
+    latest_log_row = latest_log_result.fetchone()
+    volume_bonus_applied = bool(
+        latest_log_row
+        and team_total_base_value > 0
+        and float(latest_log_row.total_value) > team_total_base_value + 0.01
+    )
+
     check_in_window_start = (
         row.scheduled_start - timedelta(
             minutes=settings.get("cleanup_event_grace_minutes_before", CLEANUP_EVENT_GRACE_MINUTES_BEFORE_FALLBACK)
@@ -702,6 +744,11 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "total_small_bags": total_small_bags,
         "total_large_bags": total_large_bags,
         "total_pounds": total_pounds,
+        "team_total_base_value": round(team_total_base_value, 2),
+        "volume_bonus_tiers": volume_bonus_tiers,
+        "volume_bonus_multiplier": volume_bonus_multiplier,
+        "volume_bonus_tier_points": volume_bonus_tier_points,
+        "volume_bonus_applied": volume_bonus_applied,
         "photos": all_photos,
         "external_link": row.external_link,
         "logging_mode": row.logging_mode,
@@ -1216,7 +1263,13 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     organizer can opt into also checking in (and awarding the check-in bonus to) anyone
     in that pool who isn't already checked in via `also_check_in=True`, which is an
     explicit attendance attestation on top of just logging a total. `attendee_pool:
-    "checked_in"` is already a verified pool, so this always applies to it."""
+    "checked_in"` is already a verified pool, so this always applies to it.
+
+    A volume bonus multiplier is also applied to the raw total before splitting: every
+    `cleanup_event_volume_bonus_tier_points` worth of value in the total adds
+    `cleanup_event_volume_bonus_per_tier` to the multiplier, capped at
+    `cleanup_event_volume_bonus_max_multiplier`. This rewards high-turnout events where a
+    big haul would otherwise split into small per-attendee shares."""
     event = await _get_event_or_404(db, cleanup_id)
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
@@ -1225,11 +1278,17 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     settings = await get_game_settings(db)
 
     if payload.scoring_method == "pounds":
-        total_value = (payload.pounds or 0) * settings.get("pound_value", 0.5)
+        base_value = (payload.pounds or 0) * settings.get("pound_value", 0.5)
     else:
-        total_value = (payload.small_bags or 0) * settings.get("small_bag_value", 1) + (
+        base_value = (payload.small_bags or 0) * settings.get("small_bag_value", 1) + (
             payload.large_bags or 0
         ) * settings.get("large_bag_value", 3)
+
+    # Volume bonus: every tier_points'-worth of raw value in the total adds one tier to the
+    # multiplier, capped at max_multiplier. Computed off base_value (pre-bonus) so the bonus
+    # can't feed back into itself.
+    volume_bonus_tiers, volume_bonus_multiplier = _compute_volume_bonus(base_value, settings)
+    total_value = round(base_value * volume_bonus_multiplier, 2)
 
     overrides = {str(k): v for k, v in (payload.overrides or {}).items()}
     override_total = sum(overrides.values())
@@ -1418,6 +1477,8 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
         "total_value": total_value,
         "per_attendee_value": split_value,
         "newly_checked_in_count": newly_checked_in_count,
+        "volume_bonus_tiers": volume_bonus_tiers,
+        "volume_bonus_multiplier": volume_bonus_multiplier,
     }
 
 
