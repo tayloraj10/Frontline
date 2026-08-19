@@ -202,6 +202,7 @@ class LogTeamTotalRequest(BaseModel):
     scoring_method: Literal["bags", "pounds"] = "bags"
     overrides: dict[UUID, float] | None = None
     also_check_in: bool = False
+    clear_nearby_reports: bool = False
 
     @field_validator("small_bags", "large_bags", "pounds")
     @classmethod
@@ -297,6 +298,65 @@ def _compute_volume_bonus(base_value: float, settings: dict) -> tuple[int, float
     tiers = int(base_value // tier_points) if tier_points > 0 else 0
     multiplier = min(1 + tiers * per_tier, max_multiplier)
     return tiers, multiplier
+
+
+async def _close_nearby_reports(
+    db: AsyncSession, event, cleanup_id: UUID, organizer_user_id: UUID, settings: dict
+) -> list:
+    """Resolves every open trash report within check-in range of this event (point or
+    route, see COALESCE below), the same proximity check GET .../nearby-reports uses to
+    preview them — and the same cleanup_event_proximity_meters radius drawn as the blue
+    check-in circle on the map, so a report visibly inside that circle is never silently
+    excluded. Used by log_team_total's clear_nearby_reports toggle — there's no
+    per-report selection, an organizer vouches for the whole event by proximity. Returns
+    the closed rows (id, geo_unit_id) so the caller can also settle any boss_spawn
+    campaign_events."""
+    result = await db.execute(
+        text("""
+            UPDATE problem_reports pr
+            SET status = 'addressed',
+                resolved_by_cleanup_id = :cleanup_id,
+                resolved_by_user_id = :organizer_user_id,
+                resolved_at = NOW()
+            FROM (SELECT location, route FROM cleanups WHERE id = :cleanup_id) ev
+            WHERE pr.campaign_id = :campaign_id
+              AND pr.status = 'open'
+              AND ST_DWithin(
+                  pr.location,
+                  COALESCE(ev.route, ev.location),
+                  CAST(:threshold AS double precision)
+              )
+            RETURNING pr.id, pr.geo_unit_id
+        """),
+        {
+            "cleanup_id": str(cleanup_id),
+            "organizer_user_id": str(organizer_user_id),
+            "campaign_id": str(event.campaign_id),
+            "threshold": settings.get("cleanup_event_proximity_meters", 150.0),
+        },
+    )
+    closed_rows = result.fetchall()
+
+    geo_unit_ids = {row.geo_unit_id for row in closed_rows if row.geo_unit_id}
+    for geo_unit_id in geo_unit_ids:
+        remaining_open = await db.execute(
+            text("SELECT 1 FROM problem_reports WHERE geo_unit_id = :geo_unit_id AND status = 'open' LIMIT 1"),
+            {"geo_unit_id": geo_unit_id},
+        )
+        if not remaining_open.fetchone():
+            await db.execute(
+                text("""
+                    UPDATE campaign_events
+                    SET status = 'resolved', resolved_at = NOW()
+                    WHERE campaign_id = :campaign_id
+                      AND geo_unit_id = :geo_unit_id
+                      AND event_type = 'boss_spawn'
+                      AND status = 'active'
+                """),
+                {"campaign_id": str(event.campaign_id), "geo_unit_id": geo_unit_id},
+            )
+
+    return closed_rows
 
 
 async def _generate_join_code(db: AsyncSession) -> str:
@@ -665,13 +725,28 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
     total_large_bags = sum(v["large_bags"] for v in bags_by_user.values()) + (row.metrics_large_bags or 0)
     total_pounds = sum(v["pounds"] for v in bags_by_user.values()) + float(row.metrics_pounds or 0)
 
+    # Persistent count of reports this event has ever closed via the clear_nearby_reports
+    # toggle (see log_team_total's docstring on why this is recomputed from
+    # resolved_by_cleanup_id rather than tracked incrementally) — shown on the page itself
+    # rather than only in the one-time toast right after submitting, so it survives reloads.
+    reports_cleared_count = await db.scalar(
+        text("SELECT COUNT(*) FROM problem_reports WHERE resolved_by_cleanup_id = :cleanup_id"),
+        {"cleanup_id": str(cleanup_id)},
+    )
+    report_clear_bonus_value = reports_cleared_count * settings.get(
+        "cleanup_event_report_clear_bonus_points", 3
+    )
+
     # Volume bonus only applies to the team-total path (see log_team_total), so this
-    # previews it off the event's own metrics_* columns, not the full aggregate above
-    # which also includes individually self-logged contributions.
+    # previews it off the event's own metrics_* columns plus the report-clear bonus, not
+    # the full aggregate above which also includes individually self-logged contributions.
+    # Mirrors log_team_total's own base_value math so this preview matches what was
+    # actually awarded, rather than understating it by leaving the report bonus out.
     team_total_base_value = (
         float(row.metrics_pounds or 0) * settings.get("pound_value", 0.5)
         + float(row.metrics_small_bags or 0) * settings.get("small_bag_value", 1)
         + float(row.metrics_large_bags or 0) * settings.get("large_bag_value", 3)
+        + report_clear_bonus_value
     )
     volume_bonus_tiers, volume_bonus_multiplier = _compute_volume_bonus(team_total_base_value, settings)
     volume_bonus_tier_points = settings.get("cleanup_event_volume_bonus_tier_points", 50)
@@ -749,6 +824,8 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "volume_bonus_multiplier": volume_bonus_multiplier,
         "volume_bonus_tier_points": volume_bonus_tier_points,
         "volume_bonus_applied": volume_bonus_applied,
+        "reports_cleared_count": reports_cleared_count,
+        "report_clear_bonus_value": report_clear_bonus_value,
         "photos": all_photos,
         "external_link": row.external_link,
         "logging_mode": row.logging_mode,
@@ -1269,7 +1346,12 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
     `cleanup_event_volume_bonus_tier_points` worth of value in the total adds
     `cleanup_event_volume_bonus_per_tier` to the multiplier, capped at
     `cleanup_event_volume_bonus_max_multiplier`. This rewards high-turnout events where a
-    big haul would otherwise split into small per-attendee shares."""
+    big haul would otherwise split into small per-attendee shares.
+
+    `clear_nearby_reports: True` also resolves every open trash report within check-in
+    range of the event (point or route) and adds `cleanup_event_report_clear_bonus_points`
+    per report cleared into the base value before the volume bonus multiplier above is
+    applied — see _close_nearby_reports."""
     event = await _get_event_or_404(db, cleanup_id)
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
@@ -1284,9 +1366,35 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
             payload.large_bags or 0
         ) * settings.get("large_bag_value", 3)
 
+    # Clearing nearby reports is folded into the base before the volume bonus multiplier,
+    # so it benefits from (and can itself help unlock) the same milestone tiers as the
+    # bags/pounds haul, rather than being tacked on flat afterward.
+    reports_newly_cleared_count = 0
+    if payload.clear_nearby_reports:
+        closed_reports = await _close_nearby_reports(
+            db, event, cleanup_id, payload.organizer_user_id, settings
+        )
+        reports_newly_cleared_count = len(closed_reports)
+
+    # Every log-team-total submission wipes and fully recomputes the event's total from
+    # scratch (see the DELETE below), so the report-clear bonus has to be recomputed from
+    # scratch too rather than only counting reports closed in *this* call — otherwise a
+    # relog after reports were already cleared on a prior submission would silently drop
+    # that bonus, since those reports are no longer "open" for _close_nearby_reports to
+    # find. resolved_by_cleanup_id permanently marks which event closed a report, so this
+    # total is stable across relogs regardless of when each report was actually cleared.
+    reports_cleared_count = await db.scalar(
+        text("SELECT COUNT(*) FROM problem_reports WHERE resolved_by_cleanup_id = :cleanup_id"),
+        {"cleanup_id": str(cleanup_id)},
+    )
+    report_clear_bonus_value = reports_cleared_count * settings.get(
+        "cleanup_event_report_clear_bonus_points", 3
+    )
+    base_value += report_clear_bonus_value
+
     # Volume bonus: every tier_points'-worth of raw value in the total adds one tier to the
-    # multiplier, capped at max_multiplier. Computed off base_value (pre-bonus) so the bonus
-    # can't feed back into itself.
+    # multiplier, capped at max_multiplier. Computed off base_value (which now includes the
+    # report-clear bonus above) so a big report haul can help unlock a tier too.
     volume_bonus_tiers, volume_bonus_multiplier = _compute_volume_bonus(base_value, settings)
     total_value = round(base_value * volume_bonus_multiplier, 2)
 
@@ -1479,6 +1587,9 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
         "newly_checked_in_count": newly_checked_in_count,
         "volume_bonus_tiers": volume_bonus_tiers,
         "volume_bonus_multiplier": volume_bonus_multiplier,
+        "reports_newly_cleared_count": reports_newly_cleared_count,
+        "reports_cleared_count": reports_cleared_count,
+        "report_clear_bonus_value": report_clear_bonus_value,
     }
 
 
@@ -1559,6 +1670,65 @@ async def demote_organizer(cleanup_id: UUID, user_id: UUID, payload: OrganizerRo
     await db.commit()
 
     return {"cleanup_id": str(cleanup_id), "user_id": str(user_id), "is_organizer": False}
+
+
+@router.get("/{cleanup_id}/nearby-reports")
+async def get_nearby_reports(cleanup_id: UUID, organizer_user_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Open trash reports within check-in range of this event, previewed on the event
+    page (map + count) so an organizer can see what the log-team-total form's
+    "clear nearby reports" toggle would close before they submit. Uses
+    cleanup_event_proximity_meters — the same radius drawn as the blue check-in circle
+    on the event map — not the generic hotspot_proximity_meters_us/_uk used by the
+    individual GPS resolve-on-checkin flow (contributions.py), so a report visibly
+    inside that circle always shows up here. For route events, distance is measured
+    against the route's full LineString rather than a single point — cleanups.route is
+    already a real PostGIS GEOGRAPHY(LINESTRING) column. The actual close happens in
+    log_team_total via _close_nearby_reports, which re-verifies proximity server-side
+    rather than trusting this preview."""
+    event = await _get_event_or_404(db, cleanup_id)
+
+    if not await _can_manage_event(db, event.group_id, cleanup_id, organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can view this")
+
+    settings = await get_game_settings(db)
+    result = await db.execute(
+        text("""
+            SELECT pr.id, pr.severity, pr.reported_at, pr.image_urls,
+                   ST_Y(pr.location::geometry) AS latitude,
+                   ST_X(pr.location::geometry) AS longitude,
+                   ST_Distance(pr.location, COALESCE(ev.route, ev.location)) AS distance_m
+            FROM problem_reports pr
+            CROSS JOIN (SELECT location, route FROM cleanups WHERE id = :cleanup_id) ev
+            WHERE pr.campaign_id = :campaign_id
+              AND pr.status = 'open'
+              AND ST_DWithin(
+                  pr.location,
+                  COALESCE(ev.route, ev.location),
+                  CAST(:threshold AS double precision)
+              )
+            ORDER BY distance_m ASC
+        """),
+        {
+            "cleanup_id": str(cleanup_id),
+            "campaign_id": str(event.campaign_id),
+            "threshold": settings.get("cleanup_event_proximity_meters", 150.0),
+        },
+    )
+    rows = result.fetchall()
+    return {
+        "reports": [
+            {
+                "id": str(r.id),
+                "severity": r.severity,
+                "reported_at": str(r.reported_at),
+                "photo_url": r.image_urls[0] if r.image_urls else None,
+                "latitude": r.latitude,
+                "longitude": r.longitude,
+                "distance_m": round(r.distance_m, 1),
+            }
+            for r in rows
+        ]
+    }
 
 
 class IntersectingGeoUnitsRequest(BaseModel):
