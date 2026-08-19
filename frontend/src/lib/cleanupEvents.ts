@@ -77,6 +77,11 @@ export type CleanupEventDetailData = {
   total_small_bags: number;
   total_large_bags: number;
   total_pounds: number;
+  team_total_base_value: number;
+  volume_bonus_tiers: number;
+  volume_bonus_multiplier: number;
+  volume_bonus_tier_points: number;
+  volume_bonus_applied: boolean;
   photos: FlaggablePhoto[];
   external_link: string | null;
   check_in_window_start: string | null;
@@ -384,6 +389,8 @@ export async function logTeamTotal({
   total_value: number;
   per_attendee_value: number;
   newly_checked_in_count: number;
+  volume_bonus_tiers: number;
+  volume_bonus_multiplier: number;
 }> {
   return postJson(`/cleanup-events/${cleanupId}/log-team-total`, {
     organizer_user_id: organizerUserId,

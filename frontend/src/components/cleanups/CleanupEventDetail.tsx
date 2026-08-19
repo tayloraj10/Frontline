@@ -494,6 +494,19 @@ export default function CleanupEventDetail({
                 </div>
               )}
             </div>
+            {event.volume_bonus_tiers > 0 && event.volume_bonus_applied && (
+              <p className="mt-3 text-xs font-semibold text-amber-400">
+                🎉 Volume bonus:{" "}
+                <span className="line-through text-zinc-500 font-normal">
+                  {event.team_total_base_value.toLocaleString()} pts
+                </span>{" "}
+                →{" "}
+                {(event.team_total_base_value * event.volume_bonus_multiplier).toLocaleString(undefined, {
+                  maximumFractionDigits: 2,
+                })}{" "}
+                pts (+{Math.round((event.volume_bonus_multiplier - 1) * 100)}%)
+              </p>
+            )}
           </div>
         )}
         {event.description && <p className="mt-3 text-sm text-zinc-300 leading-relaxed">{event.description}</p>}
@@ -1260,6 +1273,9 @@ function LogTeamTotalForm({
     "large_bag_value",
     "pound_value",
     "cleanup_event_checkin_value",
+    "cleanup_event_volume_bonus_tier_points",
+    "cleanup_event_volume_bonus_per_tier",
+    "cleanup_event_volume_bonus_max_multiplier",
   ] as const);
   const bagValuesReady = pointValues.small_bag_value !== undefined && pointValues.large_bag_value !== undefined;
   const poundValueReady = pointValues.pound_value !== undefined;
@@ -1268,7 +1284,25 @@ function LogTeamTotalForm({
     : 0;
   const poundPoints = poundValueReady ? (Number(pounds) || 0) * pointValues.pound_value! : 0;
   const totalPoints = scoringMethod === "pounds" ? poundPoints : bagPoints;
-  const perAttendee = candidates.length > 0 ? roundHalf(totalPoints / candidates.length) : 0;
+  const tierPoints = pointValues.cleanup_event_volume_bonus_tier_points ?? 50;
+  const perTierBonus = pointValues.cleanup_event_volume_bonus_per_tier ?? 0.1;
+  const maxMultiplier = pointValues.cleanup_event_volume_bonus_max_multiplier ?? 2;
+  const volumeBonusTiers = tierPoints > 0 ? Math.floor(totalPoints / tierPoints) : 0;
+  const volumeBonusMultiplier = Math.min(1 + volumeBonusTiers * perTierBonus, maxMultiplier);
+  const bonusedTotalPoints = totalPoints * volumeBonusMultiplier;
+  const perAttendee = candidates.length > 0 ? roundHalf(bonusedTotalPoints / candidates.length) : 0;
+  const tierUnits = [
+    poundValueReady ? `${(tierPoints / pointValues.pound_value!).toLocaleString()} lbs` : null,
+    bagValuesReady ? `${(tierPoints / pointValues.small_bag_value!).toLocaleString()} small bags` : null,
+    bagValuesReady
+      ? `${(tierPoints / pointValues.large_bag_value!).toLocaleString(undefined, { maximumFractionDigits: 1 })} large bags`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+  const volumeBonusTip = `Volume bonus: every ${tierPoints} points' worth logged as a team total${
+    tierUnits ? ` (${tierUnits})` : ""
+  } adds +${Math.round(perTierBonus * 100)}% to the total, up to ${maxMultiplier}x.`;
   const hasNegative =
     (Number(smallBags) || 0) < 0 ||
     (Number(largeBags) || 0) < 0 ||
@@ -1320,8 +1354,11 @@ function LogTeamTotalForm({
       const checkinNote = res.newly_checked_in_count
         ? ` ${res.newly_checked_in_count} newly checked in and awarded check-in points.`
         : "";
+      const bonusNote = res.volume_bonus_tiers
+        ? ` Volume bonus: +${Math.round((res.volume_bonus_multiplier - 1) * 100)}% (${res.volume_bonus_tiers} tier${res.volume_bonus_tiers === 1 ? "" : "s"}) applied to the total!`
+        : "";
       setResult(
-        `Credited ${res.credited_count} attendee${res.credited_count === 1 ? "" : "s"}.${checkinNote}`
+        `Credited ${res.credited_count} attendee${res.credited_count === 1 ? "" : "s"}.${checkinNote}${bonusNote}`
       );
     } catch (err) {
       setError(extractErrorMessage(err, "Failed to log team total"));
@@ -1360,6 +1397,9 @@ function LogTeamTotalForm({
           </>
         )}
       </button>
+      <p className="text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+        🎉 {volumeBonusTip}
+      </p>
       <div className="grid grid-cols-3 gap-2">
         <div>
           <label className="text-[11px] text-zinc-600">Small bags</label>
@@ -1470,7 +1510,9 @@ function LogTeamTotalForm({
         <p className="text-xs text-zinc-400">
           Total:{" "}
           <span className="font-semibold text-zinc-100">
-            {(scoringMethod === "pounds" ? poundValueReady : bagValuesReady) ? `${totalPoints.toLocaleString()} pts` : "— pts"}
+            {(scoringMethod === "pounds" ? poundValueReady : bagValuesReady)
+              ? `${(volumeBonusTiers > 0 ? bonusedTotalPoints : totalPoints).toLocaleString()} pts`
+              : "— pts"}
           </span>
           {candidates.length > 0 && (scoringMethod === "pounds" ? poundValueReady : bagValuesReady) && (
             <>
@@ -1479,6 +1521,20 @@ function LogTeamTotalForm({
             </>
           )}
         </p>
+        {totalPoints > 0 &&
+          (scoringMethod === "pounds" ? poundValueReady : bagValuesReady) &&
+          (volumeBonusTiers > 0 ? (
+            <p className="text-[11px] font-semibold text-amber-400">
+              🎉 Volume bonus: +{Math.round((volumeBonusMultiplier - 1) * 100)}% ({volumeBonusTiers} tier
+              {volumeBonusTiers === 1 ? "" : "s"}) — {totalPoints.toLocaleString()} pts base →{" "}
+              {bonusedTotalPoints.toLocaleString()} pts
+            </p>
+          ) : (
+            <p className="text-[11px] text-zinc-500">
+              {Math.max(0, tierPoints - totalPoints).toLocaleString()} more points&apos; worth to unlock a volume
+              bonus
+            </p>
+          ))}
         {candidates.length === 0 && (
           <button
             onClick={() => setEmptyPoolOpen((v) => !v)}
