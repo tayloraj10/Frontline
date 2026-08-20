@@ -137,6 +137,19 @@ export default function CleanupEventDetail({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [checkInPointsAwarded, setCheckInPointsAwarded] = useState<number | null>(null);
   const [recentCheckinPoints, setRecentCheckinPoints] = useState<Record<string, number>>({});
+  const [previewAsAttendee, setPreviewAsAttendee] = useState(false);
+  const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
+    if (typeof window === "undefined") return "guided";
+    const stored = window.localStorage.getItem("cleanup-event-view-mode");
+    return stored === "full" ? "full" : "guided";
+  });
+  const [guidedStep, setGuidedStep] = useState(0);
+  const changeViewMode = (mode: "guided" | "full") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("cleanup-event-view-mode", mode);
+    }
+  };
   const { values: checkinPointValues } = useGameSettings(["cleanup_event_checkin_value"]);
   const checkinPointValue = checkinPointValues.cleanup_event_checkin_value;
 
@@ -255,6 +268,7 @@ export default function CleanupEventDetail({
   const spotsLeft = event.max_attendees !== null ? event.max_attendees - goingCount : null;
   const blockGoing = event.is_full && viewerStatus !== "going";
   const isCancelled = event.status === "cancelled";
+  const effectiveIsOrganizer = event.is_organizer && !previewAsAttendee;
 
   return (
     <div className="space-y-6">
@@ -367,7 +381,7 @@ export default function CleanupEventDetail({
           </div>
           <div className="flex items-center gap-2 shrink-0 sm:pt-1">
             <ShareButton variant="icon" content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
-            {event.is_organizer && (
+            {effectiveIsOrganizer && (
               <>
                 <Link
                   href={`/groups/${event.group_slug}/events/${event.id}/edit`}
@@ -534,312 +548,463 @@ export default function CleanupEventDetail({
         )}
       </div>
 
-      {error && <p className="text-red-400 text-xs">{error}</p>}
-
-      {isCancelled ? null : !userId ? (
-        <Link
-          href={`/login?next=/cleanup-events/${event.id}`}
-          className="block text-center px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-        >
-          Log in to RSVP
-        </Link>
-      ) : (
-        <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-zinc-300">
-              {goingCount} going
-              {event.max_attendees !== null && (
-                <span className="text-zinc-500 font-normal">
-                  {" "}
-                  / {event.max_attendees} · {event.is_full ? "Event full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`}
-                </span>
-              )}
+      {event.is_organizer && !isCancelled && (
+        <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+          {previewAsAttendee ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-700/60 bg-sky-900/30 px-2.5 py-1 text-xs font-semibold text-sky-300">
+              👁️ Previewing what attendees see
             </span>
-            {viewerCheckedIn && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
-                ✓ Checked in
-                {(event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded ?? 0) > 0 &&
-                  ` · +${event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded} pts`}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {(["going", "maybe", "cancelled"] as const).map((status) => {
-              const activeClasses =
-                status === "going"
-                  ? "bg-emerald-500 border-emerald-500 text-emerald-950"
-                  : status === "maybe"
-                  ? "bg-amber-500 border-amber-500 text-amber-950"
-                  : "bg-red-500 border-red-500 text-red-950";
-              return (
+          ) : (
+            <div className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-900 p-0.5 text-xs font-semibold">
+              {(["guided", "full"] as const).map((mode) => (
                 <button
-                  key={status}
-                  disabled={rsvpLoading || (status === "going" && blockGoing)}
-                  onClick={() => handleRsvp(status)}
-                  title={status === "going" && blockGoing ? "This event is full" : undefined}
-                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 ${
-                    viewerStatus === status
-                      ? activeClasses
-                      : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500 active:scale-[0.97]"
+                  key={mode}
+                  type="button"
+                  onClick={() => changeViewMode(mode)}
+                  className={`px-3 py-1.5 rounded-md transition-colors touch-manipulation ${
+                    viewMode === mode
+                      ? "bg-sky-500 text-sky-950"
+                      : "text-zinc-400 hover:text-zinc-200 active:text-zinc-200"
                   }`}
                 >
-                  {status === "going" ? "Going" : status === "maybe" ? "Maybe" : "Can't go"}
+                  {mode === "guided" ? "Guided" : "Full page"}
                 </button>
-              );
-            })}
-          </div>
-
-          {!viewerCheckedIn && (
-            <div className="pt-2 border-t border-zinc-800 space-y-2">
-              <p className="text-xs text-emerald-400/80 font-medium">
-                🏅 Earn <SettingValue value={checkinPointValue} loading={checkinPointValue === undefined} /> points for checking in
-              </p>
-              <button
-                onClick={handleCheckInWithLocation}
-                disabled={checkInLoading}
-                className="w-full px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                {checkInLoading ? "Checking in…" : "Check in with my location"}
-              </button>
-              {showJoinCodeField ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    className={inputCls}
-                    placeholder="Join code"
-                    value={joinCodeInput}
-                    onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                    maxLength={6}
-                  />
-                  <button
-                    onClick={handleCheckInWithCode}
-                    disabled={checkInLoading || !joinCodeInput.trim()}
-                    className="px-3 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation shrink-0"
-                  >
-                    Submit
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowJoinCodeField(true)}
-                  className="w-full text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
-                >
-                  Have a join code instead?
-                </button>
-              )}
-            </div>
-          )}
-
-          {event.logging_mode === "organizer_total" ? (
-            <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg shadow-elevation-1">
-              <span aria-hidden="true">ℹ️</span>
-              The organizer will log the event totals for everyone.
-            </div>
-          ) : (
-            <Link
-              href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              <span aria-hidden="true">📍</span>
-              Log your cleanup on the map
-            </Link>
-          )}
-        </div>
-      )}
-
-      {event.is_organizer && event.join_code && (
-        <div className="border border-amber-700/40 bg-amber-900/10 rounded-xl p-4">
-          <p className="text-xs text-amber-400/80 mb-1">Organizer join code</p>
-          <p className="text-2xl font-black tracking-widest text-amber-300">{event.join_code}</p>
-          <p className="mt-1 text-xs text-zinc-500">Share this with attendees who can&apos;t check in by location.</p>
-        </div>
-      )}
-
-      {event.is_organizer && !isCancelled && event.logging_mode === "organizer_total" && (
-        <LogTeamTotalForm
-          cleanupId={event.id}
-          organizerUserId={userId!}
-          rsvps={event.rsvps}
-          eventLat={event.lat}
-          eventLng={event.lng}
-          eventRoute={event.route}
-          persistedReportsClearedCount={event.reports_cleared_count}
-          onLogged={refresh}
-        />
-      )}
-
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-        <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
-          <span className="text-sm font-semibold text-zinc-300">
-            Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
-          </span>
-          {event.is_organizer && !isCancelled && (
-            <AddAttendeeControl
-              cleanupId={event.id}
-              existingUserIds={event.rsvps.map((r) => r.user_id)}
-              onAdded={refresh}
-            />
-          )}
-        </div>
-        {event.rsvps.length === 0 ? (
-          <div className="px-4 py-6 text-center text-zinc-600 text-sm">No RSVPs yet.</div>
-        ) : (
-          <ul className="divide-y divide-zinc-800/60">
-            {event.rsvps.map((r) => {
-              const hasContribution = r.small_bags + r.large_bags > 0 || r.pounds > 0 || r.points > 0;
-              return (
-                <li key={r.user_id} className="px-4 py-2.5 flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Avatar
-                        avatarUrl={r.avatar_url}
-                        name={r.display_name ?? r.username ?? "?"}
-                        username={r.username}
-                        size="xs"
-                      />
-                      {r.username ? (
-                        <Link href={`/users/${encodeURIComponent(r.username)}`} className="text-sm text-zinc-200 truncate hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
-                          {r.display_name ?? r.username}
-                        </Link>
-                      ) : (
-                        <span className="text-sm text-zinc-200 truncate">{r.display_name ?? "Unknown"}</span>
-                      )}
-                      <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
-                    </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                      {r.checked_in_at ? (
-                        <span className="text-xs text-emerald-400 whitespace-nowrap">
-                          ✓ checked in
-                          {(r.checkin_points || recentCheckinPoints[r.user_id])
-                            ? ` · +${r.checkin_points || recentCheckinPoints[r.user_id]} pts`
-                            : ""}
-                        </span>
-                      ) : event.is_organizer ? (
-                        <OrganizerCheckInButton
-                          cleanupId={event.id}
-                          organizerUserId={userId!}
-                          attendeeUserId={r.user_id}
-                          onCheckedIn={async (pointsAwarded) => {
-                            if (pointsAwarded > 0) {
-                              setRecentCheckinPoints((prev) => ({ ...prev, [r.user_id]: pointsAwarded }));
-                              if (r.user_id === userId) refreshUserPoints(userId);
-                            }
-                            await refresh();
-                          }}
-                          onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to check in attendee"))}
-                        />
-                      ) : null}
-                      {event.is_organizer && (
-                        <OrganizerLogButton
-                          cleanupId={event.id}
-                          organizerUserId={userId!}
-                          attendeeUserId={r.user_id}
-                          attendeeName={r.display_name ?? r.username ?? "attendee"}
-                          onLogged={refresh}
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {(r.is_organizer || r.is_late || hasContribution) && (
-                    <div className="flex items-center gap-1.5 flex-wrap pl-8">
-                      {r.is_organizer && (
-                        <span className="text-[10px] font-semibold text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0">
-                          ★ Organizer
-                        </span>
-                      )}
-                      {r.is_late && (
-                        <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-0.5 shrink-0">
-                          Late
-                        </span>
-                      )}
-                      {(r.small_bags + r.large_bags > 0 || r.pounds > 0) && (
-                        <span
-                          className="text-xs text-emerald-400 shrink-0"
-                          title={`${r.small_bags} small bag${r.small_bags === 1 ? "" : "s"} (about a grocery bag size), ${r.large_bags} large bag${r.large_bags === 1 ? "" : "s"} (about a kitchen trash bag size)`}
-                        >
-                          {r.small_bags + r.large_bags > 0 && (
-                            <>
-                              🗑️ {r.small_bags + r.large_bags}
-                              <span className="text-emerald-400/70"> ({r.small_bags} small, {r.large_bags} large)</span>
-                            </>
-                          )}
-                          {r.pounds > 0 && `${r.small_bags + r.large_bags > 0 ? " · " : ""}⚖️ ${r.pounds.toLocaleString()} lbs`}
-                        </span>
-                      )}
-                      {r.checkin_points > 0 && (
-                        <span
-                          className="text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/30 rounded px-1.5 py-0.5 shrink-0"
-                          title="Credited for checking in to the event"
-                        >
-                          +{r.checkin_points.toLocaleString()} pts · check-in
-                        </span>
-                      )}
-                      {r.team_total_points > 0 && (
-                        <span
-                          className="text-xs text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0"
-                          title={
-                            r.small_bags + r.large_bags === 0 && r.pounds === 0
-                              ? "Credited as their share of an organizer's team-total log, not an individually logged amount"
-                              : undefined
-                          }
-                        >
-                          +{r.team_total_points.toLocaleString()} pts
-                          {r.small_bags + r.large_bags === 0 && r.pounds === 0 && " · team total"}
-                        </span>
-                      )}
-                      {r.checkin_points > 0 && r.team_total_points > 0 && (
-                        <span className="text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 rounded px-1.5 py-0.5 shrink-0">
-                          = {r.points.toLocaleString()} pts
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {event.is_organizer && r.user_id !== userId && (
-                    <div className="pl-8">
-                      <OrganizerRoleButton
-                        cleanupId={event.id}
-                        organizerUserId={userId!}
-                        targetUserId={r.user_id}
-                        isOrganizer={r.is_organizer}
-                        onChanged={refresh}
-                        onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to update organizer"))}
-                      />
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {(event.photos.length > 0 || (userId && !isCancelled)) && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-          <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-zinc-300">
-              Photos <span className="text-zinc-500 font-normal">({event.photos.length})</span>
-            </span>
-            {userId && !isCancelled && (
-              <AddEventPhotoButton cleanupId={event.id} userId={userId} onAdded={refresh} />
-            )}
-          </div>
-          {event.photos.length > 0 && (
-            <div className="p-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {event.photos.map((photo, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={`${photo.url}-${i}`}
-                  src={photo.url}
-                  alt=""
-                  onClick={() => setLightboxIndex(i)}
-                  className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation shadow-elevation-1"
-                />
               ))}
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => setPreviewAsAttendee((v) => !v)}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors touch-manipulation ${
+              previewAsAttendee
+                ? "border-sky-600 bg-sky-500 text-sky-950 hover:bg-sky-400 active:bg-sky-400"
+                : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500"
+            }`}
+          >
+            {previewAsAttendee ? "Exit preview" : "👁️ Preview what attendees see"}
+          </button>
         </div>
       )}
+
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+
+      {(() => {
+        const checkinSection = isCancelled ? null : !userId ? (
+          <Link
+            href={`/login?next=/cleanup-events/${event.id}`}
+            className="block text-center px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+          >
+            Log in to RSVP
+          </Link>
+        ) : (
+          <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-zinc-300">
+                {goingCount} going
+                {event.max_attendees !== null && (
+                  <span className="text-zinc-500 font-normal">
+                    {" "}
+                    / {event.max_attendees} · {event.is_full ? "Event full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`}
+                  </span>
+                )}
+              </span>
+              {viewerCheckedIn && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+                  ✓ Checked in
+                  {(event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded ?? 0) > 0 &&
+                    ` · +${event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded} pts`}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {(["going", "maybe", "cancelled"] as const).map((status) => {
+                const activeClasses =
+                  status === "going"
+                    ? "bg-emerald-500 border-emerald-500 text-emerald-950"
+                    : status === "maybe"
+                    ? "bg-amber-500 border-amber-500 text-amber-950"
+                    : "bg-red-500 border-red-500 text-red-950";
+                return (
+                  <button
+                    key={status}
+                    disabled={rsvpLoading || (status === "going" && blockGoing)}
+                    onClick={() => handleRsvp(status)}
+                    title={status === "going" && blockGoing ? "This event is full" : undefined}
+                    className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                      viewerStatus === status
+                        ? activeClasses
+                        : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500 active:scale-[0.97]"
+                    }`}
+                  >
+                    {status === "going" ? "Going" : status === "maybe" ? "Maybe" : "Can't go"}
+                  </button>
+                );
+              })}
+            </div>
+
+            {!viewerCheckedIn && (
+              <div className="pt-2 border-t border-zinc-800 space-y-2">
+                <p className="text-xs text-emerald-400/80 font-medium">
+                  🏅 Earn <SettingValue value={checkinPointValue} loading={checkinPointValue === undefined} /> points for checking in
+                </p>
+                <button
+                  onClick={handleCheckInWithLocation}
+                  disabled={checkInLoading}
+                  className="w-full px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  {checkInLoading ? "Checking in…" : "Check in with my location"}
+                </button>
+                {showJoinCodeField ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      className={inputCls}
+                      placeholder="Join code"
+                      value={joinCodeInput}
+                      onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                      maxLength={6}
+                    />
+                    <button
+                      onClick={handleCheckInWithCode}
+                      disabled={checkInLoading || !joinCodeInput.trim()}
+                      className="px-3 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation shrink-0"
+                    >
+                      Submit
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowJoinCodeField(true)}
+                    className="w-full text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
+                  >
+                    Have a join code instead?
+                  </button>
+                )}
+              </div>
+            )}
+
+            {event.logging_mode === "organizer_total" ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg shadow-elevation-1">
+                <span aria-hidden="true">ℹ️</span>
+                The organizer will log the event totals for everyone.
+              </div>
+            ) : (
+              <Link
+                href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
+                className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                <span aria-hidden="true">📍</span>
+                Log your cleanup on the map
+              </Link>
+            )}
+          </div>
+        );
+
+        const checkedInCount = event.rsvps.filter((r) => r.checked_in_at).length;
+        const checkinSummarySection = effectiveIsOrganizer && !isCancelled && (
+          <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+            <div className="flex items-center gap-3 text-sm flex-wrap">
+              <span className="font-semibold text-zinc-200">{goingCount} <span className="font-normal text-zinc-500">RSVP&apos;d yes</span></span>
+              <span className="text-zinc-700">·</span>
+              <span className="font-semibold text-emerald-400">{checkedInCount} <span className="font-normal text-zinc-500">checked in</span></span>
+            </div>
+            <button
+              type="button"
+              onClick={() => refresh()}
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation shrink-0"
+            >
+              ↻ Refresh
+            </button>
+          </div>
+        );
+
+        const doCleanupSection = (
+          <div className="border border-zinc-800 rounded-xl p-5 text-center space-y-1.5 shadow-elevation-1">
+            <p className="text-2xl" aria-hidden="true">🧹</p>
+            <p className="text-sm font-semibold text-zinc-200">Time to clean!</p>
+            <p className="text-xs text-zinc-500 max-w-xs mx-auto">
+              {event.logging_mode === "organizer_total"
+                ? "Nothing to do here — get out there with your team and pick up trash. Come back to this page to log the team's totals when you're done."
+                : "Nothing to do here — get out there and pick up trash. Attendees log their own totals on the map as they go."}
+            </p>
+          </div>
+        );
+
+        const joinCodeSection = effectiveIsOrganizer && event.join_code && (
+          <div className="border border-amber-700/40 bg-amber-900/10 rounded-xl p-4">
+            <p className="text-xs text-amber-400/80 mb-1">Organizer join code</p>
+            <p className="text-2xl font-black tracking-widest text-amber-300">{event.join_code}</p>
+            <p className="mt-1 text-xs text-zinc-500">Share this with attendees who can&apos;t check in by location.</p>
+          </div>
+        );
+
+        const logSection = effectiveIsOrganizer && !isCancelled && event.logging_mode === "organizer_total" && (
+          <LogTeamTotalForm
+            cleanupId={event.id}
+            organizerUserId={userId!}
+            rsvps={event.rsvps}
+            eventLat={event.lat}
+            eventLng={event.lng}
+            eventRoute={event.route}
+            persistedReportsClearedCount={event.reports_cleared_count}
+            onLogged={refresh}
+          />
+        );
+
+        const attendeesSection = (
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-zinc-300">
+                Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
+              </span>
+              {effectiveIsOrganizer && !isCancelled && (
+                <AddAttendeeControl
+                  cleanupId={event.id}
+                  existingUserIds={event.rsvps.map((r) => r.user_id)}
+                  onAdded={refresh}
+                />
+              )}
+            </div>
+            {event.rsvps.length === 0 ? (
+              <div className="px-4 py-6 text-center text-zinc-600 text-sm">No RSVPs yet.</div>
+            ) : (
+              <ul className="divide-y divide-zinc-800/60">
+                {event.rsvps.map((r) => {
+                  const hasContribution = r.small_bags + r.large_bags > 0 || r.pounds > 0 || r.points > 0;
+                  return (
+                    <li key={r.user_id} className="px-4 py-2.5 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                          <Avatar
+                            avatarUrl={r.avatar_url}
+                            name={r.display_name ?? r.username ?? "?"}
+                            username={r.username}
+                            size="xs"
+                          />
+                          {r.username ? (
+                            <Link href={`/users/${encodeURIComponent(r.username)}`} className="text-sm text-zinc-200 break-words hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
+                              {r.display_name ?? r.username}
+                            </Link>
+                          ) : (
+                            <span className="text-sm text-zinc-200 break-words">{r.display_name ?? "Unknown"}</span>
+                          )}
+                          <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                          {r.checked_in_at ? (
+                            <span className="text-xs text-emerald-400 whitespace-nowrap">
+                              ✓ checked in
+                              {(r.checkin_points || recentCheckinPoints[r.user_id])
+                                ? ` · +${r.checkin_points || recentCheckinPoints[r.user_id]} pts`
+                                : ""}
+                            </span>
+                          ) : effectiveIsOrganizer ? (
+                            <OrganizerCheckInButton
+                              cleanupId={event.id}
+                              organizerUserId={userId!}
+                              attendeeUserId={r.user_id}
+                              onCheckedIn={async (pointsAwarded) => {
+                                if (pointsAwarded > 0) {
+                                  setRecentCheckinPoints((prev) => ({ ...prev, [r.user_id]: pointsAwarded }));
+                                  if (r.user_id === userId) refreshUserPoints(userId);
+                                }
+                                await refresh();
+                              }}
+                              onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to check in attendee"))}
+                            />
+                          ) : null}
+                          {effectiveIsOrganizer && (
+                            <OrganizerLogButton
+                              cleanupId={event.id}
+                              organizerUserId={userId!}
+                              attendeeUserId={r.user_id}
+                              attendeeName={r.display_name ?? r.username ?? "attendee"}
+                              onLogged={refresh}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {(r.is_organizer || r.is_late || hasContribution) && (
+                        <div className="flex items-center gap-1.5 flex-wrap pl-8">
+                          {r.is_organizer && (
+                            <span className="text-[10px] font-semibold text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0">
+                              ★ Organizer
+                            </span>
+                          )}
+                          {r.is_late && (
+                            <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-0.5 shrink-0">
+                              Late
+                            </span>
+                          )}
+                          {(r.small_bags + r.large_bags > 0 || r.pounds > 0) && (
+                            <span
+                              className="text-xs text-emerald-400 shrink-0"
+                              title={`${r.small_bags} small bag${r.small_bags === 1 ? "" : "s"} (about a grocery bag size), ${r.large_bags} large bag${r.large_bags === 1 ? "" : "s"} (about a kitchen trash bag size)`}
+                            >
+                              {r.small_bags + r.large_bags > 0 && (
+                                <>
+                                  🗑️ {r.small_bags + r.large_bags}
+                                  <span className="text-emerald-400/70"> ({r.small_bags} small, {r.large_bags} large)</span>
+                                </>
+                              )}
+                              {r.pounds > 0 && `${r.small_bags + r.large_bags > 0 ? " · " : ""}⚖️ ${r.pounds.toLocaleString()} lbs`}
+                            </span>
+                          )}
+                          {r.checkin_points > 0 && (
+                            <span
+                              className="text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/30 rounded px-1.5 py-0.5 shrink-0"
+                              title="Credited for checking in to the event"
+                            >
+                              +{r.checkin_points.toLocaleString()} pts · check-in
+                            </span>
+                          )}
+                          {r.team_total_points > 0 && (
+                            <span
+                              className="text-xs text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0"
+                              title={
+                                r.small_bags + r.large_bags === 0 && r.pounds === 0
+                                  ? "Credited as their share of an organizer's team-total log, not an individually logged amount"
+                                  : undefined
+                              }
+                            >
+                              +{r.team_total_points.toLocaleString()} pts
+                              {r.small_bags + r.large_bags === 0 && r.pounds === 0 && " · team total"}
+                            </span>
+                          )}
+                          {r.checkin_points > 0 && r.team_total_points > 0 && (
+                            <span className="text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 rounded px-1.5 py-0.5 shrink-0">
+                              = {r.points.toLocaleString()} pts
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {effectiveIsOrganizer && r.user_id !== userId && (
+                        <div className="pl-8">
+                          <OrganizerRoleButton
+                            cleanupId={event.id}
+                            organizerUserId={userId!}
+                            targetUserId={r.user_id}
+                            isOrganizer={r.is_organizer}
+                            onChanged={refresh}
+                            onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to update organizer"))}
+                          />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        );
+
+        const photosSection = (event.photos.length > 0 || (userId && !isCancelled)) && (
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-zinc-300">
+                Photos <span className="text-zinc-500 font-normal">({event.photos.length})</span>
+              </span>
+              {userId && !isCancelled && (
+                <AddEventPhotoButton cleanupId={event.id} userId={userId} onAdded={refresh} />
+              )}
+            </div>
+            {event.photos.length > 0 && (
+              <div className="p-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {event.photos.map((photo, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={`${photo.url}-${i}`}
+                    src={photo.url}
+                    alt=""
+                    onClick={() => setLightboxIndex(i)}
+                    className="w-full aspect-square object-cover rounded-lg cursor-pointer bg-zinc-800 border border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation shadow-elevation-1"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+        if (effectiveIsOrganizer && !isCancelled && viewMode === "guided") {
+          const attendeesStepIndex = 2 + (logSection ? 1 : 0);
+          const manageAttendeesNote = (
+            <button
+              type="button"
+              onClick={() => setGuidedStep(attendeesStepIndex)}
+              className="w-full text-left px-3 py-2 text-xs text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg hover:border-zinc-600 hover:text-zinc-300 active:border-zinc-600 active:text-zinc-300 transition-colors duration-150 touch-manipulation"
+            >
+              Need to manually check someone in or see the full attendee list? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
+            </button>
+          );
+          const steps: { key: string; label: string; content: React.ReactNode }[] = [
+            { key: "checkin", label: "Check in attendees", content: <>{checkinSection}{checkinSummarySection}{joinCodeSection}</> },
+            { key: "clean", label: "Do the cleanup", content: doCleanupSection },
+            ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
+            { key: "attendees", label: "Manage attendee data", content: attendeesSection },
+            ...(photosSection ? [{ key: "photos", label: "Photos", content: photosSection as React.ReactNode }] : []),
+          ];
+          const activeStepIndex = Math.min(guidedStep, steps.length - 1);
+          const prevNextRow = (
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                disabled={activeStepIndex === 0}
+                onClick={() => setGuidedStep(activeStepIndex - 1)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[border-color,transform] duration-150 touch-manipulation"
+              >
+                ← Prev
+              </button>
+              <span className="text-xs text-zinc-500">
+                Step {activeStepIndex + 1} of {steps.length}
+              </span>
+              <button
+                type="button"
+                disabled={activeStepIndex === steps.length - 1}
+                onClick={() => setGuidedStep(activeStepIndex + 1)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[border-color,transform] duration-150 touch-manipulation"
+              >
+                Next →
+              </button>
+            </div>
+          );
+          return (
+            <div className="space-y-4">
+              {prevNextRow}
+              <div className="flex items-center gap-2 flex-wrap">
+                {steps.map((s, i) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setGuidedStep(i)}
+                    className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors touch-manipulation ${
+                      i === activeStepIndex
+                        ? "border-sky-500 bg-sky-950/40 text-sky-300"
+                        : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500"
+                    }`}
+                  >
+                    {i + 1}. {s.label}
+                  </button>
+                ))}
+              </div>
+              {activeStepIndex === 0 && manageAttendeesNote}
+              <div className="space-y-4">{steps[activeStepIndex].content}</div>
+              {prevNextRow}
+            </div>
+          );
+        }
+
+        return (
+          <>
+            {checkinSection}
+            {checkinSummarySection}
+            {joinCodeSection}
+            {logSection}
+            {attendeesSection}
+            {photosSection}
+          </>
+        );
+      })()}
 
       {lightboxIndex !== null && (
         <Lightbox
@@ -1549,30 +1714,48 @@ function LogTeamTotalForm({
                 eventRoute={eventRoute}
                 reports={nearbyReports}
               />
-              <label className="flex items-start gap-2 text-[11px] text-zinc-500 pl-0.5">
-                <input
-                  type="checkbox"
-                  checked={clearNearbyReports}
-                  onChange={(e) => setClearNearbyReports(e.target.checked)}
-                  className="mt-0.5 accent-emerald-600"
-                />
-                <span>
-                  Also mark all {nearbyReports.length} report{nearbyReports.length === 1 ? "" : "s"} above as
-                  cleaned up, awarding{" "}
-                  <SettingValue
-                    value={pointValues.cleanup_event_report_clear_bonus_points}
-                    loading={pointValuesLoading}
-                  />
-                  {" "}pts per report on top of the team total
-                  {!pointValuesLoading && (
-                    <>
-                      {" "}
-                      (+{(nearbyReports.length * reportClearBonusPerReport).toLocaleString()} pts total)
-                    </>
-                  )}
-                  .
-                </span>
-              </label>
+              <button
+                type="button"
+                onClick={() => setClearNearbyReports((v) => !v)}
+                aria-pressed={clearNearbyReports}
+                className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                  clearNearbyReports
+                    ? "border-orange-500 bg-orange-900/20"
+                    : "border-zinc-700 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.99]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className={`shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center text-sm font-bold transition-colors ${
+                      clearNearbyReports
+                        ? "bg-orange-500 border-orange-500 text-orange-950"
+                        : "border-zinc-600 text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-200">
+                      🧹 Also clear all {nearbyReports.length} nearby trash report{nearbyReports.length === 1 ? "" : "s"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-400">
+                      Marks them cleaned up and awards{" "}
+                      <SettingValue
+                        value={pointValues.cleanup_event_report_clear_bonus_points}
+                        loading={pointValuesLoading}
+                      />
+                      {" "}pts each on top of the team total
+                      {!pointValuesLoading && (
+                        <span className="font-semibold text-orange-400">
+                          {" "}(+{(nearbyReports.length * reportClearBonusPerReport).toLocaleString()} pts total)
+                        </span>
+                      )}
+                      .
+                    </p>
+                  </div>
+                </div>
+              </button>
             </>
           )}
         </div>
