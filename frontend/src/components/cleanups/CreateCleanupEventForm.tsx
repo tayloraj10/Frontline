@@ -8,6 +8,14 @@ import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
 import RoutePicker from "@/components/map/RoutePicker";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
+import { GuidedStepper, StepperNav, ViewModeToggle, type GuidedStep } from "@/components/ui/GuidedStepper";
+
+const hostEventSteps: GuidedStep[] = [
+  { key: "basics", label: "Basics" },
+  { key: "schedule", label: "Schedule & Logging" },
+  { key: "location", label: "Logistics & Location" },
+  { key: "photo", label: "Cover photo" },
+];
 
 const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
@@ -92,6 +100,15 @@ export default function CreateCleanupEventForm({
   const hadInitialRoute = !!initialValues?.route;
   const [cohostGroupIds, setCohostGroupIds] = useState<string[]>(initialCohostGroupIds);
   const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">(initialValues?.loggingMode ?? "organizer_total");
+  const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
+    if (typeof window === "undefined") return "guided";
+    return localStorage.getItem("frontline:host-event-view-mode") === "full" ? "full" : "guided";
+  });
+  const changeViewMode = (mode: "guided" | "full") => {
+    setViewMode(mode);
+    localStorage.setItem("frontline:host-event-view-mode", mode);
+  };
+  const [guidedStep, setGuidedStep] = useState(0);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -175,8 +192,8 @@ export default function CreateCleanupEventForm({
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+  const basicsSection = (
+    <>
       <CohostGroupPicker
         primaryGroupId={groupId}
         value={cohostGroupIds}
@@ -192,7 +209,11 @@ export default function CreateCleanupEventForm({
         <label className="text-xs text-zinc-500">Description</label>
         <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
       </div>
+    </>
+  );
 
+  const scheduleSection = (
+    <>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <label className="text-xs text-zinc-500">Starts</label>
@@ -236,7 +257,11 @@ export default function CreateCleanupEventForm({
             : "Attendees self-log from the map near the event; no team total needed."}
         </p>
       </div>
+    </>
+  );
 
+  const locationSection = (
+    <>
       <div className="space-y-1">
         <label className="text-xs text-zinc-500">RSVP limit (optional)</label>
         <input
@@ -321,9 +346,14 @@ export default function CreateCleanupEventForm({
           <p className="text-[11px] text-zinc-600">Set the event location above first, then draw the route.</p>
         )}
       </div>
+    </>
+  );
 
+  const photoSection = (
+    <>
       <div className="space-y-1">
-        <label className="text-xs text-zinc-500">Photo (optional)</label>
+        <label className="text-xs text-zinc-500">Cover photo (optional)</label>
+        <p className="text-[11px] text-zinc-600">Shown at the top of the event page. This is not a photo from the cleanup itself.</p>
         <input
           ref={imageInputRef}
           type="file"
@@ -352,6 +382,34 @@ export default function CreateCleanupEventForm({
           </div>
         )}
       </div>
+    </>
+  );
+
+  const hostEventStepSections = [basicsSection, scheduleSection, locationSection, photoSection];
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <ViewModeToggle viewMode={viewMode} onChange={changeViewMode} />
+
+      {viewMode === "guided" ? (
+        <>
+          <GuidedStepper steps={hostEventSteps} activeIndex={guidedStep} onJump={setGuidedStep} />
+          <div className="space-y-4">{hostEventStepSections[guidedStep]}</div>
+          <StepperNav
+            activeIndex={guidedStep}
+            count={hostEventSteps.length}
+            onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
+            onNext={() => setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1))}
+          />
+        </>
+      ) : (
+        <>
+          {basicsSection}
+          {scheduleSection}
+          {locationSection}
+          {photoSection}
+        </>
+      )}
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
       <div className="flex gap-2">

@@ -275,7 +275,7 @@ export default function CleanupEventDetail({
       {event.image_url && (
         <div className="w-full aspect-video rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={event.image_url} alt={event.title} className="w-full h-full object-cover" />
+          <img src={event.image_url} alt={event.title} className="w-full h-full object-contain" />
         </div>
       )}
 
@@ -717,14 +717,56 @@ export default function CleanupEventDetail({
           </div>
         );
 
+        const checkinRosterSection = effectiveIsOrganizer && !isCancelled && event.rsvps.length > 0 && (
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+              <span className="text-sm font-semibold text-zinc-300">
+                Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
+              </span>
+            </div>
+            <ul className="divide-y divide-zinc-800/60">
+              {event.rsvps.map((r) => (
+                <li key={r.user_id} className="px-4 py-2 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Avatar
+                      avatarUrl={r.avatar_url}
+                      name={r.display_name ?? r.username ?? "?"}
+                      username={r.username}
+                      size="xs"
+                    />
+                    <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
+                  </div>
+                  {r.checked_in_at ? (
+                    <span className="text-xs text-emerald-400 whitespace-nowrap shrink-0">✓ checked in</span>
+                  ) : (
+                    <OrganizerCheckInButton
+                      cleanupId={event.id}
+                      organizerUserId={userId!}
+                      attendeeUserId={r.user_id}
+                      onCheckedIn={async (pointsAwarded) => {
+                        if (pointsAwarded > 0) {
+                          setRecentCheckinPoints((prev) => ({ ...prev, [r.user_id]: pointsAwarded }));
+                          if (r.user_id === userId) refreshUserPoints(userId);
+                        }
+                        await refresh();
+                      }}
+                      onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to check in attendee"))}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+
         const doCleanupSection = (
           <div className="border border-zinc-800 rounded-xl p-5 text-center space-y-1.5 shadow-elevation-1">
             <p className="text-2xl" aria-hidden="true">🧹</p>
             <p className="text-sm font-semibold text-zinc-200">Time to clean!</p>
             <p className="text-xs text-zinc-500 max-w-xs mx-auto">
               {event.logging_mode === "organizer_total"
-                ? "Nothing to do here — get out there with your team and pick up trash. Come back to this page to log the team's totals when you're done."
-                : "Nothing to do here — get out there and pick up trash. Attendees log their own totals on the map as they go."}
+                ? "Nothing to do here. Get out there with your team and pick up trash, then come back to this page to log the team's totals when you're done."
+                : "Nothing to do here. Get out there and pick up trash. Attendees log their own totals on the map as they go."}
             </p>
           </div>
         );
@@ -934,11 +976,11 @@ export default function CleanupEventDetail({
               onClick={() => setGuidedStep(attendeesStepIndex)}
               className="w-full text-left px-3 py-2 text-xs text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg hover:border-zinc-600 hover:text-zinc-300 active:border-zinc-600 active:text-zinc-300 transition-colors duration-150 touch-manipulation"
             >
-              Need to manually check someone in or see the full attendee list? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
+              Need to add someone, see bag/point totals, or manage organizers? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
             </button>
           );
           const steps: { key: string; label: string; content: React.ReactNode }[] = [
-            { key: "checkin", label: "Check in attendees", content: <>{checkinSection}{checkinSummarySection}{joinCodeSection}</> },
+            { key: "checkin", label: "Check in attendees", content: <>{checkinSection}{joinCodeSection}{checkinSummarySection}{checkinRosterSection}</> },
             { key: "clean", label: "Do the cleanup", content: doCleanupSection },
             ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
             { key: "attendees", label: "Manage attendee data", content: attendeesSection },
@@ -1514,14 +1556,14 @@ function LogTeamTotalForm({
     poundValueReady ? `${(tierPoints / pointValues.pound_value!).toLocaleString()} lbs` : null,
     bagValuesReady ? `${(tierPoints / pointValues.small_bag_value!).toLocaleString()} small bags` : null,
     bagValuesReady
-      ? `${(tierPoints / pointValues.large_bag_value!).toLocaleString(undefined, { maximumFractionDigits: 1 })} large bags`
+      ? `${Math.round(tierPoints / pointValues.large_bag_value!).toLocaleString()} large bags`
       : null,
   ]
     .filter(Boolean)
     .join(" / ");
   const volumeBonusTip = `Volume bonus: every ${tierPoints} points' worth logged as a team total${
     tierUnits ? ` (${tierUnits})` : ""
-  } adds +${Math.round(perTierBonus * 100)}% to the total, up to ${maxMultiplier}x.`;
+  } adds +${Math.round(perTierBonus * 100)}% more points to the total, up to ${maxMultiplier}x.`;
   const hasNegative =
     (Number(smallBags) || 0) < 0 ||
     (Number(largeBags) || 0) < 0 ||
@@ -1609,16 +1651,16 @@ function LogTeamTotalForm({
         {warningOpen ? (
           <>
             Enter the event&apos;s <span className="font-semibold">full</span> total each time, not just
-            what&apos;s new — submitting wipes any credit from a previous team-total submission and
+            what&apos;s new. Submitting wipes any credit from a previous team-total submission and
             re-splits the full new total across everyone currently eligible (see the log history below
-            for a record of past totals). Attendees credited another way — their own self-logged
-            contribution, or an organizer&apos;s &quot;Log for them&quot; — are untouched and stay
+            for a record of past totals). Attendees credited another way, whether their own self-logged
+            contribution or an organizer&apos;s &quot;Log for them&quot;, are untouched and stay
             excluded from the split.{" "}
             <span className="underline">Show less</span>
           </>
         ) : (
           <>
-            Re-running this wipes and re-splits the full total — enter the whole event total, not just
+            Re-running this wipes and re-splits the full total. Enter the whole event total, not just
             what&apos;s new.{" "}
             <span className="underline">Read more</span>
           </>

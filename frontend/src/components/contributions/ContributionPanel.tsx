@@ -19,6 +19,7 @@ import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import Lightbox from "@/components/Lightbox";
 import IconButton from "@/components/ui/IconButton";
+import { GuidedStepper, StepperNav, ViewModeToggle, type GuidedStep } from "@/components/ui/GuidedStepper";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -791,6 +792,15 @@ function ContributeModal({
     }
     return userGroups.length === 1 ? userGroups[0].id : null;
   });
+  const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
+    if (typeof window === "undefined") return "guided";
+    return localStorage.getItem("frontline:contribute-cleanup-view-mode") === "full" ? "full" : "guided";
+  });
+  const changeViewMode = (mode: "guided" | "full") => {
+    setViewMode(mode);
+    localStorage.setItem("frontline:contribute-cleanup-view-mode", mode);
+  };
+  const [guidedStep, setGuidedStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [hotspotCleared, setHotspotCleared] = useState(false);
@@ -1076,39 +1086,43 @@ function ContributeModal({
     );
   }
 
-  return (
-    <ModalShell
-      title={config.title}
-      onClose={onClose}
-      glow={isEventMode ? "blue" : isCleanup && Boolean(activeMultiplier) ? "orange" : false}
-    >
-      <div className="flex flex-col gap-4">
+  const cleanupSteps: GuidedStep[] = [
+    { key: "photo", label: "Photo & Notes" },
+    { key: "where", label: "How & Where" },
+    { key: "group", label: "Group & Bags" },
+  ];
 
-        {isCleanup && claimedReportId && (
-          <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
-            <div className="flex items-center gap-2">
-              <span className="text-base shrink-0">🎯</span>
-              <span>Challenge complete — {effectiveMultiplier ? "two bonuses are eligible" : "this cleanup earns a score bonus"}:</span>
-            </div>
-            <div className="flex flex-col gap-1 pl-6">
-              <span className={challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "font-bold text-violet-200" : "text-violet-400/60 line-through"}>
-                {gameSettings.claim_challenge_multiplier ?? challengeMultiplier}× challenge bonus
-                {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) && " (applied)"}
-              </span>
-              {effectiveMultiplier && (
-                <span className={effectiveMultiplier.multiplier > challengeMultiplier ? "font-bold text-orange-300" : "text-orange-400/50 line-through"}>
-                  {effectiveMultiplier.multiplier}× hotspot bonus
-                  {effectiveMultiplier.multiplier > challengeMultiplier && " (applied)"}
-                </span>
-              )}
-            </div>
+  const heroSection = (
+    <>
+      {isCleanup && claimedReportId && (
+        <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
+          <div className="flex items-center gap-2">
+            <span className="text-base shrink-0">🎯</span>
+            <span>Challenge complete — {effectiveMultiplier ? "two bonuses are eligible" : "this cleanup earns a score bonus"}:</span>
+          </div>
+          <div className="flex flex-col gap-1 pl-6">
+            <span className={challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "font-bold text-violet-200" : "text-violet-400/60 line-through"}>
+              {gameSettings.claim_challenge_multiplier ?? challengeMultiplier}× challenge bonus
+              {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) && " (applied)"}
+            </span>
             {effectiveMultiplier && (
-              <span className="pl-6 text-violet-400/70">Only the larger bonus applies — they don&apos;t stack.</span>
+              <span className={effectiveMultiplier.multiplier > challengeMultiplier ? "font-bold text-orange-300" : "text-orange-400/50 line-through"}>
+                {effectiveMultiplier.multiplier}× hotspot bonus
+                {effectiveMultiplier.multiplier > challengeMultiplier && " (applied)"}
+              </span>
             )}
           </div>
-        )}
+          {effectiveMultiplier && (
+            <span className="pl-6 text-violet-400/70">Only the larger bonus applies — they don&apos;t stack.</span>
+          )}
+        </div>
+      )}
+    </>
+  );
 
-        {isCleanup && nearbyEvent && nearbyEvent.logging_mode === "organizer_total" ? (
+  const modeAndLocationSection = (
+    <>
+      {isCleanup && nearbyEvent && nearbyEvent.logging_mode === "organizer_total" ? (
           <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-300 cursor-pointer">
             <input
               type="checkbox"
@@ -1158,20 +1172,6 @@ function ContributeModal({
               </span>
             </div>
           )
-        )}
-
-        {/* Account handle — unfollow only (required) */}
-        {isUnfollow && (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Account you unfollowed (required)</label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="@handle or account name"
-              className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
-            />
-          </div>
         )}
 
         {/* Point / Route toggle — cleanup only */}
@@ -1331,7 +1331,11 @@ function ContributeModal({
             </span>
           </div>
         )}
+    </>
+  );
 
+  const groupAndBagsSection = (
+    <>
         {/* Group selection */}
         {userGroups.length > 0 && (
           <div>
@@ -1437,7 +1441,11 @@ function ContributeModal({
             </div>
           </div>
         )}
+    </>
+  );
 
+  const civicActionSelector = (
+    <>
         {/* Civic action selector */}
         {isCivicAction && (
           <div>
@@ -1460,7 +1468,29 @@ function ContributeModal({
             </div>
           </div>
         )}
+    </>
+  );
 
+  const unfollowField = (
+    <>
+        {/* Account handle — unfollow only (required) */}
+        {isUnfollow && (
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Account you unfollowed (required)</label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="@handle or account name"
+              className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+            />
+          </div>
+        )}
+    </>
+  );
+
+  const photoAndNotesSection = (
+    <>
         {/* Photo */}
         {showPhoto && (
           <div>
@@ -1553,6 +1583,54 @@ function ContributeModal({
               className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
             />
           </div>
+        )}
+    </>
+  );
+
+  const guidedStepSections = [photoAndNotesSection, modeAndLocationSection, groupAndBagsSection];
+
+  return (
+    <ModalShell
+      title={config.title}
+      onClose={onClose}
+      glow={isEventMode ? "blue" : isCleanup && Boolean(activeMultiplier) ? "orange" : false}
+    >
+      <div className="flex flex-col gap-4">
+        {heroSection}
+        {unfollowField}
+
+        {isCleanup && (
+          <ViewModeToggle viewMode={viewMode} onChange={changeViewMode} />
+        )}
+
+        {isCleanup && viewMode === "guided" ? (
+          <>
+            <GuidedStepper steps={cleanupSteps} activeIndex={guidedStep} onJump={setGuidedStep} />
+            {guidedStepSections[guidedStep]}
+            <StepperNav
+              activeIndex={guidedStep}
+              count={cleanupSteps.length}
+              onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
+              onNext={() => setGuidedStep((s) => Math.min(cleanupSteps.length - 1, s + 1))}
+            />
+          </>
+        ) : (
+          <>
+            {isCleanup ? (
+              <>
+                {photoAndNotesSection}
+                {modeAndLocationSection}
+                {groupAndBagsSection}
+              </>
+            ) : (
+              <>
+                {modeAndLocationSection}
+                {groupAndBagsSection}
+                {civicActionSelector}
+                {photoAndNotesSection}
+              </>
+            )}
+          </>
         )}
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -2632,6 +2710,21 @@ function HostEventModal({
   const [externalLink, setExternalLink] = useState("");
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">("organizer_total");
+  const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
+    if (typeof window === "undefined") return "guided";
+    return localStorage.getItem("frontline:host-event-view-mode") === "full" ? "full" : "guided";
+  });
+  const changeViewMode = (mode: "guided" | "full") => {
+    setViewMode(mode);
+    localStorage.setItem("frontline:host-event-view-mode", mode);
+  };
+  const [guidedStep, setGuidedStep] = useState(0);
+  const hostEventSteps: GuidedStep[] = [
+    { key: "basics", label: "Basics" },
+    { key: "schedule", label: "Schedule & Logging" },
+    { key: "location", label: "Logistics & Location" },
+    { key: "photo", label: "Cover photo" },
+  ];
 
   // A freshly finished route arrives via routeOverride once the map's route picker reports
   // "Finish route" — this is a purely decorative/pre-planning route for the event listing
@@ -2735,9 +2828,8 @@ function HostEventModal({
     );
   }
 
-  return (
-    <ModalShell title="Host Cleanup Event" onClose={onClose}>
-      <div className="flex flex-col gap-4">
+  const basicsSection = (
+    <>
         {adminGroups.length > 1 ? (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Hosting group</label>
@@ -2801,7 +2893,11 @@ function HostEventModal({
             className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
           />
         </div>
+    </>
+  );
 
+  const scheduleSection = (
+    <>
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">Starts</label>
           <input
@@ -2848,7 +2944,11 @@ function HostEventModal({
               : "Attendees self-log from the map near the event; no team total needed."}
           </p>
         </div>
+    </>
+  );
 
+  const locationSection = (
+    <>
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">RSVP limit (optional)</label>
           <input
@@ -2871,6 +2971,48 @@ function HostEventModal({
             className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
           />
         </div>
+
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
+            Pre-planned route (optional)
+          </label>
+          {!route ? (
+            <button
+              type="button"
+              onClick={onEnterRoutePicker}
+              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
+            >
+              🛤️ Draw route on map
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
+                </span>
+                <button
+                  type="button"
+                  onClick={onEnterRoutePicker}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+                >
+                  Redraw
+                </button>
+              </div>
+              <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" />
+            </div>
+          )}
+        </div>
+
+        {route && (
+          <button
+            type="button"
+            onClick={() => setRoute(null)}
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+          >
+            Use a single pin instead
+          </button>
+        )}
 
         {!route && (
           <div>
@@ -2954,51 +3096,14 @@ function HostEventModal({
             )}
           </div>
         )}
+    </>
+  );
 
-        {route && (
-          <button
-            type="button"
-            onClick={() => setRoute(null)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-          >
-            Use a single pin instead
-          </button>
-        )}
-
+  const photoSection = (
+    <>
         <div>
-          <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
-            Pre-planned route (optional)
-          </label>
-          {!route ? (
-            <button
-              type="button"
-              onClick={onEnterRoutePicker}
-              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
-            >
-              🛤️ Draw route on map
-            </button>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                  Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
-                </span>
-                <button
-                  type="button"
-                  onClick={onEnterRoutePicker}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-                >
-                  Redraw
-                </button>
-              </div>
-              <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" />
-            </div>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Photo (optional)</label>
+          <label className="block text-xs text-zinc-500 mb-1.5">Cover photo (optional)</label>
+          <p className="text-[11px] text-zinc-600 mb-1.5">Shown at the top of the event page. This is not a photo from the cleanup itself.</p>
           <input
             type="file"
             accept="image/*"
@@ -3021,6 +3126,35 @@ function HostEventModal({
             </div>
           )}
         </div>
+    </>
+  );
+
+  const hostEventStepSections = [basicsSection, scheduleSection, locationSection, photoSection];
+
+  return (
+    <ModalShell title="Host Cleanup Event" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <ViewModeToggle viewMode={viewMode} onChange={changeViewMode} />
+
+        {viewMode === "guided" ? (
+          <>
+            <GuidedStepper steps={hostEventSteps} activeIndex={guidedStep} onJump={setGuidedStep} />
+            {hostEventStepSections[guidedStep]}
+            <StepperNav
+              activeIndex={guidedStep}
+              count={hostEventSteps.length}
+              onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
+              onNext={() => setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1))}
+            />
+          </>
+        ) : (
+          <>
+            {basicsSection}
+            {scheduleSection}
+            {locationSection}
+            {photoSection}
+          </>
+        )}
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
