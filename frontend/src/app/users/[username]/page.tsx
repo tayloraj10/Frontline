@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import { formatPoints } from "@/lib/formatPoints";
 import type { Database } from "@/types/database";
 import UserActivityList from "@/components/contributions/UserActivityList";
@@ -28,6 +30,38 @@ interface Props {
   params: Promise<{ username: string }>;
 }
 
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { username: rawUsername } = await params;
+  const username = decodeURIComponent(rawUsername);
+  const supabase = createPublicClient();
+  const { data: profile } = await supabase
+    .schema("public")
+    .from("profiles")
+    .select("username, display_name, bio, avatar_url")
+    .eq("username", username)
+    .single();
+
+  if (!profile) return {};
+
+  const title = profile.display_name || profile.username;
+  const description = profile.bio ?? `${title}'s profile on Frontline.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `/users/${encodeURIComponent(profile.username)}`,
+      ...(profile.avatar_url && { images: [profile.avatar_url] }),
+    },
+    twitter: {
+      title,
+      description,
+      ...(profile.avatar_url && { images: [profile.avatar_url] }),
+    },
+  };
+}
 
 export default async function UserProfilePage({ params }: Props) {
   const { username: rawUsername } = await params;

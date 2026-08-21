@@ -1,8 +1,47 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import BackButton from "@/components/ui/BackButton";
 import type { BrowseOffer } from "../PartnersBrowseClient";
 import PartnerDetailClient, { type DetailBusiness, type DetailLocation } from "./PartnerDetailClient";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = createPublicClient();
+  const { data: business } = await supabase
+    .schema("public")
+    .from("partner_businesses")
+    .select("name, description, logo_url")
+    .eq("slug", slug)
+    .eq("status", "active")
+    .single();
+
+  if (!business) return {};
+
+  const title = business.name;
+  const description = business.description ?? `${business.name} — Frontline partner.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `/partners/${slug}`,
+      ...(business.logo_url && { images: [business.logo_url] }),
+    },
+    twitter: {
+      title,
+      description,
+      ...(business.logo_url && { images: [business.logo_url] }),
+    },
+  };
+}
 
 export default async function PartnerDetailPage({
   params,
