@@ -9,9 +9,31 @@ import PullToRefresh from "@/components/PullToRefresh";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
+const SITE_URL = "https://www.frontlinemaps.com";
+const SITE_DESCRIPTION =
+  "Join campaigns, log cleanups, and claim territory on the map with Frontline — gamified collective action for your neighborhood.";
+
 export const metadata: Metadata = {
-  title: "Frontline",
-  description: "Collective Action on the Map",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Frontline — Collective Action on the Map",
+    template: "%s — Frontline",
+  },
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    siteName: "Frontline",
+    title: "Frontline — Collective Action on the Map",
+    description: SITE_DESCRIPTION,
+    url: "/",
+    type: "website",
+    images: ["/icon.png"],
+  },
+  twitter: {
+    card: "summary",
+    title: "Frontline — Collective Action on the Map",
+    description: SITE_DESCRIPTION,
+    images: ["/icon.png"],
+  },
 };
 
 // Pinch-zoom is disabled only inside the native app (see capacitor.config.ts's

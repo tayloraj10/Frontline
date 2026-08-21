@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { BarChart3, CalendarPlus, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
 import Avatar from "@/components/ui/Avatar";
@@ -25,6 +27,38 @@ const SOCIAL_LABELS: { key: keyof NonNullable<Group["social_links"]>; label: str
 
 interface Props {
   params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = createPublicClient();
+  const { data: group } = await supabase
+    .from("groups")
+    .select("name, description, image_url, status")
+    .eq("slug", slug)
+    .eq("status", "approved")
+    .single();
+
+  if (!group) return {};
+
+  const title = group.name;
+  const description = group.description ?? `${group.name} on Frontline.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `/groups/${slug}`,
+      ...(group.image_url && { images: [group.image_url] }),
+    },
+    twitter: {
+      title,
+      description,
+      ...(group.image_url && { images: [group.image_url] }),
+    },
+  };
 }
 
 export default async function GroupProfilePage({ params }: Props) {

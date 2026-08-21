@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { unstable_cache } from "next/cache";
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import CampaignPageClient, { CampaignStatBar } from "./CampaignPageClient";
@@ -18,6 +19,29 @@ type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 interface Props {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ lat?: string; lng?: string; zoom?: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = createPublicClient();
+  const { data: campaign } = await supabase
+    .schema("public")
+    .from("campaigns")
+    .select("title, description")
+    .eq("slug", slug)
+    .single();
+
+  if (!campaign) return {};
+
+  const title = campaign.title;
+  const description = campaign.description ?? `Join the ${campaign.title} campaign on Frontline.`;
+
+  return {
+    title,
+    description,
+    openGraph: { title, description, url: `/campaigns/${slug}` },
+    twitter: { title, description },
+  };
 }
 
 type ProblemReportMapData = {
