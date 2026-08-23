@@ -544,6 +544,12 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                     {c.counts_toward_spendable_points ? "Counts" : "Doesn't count"}
                   </label>
                 </div>
+                <Link
+                  href={`/admin/campaigns/${c.slug}/dashboard`}
+                  className="block text-center text-xs font-medium text-emerald-400 hover:text-emerald-300 active:text-emerald-500 transition-colors duration-150 pt-1 border-t border-zinc-800/60"
+                >
+                  Dashboard →
+                </Link>
               </div>
             ))}
           </div>
@@ -555,6 +561,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                   <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Type</th>
                   <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Spendable points</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
@@ -589,6 +596,14 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                         />
                         {c.counts_toward_spendable_points ? "Counts" : "Doesn't count"}
                       </label>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/admin/campaigns/${c.slug}/dashboard`}
+                        className="text-xs font-medium text-emerald-400 hover:text-emerald-300 active:text-emerald-500 transition-colors duration-150"
+                      >
+                        Dashboard →
+                      </Link>
                     </td>
                   </tr>
                 ))}
