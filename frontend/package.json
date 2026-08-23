@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -39,7 +39,8 @@
     "next": "16.2.7",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
