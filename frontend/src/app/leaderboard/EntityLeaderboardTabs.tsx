@@ -1,27 +1,70 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
 import RankBadge from "@/components/ui/RankBadge";
 import { computeRanks } from "@/lib/ranking";
+import { mondayOf } from "@/app/groups/[slug]/stats/statsWindow";
 
-interface Profile {
-  id: string;
-  username: string;
+type Interval = "today" | "week" | "month" | "all";
+
+interface GlobalUser {
+  user_id: string;
+  username: string | null;
   display_name: string | null;
   avatar_url: string | null;
-  points: number | null;
+  total_value: number;
+  contribution_count: number;
 }
 
-interface TrashWarGroup {
-  entity_id: string;
+interface GlobalGroup {
+  group_id: string;
   name: string | null;
   slug: string | null;
   logo_url: string | null;
   total_value: number;
   contribution_count: number;
+}
+
+interface GlobalLeaderboardResponse {
+  interval: Interval;
+  users: GlobalUser[];
+  groups: GlobalGroup[];
+}
+
+const INTERVALS: { id: Interval; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "This week" },
+  { id: "month", label: "This month" },
+  { id: "all", label: "All-time" },
+];
+
+/** Static "what dates this covers" label for the current interval -- always today's/this
+ * week's/this month's actual dates, since this tab has no period navigation like
+ * IntervalPicker's date input does. */
+function dateRangeLabel(interval: Interval): string {
+  const now = new Date();
+  if (interval === "today") {
+    return now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  if (interval === "week") {
+    const monday = mondayOf(now);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const sameMonth = monday.getMonth() === sunday.getMonth();
+    const startStr = monday.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const endStr = sunday.toLocaleDateString(
+      undefined,
+      sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" }
+    );
+    return `${startStr}–${endStr}`;
+  }
+  if (interval === "month") {
+    return now.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+  return "All time";
 }
 
 function EntityRow({
@@ -58,22 +101,33 @@ function EntityRow({
   );
 }
 
-export default function EntityLeaderboardTabs({
-  profiles,
-  groups,
-}: {
-  profiles: Profile[];
-  groups: TrashWarGroup[];
-}) {
+export default function EntityLeaderboardTabs({ fastapiUrl }: { fastapiUrl: string }) {
   const [tab, setTab] = useState<"users" | "groups">("users");
-  const profileRanks = computeRanks(profiles, (p) => p.points ?? 0);
+  const [interval, setInterval] = useState<Interval>("month");
+  const [data, setData] = useState<GlobalLeaderboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    fetch(`${fastapiUrl}/api/leaderboard/global?interval=${interval}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [fastapiUrl, interval]);
+
+  const users = data?.users ?? [];
+  const groups = data?.groups ?? [];
+  const userRanks = computeRanks(users, (u) => u.total_value);
   const groupRanks = computeRanks(groups, (g) => g.total_value);
 
   return (
     <div className="mt-8">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-          {tab === "users" ? "All-Time Points (All Campaigns)" : "Trash War Points"}
+          Points (All Campaigns)
         </div>
         <div className="flex items-center gap-1 border border-zinc-800 rounded-lg p-1 w-fit">
           <button
@@ -95,31 +149,63 @@ export default function EntityLeaderboardTabs({
         </div>
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <div className="flex items-center gap-1 flex-wrap">
+          {INTERVALS.map((iv) => (
+            <button
+              key={iv.id}
+              onClick={() => setInterval(iv.id)}
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors touch-manipulation ${
+                interval === iv.id
+                  ? "bg-zinc-700 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
+              }`}
+            >
+              {iv.label}
+            </button>
+          ))}
+        </div>
+
+        {interval !== "all" && (
+          <div className="px-2.5 py-1 text-xs text-zinc-500 border border-zinc-800 rounded-lg w-fit">
+            {dateRangeLabel(interval)}
+          </div>
+        )}
+      </div>
+
+      <div
+        className={`border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 transition-opacity ${
+          loading ? "opacity-50" : ""
+        }`}
+      >
         {tab === "users" ? (
-          profiles.length === 0 ? (
-            <div className="px-5 py-10 text-center text-zinc-600 text-sm">No contributions yet.</div>
+          users.length === 0 ? (
+            <div className="px-5 py-10 text-center text-zinc-600 text-sm">
+              {loading ? "Loading…" : "No contributions yet."}
+            </div>
           ) : (
             <ul className="divide-y divide-zinc-800/50">
-              {profiles.map((p, i) => (
+              {users.map((u, i) => (
                 <EntityRow
-                  key={p.id}
-                  rank={profileRanks[i]}
-                  href={`/users/${encodeURIComponent(p.username)}`}
-                  avatarUrl={p.avatar_url}
-                  name={p.display_name ?? p.username}
-                  points={p.points ?? 0}
+                  key={u.user_id}
+                  rank={userRanks[i]}
+                  href={`/users/${encodeURIComponent(u.username ?? u.user_id)}`}
+                  avatarUrl={u.avatar_url}
+                  name={u.display_name ?? u.username ?? "Unknown user"}
+                  points={u.total_value}
                 />
               ))}
             </ul>
           )
         ) : groups.length === 0 ? (
-          <div className="px-5 py-10 text-center text-zinc-600 text-sm">No group contributions yet.</div>
+          <div className="px-5 py-10 text-center text-zinc-600 text-sm">
+            {loading ? "Loading…" : "No group contributions yet."}
+          </div>
         ) : (
           <ul className="divide-y divide-zinc-800/50">
             {groups.map((g, i) => (
               <EntityRow
-                key={g.entity_id}
+                key={g.group_id}
                 rank={groupRanks[i]}
                 href={`/groups/${g.slug}`}
                 avatarUrl={g.logo_url}

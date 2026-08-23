@@ -263,7 +263,7 @@ export default function PartnersBrowseClient({
               <img src={business.logo_url} alt={business.name} className="w-8 h-8 rounded object-cover shrink-0" />
             )}
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-bold text-zinc-100 truncate">{business.name}</h2>
+              <h2 className="text-sm font-bold text-zinc-100 break-words">{business.name}</h2>
               {business.locations.length === 1 && (business.locations[0].city || business.locations[0].state) && (
                 <p className="text-xs text-zinc-500 truncate">
                   {[business.locations[0].city, business.locations[0].state].filter(Boolean).join(", ")}
