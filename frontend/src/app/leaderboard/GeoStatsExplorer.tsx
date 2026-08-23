@@ -5,6 +5,7 @@ import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
 import RankBadge from "@/components/ui/RankBadge";
 import { computeRanks } from "@/lib/ranking";
+import { mondayOf } from "@/app/groups/[slug]/stats/statsWindow";
 import GeoStatsMap from "./GeoStatsMap";
 import StatDetailModal, { StatKind } from "./StatDetailModal";
 
@@ -78,6 +79,31 @@ const INTERVALS: { id: Interval; label: string }[] = [
   { id: "all", label: "All-time" },
 ];
 
+/** Static "what dates this covers" label for the current interval -- there's no period
+ * navigation here, so it's always today's/this week's/this month's actual dates. */
+function dateRangeLabel(interval: Interval): string {
+  const now = new Date();
+  if (interval === "today") {
+    return now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  if (interval === "week") {
+    const monday = mondayOf(now);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const sameMonth = monday.getMonth() === sunday.getMonth();
+    const startStr = monday.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const endStr = sunday.toLocaleDateString(
+      undefined,
+      sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" }
+    );
+    return `${startStr}–${endStr}`;
+  }
+  if (interval === "month") {
+    return now.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+  return "All time";
+}
+
 const LEVEL_LABELS: Record<GeoLevel, string> = {
   borough: "Borough",
   neighborhood: "Neighborhood",
@@ -120,7 +146,7 @@ export default function GeoStatsExplorer({
   fastapiUrl: string;
   unit: string;
 }) {
-  const [interval, setInterval] = useState<Interval>("all");
+  const [interval, setInterval] = useState<Interval>("month");
   const [focusStack, setFocusStack] = useState<FocusUnit[]>([]);
   const [level, setLevel] = useState<GeoLevel | null>(null);
   const [data, setData] = useState<GeoStatsResponse | null>(null);
@@ -240,20 +266,28 @@ export default function GeoStatsExplorer({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 flex-wrap">
-        {INTERVALS.map((iv) => (
-          <button
-            key={iv.id}
-            onClick={() => setInterval(iv.id)}
-            className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors touch-manipulation ${
-              interval === iv.id
-                ? "bg-zinc-700 text-zinc-100"
-                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
-            }`}
-          >
-            {iv.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 flex-wrap">
+          {INTERVALS.map((iv) => (
+            <button
+              key={iv.id}
+              onClick={() => setInterval(iv.id)}
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors touch-manipulation ${
+                interval === iv.id
+                  ? "bg-zinc-700 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
+              }`}
+            >
+              {iv.label}
+            </button>
+          ))}
+        </div>
+
+        {interval !== "all" && (
+          <div className="px-2.5 py-1 text-xs text-zinc-500 border border-zinc-800 rounded-lg w-fit">
+            {dateRangeLabel(interval)}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-1 text-xs text-zinc-500 flex-wrap">

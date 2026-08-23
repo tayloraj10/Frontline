@@ -1,15 +1,8 @@
 import { unstable_cache } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { formatPoints } from "@/lib/formatPoints";
 import LeaderboardViewSwitch from "./LeaderboardViewSwitch";
 import EntityLeaderboardTabs from "./EntityLeaderboardTabs";
-import type { Database } from "@/types/database";
-
-type Profile = Pick<
-  Database["public"]["Tables"]["profiles"]["Row"],
-  "id" | "username" | "display_name" | "avatar_url" | "points"
->;
 
 interface TrashWarGroup {
   entity_id: string;
@@ -68,27 +61,15 @@ const getTrashWarStats = unstable_cache(
 );
 
 export default async function GlobalLeaderboardPage() {
-  const supabase = await createClient();
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
-  const [{ data: profilesData }, trashWarStats] = await Promise.all([
-    supabase
-      .schema("public")
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, points")
-      .gt("points", 0)
-      .order("points", { ascending: false })
-      .limit(100),
-    getTrashWarStats(fastapiUrl),
-  ]);
-
-  const profiles = (profilesData ?? []) as Profile[];
+  const trashWarStats = await getTrashWarStats(fastapiUrl);
 
   return (
     <main className="max-w-2xl mx-auto px-6 py-10 w-full">
       <div className="mb-6">
         <h1 className="text-2xl font-black text-zinc-100 leading-tight">Leaderboard</h1>
-        <p className="text-sm text-zinc-500 mt-1">Trash War's pulse, plus all-time points across every campaign.</p>
+        <p className="text-sm text-zinc-500 mt-1">Trash War's pulse, plus points across every campaign.</p>
       </div>
 
       {trashWarStats && (
@@ -125,7 +106,7 @@ export default async function GlobalLeaderboardPage() {
               </div>
             </dl>
 
-            <EntityLeaderboardTabs profiles={profiles} groups={trashWarStats.groups} />
+            <EntityLeaderboardTabs fastapiUrl={fastapiUrl} />
           </LeaderboardViewSwitch>
         </div>
       )}
