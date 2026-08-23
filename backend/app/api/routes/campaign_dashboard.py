@@ -216,6 +216,7 @@ async def get_dashboard_cleanups(
                 FROM cleanup_rsvps r
                 JOIN cleanups cl ON cl.id = r.cleanup_id
                 WHERE cl.campaign_id = :campaign_id
+                  AND cl.is_group_event = true
                   AND (CAST(:start AS timestamptz) IS NULL OR cl.created_at >= :start)
                   AND (CAST(:end AS timestamptz) IS NULL OR cl.created_at < :end)
             """),
