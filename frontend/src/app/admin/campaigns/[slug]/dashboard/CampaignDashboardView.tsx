@@ -296,10 +296,10 @@ export default function CampaignDashboardView({
             ) : (
               <div className="h-64 mb-4">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={cleanups.data.trend}>
+                  <BarChart data={cleanups.data.trend} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                     <XAxis dataKey="bucket" tickFormatter={formatBucketTick} stroke="#71717a" fontSize={11} />
-                    <YAxis stroke="#71717a" fontSize={11} allowDecimals={false} />
+                    <YAxis stroke="#71717a" fontSize={11} allowDecimals={false} width={28} />
                     <Tooltip
                       labelFormatter={formatBucketLabel}
                       contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", fontSize: 12 }}
@@ -411,10 +411,10 @@ export default function CampaignDashboardView({
             ) : (
               <div className="h-64 mb-4">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trend.data.trend}>
+                  <LineChart data={trend.data.trend} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                     <XAxis dataKey="bucket" tickFormatter={formatBucketTick} stroke="#71717a" fontSize={11} />
-                    <YAxis stroke="#71717a" fontSize={11} />
+                    <YAxis stroke="#71717a" fontSize={11} width={36} />
                     <Tooltip
                       labelFormatter={formatBucketLabel}
                       contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", fontSize: 12 }}
@@ -428,7 +428,7 @@ export default function CampaignDashboardView({
             )}
 
             <div className="grid sm:grid-cols-2 gap-4">
-              <div>
+              <div className="min-w-0">
                 <div className="text-xs font-semibold text-zinc-500 mb-2">By contribution type</div>
                 {breakdown.data.by_type.length === 0 ? (
                   <div className="text-zinc-600 text-xs">No data.</div>
@@ -456,7 +456,7 @@ export default function CampaignDashboardView({
                   </div>
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="text-xs font-semibold text-zinc-500 mb-2">Top contributors</div>
                 {breakdown.data.top_contributors.length === 0 ? (
                   <div className="text-zinc-600 text-xs">No data.</div>
@@ -552,11 +552,11 @@ export default function CampaignDashboardView({
             {partners.data.trend.length > 0 && (
               <div className="h-56 mb-4">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={partners.data.trend}>
+                  <LineChart data={partners.data.trend} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                     <XAxis dataKey="bucket" tickFormatter={formatBucketTick} stroke="#71717a" fontSize={11} />
-                    <YAxis yAxisId="redemptions" stroke="#71717a" fontSize={11} allowDecimals={false} />
-                    <YAxis yAxisId="offers" orientation="right" stroke="#71717a" fontSize={11} allowDecimals={false} />
+                    <YAxis yAxisId="redemptions" stroke="#71717a" fontSize={11} allowDecimals={false} width={28} />
+                    <YAxis yAxisId="offers" orientation="right" stroke="#71717a" fontSize={11} allowDecimals={false} width={28} />
                     <Tooltip
                       labelFormatter={formatBucketLabel}
                       contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", fontSize: 12 }}
