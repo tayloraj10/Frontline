@@ -1774,7 +1774,7 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
   return (
     <div className="border border-zinc-800 rounded-lg px-4 py-3 shadow-elevation-1">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-zinc-200">{offer.title}</p>
           {offer.description && <p className="text-xs text-zinc-500 mt-0.5">{offer.description}</p>}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs">
@@ -1796,40 +1796,6 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
             )}
             {offer.code && <span className="text-zinc-600 font-mono">code: {offer.code}</span>}
           </div>
-          {showRedemptions && (
-            <div className="mt-2 border border-zinc-800 rounded-lg divide-y divide-zinc-800/60 overflow-hidden shadow-elevation-1">
-              {loadingRedemptions ? (
-                <p className="px-3 py-2 text-xs text-zinc-600">Loading…</p>
-              ) : redemptions && redemptions.length > 0 ? (
-                redemptions.map((r) => (
-                  <div key={r.id} className="px-3 py-1.5 flex items-center justify-between gap-3 text-xs">
-                    <span className="text-zinc-400 truncate">
-                      {r.profiles?.display_name ?? r.profiles?.username ?? "Unknown user"}
-                    </span>
-                    <span className="flex items-center gap-2 shrink-0">
-                      <span className="text-zinc-600">
-                        {new Date(r.redeemed_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                      </span>
-                      {r.used_at ? (
-                        <span
-                          title={`Used ${new Date(r.used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`}
-                          className="text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 cursor-help"
-                        >
-                          Used
-                        </span>
-                      ) : (
-                        <span className="text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5">
-                          Not used
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="px-3 py-2 text-xs text-zinc-600">No redemptions yet.</p>
-              )}
-            </div>
-          )}
         </div>
         {offer.status !== "cancelled" && (
           <div className="flex items-center gap-2 shrink-0">
@@ -1849,6 +1815,40 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
           </div>
         )}
       </div>
+      {showRedemptions && (
+        <div className="mt-2 w-full border border-zinc-800 rounded-lg divide-y divide-zinc-800/60 overflow-hidden shadow-elevation-1">
+          {loadingRedemptions ? (
+            <p className="px-3 py-2 text-xs text-zinc-600">Loading…</p>
+          ) : redemptions && redemptions.length > 0 ? (
+            redemptions.map((r) => (
+              <div key={r.id} className="px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-xs">
+                <span className="text-zinc-400">
+                  {r.profiles?.display_name ?? r.profiles?.username ?? "Unknown user"}
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="text-zinc-600">
+                    {new Date(r.redeemed_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </span>
+                  {r.used_at ? (
+                    <span
+                      title={`Used ${new Date(r.used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`}
+                      className="text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 cursor-help"
+                    >
+                      Used
+                    </span>
+                  ) : (
+                    <span className="text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5">
+                      Not used
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-xs text-zinc-600">No redemptions yet.</p>
+          )}
+        </div>
+      )}
       <ConfirmModal
         open={confirmingCancel}
         title="Cancel offer?"

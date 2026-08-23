@@ -128,8 +128,8 @@ export default async function GroupProfilePage({ params }: Props) {
         <BackButton href="/groups" label="Groups" />
       </div>
 
-      <div className="mt-6 mb-8 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div className="flex items-start gap-4 min-w-0 lg:flex-1">
+      <div className="mt-6 mb-8 flex flex-col gap-4">
+        <div className="flex items-start gap-4 min-w-0">
           <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
             {group.image_url ? (
               <img src={group.image_url} alt={group.name} className="w-full h-full object-cover" />
@@ -176,7 +176,7 @@ export default async function GroupProfilePage({ params }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-x-2 gap-y-3 shrink-0 flex-wrap">
+        <div className="flex items-center gap-x-2 gap-y-3 flex-wrap lg:justify-end">
           <ShareButton
             variant="icon"
             content={{ title: group.name, text: group.description ?? undefined }}
