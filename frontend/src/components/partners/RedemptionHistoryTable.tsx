@@ -86,36 +86,61 @@ export default function RedemptionHistoryTable({
       )}
 
       {redemptions.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left text-zinc-600 border-b border-zinc-800">
-                <th className="py-2 pr-3 font-medium">Redeemed by</th>
-                <th className="py-2 pr-3 font-medium">Offer</th>
-                <th className="py-2 pr-3 font-medium">Redeemed at</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {redemptions.map((r) => (
-                <tr key={r.id} className="border-b border-zinc-900">
-                  <td className="py-2 pr-3 text-zinc-300">{r.display_name ?? r.username ?? "Unknown user"}</td>
-                  <td className="py-2 pr-3 text-zinc-400">{r.offer_title}</td>
-                  <td className="py-2 pr-3 text-zinc-500">
-                    {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : "—"}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {r.used_at ? (
-                      <span className="text-emerald-400">Used {new Date(r.used_at).toLocaleDateString()}</span>
-                    ) : (
-                      <span className="text-amber-400">Not yet used</span>
-                    )}
-                  </td>
+        <>
+          <ul className="sm:hidden divide-y divide-zinc-900">
+            {redemptions.map((r) => (
+              <li key={r.id} className="py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-zinc-200 font-medium truncate">
+                    {r.display_name ?? r.username ?? "Unknown user"}
+                  </span>
+                  {r.used_at ? (
+                    <span className="text-emerald-400 text-[11px] shrink-0">
+                      Used {new Date(r.used_at).toLocaleDateString()}
+                    </span>
+                  ) : (
+                    <span className="text-amber-400 text-[11px] shrink-0">Not yet used</span>
+                  )}
+                </div>
+                <p className="text-zinc-400 mt-0.5">{r.offer_title}</p>
+                <p className="text-zinc-600 text-[11px] mt-0.5">
+                  {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : "—"}
+                </p>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-zinc-600 border-b border-zinc-800">
+                  <th className="py-2 pr-3 font-medium">Redeemed by</th>
+                  <th className="py-2 pr-3 font-medium">Offer</th>
+                  <th className="py-2 pr-3 font-medium">Redeemed at</th>
+                  <th className="py-2 pr-3 font-medium">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {redemptions.map((r) => (
+                  <tr key={r.id} className="border-b border-zinc-900">
+                    <td className="py-2 pr-3 text-zinc-300">{r.display_name ?? r.username ?? "Unknown user"}</td>
+                    <td className="py-2 pr-3 text-zinc-400">{r.offer_title}</td>
+                    <td className="py-2 pr-3 text-zinc-500">
+                      {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : "—"}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {r.used_at ? (
+                        <span className="text-emerald-400">Used {new Date(r.used_at).toLocaleDateString()}</span>
+                      ) : (
+                        <span className="text-amber-400">Not yet used</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {redemptions.length < totalCount && (

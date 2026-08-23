@@ -137,7 +137,7 @@ export default async function GroupProfilePage({ params }: Props) {
               <span className="text-2xl font-black text-zinc-300">{group.name[0].toUpperCase()}</span>
             )}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-black text-zinc-100 leading-tight">{group.name}</h1>
               {group.verified && (
