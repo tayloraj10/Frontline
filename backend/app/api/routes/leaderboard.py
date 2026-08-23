@@ -459,6 +459,11 @@ async def get_campaign_geo_stats(
         )
     ).fetchall()
 
+    # Restricted to self-logged cleanups (c.cleanup_id) only, unlike group_bag_totals/
+    # child_bag_totals below -- a team-total group event's cleanup_event_id metrics are
+    # a shared total across all attendees, and crediting the full amount to each individual
+    # attendee is misleading when displayed as "this person's bags/pounds". Groups and geo
+    # units legitimately own their team-total events, so they still include cleanup_event_id.
     user_bag_totals = {
         row.user_id: {"small_bags": row.small_bags, "large_bags": row.large_bags, "pounds": row.pounds}
         for row in (
@@ -470,11 +475,11 @@ async def get_campaign_geo_stats(
                         COALESCE(SUM(cl.metrics_large_bags), 0)::int AS large_bags,
                         COALESCE(SUM(cl.metrics_pounds), 0)::float   AS pounds
                     FROM (
-                        SELECT DISTINCT c.user_id, COALESCE(c.cleanup_id, c.cleanup_event_id) AS cid
+                        SELECT DISTINCT c.user_id, c.cleanup_id AS cid
                         FROM contributions c
                         WHERE c.campaign_id = :cid AND c.user_id IS NOT NULL
                           AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
-                          AND COALESCE(c.cleanup_id, c.cleanup_event_id) IS NOT NULL
+                          AND c.cleanup_id IS NOT NULL
                           {scope_filter}
                     ) dc
                     JOIN cleanups cl ON cl.id = dc.cid

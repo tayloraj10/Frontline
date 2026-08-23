@@ -386,14 +386,20 @@ export default function GeoStatsExplorer({
                           {child.display_name ?? child.unit_id}
                         </span>
                         <div className="flex items-center gap-4 shrink-0 text-right">
-                          {(child.small_bags > 0 || child.large_bags > 0 || child.pounds > 0) && (
-                            <div className="hidden md:block text-right">
-                              <div className="text-xs font-semibold text-zinc-400 tabular-nums">
-                                {formatPoints(child.small_bags + child.large_bags)}
-                              </div>
-                              <div className="text-xs text-zinc-600">bags</div>
+                          <div className="hidden md:block text-right w-10">
+                            <div className="text-xs font-semibold text-zinc-400 tabular-nums">
+                              {child.pounds > 0 ? formatPoints(child.pounds) : "-"}
                             </div>
-                          )}
+                            <div className="text-xs text-zinc-600">lbs</div>
+                          </div>
+                          <div className="hidden md:block text-right w-10">
+                            <div className="text-xs font-semibold text-zinc-400 tabular-nums">
+                              {child.small_bags > 0 || child.large_bags > 0
+                                ? formatPoints(child.small_bags + child.large_bags)
+                                : "-"}
+                            </div>
+                            <div className="text-xs text-zinc-600">bags</div>
+                          </div>
                           <div className="hidden sm:block text-right">
                             <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                               {formatPoints(child.total_value)}
@@ -447,14 +453,18 @@ export default function GeoStatsExplorer({
                   <span className="text-sm text-zinc-200 truncate font-medium">{g.name ?? "Unknown Group"}</span>
                 </div>
                 <div className="flex items-center gap-4 shrink-0 text-right">
-                  {(g.small_bags > 0 || g.large_bags > 0 || g.pounds > 0) && (
-                    <div className="hidden md:block text-right">
-                      <div className="text-xs font-semibold text-zinc-400 tabular-nums">
-                        {formatPoints(g.small_bags + g.large_bags)}
-                      </div>
-                      <div className="text-xs text-zinc-600">bags</div>
+                  <div className="hidden md:block text-right w-10">
+                    <div className="text-xs font-semibold text-zinc-400 tabular-nums">
+                      {g.pounds > 0 ? formatPoints(g.pounds) : "-"}
                     </div>
-                  )}
+                    <div className="text-xs text-zinc-600">lbs</div>
+                  </div>
+                  <div className="hidden md:block text-right w-10">
+                    <div className="text-xs font-semibold text-zinc-400 tabular-nums">
+                      {g.small_bags > 0 || g.large_bags > 0 ? formatPoints(g.small_bags + g.large_bags) : "-"}
+                    </div>
+                    <div className="text-xs text-zinc-600">bags</div>
+                  </div>
                   <div className="hidden sm:block text-right">
                     <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                       {formatPoints(g.total_value)}
@@ -495,14 +505,18 @@ export default function GeoStatsExplorer({
                     <span className="text-sm text-zinc-200 truncate font-medium">{name}</span>
                   </div>
                   <div className="flex items-center gap-4 shrink-0 text-right">
-                    {(u.small_bags > 0 || u.large_bags > 0 || u.pounds > 0) && (
-                      <div className="hidden md:block text-right">
-                        <div className="text-xs font-semibold text-zinc-400 tabular-nums">
-                          {formatPoints(u.small_bags + u.large_bags)}
-                        </div>
-                        <div className="text-xs text-zinc-600">bags</div>
+                    <div className="hidden md:block text-right w-10">
+                      <div className="text-xs font-semibold text-zinc-400 tabular-nums">
+                        {u.pounds > 0 ? formatPoints(u.pounds) : "-"}
                       </div>
-                    )}
+                      <div className="text-xs text-zinc-600">lbs</div>
+                    </div>
+                    <div className="hidden md:block text-right w-10">
+                      <div className="text-xs font-semibold text-zinc-400 tabular-nums">
+                        {u.small_bags > 0 || u.large_bags > 0 ? formatPoints(u.small_bags + u.large_bags) : "-"}
+                      </div>
+                      <div className="text-xs text-zinc-600">bags</div>
+                    </div>
                     <div className="hidden sm:block text-right">
                       <div className="text-xs font-semibold text-zinc-300 tabular-nums">
                         {formatPoints(u.total_value)}
