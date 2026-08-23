@@ -133,7 +133,7 @@ interface TrashReportsData {
 interface PartnersData {
   businesses: { business_id: string; name: string; status: string; redemption_count: number; points_redeemed: number }[];
   offers: { offer_id: string; title: string; business_name: string; status: string; redemption_count: number; points_redeemed: number }[];
-  trend: { bucket: string; redemption_count: number; points_redeemed: number }[];
+  trend: { bucket: string; redemption_count: number; points_redeemed: number; active_offer_count: number }[];
 }
 
 function formatBucketLabel(bucket: React.ReactNode): string {
@@ -142,6 +142,47 @@ function formatBucketLabel(bucket: React.ReactNode): string {
 
 function formatBucketTick(bucket: string): string {
   return new Date(bucket).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatContributionType(type: string): string {
+  return type
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+// Wraps a proper-cased label onto up to two lines (splitting on the space closest to the
+// midpoint) so long contribution-type names don't get clipped by the Y-axis column width.
+function wrapLabel(label: string, maxCharsPerLine = 14): [string] | [string, string] {
+  if (label.length <= maxCharsPerLine) return [label];
+  const words = label.split(" ");
+  if (words.length === 1) return [label];
+  let bestSplit = 1;
+  let bestDiff = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const firstLine = words.slice(0, i).join(" ");
+    const diff = Math.abs(firstLine.length - label.length / 2);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestSplit = i;
+    }
+  }
+  return [words.slice(0, bestSplit).join(" "), words.slice(bestSplit).join(" ")];
+}
+
+function ContributionTypeTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) {
+  const label = formatContributionType(payload?.value ?? "");
+  const lines = wrapLabel(label);
+  return (
+    <text x={x} y={y} textAnchor="end" fill="#71717a" fontSize={11}>
+      {lines.map((line, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? (lines.length > 1 ? -4 : 4) : 12}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
 }
 
 export default function CampaignDashboardView({
@@ -397,8 +438,18 @@ export default function CampaignDashboardView({
                       <BarChart data={breakdown.data.by_type} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                         <XAxis type="number" stroke="#71717a" fontSize={11} />
-                        <YAxis type="category" dataKey="contribution_type" stroke="#71717a" fontSize={11} width={90} />
-                        <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", fontSize: 12 }} />
+                        <YAxis
+                          type="category"
+                          dataKey="contribution_type"
+                          stroke="#71717a"
+                          fontSize={11}
+                          width={110}
+                          tick={<ContributionTypeTick />}
+                        />
+                        <Tooltip
+                          labelFormatter={(label) => formatContributionType(String(label))}
+                          contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", fontSize: 12 }}
+                        />
                         <Bar dataKey="total_value" name="Points" fill={CHART_COLORS.amber} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -504,12 +555,15 @@ export default function CampaignDashboardView({
                   <LineChart data={partners.data.trend}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                     <XAxis dataKey="bucket" tickFormatter={formatBucketTick} stroke="#71717a" fontSize={11} />
-                    <YAxis stroke="#71717a" fontSize={11} allowDecimals={false} />
+                    <YAxis yAxisId="redemptions" stroke="#71717a" fontSize={11} allowDecimals={false} />
+                    <YAxis yAxisId="offers" orientation="right" stroke="#71717a" fontSize={11} allowDecimals={false} />
                     <Tooltip
                       labelFormatter={formatBucketLabel}
                       contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", fontSize: 12 }}
                     />
-                    <Line type="monotone" dataKey="redemption_count" name="Redemptions" stroke={CHART_COLORS.emerald} dot={false} strokeWidth={2} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line yAxisId="redemptions" type="monotone" dataKey="redemption_count" name="Redemptions" stroke={CHART_COLORS.emerald} dot={false} strokeWidth={2} />
+                    <Line yAxisId="offers" type="stepAfter" dataKey="active_offer_count" name="Active offers" stroke={CHART_COLORS.sky} dot={false} strokeWidth={2} strokeDasharray="4 3" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

@@ -56,21 +56,21 @@ async def get_dashboard_overview(
     start, end = await resolve_stats_window(db, interval, start_date, end_date)
     params = _window_params(campaign_id, start, end)
 
+    # Points are NOT deduped by cleanup here -- unlike bags/pounds (which live once per
+    # cleanups row, shared across a team-split event's attendees), each contributions row
+    # is one specific user's actual point award, so summing them directly is correct (same
+    # as leaderboard.py's /leaderboard aggregate). Deduping by cleanup_id/cleanup_event_id
+    # would collapse every attendee but one down to a single row and badly undercount.
     contrib_row = (
         await db.execute(
             text("""
-                WITH deduped AS (
-                    SELECT DISTINCT ON (COALESCE(c.cleanup_id::text, c.cleanup_event_id::text, c.id::text))
-                        c.id, c.user_id, c.value
-                    FROM contributions c
-                    WHERE c.campaign_id = :campaign_id
-                      AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
-                      AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
-                )
                 SELECT COUNT(*)::int AS contribution_count,
                        COUNT(DISTINCT user_id)::int AS unique_participants,
                        COALESCE(SUM(value), 0)::float AS total_points
-                FROM deduped
+                FROM contributions c
+                WHERE c.campaign_id = :campaign_id
+                  AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
             """),
             params,
         )
@@ -335,19 +335,16 @@ async def get_dashboard_contributions_breakdown(
     start, end = await resolve_stats_window(db, interval, start_date, end_date)
     params = _window_params(campaign_id, start, end)
 
+    # See the no-dedup comment on /overview's contrib_row -- points are per-user, not
+    # per-event, so they're summed directly rather than deduped by cleanup.
     type_rows = (
         await db.execute(
             text("""
-                WITH deduped AS (
-                    SELECT DISTINCT ON (COALESCE(c.cleanup_id::text, c.cleanup_event_id::text, c.id::text))
-                        c.id, c.contribution_type, c.value
-                    FROM contributions c
-                    WHERE c.campaign_id = :campaign_id
-                      AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
-                      AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
-                )
                 SELECT contribution_type, COUNT(*)::int AS count, COALESCE(SUM(value), 0)::float AS total_value
-                FROM deduped
+                FROM contributions c
+                WHERE c.campaign_id = :campaign_id
+                  AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                 GROUP BY contribution_type
                 ORDER BY total_value DESC
             """),
@@ -358,19 +355,14 @@ async def get_dashboard_contributions_breakdown(
     top_contributors_rows = (
         await db.execute(
             text("""
-                WITH deduped AS (
-                    SELECT DISTINCT ON (COALESCE(c.cleanup_id::text, c.cleanup_event_id::text, c.id::text))
-                        c.id, c.user_id, c.value
-                    FROM contributions c
-                    WHERE c.campaign_id = :campaign_id
-                      AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
-                      AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
-                )
-                SELECT d.user_id::text AS user_id, p.username, p.display_name,
-                       COUNT(*)::int AS contribution_count, COALESCE(SUM(d.value), 0)::float AS total_value
-                FROM deduped d
-                JOIN profiles p ON p.id = d.user_id
-                GROUP BY d.user_id, p.username, p.display_name
+                SELECT c.user_id::text AS user_id, p.username, p.display_name,
+                       COUNT(*)::int AS contribution_count, COALESCE(SUM(c.value), 0)::float AS total_value
+                FROM contributions c
+                JOIN profiles p ON p.id = c.user_id
+                WHERE c.campaign_id = :campaign_id
+                  AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
+                GROUP BY c.user_id, p.username, p.display_name
                 ORDER BY total_value DESC
                 LIMIT 25
             """),
@@ -407,20 +399,17 @@ async def get_dashboard_contributions_trend(
     params = _window_params(campaign_id, start, end)
     bucket = trend_bucket_unit(start, end)
 
+    # See the no-dedup comment on /overview's contrib_row -- points are per-user, not
+    # per-event, so they're summed directly rather than deduped by cleanup.
     rows = (
         await db.execute(
             text("""
-                WITH deduped AS (
-                    SELECT DISTINCT ON (COALESCE(c.cleanup_id::text, c.cleanup_event_id::text, c.id::text))
-                        c.id, c.submitted_at, c.value
-                    FROM contributions c
-                    WHERE c.campaign_id = :campaign_id
-                      AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
-                      AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
-                )
                 SELECT date_trunc(:bucket, submitted_at) AS bucket,
                        COUNT(*)::int AS count, COALESCE(SUM(value), 0)::float AS total_value
-                FROM deduped
+                FROM contributions c
+                WHERE c.campaign_id = :campaign_id
+                  AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                 GROUP BY bucket
                 ORDER BY bucket
             """),
@@ -546,17 +535,60 @@ async def get_dashboard_partners(
     ).fetchall()
 
     bucket = trend_bucket_unit(start, end)
+    # Fixed set from trend_bucket_unit()'s {"hour","day","week","month"} return values, never
+    # user input -- safe to interpolate directly. Bound as an interval-typed *parameter*
+    # (CAST(:step AS interval)), asyncpg's client-side codec demands a datetime.timedelta and
+    # rejects a plain str with "'str' object has no attribute 'days'"; a timedelta can't
+    # represent a calendar month either, so the interval literal is written directly into the
+    # SQL text instead of parameterized.
+    bucket_step_literal = {"hour": "1 hour", "day": "1 day", "week": "1 week", "month": "1 month"}[bucket]
+
+    # Redemption counts alone tend to read as a flat, uninformative line (this campaign's
+    # offer catalog is small, so weekly redemption counts sit at 1-2 the whole window) --
+    # pairing it with a running "how many offers were live at this point" line gives useful
+    # context (catalog growth vs. redemption activity) instead of one lonely flat series.
+    # Bucketed as a continuous generate_series (unlike the other trend endpoints, which only
+    # emit buckets with activity) so the offer-count line doesn't have gaps.
     trend_rows = (
         await db.execute(
-            text("""
-                SELECT date_trunc(:bucket, pr.redeemed_at) AS bucket,
-                       COUNT(*)::int AS redemption_count, COALESCE(SUM(pr.points_spent), 0)::int AS points_redeemed
-                FROM partner_redemptions pr
-                JOIN campaign_partner_businesses cpb ON cpb.business_id = pr.business_id AND cpb.campaign_id = :campaign_id
-                WHERE (CAST(:start AS timestamptz) IS NULL OR pr.redeemed_at >= :start)
-                  AND (CAST(:end AS timestamptz) IS NULL OR pr.redeemed_at < :end)
-                GROUP BY bucket
-                ORDER BY bucket
+            text(f"""
+                WITH first_offer AS (
+                    SELECT MIN(po.created_at) AS min_created
+                    FROM partner_offers po
+                    JOIN partner_businesses pb ON pb.id = po.business_id
+                    JOIN campaign_partner_businesses cpb ON cpb.business_id = pb.id AND cpb.campaign_id = :campaign_id
+                ),
+                bounds AS (
+                    SELECT date_trunc(:bucket, COALESCE(CAST(:start AS timestamptz), (SELECT min_created FROM first_offer), now())) AS start_ts,
+                           COALESCE(CAST(:end AS timestamptz), now()) AS end_ts
+                ),
+                buckets AS (
+                    SELECT generate_series(start_ts, end_ts, INTERVAL '{bucket_step_literal}') AS bucket
+                    FROM bounds
+                ),
+                redemptions AS (
+                    SELECT date_trunc(:bucket, pr.redeemed_at) AS bucket,
+                           COUNT(*)::int AS redemption_count, COALESCE(SUM(pr.points_spent), 0)::int AS points_redeemed
+                    FROM partner_redemptions pr
+                    JOIN campaign_partner_businesses cpb ON cpb.business_id = pr.business_id AND cpb.campaign_id = :campaign_id
+                    WHERE (CAST(:start AS timestamptz) IS NULL OR pr.redeemed_at >= :start)
+                      AND (CAST(:end AS timestamptz) IS NULL OR pr.redeemed_at < :end)
+                    GROUP BY bucket
+                )
+                SELECT b.bucket,
+                       COALESCE(r.redemption_count, 0) AS redemption_count,
+                       COALESCE(r.points_redeemed, 0) AS points_redeemed,
+                       (
+                           SELECT COUNT(*)::int
+                           FROM partner_offers po
+                           JOIN partner_businesses pb ON pb.id = po.business_id
+                           JOIN campaign_partner_businesses cpb2 ON cpb2.business_id = pb.id AND cpb2.campaign_id = :campaign_id
+                           WHERE po.status = 'active' AND po.starts_at <= b.bucket
+                             AND (po.ends_at IS NULL OR po.ends_at >= b.bucket)
+                       ) AS active_offer_count
+                FROM buckets b
+                LEFT JOIN redemptions r ON r.bucket = b.bucket
+                ORDER BY b.bucket
             """),
             {**params, "bucket": bucket},
         )
@@ -584,7 +616,15 @@ async def get_dashboard_partners(
             }
             for r in offer_rows
         ],
-        "trend": [{"bucket": r.bucket.isoformat(), "redemption_count": r.redemption_count, "points_redeemed": r.points_redeemed} for r in trend_rows],
+        "trend": [
+            {
+                "bucket": r.bucket.isoformat(),
+                "redemption_count": r.redemption_count,
+                "points_redeemed": r.points_redeemed,
+                "active_offer_count": r.active_offer_count,
+            }
+            for r in trend_rows
+        ],
     }
 
 
