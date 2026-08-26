@@ -70,8 +70,9 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
-  const primary = links.slice(0, MAX_PRIMARY_TABS);
-  const overflow = links.slice(MAX_PRIMARY_TABS);
+  const resolvedLinks = links.map((link) => ({ ...link, href: link.mobileHref ?? link.href }));
+  const primary = resolvedLinks.slice(0, MAX_PRIMARY_TABS);
+  const overflow = resolvedLinks.slice(MAX_PRIMARY_TABS);
 
   useClickOutside(moreRef, () => setMoreOpen(false), moreOpen);
 
@@ -89,7 +90,7 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
 
   function isActive(href: string) {
     if (!matchesHref(href)) return false;
-    const longestMatch = links.reduce(
+    const longestMatch = resolvedLinks.reduce(
       (best, l) => (matchesHref(l.href) && l.href.length > best.length ? l.href : best),
       ""
     );

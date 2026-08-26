@@ -4,6 +4,8 @@ export interface NavLink {
   /** Short label for compact chrome (bottom tab bar / overflow menu). Icon is resolved by href in BottomTabBar. */
   shortLabel?: string;
   highlight?: boolean;
+  /** Overrides `href` for the mobile bottom tab bar only (e.g. Campaigns jumps straight to the map on mobile). */
+  mobileHref?: string;
 }
 
 export interface BuildNavLinksArgs {
@@ -22,7 +24,7 @@ export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin }: Buil
         ...(isAdmin ? [{ href: "/admin", label: "Admin", shortLabel: "Admin", highlight: true }] : []),
       ]
     : [
-        { href: "/campaigns/trash-war", label: "Campaigns", shortLabel: "Campaigns" },
+        { href: "/campaigns", label: "Campaigns", shortLabel: "Campaigns", mobileHref: "/campaigns/trash-war" },
         { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard" },
         { href: "/partners", label: "Partners", shortLabel: "Partners" },
         { href: "/groups", label: "Groups", shortLabel: "Groups" },
