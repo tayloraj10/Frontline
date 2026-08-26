@@ -124,15 +124,13 @@ export default async function UserProfilePage({ params }: Props) {
       .limit(15),
   ]);
 
-  const { data: achievementsData } = isOwn
-    ? await supabase
-        .from("user_notifications")
-        .select("id, type, title, body, created_at")
-        .eq("user_id", profile.id)
-        .in("type", ["milestone", "offer_eligible"])
-        .order("created_at", { ascending: false })
-        .limit(25)
-    : { data: [] };
+  const { data: achievementsData } = await supabase
+    .from("user_notifications")
+    .select("id, type, title, body, created_at")
+    .eq("user_id", profile.id)
+    .in("type", ["milestone", "offer_eligible"])
+    .order("created_at", { ascending: false })
+    .limit(25);
 
   // Aggregate campaign participation from contributions + territory_claims
   const campaignStats = new Map<
@@ -345,7 +343,7 @@ export default async function UserProfilePage({ params }: Props) {
       )}
 
       {/* Achievements */}
-      {isOwn && (achievementsData ?? []).length > 0 && (
+      {(achievementsData ?? []).length > 0 && (
         <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">Achievements</span>

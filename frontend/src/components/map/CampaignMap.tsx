@@ -383,8 +383,10 @@ interface Props {
   onRoutePickerCancel?: () => void;
   cleanupRoutes?: CampaignCleanupRoute[];
   userId?: string | null;
-  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
+  newContribution?: { id?: string | null; lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
+  removedContribution?: { id: string; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
+  removedReport?: { id: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   activeStyle?: StyleId;
@@ -1648,7 +1650,9 @@ export default function CampaignMap({
   cleanupRoutes,
   userId,
   newContribution,
+  removedContribution,
   newReport,
+  removedReport,
   userLocation,
   focusCoords,
   activeStyle = "outdoor",
@@ -4327,6 +4331,7 @@ export default function CampaignMap({
         },
         (photo) => setSelectedPhoto(photo.contentId ? photo : { url: photo.url }),
       );
+      if (newContribution.id) marker.getElement().dataset.contributionId = newContribution.id;
       photoMarkersRef.current.push(marker);
       gsap.from(marker.getElement(), { y: -40, opacity: 0, duration: 0.5, ease: "bounce.out" });
       return;
@@ -4355,6 +4360,7 @@ export default function CampaignMap({
             (photo) => setSelectedPhoto(photo.contentId ? photo : { url: photo.url }),
             32,
           );
+          if (newContribution.id) marker.getElement().dataset.contributionId = newContribution.id;
           photoMarkersRef.current.push(marker);
           gsap.from(marker.getElement(), { y: -30, opacity: 0, duration: 0.5, ease: "bounce.out" });
         }
@@ -4370,6 +4376,7 @@ export default function CampaignMap({
       type: "Feature",
       geometry: { type: "Point", coordinates: [newContribution.lng, newContribution.lat] },
       properties: {
+        id: newContribution.id ?? undefined,
         value: newContribution.value,
         submitted_at: new Date().toISOString(),
         is_group_event: newContribution.isGroupEvent ?? false,
@@ -4378,6 +4385,26 @@ export default function CampaignMap({
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
     source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
   }, [newContribution, isCollage, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Remove a just-undone contribution's marker from the live map (Undo on the success screen)
+  useEffect(() => {
+    if (!removedContribution || !map.current) return;
+    const { id } = removedContribution;
+
+    contributionFeaturesRef.current = contributionFeaturesRef.current.filter(
+      (f) => f.properties?.id !== id,
+    );
+    const source = map.current.getSource("contribution-pts") as maplibregl.GeoJSONSource | undefined;
+    source?.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
+
+    photoMarkersRef.current = photoMarkersRef.current.filter((marker) => {
+      if (marker.getElement().dataset.contributionId === id) {
+        marker.remove();
+        return false;
+      }
+      return true;
+    });
+  }, [removedContribution]);
 
   // Append freshly-submitted problem report to the live map immediately, without waiting on Realtime
   useEffect(() => {
@@ -4413,6 +4440,25 @@ export default function CampaignMap({
     setLiveReports(nextData);
     updateReportMarkers(nextReports);
   }, [newReport, updateReportMarkers]);
+
+  // Remove a just-undone problem report's marker from the live map (Undo on the report success screen)
+  useEffect(() => {
+    if (!removedReport || !map.current) return;
+
+    const nextReports = (problemReportsRef.current?.reports ?? []).filter((r) => r.id !== removedReport.id);
+    const nextData: ProblemReports = {
+      reports: nextReports,
+      counts_by_geo_unit: problemReportsRef.current?.counts_by_geo_unit ?? {},
+      threshold: problemReportsRef.current?.threshold ?? null,
+      flag_auto_hide_threshold:
+        problemReportsRef.current?.flag_auto_hide_threshold ??
+        mapGameSettingsRef.current.flag_auto_hide_threshold ??
+        FLAG_AUTO_HIDE_THRESHOLD_FALLBACK,
+    };
+    problemReportsRef.current = nextData;
+    setLiveReports(nextData);
+    updateReportMarkers(nextReports);
+  }, [removedReport, updateReportMarkers]);
 
   // Supabase Realtime
   useEffect(() => {

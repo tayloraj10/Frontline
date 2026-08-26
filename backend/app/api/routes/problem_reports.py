@@ -124,11 +124,12 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
     geo_unit_row = geo_result.fetchone()
     geo_unit_id = str(geo_unit_row[0]) if geo_unit_row else None
 
-    await db.execute(
+    insert_result = await db.execute(
         text("""
             INSERT INTO problem_reports (campaign_id, geo_unit_id, submitted_by_user_id, image_urls, location, severity)
             VALUES (:campaign_id, :geo_unit_id, :submitted_by_user_id, :image_urls,
                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :severity)
+            RETURNING id
         """),
         {
             "campaign_id": str(payload.campaign_id),
@@ -140,6 +141,7 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
             "severity": payload.severity,
         },
     )
+    report_id = insert_result.scalar()
 
     # Check report_count triggers for this campaign/geo_unit
     hotspot_triggered = False
@@ -147,7 +149,12 @@ async def submit_problem_report(payload: ProblemReportRequest, db: AsyncSession 
         hotspot_triggered = await _check_report_triggers(payload.campaign_id, geo_unit_id, db)
 
     await db.commit()
-    return {"geo_unit_id": geo_unit_id, "status": "submitted", "hotspot_triggered": hotspot_triggered}
+    return {
+        "geo_unit_id": geo_unit_id,
+        "status": "submitted",
+        "hotspot_triggered": hotspot_triggered,
+        "report_id": str(report_id),
+    }
 
 
 @router.delete("/{report_id}")

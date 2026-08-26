@@ -274,13 +274,26 @@ export default async function CampaignPage({ params, searchParams }: Props) {
     : null;
   const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
 
-  const [{ data: membershipData }, { data: adminProfile }] = await Promise.all([
+  const [{ data: membershipData }, { data: adminProfile }, { data: myContribsData }] = await Promise.all([
     user
       ? supabase.from("group_members").select("group_id, role").eq("user_id", user.id)
       : Promise.resolve({ data: [] as { group_id: string; role: string }[] }),
     user
       ? supabase.schema("public").from("profiles").select("is_admin, points, spendable_points").eq("id", user.id).single()
       : Promise.resolve({ data: null as { is_admin: boolean; points: number; spendable_points: number } | null }),
+    // Per-viewer, so fetched here rather than inside getCampaignPageData's shared cache — the
+    // cached "activity" feed above is only the 20 most-recent contributions campaign-wide, so a
+    // user's own contributions can easily fall out of that window on an active campaign even
+    // though they still have plenty of history. This guarantees "Mine" always reflects reality.
+    user
+      ? supabase
+          .from("contributions")
+          .select("id, user_id, group_id, value, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags, metrics_pounds)")
+          .eq("campaign_id", campaign.id)
+          .eq("user_id", user.id)
+          .order("submitted_at", { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [] as typeof actContribs }),
   ]);
   const isAdmin = adminProfile?.is_admin ?? false;
 
@@ -322,8 +335,9 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   const claimedGroupIds = [...new Set(claims.filter((c) => c.claimed_by_group).map((c) => c.claimed_by_group!))];
   const lbUserIds = lbRaw.users.map((u) => u.entity_id);
   const lbGroupIds = lbRaw.groups.map((g) => g.entity_id);
-  const actUserIds = [...new Set(actContribs.filter((c) => c.user_id).map((c) => c.user_id!))];
-  const actGroupIds = [...new Set(actContribs.filter((c) => c.group_id).map((c) => c.group_id!))];
+  const myContribs = myContribsData ?? [];
+  const actUserIds = [...new Set([...actContribs, ...myContribs].filter((c) => c.user_id).map((c) => c.user_id!))];
+  const actGroupIds = [...new Set([...actContribs, ...myContribs].filter((c) => c.group_id).map((c) => c.group_id!))];
 
   const allUserIds = [...new Set([...claimedUserIds, ...lbUserIds, ...actUserIds, ...(user?.id ? [user.id] : [])])];
   const allGroupIds = [...new Set([...claimedGroupIds, ...lbGroupIds, ...actGroupIds, ...userGroupIds])];
@@ -377,8 +391,14 @@ export default async function CampaignPage({ params, searchParams }: Props) {
     })),
   };
 
-  // Enriched activity
-  const activity: ActivityItem[] = actContribs.map((c) => {
+  // Enriched activity — merges the shared cached "recent global" feed with the current
+  // viewer's own contributions (fetched uncached above) so "Mine" doesn't miss real
+  // history that fell outside the global feed's top-20 window; deduped by id.
+  const mergedContribsById = new Map([...actContribs, ...myContribs].map((c) => [c.id, c]));
+  const mergedContribs = [...mergedContribsById.values()].sort(
+    (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+  );
+  const activity: ActivityItem[] = mergedContribs.map((c) => {
     const profile = c.user_id ? profilesById.get(c.user_id) : null;
     const group = c.group_id ? groupsById.get(c.group_id) : null;
     const cleanup = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null; metrics_pounds: number | null } | null;

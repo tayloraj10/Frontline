@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 interface FeedContrib {
   id: string;
@@ -62,6 +63,7 @@ export default function FeedActivityList({
 }) {
   const [contribs, setContribs] = useState(initialContribs);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const profilesById = new Map(profiles.map((p) => [p.id, p]));
   const groupsById = new Map(groups.map((g) => [g.id, g]));
@@ -81,11 +83,19 @@ export default function FeedActivityList({
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const id = pendingDeleteId;
+    setPendingDeleteId(null);
+    await handleDelete(id);
+  };
+
   if (contribs.length === 0) {
     return <div className="px-5 py-10 text-center text-zinc-600 text-sm">No activity yet.</div>;
   }
 
   return (
+    <>
     <ul className="divide-y divide-zinc-800/50">
       {contribs.map((c) => {
         const profile = c.user_id ? profilesById.get(c.user_id) : null;
@@ -139,9 +149,9 @@ export default function FeedActivityList({
               <span className="text-xs text-zinc-600">{timeAgo(c.submitted_at)}</span>
               {isOwn && (
                 <button
-                  onClick={() => handleDelete(c.id)}
+                  onClick={() => setPendingDeleteId(c.id)}
                   disabled={deleting === c.id}
-                  className="text-zinc-700 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40"
+                  className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-600 border border-transparent hover:text-red-400 hover:bg-red-950/30 hover:border-red-900/60 active:text-red-400 active:bg-red-950/30 active:border-red-900/60 transition-colors duration-150 disabled:opacity-40 touch-manipulation"
                   title="Delete contribution"
                 >
                   {deleting === c.id ? <span className="text-xs text-zinc-600">…</span> : <TrashIcon />}
@@ -152,5 +162,15 @@ export default function FeedActivityList({
         );
       })}
     </ul>
+    <ConfirmModal
+      open={!!pendingDeleteId}
+      title="Delete this contribution?"
+      message="This can't be undone."
+      confirmLabel="Delete"
+      cancelLabel="Keep it"
+      onConfirm={handleConfirmDelete}
+      onCancel={() => setPendingDeleteId(null)}
+    />
+    </>
   );
 }

@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import { formatPoints } from "@/lib/formatPoints";
-import { createCleanupEvent } from "@/lib/cleanupEvents";
+import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
 import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString } from "@/lib/cleanupRoutes";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
@@ -244,8 +244,10 @@ interface ContributionPanelProps {
   onEnterRoutePicker?: () => void;
   routePickerActive?: boolean;
   placedRouteVertices?: [number, number][] | null;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean) => void;
-  onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean, contributionId?: string) => void;
+  onContributionRemoved?: (contributionId: string) => void;
+  onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string, reportId?: string) => void;
+  onReportRemoved?: (reportId: string) => void;
   onRouteAdded?: (route: { id: string; route: RouteLineString }) => void;
   userLocation?: Coords | null;
   locationError?: number | null;
@@ -697,6 +699,7 @@ function ContributeModal({
   routeOverride,
   onClose,
   onContributionSubmitted,
+  onContributionRemoved,
   activeMapStyle,
   nearbyEvent,
   claimedReportId,
@@ -712,7 +715,8 @@ function ContributeModal({
   onEnterRoutePicker: () => void;
   routeOverride: RouteLineString | null;
   onClose: () => void;
-  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean) => void;
+  onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean, contributionId?: string) => void;
+  onContributionRemoved?: (contributionId: string) => void;
   activeMapStyle?: string;
   nearbyEvent?: {
     id: string;
@@ -804,6 +808,9 @@ function ContributeModal({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [hotspotCleared, setHotspotCleared] = useState(false);
+  const [submittedContributionId, setSubmittedContributionId] = useState<string | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  const [undone, setUndone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nearbyReport, setNearbyReport] = useState<{ id: string; distance_m: number; unit_type: string | null } | null>(null);
   const [resolveHotspot, setResolveHotspot] = useState(true);
@@ -945,6 +952,8 @@ function ContributeModal({
     if (!canSubmit || !userId) return;
     setSubmitting(true);
     setError(null);
+    setUndone(false);
+    setSubmittedContributionId(null);
     // Capture whether a hotspot bonus was active right now, before the async submit
     // resolves, so the success screen's celebration matches what was actually scored.
     setAppliedMultiplier(isCleanup ? effectiveMultiplier : null);
@@ -999,7 +1008,7 @@ function ContributeModal({
         },
       );
       if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as { claimed_territory: boolean; hotspot_cleared?: boolean; cleanup_id?: string };
+      const data = (await res.json()) as { claimed_territory: boolean; hotspot_cleared?: boolean; cleanup_id?: string; contribution_id?: string };
 
       onContributionSubmitted?.(
         submitCoords?.latitude ?? null,
@@ -1009,8 +1018,10 @@ function ContributeModal({
         data.hotspot_cleared && nearbyReport ? nearbyReport.id : undefined,
         isRouteMode && route && data.cleanup_id ? { id: data.cleanup_id, route } : undefined,
         Boolean(effectiveEventId),
+        data.contribution_id,
       );
       setHotspotCleared(Boolean(data.hotspot_cleared));
+      setSubmittedContributionId(data.contribution_id ?? null);
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
       // Re-read the authoritative balance (rather than computing the delta client-side,
       // which would need to duplicate the trigger's multiplier/hotspot/event-mode logic)
@@ -1030,6 +1041,25 @@ function ContributeModal({
     }
     setCelebrate(false);
   }, [result, appliedMultiplier]);
+
+  const handleUndo = async () => {
+    if (!submittedContributionId || !userId) return;
+    setUndoing(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${submittedContributionId}?user_id=${userId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error();
+      setUndone(true);
+      onContributionRemoved?.(submittedContributionId);
+      refreshUserPoints(userId);
+    } catch {
+      setError("Couldn't undo — please delete it from your activity list instead.");
+    } finally {
+      setUndoing(false);
+    }
+  };
 
   if (result) {
     return (
@@ -1078,9 +1108,21 @@ function ContributeModal({
               </Link>
             </>
           )}
+          {error && <p className="text-red-400 text-xs text-center">{error}</p>}
           <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Close
           </button>
+          {undone ? (
+            <p className="mt-6 pt-3 border-t border-zinc-800 text-sm text-emerald-400 font-medium text-center">Undone — this contribution was deleted.</p>
+          ) : submittedContributionId ? (
+            <button
+              onClick={handleUndo}
+              disabled={undoing}
+              className="mt-6 pt-3 border-t border-zinc-800 text-xs font-medium text-red-400 hover:text-red-300 active:text-red-300 disabled:opacity-50 transition-colors duration-150"
+            >
+              {undoing ? "Undoing…" : "Submitted by mistake? Undo"}
+            </button>
+          ) : null}
         </div>
       </ModalShell>
     );
@@ -1610,6 +1652,7 @@ function ContributeModal({
             <StepperNav
               activeIndex={guidedStep}
               count={cleanupSteps.length}
+              accent="emerald"
               onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
               onNext={() => setGuidedStep((s) => Math.min(cleanupSteps.length - 1, s + 1))}
             />
@@ -1635,7 +1678,8 @@ function ContributeModal({
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
-        <div className="flex gap-2 pt-1">
+        {(!isCleanup || viewMode === "full" || guidedStep === cleanupSteps.length - 1) && (
+        <div className={`flex gap-2 ${isCleanup && viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
           <button
             onClick={onClose}
             className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
@@ -1659,6 +1703,7 @@ function ContributeModal({
             </Link>
           )}
         </div>
+        )}
       </div>
     </ModalShell>
   );
@@ -1675,6 +1720,7 @@ function ReportModal({
   onClose,
   activeMapStyle,
   onReportSubmitted,
+  onReportRemoved,
 }: {
   campaignId: string;
   userId: string | null;
@@ -1683,7 +1729,8 @@ function ReportModal({
   onEnterPinPicker: () => void;
   onClose: () => void;
   activeMapStyle?: string;
-  onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string) => void;
+  onReportSubmitted?: (lat: number, lng: number, severity: string, photoUrl?: string, reportId?: string) => void;
+  onReportRemoved?: (reportId: string) => void;
 }) {
   const pathname = usePathname();
   const [photo, setPhoto] = useState<File | null>(null);
@@ -1693,6 +1740,9 @@ function ReportModal({
   const [done, setDone] = useState(false);
   const [hotspotTriggered, setHotspotTriggered] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittedReportId, setSubmittedReportId] = useState<string | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  const [undone, setUndone] = useState(false);
   const { values: gameSettings, loading: settingsLoading } = useGameSettings(["trash_report_value"] as const);
 
   useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1733,7 +1783,8 @@ function ReportModal({
       );
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      onReportSubmitted?.(submitCoords.latitude, submitCoords.longitude, severity, photoUrl);
+      setSubmittedReportId(result.report_id ?? null);
+      onReportSubmitted?.(submitCoords.latitude, submitCoords.longitude, severity, photoUrl, result.report_id);
       setHotspotTriggered(!!result.hotspot_triggered);
       setDone(true);
       refreshUserPoints(userId);
@@ -1741,6 +1792,24 @@ function ReportModal({
       setError("Report failed. Please try again.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!submittedReportId || !userId) return;
+    setUndoing(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${submittedReportId}?user_id=${userId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error(await res.text());
+      setUndone(true);
+      onReportRemoved?.(submittedReportId);
+    } catch {
+      setError("Couldn't undo — you can delete it from the report itself instead.");
+    } finally {
+      setUndoing(false);
     }
   };
 
@@ -1754,9 +1823,21 @@ function ReportModal({
               ? "Report submitted! Your report just pushed this area over the threshold — a Hotspot has spawned!"
               : "Report submitted! If enough reports come in, a Hotspot will spawn."}
           </p>
+          {error && <p className="text-red-400 text-xs text-center">{error}</p>}
           <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
             Close
           </button>
+          {undone ? (
+            <p className="mt-6 pt-3 border-t border-zinc-800 text-sm text-emerald-400 font-medium text-center">Undone — this report was deleted.</p>
+          ) : submittedReportId ? (
+            <button
+              onClick={handleUndo}
+              disabled={undoing}
+              className="mt-6 pt-3 border-t border-zinc-800 text-xs font-medium text-red-400 hover:text-red-300 active:text-red-300 disabled:opacity-50 transition-colors duration-150"
+            >
+              {undoing ? "Undoing…" : "Reported by mistake? Undo"}
+            </button>
+          ) : null}
         </div>
       </ModalShell>
     );
@@ -2700,6 +2781,8 @@ function HostEventModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ id: string; join_code: string } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
   const [addressValue, setAddressValue] = useState("");
   const [addressCity, setAddressCity] = useState("");
   const [addressState, setAddressState] = useState("");
@@ -2759,6 +2842,15 @@ function HostEventModal({
   const endBeforeStart = !!scheduledEnd && !!scheduledStart && new Date(scheduledEnd) <= new Date(scheduledStart);
   const canSubmit = !!groupId && !!title.trim() && !!scheduledStart && !!submitCoords && !endBeforeStart;
 
+  // Per-step "Continue" gating for the guided flow — jumping directly to a step via the
+  // step-pills is never blocked, only advancing past a step with Continue is.
+  const hostEventStepBlockedReason: (string | null)[] = [
+    !title.trim() ? "Add a title to continue" : null,
+    !scheduledStart ? "Pick a start date to continue" : endBeforeStart ? "End time must be after the start to continue" : null,
+    !submitCoords ? "Set a location to continue" : null,
+    null,
+  ];
+
   const handleSubmit = async () => {
     if (!canSubmit || !submitCoords) return;
     if (endBeforeStart) {
@@ -2800,15 +2892,35 @@ function HostEventModal({
     }
   };
 
+  const handleCancelJustCreated = async () => {
+    if (!created) return;
+    setCancelling(true);
+    setError(null);
+    try {
+      await updateCleanupEvent({ cleanupId: created.id, organizerUserId: userId, status: "cancelled" });
+      setCancelled(true);
+      router.refresh();
+    } catch {
+      setError("Couldn't cancel — you can cancel it from the event page instead.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (created) {
     return (
       <ModalShell onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">📅</span>
-          <p className="text-zinc-100 font-semibold text-center">Event created!</p>
-          <p className="text-zinc-500 text-xs text-center">
-            Join code <span className="font-mono text-zinc-300">{created.join_code}</span> — share it so attendees can check in without GPS.
+          <p className="text-zinc-100 font-semibold text-center">
+            {cancelled ? "Event cancelled" : "Event created!"}
           </p>
+          {!cancelled && (
+            <p className="text-zinc-500 text-xs text-center">
+              Join code <span className="font-mono text-zinc-300">{created.join_code}</span> — share it so attendees can check in without GPS.
+            </p>
+          )}
+          {error && <p className="text-red-400 text-xs text-center">{error}</p>}
           <div className="flex gap-2 w-full mt-1">
             <Link
               href={`/cleanup-events/${created.id}`}
@@ -2823,6 +2935,15 @@ function HostEventModal({
               Done
             </button>
           </div>
+          {!cancelled && (
+            <button
+              onClick={handleCancelJustCreated}
+              disabled={cancelling}
+              className="mt-8 pt-3 border-t border-zinc-800 text-xs font-medium text-red-400 hover:text-red-300 active:text-red-300 disabled:opacity-50 transition-colors duration-150"
+            >
+              {cancelling ? "Cancelling…" : "Created by mistake? Cancel event"}
+            </button>
+          )}
         </div>
       </ModalShell>
     );
@@ -3143,8 +3264,13 @@ function HostEventModal({
             <StepperNav
               activeIndex={guidedStep}
               count={hostEventSteps.length}
+              accent="sky"
               onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
-              onNext={() => setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1))}
+              onNext={() => {
+                if (hostEventStepBlockedReason[guidedStep]) return;
+                setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1));
+              }}
+              nextDisabledReason={hostEventStepBlockedReason[guidedStep]}
             />
           </>
         ) : (
@@ -3158,7 +3284,8 @@ function HostEventModal({
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
-        <div className="flex gap-2 pt-1">
+        {(viewMode === "full" || guidedStep === hostEventSteps.length - 1) && (
+        <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
           <button
             onClick={onClose}
             className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
@@ -3173,6 +3300,7 @@ function HostEventModal({
             {submitting ? "Creating…" : "Create Event"}
           </button>
         </div>
+        )}
       </div>
     </ModalShell>
   );
@@ -3759,7 +3887,9 @@ export default function ContributionPanel({
   routePickerActive,
   placedRouteVertices,
   onContributionSubmitted,
+  onContributionRemoved,
   onReportSubmitted,
+  onReportRemoved,
   onRouteAdded,
   userLocation,
   locationError,
@@ -4126,6 +4256,7 @@ export default function ContributionPanel({
                 refreshPendingChallengeCompletion();
               }}
               onContributionSubmitted={onContributionSubmitted}
+              onContributionRemoved={onContributionRemoved}
               activeMapStyle={activeMapStyle}
               nearbyEvent={nearbyCleanupEvent ?? null}
               claimedReportId={claimedReportIdForContribute}
@@ -4192,6 +4323,7 @@ export default function ContributionPanel({
             onClose={() => { setMode(null); setReportOverrideCoords(null); }}
             activeMapStyle={activeMapStyle}
             onReportSubmitted={onReportSubmitted}
+            onReportRemoved={onReportRemoved}
           />
         </div>
       )}

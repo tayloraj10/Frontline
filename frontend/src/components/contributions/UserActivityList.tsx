@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const PAGE_SIZE = 15;
 
@@ -46,6 +47,7 @@ const CONTRIBUTION_ICON: Record<string, string> = {
   solarpunk_action: "🌿",
   solarpunk_photo: "📸",
   solarpunk_hex_credit: "🌱",
+  cleanup_event_checkin: "✅",
 };
 
 const CONTRIBUTION_UNIT: Record<string, string> = {
@@ -58,6 +60,20 @@ const CONTRIBUTION_UNIT: Record<string, string> = {
   solarpunk_action: "pts",
   solarpunk_photo: "pts",
   solarpunk_hex_credit: "bloom",
+  cleanup_event_checkin: "pts",
+};
+
+const CONTRIBUTION_LABEL: Record<string, string> = {
+  cleanup: "Trash cleanup",
+  photo: "Photo submission",
+  registration: "Voter registration",
+  advocacy: "Advocacy action",
+  civic_action: "Civic action",
+  unfollow: "Unfollow action",
+  solarpunk_action: "Solarpunk action",
+  solarpunk_photo: "Solarpunk photo",
+  solarpunk_hex_credit: "Solarpunk hex credit",
+  cleanup_event_checkin: "Event check-in",
 };
 
 const REPORT_STATUS_LABEL: Record<string, string> = {
@@ -106,6 +122,7 @@ export default function UserActivityList({
   const [contribs, setContribs] = useState(initialContribs);
   const [reports, setReports] = useState(initialReports);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ kind: "contribution" | "report"; id: string } | null>(null);
   const [campaignsById, setCampaignsById] = useState(new Map(campaigns.map((c) => [c.id, c])));
 
   const [contribOffset, setContribOffset] = useState(initialContribs.length);
@@ -220,6 +237,14 @@ export default function UserActivityList({
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    const { kind, id } = pendingDelete;
+    setPendingDelete(null);
+    if (kind === "contribution") await handleDeleteContribution(id);
+    else await handleDeleteReport(id);
+  };
+
   const items: ActivityItem[] = [
     ...contribs.map((c) => ({ kind: "contribution" as const, timestamp: c.submitted_at, ...c })),
     ...reports.map((r) => ({ kind: "report" as const, timestamp: r.reported_at, ...r })),
@@ -238,7 +263,10 @@ export default function UserActivityList({
         if (item.kind === "report") {
           return (
             <li key={item.id} className="px-5 py-3 flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-elevation-1">
+              <div
+                className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-elevation-1"
+                title="Trash report"
+              >
                 🚩
               </div>
               <div className="flex-1 min-w-0">
@@ -266,9 +294,9 @@ export default function UserActivityList({
                 <span className="text-xs text-zinc-600">{timeAgo(item.timestamp)}</span>
                 {isOwn && (
                   <button
-                    onClick={() => handleDeleteReport(item.id)}
+                    onClick={() => setPendingDelete({ kind: "report", id: item.id })}
                     disabled={deleting === item.id}
-                    className="text-zinc-700 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40"
+                    className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-600 border border-transparent hover:text-red-400 hover:bg-red-950/30 hover:border-red-900/60 active:text-red-400 active:bg-red-950/30 active:border-red-900/60 transition-colors duration-150 disabled:opacity-40 touch-manipulation"
                     title="Delete report"
                   >
                     {deleting === item.id ? <span className="text-xs text-zinc-600">…</span> : <TrashIcon />}
@@ -281,9 +309,13 @@ export default function UserActivityList({
 
         const icon = CONTRIBUTION_ICON[item.contribution_type] ?? "📌";
         const unit = CONTRIBUTION_UNIT[item.contribution_type] ?? "pts";
+        const label = CONTRIBUTION_LABEL[item.contribution_type] ?? item.contribution_type;
         return (
           <li key={item.id} className="px-5 py-3 flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-elevation-1">
+            <div
+              className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-elevation-1"
+              title={label}
+            >
               {icon}
             </div>
             <div className="flex-1 min-w-0">
@@ -313,6 +345,7 @@ export default function UserActivityList({
                   </>
                 )}
               </div>
+              <p className="mt-0.5 text-[11px] text-zinc-600">{label}</p>
               {item.notes && (
                 <p className="mt-0.5 text-xs text-zinc-600 line-clamp-1">{item.notes}</p>
               )}
@@ -321,9 +354,9 @@ export default function UserActivityList({
               <span className="text-xs text-zinc-600">{timeAgo(item.timestamp)}</span>
               {isOwn && (
                 <button
-                  onClick={() => handleDeleteContribution(item.id)}
+                  onClick={() => setPendingDelete({ kind: "contribution", id: item.id })}
                   disabled={deleting === item.id}
-                  className="text-zinc-700 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40"
+                  className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-600 border border-transparent hover:text-red-400 hover:bg-red-950/30 hover:border-red-900/60 active:text-red-400 active:bg-red-950/30 active:border-red-900/60 transition-colors duration-150 disabled:opacity-40 touch-manipulation"
                   title="Delete contribution"
                 >
                   {deleting === item.id ? <span className="text-xs text-zinc-600">…</span> : <TrashIcon />}
@@ -345,6 +378,15 @@ export default function UserActivityList({
         </button>
       </div>
     )}
+    <ConfirmModal
+      open={!!pendingDelete}
+      title={pendingDelete?.kind === "report" ? "Delete this report?" : "Delete this contribution?"}
+      message="This can't be undone."
+      confirmLabel="Delete"
+      cancelLabel="Keep it"
+      onConfirm={handleConfirmDelete}
+      onCancel={() => setPendingDelete(null)}
+    />
     </>
   );
 }

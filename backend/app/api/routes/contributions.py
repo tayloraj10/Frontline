@@ -454,6 +454,7 @@ async def submit_contribution(
         "claimed_territory": geo_unit_id is not None,
         "hotspot_cleared": hotspot_cleared,
         "cleanup_id": cleanup_id,
+        "contribution_id": recorded.contribution_id,
     }
 
 
