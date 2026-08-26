@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import HomeAutoRedirect from "@/components/HomeAutoRedirect";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -8,6 +8,7 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let isBusinessOnly = false;
   if (user) {
     const { data: profile } = await supabase
       .schema("public")
@@ -15,7 +16,7 @@ export default async function HomePage() {
       .select("is_business_only")
       .eq("id", user.id)
       .single();
-    redirect(profile?.is_business_only ? "/partners/dashboard" : "/campaigns");
+    isBusinessOnly = profile?.is_business_only ?? false;
   }
 
   const [{ count: campaignCount }, { count: contribCount }, { count: userCount }] = await Promise.all([
@@ -30,8 +31,11 @@ export default async function HomePage() {
     { value: (userCount ?? 0).toLocaleString(), label: "users on the frontline" },
   ];
 
+  const primaryHref = isBusinessOnly ? "/partners/dashboard" : "/campaigns/trash-war";
+
   return (
     <main className="relative flex flex-col items-center justify-center flex-1 px-6 py-24 text-center gap-10 overflow-hidden">
+      {user && <HomeAutoRedirect href={primaryHref} />}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_58%_at_50%_40%,rgba(16,185,129,0.18),transparent)] pointer-events-none" />
 
       <div className="relative space-y-5">
@@ -70,12 +74,21 @@ export default async function HomePage() {
         >
           Browse Campaigns
         </Link>
-        <Link
-          href="/signup"
-          className="px-7 py-3 border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900 active:border-zinc-500 active:bg-zinc-900 active:scale-[0.97] text-zinc-300 font-semibold rounded-xl transition-[background-color,border-color,transform] duration-150 text-sm touch-manipulation"
-        >
-          Sign Up
-        </Link>
+        {user ? (
+          <Link
+            href={primaryHref}
+            className="px-7 py-3 border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900 active:border-zinc-500 active:bg-zinc-900 active:scale-[0.97] text-zinc-300 font-semibold rounded-xl transition-[background-color,border-color,transform] duration-150 text-sm touch-manipulation"
+          >
+            {isBusinessOnly ? "Go to Dashboard" : "Open Trash War Map"}
+          </Link>
+        ) : (
+          <Link
+            href="/signup"
+            className="px-7 py-3 border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900 active:border-zinc-500 active:bg-zinc-900 active:scale-[0.97] text-zinc-300 font-semibold rounded-xl transition-[background-color,border-color,transform] duration-150 text-sm touch-manipulation"
+          >
+            Sign Up
+          </Link>
+        )}
       </div>
 
       {/* Feature pills */}

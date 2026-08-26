@@ -166,16 +166,13 @@ export default async function CampaignsPage() {
     supabase.auth.getUser(),
   ]);
 
-  let contribCount: number | null = null;
-  let userCount: number | null = null;
-  if (user) {
-    const [{ count: contribs }, { count: users }] = await Promise.all([
-      supabase.from("contributions").select("*", { count: "exact", head: true }),
-      supabase.schema("public").from("profiles").select("*", { count: "exact", head: true }),
-    ]);
-    contribCount = contribs ?? 0;
-    userCount = users ?? 0;
-  }
+  const publicClient = createPublicClient();
+  const [{ count: contribs }, { count: users }] = await Promise.all([
+    publicClient.from("contributions").select("*", { count: "exact", head: true }),
+    publicClient.schema("public").from("profiles").select("*", { count: "exact", head: true }),
+  ]);
+  const contribCount = contribs ?? 0;
+  const userCount = users ?? 0;
 
   const campaigns = [...campaignsData].sort((a, b) => {
     const ai = CAMPAIGN_SLUG_ORDER.indexOf(a.slug);
@@ -215,24 +212,20 @@ export default async function CampaignsPage() {
           {featuredCampaign && (
             <div className="mx-auto mt-6 max-w-xl">
               <CampaignCard campaign={featuredCampaign} featured />
-              {user && contribCount !== null && (
-                <div className="mt-4 flex justify-center gap-3">
-                  <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
-                    <div className="text-lg font-bold text-emerald-400 tabular-nums">{campaigns.length}</div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">active campaigns</div>
-                  </div>
-                  <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
-                    <div className="text-lg font-bold text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">contributions logged</div>
-                  </div>
-                  {userCount !== null && (
-                    <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
-                      <div className="text-lg font-bold text-emerald-400 tabular-nums">{userCount.toLocaleString()}</div>
-                      <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">users on the platform</div>
-                    </div>
-                  )}
+              <div className="mt-4 flex justify-center gap-3">
+                <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
+                  <div className="text-lg font-bold text-emerald-400 tabular-nums">{campaigns.length}</div>
+                  <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">active campaigns</div>
                 </div>
-              )}
+                <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
+                  <div className="text-lg font-bold text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
+                  <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">contributions logged</div>
+                </div>
+                <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
+                  <div className="text-lg font-bold text-emerald-400 tabular-nums">{userCount.toLocaleString()}</div>
+                  <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">users on the platform</div>
+                </div>
+              </div>
             </div>
           )}
 
