@@ -9,6 +9,7 @@ import ContributionPanel from "@/components/contributions/ContributionPanel";
 import CreateTimedEventButton from "@/components/events/CreateTimedEventButton";
 import AdminDialog from "@/components/map/AdminDialog";
 import BottomSheet from "@/components/ui/BottomSheet";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
@@ -324,11 +325,17 @@ interface Props {
 }
 
 interface NewContribution {
+  id?: string | null;
   lat: number;
   lng: number;
   value: number;
   photoUrl?: string;
   isGroupEvent?: boolean;
+  key: number;
+}
+
+interface RemovedContribution {
+  id: string;
   key: number;
 }
 
@@ -338,6 +345,11 @@ interface NewReport {
   lng: number;
   severity: string;
   photoUrl?: string;
+  key: number;
+}
+
+interface RemovedReport {
+  id: string;
   key: number;
 }
 
@@ -610,7 +622,19 @@ function displayUnit(value: number, unit: string): string {
   return `${formatPoints(value)} ${unit.endsWith("s") ? unit : unit + "s"}`;
 }
 
-function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { items: ActivityItem[]; unit: string; emptyMessage?: string }) {
+function ActivityPanel({
+  items,
+  unit,
+  emptyMessage = "No activity yet.",
+  onDelete,
+  deletingId,
+}: {
+  items: ActivityItem[];
+  unit: string;
+  emptyMessage?: string;
+  onDelete?: (id: string) => void;
+  deletingId?: string | null;
+}) {
   if (items.length === 0) {
     return <div className="px-4 py-10 text-center text-zinc-600 text-xs">{emptyMessage}</div>;
   }
@@ -663,7 +687,26 @@ function ActivityPanel({ items, unit, emptyMessage = "No activity yet." }: { ite
                 <p className="mt-0.5 text-xs text-zinc-600 line-clamp-1">{item.notes}</p>
               )}
             </div>
-            <span className="text-xs text-zinc-600 shrink-0 mt-0.5">{timeAgo(item.submitted_at)}</span>
+            <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+              <span className="text-xs text-zinc-600">{timeAgo(item.submitted_at)}</span>
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(item.id)}
+                  disabled={deletingId === item.id}
+                  aria-label="Delete contribution"
+                  title="Delete contribution"
+                  className="w-6 h-6 flex items-center justify-center rounded-full text-zinc-600 border border-transparent hover:text-red-400 hover:bg-red-950/30 hover:border-red-900/60 active:text-red-400 active:bg-red-950/30 active:border-red-900/60 transition-colors duration-150 disabled:opacity-40 touch-manipulation"
+                >
+                  {deletingId === item.id ? (
+                    <span className="text-[10px] text-zinc-600">…</span>
+                  ) : (
+                    <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1H11Z" />
+                    </svg>
+                  )}
+                </button>
+              )}
+            </div>
           </li>
         );
       })}
@@ -741,6 +784,8 @@ function PanelContent({
   startsAt,
   contributionCount,
   bagMetrics,
+  onDeleteContribution,
+  deletingContributionId,
 }: {
   openPanel: PanelKey;
   leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
@@ -754,6 +799,8 @@ function PanelContent({
   startsAt: string | null;
   contributionCount: number;
   bagMetrics: { small: number; large: number; pounds: number };
+  onDeleteContribution?: (id: string) => void;
+  deletingContributionId?: string | null;
 }) {
   return (
     <AnimatePresence mode="wait" initial={false}>
@@ -778,7 +825,13 @@ function PanelContent({
                 </Link>
               </div>
             )}
-            <ActivityPanel items={activityItems.filter((a) => a.user_id === userId)} unit={unit} emptyMessage="You haven't contributed yet." />
+            <ActivityPanel
+              items={activityItems.filter((a) => a.user_id === userId)}
+              unit={unit}
+              emptyMessage="You haven't contributed yet."
+              onDelete={onDeleteContribution}
+              deletingId={deletingContributionId}
+            />
           </>
         )}
         {openPanel === "stats" && (
@@ -835,7 +888,9 @@ export default function CampaignPageClient({
   const [pinPickerLabel, setPinPickerLabel] = useState<string | undefined>(undefined);
   const [placedPinCoords, setPlacedPinCoords] = useState<Coords | null>(null);
   const [newContribution, setNewContribution] = useState<NewContribution | null>(null);
+  const [removedContribution, setRemovedContribution] = useState<RemovedContribution | null>(null);
   const [newReport, setNewReport] = useState<NewReport | null>(null);
+  const [removedReport, setRemovedReport] = useState<RemovedReport | null>(null);
   const { values: cleanupEventSettings } = useGameSettings([
     "cleanup_event_proximity_meters",
     "cleanup_event_grace_minutes_before",
@@ -857,6 +912,8 @@ export default function CampaignPageClient({
   const [nycNeighborhoodsVisible, setNycNeighborhoodsVisible] = useState(false);
   const [openPanel, setOpenPanel] = useState<"leaderboard" | "activity" | "mine" | "stats" | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activity);
+  const [pendingDeleteContributionId, setPendingDeleteContributionId] = useState<string | null>(null);
+  const [deletingContributionId, setDeletingContributionId] = useState<string | null>(null);
   const [localProblemReports, setLocalProblemReports] = useState<ProblemReports | null | undefined>(problemReports);
   const [clickedReport, setClickedReport] = useState<ProblemReportMapData | null>(null);
   const [areaPickerActive, setAreaPickerActive] = useState(false);
@@ -978,9 +1035,10 @@ export default function CampaignPageClient({
     resolvedReportId?: string,
     newRoute?: { id: string; route: RouteLineString },
     isGroupEvent?: boolean,
+    contributionId?: string,
   ) => {
     if (lat !== null && lng !== null) {
-      setNewContribution({ lat, lng, value, photoUrl, isGroupEvent, key: Date.now() });
+      setNewContribution({ id: contributionId ?? null, lat, lng, value, photoUrl, isGroupEvent, key: Date.now() });
     }
     if (newRoute) {
       handleRouteAdded(newRoute);
@@ -993,7 +1051,7 @@ export default function CampaignPageClient({
     if (userId) {
       setActivityItems((prev) => [
         {
-          id: `optimistic-${Date.now()}`,
+          id: contributionId ?? `optimistic-${Date.now()}`,
           user_id: userId,
           actorName: userDisplayName ?? "You",
           actorUsername: userUsername,
@@ -1008,8 +1066,36 @@ export default function CampaignPageClient({
     }
   };
 
-  const handleReportSubmitted = (lat: number, lng: number, severity: string, photoUrl?: string) => {
-    setNewReport({ id: `optimistic-${Date.now()}`, lat, lng, severity, photoUrl, key: Date.now() });
+  const handleContributionRemoved = (contributionId: string) => {
+    setRemovedContribution({ id: contributionId, key: Date.now() });
+    setActivityItems((prev) => prev.filter((a) => a.id !== contributionId));
+  };
+
+  const handleConfirmDeleteMyContribution = async () => {
+    if (!pendingDeleteContributionId || !userId) return;
+    const id = pendingDeleteContributionId;
+    setPendingDeleteContributionId(null);
+    setDeletingContributionId(id);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${id}?user_id=${userId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error(await res.text());
+      handleContributionRemoved(id);
+    } catch {
+      // leave the item in place; user can retry or fall back to their profile
+    } finally {
+      setDeletingContributionId(null);
+    }
+  };
+
+  const handleReportSubmitted = (lat: number, lng: number, severity: string, photoUrl?: string, reportId?: string) => {
+    setNewReport({ id: reportId ?? `optimistic-${Date.now()}`, lat, lng, severity, photoUrl, key: Date.now() });
+  };
+
+  const handleReportRemoved = (reportId: string) => {
+    setRemovedReport({ id: reportId, key: Date.now() });
   };
 
   // Claim-a-report challenge mode: patch a single report's claim fields in place (claimed,
@@ -1143,7 +1229,9 @@ export default function CampaignPageClient({
         onRoutePickerCancel={handleRoutePickerCancel}
         userId={userId}
         newContribution={newContribution}
+        removedContribution={removedContribution}
         newReport={newReport}
+        removedReport={removedReport}
         userLocation={userLocation}
         focusCoords={focusCoords}
         activeStyle={activeMapStyle}
@@ -1186,6 +1274,8 @@ export default function CampaignPageClient({
               startsAt={campaign.starts_at}
               contributionCount={contributionCount}
               bagMetrics={bagMetrics}
+              onDeleteContribution={(id) => setPendingDeleteContributionId(id)}
+              deletingContributionId={deletingContributionId}
             />
           </div>
         </div>
@@ -1217,6 +1307,8 @@ export default function CampaignPageClient({
                 startsAt={campaign.starts_at}
                 contributionCount={contributionCount}
                 bagMetrics={bagMetrics}
+                onDeleteContribution={(id) => setPendingDeleteContributionId(id)}
+                deletingContributionId={deletingContributionId}
               />
             </div>
           )}
@@ -1420,7 +1512,9 @@ export default function CampaignPageClient({
         routePickerActive={routePickerActive}
         placedRouteVertices={placedRouteVertices}
         onContributionSubmitted={handleContributionSubmitted}
+        onContributionRemoved={handleContributionRemoved}
         onReportSubmitted={handleReportSubmitted}
+        onReportRemoved={handleReportRemoved}
         onRouteAdded={handleRouteAdded}
         userLocation={userLocation}
         locationError={locationError}
@@ -1435,6 +1529,16 @@ export default function CampaignPageClient({
         onClaimReportUpdated={handleReportClaimUpdated}
         onClaimReportResolved={handleReportClaimResolved}
         myActiveClaimReport={myActiveClaimReport}
+      />
+
+      <ConfirmModal
+        open={!!pendingDeleteContributionId}
+        title="Delete this contribution?"
+        message="This can't be undone."
+        confirmLabel="Delete"
+        cancelLabel="Keep it"
+        onConfirm={handleConfirmDeleteMyContribution}
+        onCancel={() => setPendingDeleteContributionId(null)}
       />
     </>
   );

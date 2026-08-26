@@ -398,6 +398,7 @@ export default function CreateCleanupEventForm({
           <StepperNav
             activeIndex={guidedStep}
             count={hostEventSteps.length}
+            accent="emerald"
             onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
             onNext={() => setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1))}
           />
@@ -412,22 +413,24 @@ export default function CreateCleanupEventForm({
       )}
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => router.push(mode === "edit" && cleanupId ? `/cleanup-events/${cleanupId}` : `/groups/${groupSlug}`)}
-          className="flex-1 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={loading || !canSubmit}
-          className="flex-1 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
-        >
-          {mode === "edit" ? (loading ? "Saving…" : "Save Changes") : (loading ? "Creating…" : "Create Event")}
-        </button>
-      </div>
+      {(viewMode === "full" || guidedStep === hostEventSteps.length - 1) && (
+        <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : ""}`}>
+          <button
+            type="button"
+            onClick={() => router.push(mode === "edit" && cleanupId ? `/cleanup-events/${cleanupId}` : `/groups/${groupSlug}`)}
+            className="flex-1 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading || !canSubmit}
+            className="flex-1 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
+          >
+            {mode === "edit" ? (loading ? "Saving…" : "Save Changes") : (loading ? "Creating…" : "Create Event")}
+          </button>
+        </div>
+      )}
     </form>
   );
 }
