@@ -44,6 +44,10 @@ function isPositiveInteger(value: string): boolean {
   return /^\d+$/.test(value.trim()) && Number(value) > 0;
 }
 
+function isNonNegativeInteger(value: string): boolean {
+  return /^\d+$/.test(value.trim());
+}
+
 export default function OfferForm({ initial, locations, onSubmit, onCancel, submitLabel }: {
   initial?: OfferFormInitial;
   locations?: OfferFormLocation[];
@@ -55,8 +59,8 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
   const [description, setDescription] = useState(initial?.description ?? "");
   const [redemptionMode, setRedemptionMode] = useState<"spend" | "threshold">(initial?.redemption_mode ?? "spend");
   const [pointsCost, setPointsCost] = useState<string>(initial?.points_cost != null ? String(initial.points_cost) : "");
-  const [pointsThreshold, setPointsThreshold] = useState(initial?.points_threshold ?? 500);
-  const [maxPerUser, setMaxPerUser] = useState<string>(initial?.max_redemptions_per_user != null ? String(initial.max_redemptions_per_user) : "1");
+  const [pointsThreshold, setPointsThreshold] = useState<string>(initial?.points_threshold != null ? String(initial.points_threshold) : "");
+  const [maxPerUser, setMaxPerUser] = useState<string>(initial?.max_redemptions_per_user != null ? String(initial.max_redemptions_per_user) : "");
   const [maxTotal, setMaxTotal] = useState<string>(initial?.max_total_redemptions != null ? String(initial.max_total_redemptions) : "");
   const [code, setCode] = useState(initial?.code ?? "");
   const [endsAt, setEndsAt] = useState(toDateInputValue(initial?.ends_at ?? null));
@@ -69,6 +73,10 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
     if (!title.trim()) return;
     if (redemptionMode === "spend" && !isPositiveInteger(pointsCost)) {
       setError("Points cost must be a whole number greater than 0");
+      return;
+    }
+    if (redemptionMode === "threshold" && !isNonNegativeInteger(pointsThreshold)) {
+      setError("Points threshold must be a whole number");
       return;
     }
     if (maxPerUser.trim() && !isPositiveInteger(maxPerUser)) {
@@ -87,7 +95,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
       description: description.trim() || null,
       redemption_mode: redemptionMode,
       points_cost: redemptionMode === "spend" ? Number(pointsCost) : null,
-      points_threshold: redemptionMode === "threshold" ? pointsThreshold : null,
+      points_threshold: redemptionMode === "threshold" ? Number(pointsThreshold) : null,
       max_redemptions_per_user: maxPerUser.trim() ? Number(maxPerUser) : null,
       max_total_redemptions: maxTotal.trim() ? Number(maxTotal) : null,
       code: code.trim() || null,
@@ -125,7 +133,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
         ) : (
           <div className="space-y-1">
             <label className="text-xs text-zinc-500">Points threshold</label>
-            <input type="number" min={0} className={inputCls} value={pointsThreshold} onChange={e => setPointsThreshold(Number(e.target.value))} />
+            <input type="number" min={0} step={1} className={inputCls} value={pointsThreshold} onChange={e => setPointsThreshold(e.target.value)} placeholder="Required" />
           </div>
         )}
         <div className="space-y-1">
@@ -164,6 +172,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
             loading ||
             !title.trim() ||
             (redemptionMode === "spend" && !isPositiveInteger(pointsCost)) ||
+            (redemptionMode === "threshold" && !isNonNegativeInteger(pointsThreshold)) ||
             (!!maxPerUser.trim() && !isPositiveInteger(maxPerUser)) ||
             (!!maxTotal.trim() && !isPositiveInteger(maxTotal))
           }
