@@ -155,8 +155,9 @@ export default function CleanupEventDetail({
       window.localStorage.setItem("cleanup-event-view-mode", mode);
     }
   };
-  const { values: checkinPointValues } = useGameSettings(["cleanup_event_checkin_value"]);
-  const checkinPointValue = checkinPointValues.cleanup_event_checkin_value;
+  const { values: eventSettingValues } = useGameSettings(["cleanup_event_checkin_value", "email_attendee_reminder_enabled"]);
+  const checkinPointValue = eventSettingValues.cleanup_event_checkin_value;
+  const attendeeReminderEnabled = eventSettingValues.email_attendee_reminder_enabled === 1;
 
   const viewerCheckedInInitial = !!initialEvent.viewer_rsvp?.checked_in_at;
 
@@ -747,10 +748,11 @@ export default function CleanupEventDetail({
 
         const checkinRosterSection = effectiveIsOrganizer && !isCancelled && event.rsvps.length > 0 && (
           <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-zinc-300">
                 Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
               </span>
+              {attendeeReminderEnabled && <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />}
             </div>
             <ul className="divide-y divide-zinc-800/60">
               {event.rsvps.map((r) => (
@@ -853,7 +855,7 @@ export default function CleanupEventDetail({
               </span>
               {effectiveIsOrganizer && !isCancelled && (
                 <div className="flex items-center gap-3">
-                  <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />
+                  {attendeeReminderEnabled && <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />}
                   <AddAttendeeControl
                     cleanupId={event.id}
                     existingUserIds={event.rsvps.map((r) => r.user_id)}

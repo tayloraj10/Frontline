@@ -14,7 +14,7 @@ from app.api.routes.partners import EVENT_CHECKIN_DEFAULT_DURATION, EVENT_OFFER_
 from app.core.config import settings as app_settings
 from app.db.database import get_db
 from app.services.contribution_scoring import record_contribution
-from app.services.email import send_email, format_event_datetime
+from app.services.email import send_email, format_event_datetime, render_group_logo, render_cta_button, wrap_email_html
 from app.services.event_permissions import (
     is_group_admin as _is_group_admin,
     can_manage_event as _can_manage_event,
@@ -267,21 +267,17 @@ async def _build_attendee_reminder(db: AsyncSession, cleanup_id: UUID, message: 
     when_line = format_event_datetime(row.scheduled_start) if row.scheduled_start else "TBD"
     where_parts = [p for p in [row.address_line1, row.city, row.state] if p]
     where_line = f"<br>{', '.join(where_parts)}" if where_parts else ""
-    logo_html = (
-        f'<div style="text-align:center; margin-bottom:16px;"><img src="{row.group_logo_url}" '
-        f'alt="{row.group_name or "Group"}" style="width:64px; height:64px; border-radius:50%; object-fit:cover;"></div>'
-        if row.group_logo_url else ""
-    )
+    logo_html = render_group_logo(row.group_logo_url, row.group_name)
     custom_html = f"<p>{message}</p>" if message else ""
     event_link = f"{app_settings.frontend_url}/cleanup-events/{cleanup_id}"
 
-    html = f"""
+    html = wrap_email_html(f"""
         {logo_html}
-        <p>{f"<strong>{row.group_name}</strong> is" if row.group_name else "This is"} a reminder about an upcoming cleanup you're signed up for:</p>
+        <p>{f"<strong>{row.group_name}</strong> is sending" if row.group_name else "This is"} a reminder about an upcoming cleanup you're signed up for:</p>
         <p><strong>{row.title}</strong><br>{when_line}{where_line}</p>
         {custom_html}
-        <p><a href="{event_link}">View event details</a></p>
-    """
+        <p style="margin-top:24px;">{render_cta_button(event_link, "View event details")}</p>
+    """)
     subject = f"Reminder: {row.title}"
     return subject, html, going_count
 
@@ -1853,16 +1849,16 @@ async def run_organizer_reminders(db: AsyncSession = Depends(get_db)):
         if organizer_emails:
             when_line = format_event_datetime(event.scheduled_start)
             event_link = f"{app_settings.frontend_url}/cleanup-events/{event.id}"
-            html = f"""
+            html = wrap_email_html(f"""
                 <p>Your event is coming up:</p>
                 <p><strong>{event.title}</strong><br>{when_line}</p>
-                <table style="border-collapse: collapse; margin: 16px 0;">
-                    <tr><td style="padding:4px 12px 4px 0; color:#555;">RSVPs</td><td style="padding:4px 0; font-weight:bold;">{stats_row.going_count}</td></tr>
-                    <tr><td style="padding:4px 12px 4px 0; color:#555;">Cohost groups</td><td style="padding:4px 0; font-weight:bold;">{stats_row.cohost_count}</td></tr>
-                    <tr><td style="padding:4px 12px 4px 0; color:#555;">Attached offers</td><td style="padding:4px 0; font-weight:bold;">{stats_row.offer_count}</td></tr>
+                <table role="presentation" style="border-collapse: collapse; margin: 16px 0;">
+                    <tr><td style="padding:4px 12px 4px 0; color:#71717a;">RSVPs</td><td style="padding:4px 0; font-weight:bold;">{stats_row.going_count}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0; color:#71717a;">Cohost groups</td><td style="padding:4px 0; font-weight:bold;">{stats_row.cohost_count}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0; color:#71717a;">Attached offers</td><td style="padding:4px 0; font-weight:bold;">{stats_row.offer_count}</td></tr>
                 </table>
-                <p><a href="{event_link}">View event</a></p>
-            """
+                <p style="margin-top:24px;">{render_cta_button(event_link, "View event")}</p>
+            """)
             sent = await send_email(
                 db,
                 to=organizer_emails,
