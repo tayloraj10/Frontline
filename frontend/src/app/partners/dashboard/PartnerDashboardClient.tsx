@@ -44,17 +44,19 @@ export type DashboardOffer = {
   business_id: string;
   title: string;
   description: string | null;
-  redemption_mode: "spend" | "threshold";
+  redemption_mode: "spend" | "threshold" | "event_only";
   points_cost: number | null;
   points_threshold: number | null;
   max_redemptions_per_user: number | null;
   max_total_redemptions: number | null;
+  event_redemption_limit: number | null;
   code: string | null;
   status: string;
   starts_at: string;
   ends_at: string | null;
   created_at: string;
   location_id: string | null;
+  event_eligible: boolean;
 };
 
 function BusinessPanel({
@@ -204,7 +206,7 @@ function BusinessPanel({
       .schema("public")
       .from("partner_offers")
       .insert({ ...payload, business_id: business.id, status: "active" })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
       .single();
 
     if (insertErr) return insertErr.message;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import ShareButton from "@/components/ShareButton";
@@ -44,7 +44,17 @@ export default function PartnerDetailClient({
   userPoints: number | null;
 }) {
   const [points, setPoints] = useState(userPoints);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const locations = business.locations;
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { maximumAge: 5 * 60 * 1000, timeout: 8000 }
+    );
+  }, []);
   const socialLinks = business.social_links ?? {};
   const socialEntries = Object.entries(socialLinks).filter(([platform, url]) => !!url && platform !== "website");
 
@@ -153,6 +163,7 @@ export default function PartnerDetailClient({
               locations={locations}
               userId={userId}
               userPoints={points}
+              userLocation={userLocation}
               onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}
             />
           ))

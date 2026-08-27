@@ -94,17 +94,19 @@ export type PartnerOffer = {
   business_id: string;
   title: string;
   description: string | null;
-  redemption_mode: "spend" | "threshold";
+  redemption_mode: "spend" | "threshold" | "event_only";
   points_cost: number | null;
   points_threshold: number | null;
   max_redemptions_per_user: number | null;
   max_total_redemptions: number | null;
+  event_redemption_limit: number | null;
   code: string | null;
   status: string;
   starts_at: string;
   ends_at: string | null;
   created_at: string;
   location_id: string | null;
+  event_eligible: boolean;
 };
 
 export type OfferRedemption = {
@@ -1732,7 +1734,7 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
       .from("partner_offers")
       .update(payload)
       .eq("id", offer.id)
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
       .single();
 
     if (updateErr) return updateErr.message;
@@ -1781,8 +1783,18 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
             <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">{offer.redemption_mode}</span>
             {offer.redemption_mode === "spend"
               ? <span className="text-zinc-500">{offer.points_cost} pts</span>
-              : <span className="text-zinc-500">{offer.points_threshold}+ pts to unlock</span>}
+              : offer.redemption_mode === "threshold"
+              ? <span className="text-zinc-500">{offer.points_threshold}+ pts to unlock</span>
+              : <span className="text-zinc-500">event check-in only</span>}
             <StatusBadge status={offer.status} />
+            {offer.event_eligible && (
+              <span
+                title="Event offers can be attached to a cleanup event by its organizer. Attendees who check in can redeem it for free, no points required, within 4 hours after the event ends."
+                className="px-1.5 py-0.5 rounded bg-amber-950/50 border border-amber-800/60 text-amber-400 font-semibold flex items-center gap-1 cursor-help"
+              >
+                Event offer
+              </span>
+            )}
             {redemptionCount > 0 ? (
               <button
                 type="button"
@@ -2073,7 +2085,7 @@ function BusinessCard({
       .schema("public")
       .from("partner_offers")
       .insert({ ...payload, business_id: business.id, status: "active" })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
       .single();
 
     if (insertErr) return insertErr.message;
@@ -3458,7 +3470,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   triggers: "Trigger defaults",
   moderation: "Moderation",
   milestones: "Milestone ladders",
+  notifications: "Email notifications",
 };
+
+// Settings that are conceptually booleans (stored as 0/1 in the numeric game_settings
+// column) get a toggle switch instead of a number input.
+const BOOLEAN_SETTING_KEYS = new Set([
+  "email_partner_coordination_enabled",
+  "email_attendee_reminder_enabled",
+  "email_organizer_stats_reminder_enabled",
+]);
 
 const METERS_TO_FEET = 3.28084;
 
@@ -3521,12 +3542,15 @@ function SettingsTab({ settings, setSettings }: {
     return groups;
   }, [settings]);
 
-  const handleSave = async (setting: GameSetting) => {
-    const raw = drafts[setting.key];
-    const parsed = Number(raw);
-    if (raw === "" || Number.isNaN(parsed)) {
-      setErrorKey(setting.key);
-      return;
+  const handleSave = async (setting: GameSetting, overrideValue?: number) => {
+    let parsed = overrideValue;
+    if (parsed === undefined) {
+      const raw = drafts[setting.key];
+      parsed = Number(raw);
+      if (raw === "" || Number.isNaN(parsed)) {
+        setErrorKey(setting.key);
+        return;
+      }
     }
     setSavingKey(setting.key);
     setErrorKey(null);
@@ -3542,7 +3566,8 @@ function SettingsTab({ settings, setSettings }: {
       setErrorKey(setting.key);
       return;
     }
-    setSettings(settings.map(s => s.key === setting.key ? { ...s, value: parsed } : s));
+    setSettings(settings.map(s => s.key === setting.key ? { ...s, value: parsed! } : s));
+    setDrafts(d => ({ ...d, [setting.key]: String(parsed) }));
     setSavedKey(setting.key);
     setTimeout(() => setSavedKey(k => k === setting.key ? null : k), 1500);
   };
@@ -3577,8 +3602,41 @@ function SettingsTab({ settings, setSettings }: {
               const dirty = drafts[setting.key] !== String(setting.value);
               const isProximity = setting.category === "proximity";
               const isSolarpunkTieIn = setting.key === "trash_war_solarpunk_credit";
+              const isBoolean = BOOLEAN_SETTING_KEYS.has(setting.key);
               const metersDraft = Number(drafts[setting.key]);
               const feetDraft = Number.isFinite(metersDraft) ? Math.round(metersDraft * METERS_TO_FEET) : NaN;
+              if (isBoolean) {
+                const on = setting.value !== 0;
+                return (
+                  <div key={setting.key} className="flex items-center gap-4 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-zinc-200">{setting.label}</p>
+                      {setting.description && (
+                        <p className="text-xs text-zinc-500 mt-0.5">{setting.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {savedKey === setting.key && <span className="text-xs text-emerald-400">Saved ✓</span>}
+                      {errorKey === setting.key && <span className="text-xs text-red-400">Error</span>}
+                      <button
+                        role="switch"
+                        aria-checked={on}
+                        disabled={savingKey === setting.key}
+                        onClick={() => handleSave(setting, on ? 0 : 1)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-150 disabled:opacity-50 touch-manipulation ${
+                          on ? "bg-emerald-600" : "bg-zinc-700"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-150 ${
+                            on ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div
                   key={setting.key}

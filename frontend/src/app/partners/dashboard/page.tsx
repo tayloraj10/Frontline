@@ -66,7 +66,7 @@ export default async function PartnerDashboardPage() {
     ? await supabase
         .schema("public")
         .from("partner_offers")
-        .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
+        .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
         .in("business_id", businessIds)
         .order("created_at", { ascending: false })
     : { data: [] as DashboardOffer[] };

@@ -90,6 +90,30 @@ export type CleanupEventDetailData = {
   check_in_window_end: string | null;
   check_in_radius_meters: number;
   logging_mode: "organizer_total" | "individual";
+  event_offers: CleanupEventOffer[];
+  event_offer_redemption_open: boolean;
+};
+
+export type CleanupEventOffer = {
+  id: string;
+  title: string;
+  description: string | null;
+  business_name: string;
+  business_slug: string;
+  max_redemptions: number | null;
+  redeemed_count: number;
+  location_id: string | null;
+  locations: CleanupEventOfferLocation[];
+};
+
+export type CleanupEventOfferLocation = {
+  id: string;
+  label: string | null;
+  address_line1: string | null;
+  city: string | null;
+  state: string | null;
+  lat: number;
+  lng: number;
 };
 
 export type GroupCleanupEventListItem = {
@@ -496,6 +520,42 @@ export async function demoteOrganizer({
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export type AttendeeReminderPreview = {
+  subject: string;
+  html: string;
+  recipient_count: number;
+};
+
+export async function previewAttendeeReminder({
+  cleanupId,
+  organizerUserId,
+  message,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  message?: string;
+}): Promise<AttendeeReminderPreview> {
+  return postJson(`/cleanup-events/${cleanupId}/attendee-reminder/preview`, {
+    organizer_user_id: organizerUserId,
+    message: message || null,
+  });
+}
+
+export async function sendAttendeeReminder({
+  cleanupId,
+  organizerUserId,
+  message,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+  message?: string;
+}): Promise<{ sent: boolean; recipient_count: number; reason?: string }> {
+  return postJson(`/cleanup-events/${cleanupId}/attendee-reminder/send`, {
+    organizer_user_id: organizerUserId,
+    message: message || null,
+  });
 }
 
 export type NearbyReport = {

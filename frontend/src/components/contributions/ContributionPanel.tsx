@@ -16,6 +16,8 @@ import { formatPoints } from "@/lib/formatPoints";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
 import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString } from "@/lib/cleanupRoutes";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
+import NearbyPartnersPanel from "@/components/cleanups/NearbyPartnersPanel";
+import { useNearbyPartners } from "@/lib/nearbyPartners";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import Lightbox from "@/components/Lightbox";
 import IconButton from "@/components/ui/IconButton";
@@ -2802,12 +2804,6 @@ function HostEventModal({
     localStorage.setItem("frontline:host-event-view-mode", mode);
   };
   const [guidedStep, setGuidedStep] = useState(0);
-  const hostEventSteps: GuidedStep[] = [
-    { key: "basics", label: "Basics" },
-    { key: "schedule", label: "Schedule & Logging" },
-    { key: "location", label: "Logistics & Location" },
-    { key: "photo", label: "Cover photo" },
-  ];
 
   // A freshly finished route arrives via routeOverride once the map's route picker reports
   // "Finish route" — this is a purely decorative/pre-planning route for the event listing
@@ -2832,13 +2828,33 @@ function HostEventModal({
   }, [imageFile]);
 
   // With a route drawn, the location field is hidden (see `{!route && ...}` below) and the
-  // route's own first node is the meeting point — falling back to overrideCoords/addressCoords/
+  // route's own first node is the meeting point -- falling back to overrideCoords/addressCoords/
   // gps.coords here would silently use a stale or unrelated location (e.g. wherever the
   // organizer's GPS was standing), disconnected from the route they actually drew.
   const routeStart = route?.coordinates?.[0] ?? null;
   const submitCoords = routeStart
     ? { latitude: routeStart[1], longitude: routeStart[0] }
     : overrideCoords ?? addressCoords ?? gps.coords;
+  const { partners: nearbyPartners } = useNearbyPartners(
+    submitCoords?.latitude ?? null,
+    submitCoords?.longitude ?? null,
+    undefined,
+    undefined,
+    route?.coordinates
+  );
+  const hasNearbyPartners = nearbyPartners.length > 0;
+  const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>([]);
+  const toggleOfferId = (offerId: string) => {
+    setSelectedOfferIds((prev) => (prev.includes(offerId) ? prev.filter((id) => id !== offerId) : [...prev, offerId]));
+  };
+  const hostEventSteps: GuidedStep[] = [
+    { key: "basics", label: "Basics" },
+    { key: "schedule", label: "Schedule & Logging" },
+    { key: "logistics", label: "Logistics" },
+    { key: "location", label: "Location" },
+    ...(hasNearbyPartners ? [{ key: "partners", label: "Nearby Partners" }] : []),
+    { key: "photo", label: "Cover photo" },
+  ];
   const endBeforeStart = !!scheduledEnd && !!scheduledStart && new Date(scheduledEnd) <= new Date(scheduledStart);
   const canSubmit = !!groupId && !!title.trim() && !!scheduledStart && !!submitCoords && !endBeforeStart;
 
@@ -2847,9 +2863,12 @@ function HostEventModal({
   const hostEventStepBlockedReason: (string | null)[] = [
     !title.trim() ? "Add a title to continue" : null,
     !scheduledStart ? "Pick a start date to continue" : endBeforeStart ? "End time must be after the start to continue" : null,
+    null,
     !submitCoords ? "Set a location to continue" : null,
+    ...(hasNearbyPartners ? [null] : []),
     null,
   ];
+  const activeGuidedStep = Math.min(guidedStep, hostEventSteps.length - 1);
 
   const handleSubmit = async () => {
     if (!canSubmit || !submitCoords) return;
@@ -2882,6 +2901,27 @@ function HostEventModal({
         cohostGroupIds,
         loggingMode,
       });
+      if (selectedOfferIds.length > 0) {
+        const supabase = createClient();
+        const allOffers = nearbyPartners.flatMap((p) => p.eventOffers);
+        await supabase
+          .schema("public")
+          .from("cleanup_event_offers")
+          .insert(selectedOfferIds.map((offer_id) => ({
+            cleanup_id: result.id,
+            offer_id,
+            added_by: userId,
+            max_redemptions: allOffers.find((o) => o.id === offer_id)?.event_redemption_limit ?? null,
+          })));
+        const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+        for (const offer_id of selectedOfferIds) {
+          fetch(`${fastapiUrl}/api/partners/offers/${offer_id}/events/${result.id}/notify-attachment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organizer_user_id: userId }),
+          }).catch(() => {});
+        }
+      }
       setCreated(result);
       if (route) onRouteAdded?.({ id: result.id, route });
       router.refresh();
@@ -3068,7 +3108,7 @@ function HostEventModal({
     </>
   );
 
-  const locationSection = (
+  const logisticsSection = (
     <>
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">RSVP limit (optional)</label>
@@ -3092,7 +3132,11 @@ function HostEventModal({
             className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
           />
         </div>
+    </>
+  );
 
+  const locationSection = (
+    <>
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
             Pre-planned route (optional)
@@ -3220,6 +3264,16 @@ function HostEventModal({
     </>
   );
 
+  const partnersSection = (
+    <NearbyPartnersPanel
+      partners={nearbyPartners}
+      selectedOfferIds={selectedOfferIds}
+      onToggleOffer={toggleOfferId}
+      maxAttendees={maxAttendees}
+      onSetMaxAttendees={setMaxAttendees}
+    />
+  );
+
   const photoSection = (
     <>
         <div>
@@ -3250,7 +3304,9 @@ function HostEventModal({
     </>
   );
 
-  const hostEventStepSections = [basicsSection, scheduleSection, locationSection, photoSection];
+  const hostEventStepSections = hasNearbyPartners
+    ? [basicsSection, scheduleSection, logisticsSection, locationSection, partnersSection, photoSection]
+    : [basicsSection, scheduleSection, logisticsSection, locationSection, photoSection];
 
   return (
     <ModalShell title="Host Cleanup Event" onClose={onClose}>
@@ -3259,32 +3315,34 @@ function HostEventModal({
 
         {viewMode === "guided" ? (
           <>
-            <GuidedStepper steps={hostEventSteps} activeIndex={guidedStep} onJump={setGuidedStep} />
-            {hostEventStepSections[guidedStep]}
+            <GuidedStepper steps={hostEventSteps} activeIndex={activeGuidedStep} onJump={setGuidedStep} />
+            {hostEventStepSections[activeGuidedStep]}
             <StepperNav
-              activeIndex={guidedStep}
+              activeIndex={activeGuidedStep}
               count={hostEventSteps.length}
               accent="sky"
               onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
               onNext={() => {
-                if (hostEventStepBlockedReason[guidedStep]) return;
+                if (hostEventStepBlockedReason[activeGuidedStep]) return;
                 setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1));
               }}
-              nextDisabledReason={hostEventStepBlockedReason[guidedStep]}
+              nextDisabledReason={hostEventStepBlockedReason[activeGuidedStep]}
             />
           </>
         ) : (
           <>
             {basicsSection}
             {scheduleSection}
+            {logisticsSection}
             {locationSection}
+            {hasNearbyPartners && partnersSection}
             {photoSection}
           </>
         )}
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
-        {(viewMode === "full" || guidedStep === hostEventSteps.length - 1) && (
+        {(viewMode === "full" || activeGuidedStep === hostEventSteps.length - 1) && (
         <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
           <button
             onClick={onClose}
