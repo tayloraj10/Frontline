@@ -76,7 +76,7 @@ type PartnerBusinessRow = {
   website_url: string | null; status: string;
   partner_business_locations: { id: string; label: string | null; lat: number; lng: number; google_maps_url: string | null; status: string }[];
 };
-type OfferRequirement = { title: string; mode: "spend" | "threshold"; requirement: number; location_id: string | null };
+type OfferRequirement = { title: string; mode: "spend" | "threshold" | "event_only"; requirement: number; location_id: string | null };
 
 // Everything here is public, RLS-open data (or FastAPI-computed data with no
 // per-user variance), so it's safe to share one cache entry across all
@@ -160,7 +160,7 @@ const getCampaignPageData = unstable_cache(
       : {
           data: [] as {
             business_id: string; title: string; starts_at: string; ends_at: string | null;
-            redemption_mode: "spend" | "threshold"; points_cost: number | null; points_threshold: number | null;
+            redemption_mode: "spend" | "threshold" | "event_only"; points_cost: number | null; points_threshold: number | null;
             location_id: string | null;
           }[],
         };
@@ -174,7 +174,9 @@ const getCampaignPageData = unstable_cache(
     for (const row of activeOfferRows ?? []) {
       if (row.starts_at > nowIso) continue;
       if (row.ends_at && row.ends_at <= nowIso) continue;
-      const requirement = row.redemption_mode === "spend" ? row.points_cost ?? 0 : row.points_threshold ?? 0;
+      const requirement = row.redemption_mode === "spend" ? row.points_cost ?? 0
+        : row.redemption_mode === "threshold" ? row.points_threshold ?? 0
+        : 0; // event_only: no points requirement, never counts as "affordable" below
       const list = activeOffersByBusiness.get(row.business_id) ?? [];
       list.push({ title: row.title, mode: row.redemption_mode, requirement, location_id: row.location_id });
       activeOffersByBusiness.set(row.business_id, list);
@@ -308,7 +310,9 @@ export default async function CampaignPage({ params, searchParams }: Props) {
         ? offers.find((o) =>
             o.mode === "spend"
               ? adminProfile.spendable_points >= o.requirement
-              : adminProfile.points >= o.requirement
+              : o.mode === "threshold"
+              ? adminProfile.points >= o.requirement
+              : false // event_only offers have no points path, never "affordable"
           )
         : undefined;
       return { ...l, affordableOfferTitle: affordable?.title ?? null };

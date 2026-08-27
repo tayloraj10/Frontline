@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     sentry_dsn: str = ""
     admin_api_secret: str = ""
+    resend_api_key: str = ""
+    frontend_url: str = "http://localhost:3000"
 
     cors_origins: str = (
         "http://localhost:3000,"

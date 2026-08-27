@@ -322,7 +322,7 @@ export type MapBusinessLocation = {
   activeOfferTitle?: string | null;
   // Public offer catalog (safe to cache); used server-side, after the cache read, to
   // derive affordableOfferTitle below for the current viewer. Not otherwise rendered.
-  offers?: { title: string; mode: "spend" | "threshold"; requirement: number }[];
+  offers?: { title: string; mode: "spend" | "threshold" | "event_only"; requirement: number }[];
   // Server-computed per-viewer (never cached alongside the rest of this object — see
   // campaigns/[slug]/page.tsx's cache-boundary comment): set when the signed-in viewer
   // currently has enough points for at least one of this location's active offers.

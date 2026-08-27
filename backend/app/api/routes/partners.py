@@ -7,7 +7,10 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.database import get_db
+from app.services.email import send_email, format_event_datetime
+from app.services.event_permissions import can_manage_event
 from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/partners", tags=["partners"])
@@ -23,6 +26,18 @@ RADIUS_TIER_SETTING_KEYS = {
 class RedeemRequest(BaseModel):
     user_id: UUID
     location_id: Optional[UUID] = None
+    cleanup_id: Optional[UUID] = None
+
+
+# How long after a cleanup event's (effective) end time an attendee can still redeem an
+# event-eligible offer for free. Effective end falls back to start + 2 hours when no
+# scheduled_end is set, matching the check-in window default shown in the event form.
+EVENT_OFFER_REDEMPTION_WINDOW = timedelta(hours=4)
+EVENT_CHECKIN_DEFAULT_DURATION = timedelta(hours=2)
+
+
+class NotifyEventAttachmentRequest(BaseModel):
+    organizer_user_id: UUID
 
 
 class AddBusinessAdminRequest(BaseModel):
@@ -61,7 +76,8 @@ async def redeem_offer(
         text("""
             SELECT o.id, o.business_id, o.location_id, o.title, o.code, o.redemption_mode, o.points_cost,
                    o.points_threshold, o.max_redemptions_per_user, o.max_total_redemptions,
-                   o.status, o.starts_at, o.ends_at, b.status AS business_status, b.name AS business_name
+                   o.status, o.starts_at, o.ends_at, o.event_eligible,
+                   b.status AS business_status, b.name AS business_name
             FROM partner_offers o
             JOIN partner_businesses b ON b.id = o.business_id
             WHERE o.id = :offer_id
@@ -119,12 +135,38 @@ async def redeem_offer(
         raise HTTPException(status_code=404, detail="User not found")
     current_points = float(points_row.spendable_points)
 
-    if offer.redemption_mode == "spend":
-        if current_points < float(offer.points_cost):
-            raise HTTPException(status_code=409, detail="Not enough points to redeem this offer")
-    else:
-        if current_points < float(offer.points_threshold):
-            raise HTTPException(status_code=409, detail="You haven't reached the points threshold for this offer")
+    event_redemption = False
+    if offer.event_eligible and payload.cleanup_id is not None:
+        event_result = await db.execute(
+            text("""
+                SELECT c.scheduled_start, c.scheduled_end, r.checked_in_at, ceo.max_redemptions
+                FROM cleanup_event_offers ceo
+                JOIN cleanups c ON c.id = ceo.cleanup_id
+                LEFT JOIN cleanup_rsvps r ON r.cleanup_id = ceo.cleanup_id AND r.user_id = :user_id
+                WHERE ceo.cleanup_id = :cleanup_id AND ceo.offer_id = :offer_id
+            """),
+            {"cleanup_id": str(payload.cleanup_id), "offer_id": str(offer_id), "user_id": str(payload.user_id)},
+        )
+        event_row = event_result.fetchone()
+        if not event_row:
+            raise HTTPException(status_code=400, detail="This offer isn't linked to that event")
+        if event_row.checked_in_at is None:
+            raise HTTPException(status_code=409, detail="You need to check in to this event to redeem this offer")
+        effective_end = event_row.scheduled_end or (event_row.scheduled_start + EVENT_CHECKIN_DEFAULT_DURATION)
+        if now > effective_end + EVENT_OFFER_REDEMPTION_WINDOW:
+            raise HTTPException(status_code=409, detail="The redemption window for this event offer has passed")
+        event_redemption = True
+        event_max_redemptions = event_row.max_redemptions
+
+    if not event_redemption:
+        if offer.redemption_mode == "event_only":
+            raise HTTPException(status_code=409, detail="This offer can only be redeemed by checking in to an event it's attached to")
+        if offer.redemption_mode == "spend":
+            if current_points < float(offer.points_cost):
+                raise HTTPException(status_code=409, detail="Not enough points to redeem this offer")
+        else:
+            if current_points < float(offer.points_threshold):
+                raise HTTPException(status_code=409, detail="You haven't reached the points threshold for this offer")
 
     if offer.max_redemptions_per_user is not None:
         count_result = await db.execute(
@@ -149,7 +191,15 @@ async def redeem_offer(
         if total_result.scalar() >= offer.max_total_redemptions:
             raise HTTPException(status_code=409, detail="This offer has reached its redemption limit")
 
-    points_spent = float(offer.points_cost) if offer.redemption_mode == "spend" else 0
+    if event_redemption and event_max_redemptions is not None:
+        event_count_result = await db.execute(
+            text("SELECT COUNT(*) FROM partner_redemptions WHERE offer_id = :offer_id AND cleanup_id = :cleanup_id"),
+            {"offer_id": str(offer_id), "cleanup_id": str(payload.cleanup_id)},
+        )
+        if event_count_result.scalar() >= event_max_redemptions:
+            raise HTTPException(status_code=409, detail="This offer has reached its redemption limit for this event")
+
+    points_spent = float(offer.points_cost) if (not event_redemption and offer.redemption_mode == "spend") else 0
     if points_spent > 0:
         await db.execute(
             text("UPDATE profiles SET spendable_points = spendable_points - :spent WHERE id = :user_id"),
@@ -159,9 +209,9 @@ async def redeem_offer(
     insert_result = await db.execute(
         text("""
             INSERT INTO partner_redemptions
-                (user_id, offer_id, business_id, location_id, code, points_spent)
+                (user_id, offer_id, business_id, location_id, code, points_spent, cleanup_id)
             VALUES
-                (:user_id, :offer_id, :business_id, :location_id, :code, :points_spent)
+                (:user_id, :offer_id, :business_id, :location_id, :code, :points_spent, :cleanup_id)
             RETURNING id
         """),
         {
@@ -171,6 +221,7 @@ async def redeem_offer(
             "location_id": str(redemption_location_id) if redemption_location_id else None,
             "code": offer.code,
             "points_spent": points_spent,
+            "cleanup_id": str(payload.cleanup_id) if event_redemption else None,
         },
     )
     redemption_id = insert_result.scalar()
@@ -248,6 +299,134 @@ async def mark_redemption_used(
     await db.commit()
 
     return {"used_at": used_at.isoformat() if used_at else None}
+
+
+@router.post("/offers/{offer_id}/events/{cleanup_id}/notify-attachment")
+async def notify_event_offer_attachment(
+    offer_id: UUID,
+    cleanup_id: UUID,
+    payload: NotifyEventAttachmentRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Emails a business's admins when an organizer attaches their offer to a cleanup
+    event, CC'ing the organizer. Called by the frontend right after its own direct-Supabase
+    insert into cleanup_event_offers succeeds — this endpoint only sends the notification
+    and never itself creates the attachment, since email needs auth.users + Resend, both
+    only reachable from the backend. A failed send never surfaces as an error to the
+    organizer (send_email swallows and logs it); the attachment itself already succeeded.
+    Requires payload.organizer_user_id to actually be able to manage this event (same
+    check as the attendee-reminder endpoints), since this is otherwise an unauthenticated
+    way to spam a business's admins and to probe/CC an arbitrary user's email."""
+    row = (
+        await db.execute(
+            text("""
+                SELECT ceo.id AS attachment_id, ceo.max_redemptions,
+                       o.title AS offer_title, o.description AS offer_description,
+                       b.id AS business_id, b.name AS business_name,
+                       c.title AS cleanup_title, c.scheduled_start,
+                       c.group_id AS group_id,
+                       g.name AS group_name
+                FROM cleanup_event_offers ceo
+                JOIN partner_offers o ON o.id = ceo.offer_id
+                JOIN partner_businesses b ON b.id = o.business_id
+                JOIN cleanups c ON c.id = ceo.cleanup_id
+                LEFT JOIN groups g ON g.id = c.group_id
+                WHERE ceo.offer_id = :offer_id AND ceo.cleanup_id = :cleanup_id
+            """),
+            {"offer_id": str(offer_id), "cleanup_id": str(cleanup_id)},
+        )
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="No such offer attachment for that event")
+
+    if not await can_manage_event(db, row.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Not authorized to manage this event")
+
+    admin_rows = (
+        await db.execute(
+            text("""
+                SELECT u.email FROM partner_business_admins pba
+                JOIN auth.users u ON u.id = pba.user_id
+                WHERE pba.business_id = :business_id
+            """),
+            {"business_id": str(row.business_id)},
+        )
+    ).fetchall()
+    admin_emails = [r.email for r in admin_rows if r.email]
+
+    organizer_row = (
+        await db.execute(
+            text("SELECT p.username, u.email FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.id = :user_id"),
+            {"user_id": str(payload.organizer_user_id)},
+        )
+    ).fetchone()
+
+    if not admin_emails:
+        return {"sent": False, "reason": "This business has no admins with an email on file"}
+
+    game_settings = await get_game_settings(db)
+    if not game_settings.get("email_partner_coordination_enabled"):
+        return {"sent": False, "reason": "Partner coordination emails are disabled"}
+
+    event_link = f"{settings.frontend_url}/cleanup-events/{cleanup_id}"
+    limit_line = (
+        f"<p>This offer is capped at {row.max_redemptions} redemption(s) for this event.</p>"
+        if row.max_redemptions is not None
+        else ""
+    )
+    when_line = format_event_datetime(row.scheduled_start) if row.scheduled_start else "TBD"
+    html = f"""
+        <p>Your offer <strong>{row.offer_title}</strong> has been attached to an upcoming cleanup event{f" hosted by {row.group_name}" if row.group_name else ""}:</p>
+        <p><strong>{row.cleanup_title}</strong><br>{when_line}</p>
+        {limit_line}
+        <p>Attendees who check in to this event will be able to redeem it for free.</p>
+        <p><a href="{event_link}">View the event</a></p>
+    """
+
+    sent = await send_email(
+        db,
+        to=admin_emails,
+        cc=[organizer_row.email] if organizer_row and organizer_row.email else [],
+        subject=f"Your offer was attached to \"{row.cleanup_title}\"",
+        html=html,
+        kind="event_offer_attached",
+        related_id=row.attachment_id,
+    )
+
+    return {"sent": sent}
+
+
+@router.delete("/offers/{offer_id}/events/{cleanup_id}")
+async def remove_event_offer_attachment(
+    offer_id: UUID,
+    cleanup_id: UUID,
+    organizer_user_id: UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detaches an event-eligible offer from a cleanup event. Goes through the backend
+    (rather than a direct client-side Supabase delete, the way attachment is created)
+    because cleanup_event_offers' RLS delete policy only recognizes group admins, while
+    an event's actual organizer (or a co-hosting group's admin) should be able to manage
+    offers on their own event too -- same can_manage_event check as the attendee-reminder
+    endpoints."""
+    row = (
+        await db.execute(
+            text("SELECT group_id FROM cleanups WHERE id = :cleanup_id"),
+            {"cleanup_id": str(cleanup_id)},
+        )
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cleanup event not found")
+
+    if not await can_manage_event(db, row.group_id, cleanup_id, organizer_user_id):
+        raise HTTPException(status_code=403, detail="Not authorized to manage this event")
+
+    await db.execute(
+        text("DELETE FROM cleanup_event_offers WHERE cleanup_id = :cleanup_id AND offer_id = :offer_id"),
+        {"cleanup_id": str(cleanup_id), "offer_id": str(offer_id)},
+    )
+    await db.commit()
+    return {"status": "removed"}
 
 
 @router.get("/businesses/{business_id}/admins")

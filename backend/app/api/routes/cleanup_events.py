@@ -10,8 +10,15 @@ from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.partners import EVENT_CHECKIN_DEFAULT_DURATION, EVENT_OFFER_REDEMPTION_WINDOW
+from app.core.config import settings as app_settings
 from app.db.database import get_db
 from app.services.contribution_scoring import record_contribution
+from app.services.email import send_email, format_event_datetime
+from app.services.event_permissions import (
+    is_group_admin as _is_group_admin,
+    can_manage_event as _can_manage_event,
+)
 from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
@@ -163,6 +170,18 @@ class OrganizerCheckInRequest(BaseModel):
     attendee_user_id: UUID
 
 
+class AttendeeReminderRequest(BaseModel):
+    organizer_user_id: UUID
+    message: str | None = None
+
+    @field_validator("message")
+    @classmethod
+    def _message_length(cls, v: str | None) -> str | None:
+        if v is not None and len(v) > 2000:
+            raise ValueError("message must be 2000 characters or fewer")
+        return v
+
+
 class AddEventPhotosRequest(BaseModel):
     user_id: UUID
     photo_urls: list[str]
@@ -219,49 +238,52 @@ class LogTeamTotalRequest(BaseModel):
         return v
 
 
-async def _is_group_admin(db: AsyncSession, group_id: UUID, user_id: UUID) -> bool:
-    result = await db.execute(
-        text("""
-            SELECT 1 FROM group_members
-            WHERE group_id = :group_id AND user_id = :user_id AND role = 'admin'
-        """),
-        {"group_id": str(group_id), "user_id": str(user_id)},
+async def _build_attendee_reminder(db: AsyncSession, cleanup_id: UUID, message: str | None) -> tuple[str, str, int]:
+    """Shared by the preview and send endpoints so what an organizer previews is
+    byte-for-byte what actually goes out. Returns (subject, html, going_count)."""
+    row = (
+        await db.execute(
+            text("""
+                SELECT c.title, c.scheduled_start, c.address_line1, c.city, c.state,
+                       g.name AS group_name, g.image_url AS group_logo_url
+                FROM cleanups c
+                LEFT JOIN groups g ON g.id = c.group_id
+                WHERE c.id = :id
+            """),
+            {"id": str(cleanup_id)},
+        )
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cleanup event not found")
+
+    count_row = (
+        await db.execute(
+            text("SELECT COUNT(*) FROM cleanup_rsvps WHERE cleanup_id = :id AND status = 'going'"),
+            {"id": str(cleanup_id)},
+        )
+    ).fetchone()
+    going_count = count_row[0] if count_row else 0
+
+    when_line = format_event_datetime(row.scheduled_start) if row.scheduled_start else "TBD"
+    where_parts = [p for p in [row.address_line1, row.city, row.state] if p]
+    where_line = f"<br>{', '.join(where_parts)}" if where_parts else ""
+    logo_html = (
+        f'<div style="text-align:center; margin-bottom:16px;"><img src="{row.group_logo_url}" '
+        f'alt="{row.group_name or "Group"}" style="width:64px; height:64px; border-radius:50%; object-fit:cover;"></div>'
+        if row.group_logo_url else ""
     )
-    return result.fetchone() is not None
+    custom_html = f"<p>{message}</p>" if message else ""
+    event_link = f"{app_settings.frontend_url}/cleanup-events/{cleanup_id}"
 
-
-async def _is_event_organizer(db: AsyncSession, cleanup_id: UUID, user_id: UUID) -> bool:
-    result = await db.execute(
-        text("""
-            SELECT 1 FROM cleanup_rsvps
-            WHERE cleanup_id = :cleanup_id AND user_id = :user_id AND is_organizer = true
-        """),
-        {"cleanup_id": str(cleanup_id), "user_id": str(user_id)},
-    )
-    return result.fetchone() is not None
-
-
-async def _is_any_cohost_admin(db: AsyncSession, cleanup_id: UUID, user_id: UUID) -> bool:
-    result = await db.execute(
-        text("""
-            SELECT 1 FROM cleanup_event_cohosts h
-            JOIN group_members gm ON gm.group_id = h.group_id
-            WHERE h.cleanup_id = :cleanup_id AND gm.user_id = :user_id AND gm.role = 'admin'
-        """),
-        {"cleanup_id": str(cleanup_id), "user_id": str(user_id)},
-    )
-    return result.fetchone() is not None
-
-
-async def _can_manage_event(db: AsyncSession, group_id: UUID, cleanup_id: UUID, user_id: UUID) -> bool:
-    """Group admins retain their existing blanket override, as do admins of any
-    co-hosting group; real per-event organizers (the creator, or anyone an organizer
-    has promoted) get the same powers without needing to be a group admin."""
-    if await _is_group_admin(db, group_id, user_id):
-        return True
-    if await _is_event_organizer(db, cleanup_id, user_id):
-        return True
-    return await _is_any_cohost_admin(db, cleanup_id, user_id)
+    html = f"""
+        {logo_html}
+        <p>{f"<strong>{row.group_name}</strong> is" if row.group_name else "This is"} a reminder about an upcoming cleanup you're signed up for:</p>
+        <p><strong>{row.title}</strong><br>{when_line}{where_line}</p>
+        {custom_html}
+        <p><a href="{event_link}">View event details</a></p>
+    """
+    subject = f"Reminder: {row.title}"
+    return subject, html, going_count
 
 
 async def _group_for_credit(db: AsyncSession, primary_group_id: UUID, cleanup_id: UUID, user_id: UUID) -> UUID:
@@ -771,6 +793,47 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         and float(latest_log_row.total_value) > team_total_base_value + 0.01
     )
 
+    event_offers_result = await db.execute(
+        text("""
+            SELECT o.id, o.title, o.description, b.name AS business_name, b.slug AS business_slug,
+                   ceo.max_redemptions, o.location_id,
+                   (SELECT COUNT(*) FROM partner_redemptions pr WHERE pr.offer_id = o.id AND pr.cleanup_id = ceo.cleanup_id) AS redeemed_count,
+                   COALESCE(locs.locations, '[]'::json) AS locations
+            FROM cleanup_event_offers ceo
+            JOIN partner_offers o ON o.id = ceo.offer_id
+            JOIN partner_businesses b ON b.id = o.business_id
+            LEFT JOIN LATERAL (
+                SELECT json_agg(json_build_object(
+                    'id', l.id, 'label', l.label, 'address_line1', l.address_line1,
+                    'city', l.city, 'state', l.state, 'lat', l.lat, 'lng', l.lng
+                )) AS locations
+                FROM partner_business_locations l
+                WHERE l.business_id = b.id AND l.status = 'active'
+            ) locs ON true
+            WHERE ceo.cleanup_id = :id AND o.status = 'active' AND b.status = 'active'
+        """),
+        {"id": str(cleanup_id)},
+    )
+    event_offers = [
+        {
+            "id": str(r.id),
+            "title": r.title,
+            "description": r.description,
+            "business_name": r.business_name,
+            "business_slug": r.business_slug,
+            "max_redemptions": r.max_redemptions,
+            "redeemed_count": r.redeemed_count,
+            "location_id": str(r.location_id) if r.location_id else None,
+            "locations": r.locations,
+        }
+        for r in event_offers_result.fetchall()
+    ]
+
+    # Mirrors the effective-end/window logic in partners.redeem_offer so the UI can decide
+    # whether to show the redemption surface at all, without duplicating the math client-side.
+    effective_end = row.scheduled_end or (row.scheduled_start + EVENT_CHECKIN_DEFAULT_DURATION if row.scheduled_start else None)
+    event_offer_redemption_open = bool(effective_end and datetime.now(effective_end.tzinfo) <= effective_end + EVENT_OFFER_REDEMPTION_WINDOW)
+
     check_in_window_start = (
         row.scheduled_start - timedelta(
             minutes=settings.get("cleanup_event_grace_minutes_before", CLEANUP_EVENT_GRACE_MINUTES_BEFORE_FALLBACK)
@@ -832,6 +895,8 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "check_in_window_start": check_in_window_start.isoformat() if check_in_window_start else None,
         "check_in_window_end": check_in_window_end.isoformat() if check_in_window_end else None,
         "check_in_radius_meters": settings.get("cleanup_event_proximity_meters", 150.0),
+        "event_offers": event_offers,
+        "event_offer_redemption_open": event_offer_redemption_open,
     }
 
 
@@ -1670,6 +1735,152 @@ async def demote_organizer(cleanup_id: UUID, user_id: UUID, payload: OrganizerRo
     await db.commit()
 
     return {"cleanup_id": str(cleanup_id), "user_id": str(user_id), "is_organizer": False}
+
+
+@router.post("/{cleanup_id}/attendee-reminder/preview")
+async def preview_attendee_reminder(cleanup_id: UUID, payload: AttendeeReminderRequest, db: AsyncSession = Depends(get_db)):
+    """Renders exactly what send_attendee_reminder would send, without sending it, so
+    the organizer can review (and lightly customize via `message`) before committing."""
+    event = await _get_event_or_404(db, cleanup_id)
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can preview this")
+
+    subject, html, going_count = await _build_attendee_reminder(db, cleanup_id, payload.message)
+    return {"subject": subject, "html": html, "recipient_count": going_count}
+
+
+@router.post("/{cleanup_id}/attendee-reminder/send")
+async def send_attendee_reminder(cleanup_id: UUID, payload: AttendeeReminderRequest, db: AsyncSession = Depends(get_db)):
+    """Manually-triggered reminder blast to everyone RSVP'd 'going', gated by the
+    email_attendee_reminder_enabled killswitch (defaults off)."""
+    event = await _get_event_or_404(db, cleanup_id)
+    if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Only a group admin or event organizer can send this")
+
+    game_settings = await get_game_settings(db)
+    if not game_settings.get("email_attendee_reminder_enabled"):
+        return {"sent": False, "reason": "Attendee reminder emails are disabled", "recipient_count": 0}
+
+    subject, html, going_count = await _build_attendee_reminder(db, cleanup_id, payload.message)
+
+    recipient_rows = (
+        await db.execute(
+            text("""
+                SELECT u.email FROM cleanup_rsvps r
+                JOIN auth.users u ON u.id = r.user_id
+                WHERE r.cleanup_id = :id AND r.status = 'going'
+            """),
+            {"id": str(cleanup_id)},
+        )
+    ).fetchall()
+    recipients = [r.email for r in recipient_rows if r.email]
+    if not recipients:
+        return {"sent": False, "reason": "No attendees to email", "recipient_count": 0}
+
+    organizer_row = (
+        await db.execute(
+            text("SELECT email FROM auth.users WHERE id = :id"),
+            {"id": str(payload.organizer_user_id)},
+        )
+    ).fetchone()
+    organizer_email = organizer_row.email if organizer_row and organizer_row.email else recipients[0]
+
+    # Attendees go in bcc (not to) so a blast to a large going-list never exposes
+    # everyone's email address to everyone else in the To: header.
+    sent = await send_email(
+        db,
+        to=[organizer_email],
+        bcc=recipients,
+        subject=subject,
+        html=html,
+        kind="attendee_reminder",
+        related_id=cleanup_id,
+    )
+    return {"sent": sent, "recipient_count": len(recipients)}
+
+
+@router.post("/organizer-reminders/run")
+async def run_organizer_reminders(db: AsyncSession = Depends(get_db)):
+    """Day-of reminder to each event's organizer(s), with current RSVP/cohost/offer
+    stats. Intended to be called once each morning by a Railway cron (see
+    scripts/run_organizer_reminders.py), same pattern as decay.py's /decay/run. Gated by
+    the email_organizer_stats_reminder_enabled killswitch (defaults off) and by
+    cleanups.organizer_reminder_sent_at, which this marks per-event so re-running the
+    same day never double-sends."""
+    game_settings = await get_game_settings(db)
+    if not game_settings.get("email_organizer_stats_reminder_enabled"):
+        return {"sent_count": 0, "reason": "Organizer stats reminder emails are disabled"}
+
+    due_events = (
+        await db.execute(
+            text("""
+                SELECT c.id, c.title, c.scheduled_start
+                FROM cleanups c
+                WHERE c.is_group_event = true
+                  AND c.status = 'scheduled'
+                  AND c.organizer_reminder_sent_at IS NULL
+                  AND c.scheduled_start::date = CURRENT_DATE
+            """)
+        )
+    ).fetchall()
+
+    sent_count = 0
+    for event in due_events:
+        stats_row = (
+            await db.execute(
+                text("""
+                    SELECT
+                        (SELECT COUNT(*) FROM cleanup_rsvps WHERE cleanup_id = :id AND status = 'going') AS going_count,
+                        (SELECT COUNT(*) FROM cleanup_event_cohosts WHERE cleanup_id = :id) AS cohost_count,
+                        (SELECT COUNT(*) FROM cleanup_event_offers WHERE cleanup_id = :id) AS offer_count
+                """),
+                {"id": str(event.id)},
+            )
+        ).fetchone()
+
+        organizer_rows = (
+            await db.execute(
+                text("""
+                    SELECT u.email FROM cleanup_rsvps r
+                    JOIN auth.users u ON u.id = r.user_id
+                    WHERE r.cleanup_id = :id AND r.is_organizer = true
+                """),
+                {"id": str(event.id)},
+            )
+        ).fetchall()
+        organizer_emails = [r.email for r in organizer_rows if r.email]
+
+        if organizer_emails:
+            when_line = format_event_datetime(event.scheduled_start)
+            event_link = f"{app_settings.frontend_url}/cleanup-events/{event.id}"
+            html = f"""
+                <p>Your event is coming up:</p>
+                <p><strong>{event.title}</strong><br>{when_line}</p>
+                <table style="border-collapse: collapse; margin: 16px 0;">
+                    <tr><td style="padding:4px 12px 4px 0; color:#555;">RSVPs</td><td style="padding:4px 0; font-weight:bold;">{stats_row.going_count}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0; color:#555;">Cohost groups</td><td style="padding:4px 0; font-weight:bold;">{stats_row.cohost_count}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0; color:#555;">Attached offers</td><td style="padding:4px 0; font-weight:bold;">{stats_row.offer_count}</td></tr>
+                </table>
+                <p><a href="{event_link}">View event</a></p>
+            """
+            sent = await send_email(
+                db,
+                to=organizer_emails,
+                subject=f"Your event is coming up: {stats_row.going_count} RSVPs so far",
+                html=html,
+                kind="organizer_stats_reminder",
+                related_id=event.id,
+            )
+            if sent:
+                sent_count += 1
+
+        await db.execute(
+            text("UPDATE cleanups SET organizer_reminder_sent_at = NOW() WHERE id = :id"),
+            {"id": str(event.id)},
+        )
+        await db.commit()
+
+    return {"checked_count": len(due_events), "sent_count": sent_count}
 
 
 @router.get("/{cleanup_id}/nearby-reports")

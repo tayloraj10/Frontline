@@ -5,17 +5,22 @@ import { useRouter } from "next/navigation";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
+import { createClient } from "@/lib/supabase/client";
 import RoutePicker from "@/components/map/RoutePicker";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
+import NearbyPartnersPanel from "@/components/cleanups/NearbyPartnersPanel";
+import { useNearbyPartners } from "@/lib/nearbyPartners";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
 import { GuidedStepper, StepperNav, ViewModeToggle, type GuidedStep } from "@/components/ui/GuidedStepper";
 
-const hostEventSteps: GuidedStep[] = [
+const hostEventStepsBase: GuidedStep[] = [
   { key: "basics", label: "Basics" },
   { key: "schedule", label: "Schedule & Logging" },
-  { key: "location", label: "Logistics & Location" },
-  { key: "photo", label: "Cover photo" },
+  { key: "logistics", label: "Logistics" },
+  { key: "location", label: "Location" },
 ];
+const hostEventStepPartners: GuidedStep = { key: "partners", label: "Nearby Partners" };
+const hostEventStepPhoto: GuidedStep = { key: "photo", label: "Cover photo" };
 
 const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
@@ -109,6 +114,15 @@ export default function CreateCleanupEventForm({
     localStorage.setItem("frontline:host-event-view-mode", mode);
   };
   const [guidedStep, setGuidedStep] = useState(0);
+  const { partners: nearbyPartners } = useNearbyPartners(lat, lng, undefined, undefined, route?.coordinates);
+  const hasNearbyPartners = nearbyPartners.length > 0;
+  const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>([]);
+  const toggleOfferId = (offerId: string) => {
+    setSelectedOfferIds((prev) => (prev.includes(offerId) ? prev.filter((id) => id !== offerId) : [...prev, offerId]));
+  };
+  const hostEventSteps: GuidedStep[] = hasNearbyPartners
+    ? [...hostEventStepsBase, hostEventStepPartners, hostEventStepPhoto]
+    : [...hostEventStepsBase, hostEventStepPhoto];
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -161,7 +175,7 @@ export default function CreateCleanupEventForm({
           setLoading(false);
           return;
         }
-        await createCleanupEvent({
+        const created = await createCleanupEvent({
           campaignId,
           groupId,
           organizerUserId,
@@ -183,6 +197,27 @@ export default function CreateCleanupEventForm({
           cohostGroupIds,
           loggingMode,
         });
+        if (selectedOfferIds.length > 0) {
+          const supabase = createClient();
+          const allOffers = nearbyPartners.flatMap((p) => p.eventOffers);
+          await supabase
+            .schema("public")
+            .from("cleanup_event_offers")
+            .insert(selectedOfferIds.map((offer_id) => ({
+              cleanup_id: created.id,
+              offer_id,
+              added_by: organizerUserId,
+              max_redemptions: allOffers.find((o) => o.id === offer_id)?.event_redemption_limit ?? null,
+            })));
+          const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+          for (const offer_id of selectedOfferIds) {
+            fetch(`${fastapiUrl}/api/partners/offers/${offer_id}/events/${created.id}/notify-attachment`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ organizer_user_id: organizerUserId }),
+            }).catch(() => {});
+          }
+        }
         router.push(`/groups/${groupSlug}`);
       }
       router.refresh();
@@ -260,7 +295,7 @@ export default function CreateCleanupEventForm({
     </>
   );
 
-  const locationSection = (
+  const logisticsSection = (
     <>
       <div className="space-y-1">
         <label className="text-xs text-zinc-500">RSVP limit (optional)</label>
@@ -284,7 +319,11 @@ export default function CreateCleanupEventForm({
           placeholder="https://... (site, waiver form, sign-up sheet)"
         />
       </div>
+    </>
+  );
 
+  const locationSection = (
+    <>
       <div className="space-y-1">
         <label className="text-xs text-zinc-500">Street address</label>
         <AddressAutocomplete
@@ -349,6 +388,16 @@ export default function CreateCleanupEventForm({
     </>
   );
 
+  const partnersSection = (
+    <NearbyPartnersPanel
+      partners={nearbyPartners}
+      selectedOfferIds={selectedOfferIds}
+      onToggleOffer={toggleOfferId}
+      maxAttendees={maxAttendees}
+      onSetMaxAttendees={setMaxAttendees}
+    />
+  );
+
   const photoSection = (
     <>
       <div className="space-y-1">
@@ -385,7 +434,10 @@ export default function CreateCleanupEventForm({
     </>
   );
 
-  const hostEventStepSections = [basicsSection, scheduleSection, locationSection, photoSection];
+  const hostEventStepSections = hasNearbyPartners
+    ? [basicsSection, scheduleSection, logisticsSection, locationSection, partnersSection, photoSection]
+    : [basicsSection, scheduleSection, logisticsSection, locationSection, photoSection];
+  const activeGuidedStep = Math.min(guidedStep, hostEventSteps.length - 1);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -393,10 +445,10 @@ export default function CreateCleanupEventForm({
 
       {viewMode === "guided" ? (
         <>
-          <GuidedStepper steps={hostEventSteps} activeIndex={guidedStep} onJump={setGuidedStep} />
-          <div className="space-y-4">{hostEventStepSections[guidedStep]}</div>
+          <GuidedStepper steps={hostEventSteps} activeIndex={activeGuidedStep} onJump={setGuidedStep} />
+          <div className="space-y-4">{hostEventStepSections[activeGuidedStep]}</div>
           <StepperNav
-            activeIndex={guidedStep}
+            activeIndex={activeGuidedStep}
             count={hostEventSteps.length}
             accent="emerald"
             onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
@@ -407,13 +459,15 @@ export default function CreateCleanupEventForm({
         <>
           {basicsSection}
           {scheduleSection}
+          {logisticsSection}
           {locationSection}
+          {hasNearbyPartners && partnersSection}
           {photoSection}
         </>
       )}
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
-      {(viewMode === "full" || guidedStep === hostEventSteps.length - 1) && (
+      {(viewMode === "full" || activeGuidedStep === hostEventSteps.length - 1) && (
         <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : ""}`}>
           <button
             type="button"
