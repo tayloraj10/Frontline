@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.database import get_db
 from app.services.email import send_email, format_event_datetime
+from app.services.event_permissions import can_manage_event
 from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/partners", tags=["partners"])
@@ -312,7 +313,10 @@ async def notify_event_offer_attachment(
     insert into cleanup_event_offers succeeds — this endpoint only sends the notification
     and never itself creates the attachment, since email needs auth.users + Resend, both
     only reachable from the backend. A failed send never surfaces as an error to the
-    organizer (send_email swallows and logs it); the attachment itself already succeeded."""
+    organizer (send_email swallows and logs it); the attachment itself already succeeded.
+    Requires payload.organizer_user_id to actually be able to manage this event (same
+    check as the attendee-reminder endpoints), since this is otherwise an unauthenticated
+    way to spam a business's admins and to probe/CC an arbitrary user's email."""
     row = (
         await db.execute(
             text("""
@@ -320,6 +324,7 @@ async def notify_event_offer_attachment(
                        o.title AS offer_title, o.description AS offer_description,
                        b.id AS business_id, b.name AS business_name,
                        c.title AS cleanup_title, c.scheduled_start,
+                       c.group_id AS group_id,
                        g.name AS group_name
                 FROM cleanup_event_offers ceo
                 JOIN partner_offers o ON o.id = ceo.offer_id
@@ -333,6 +338,9 @@ async def notify_event_offer_attachment(
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="No such offer attachment for that event")
+
+    if not await can_manage_event(db, row.group_id, cleanup_id, payload.organizer_user_id):
+        raise HTTPException(status_code=403, detail="Not authorized to manage this event")
 
     admin_rows = (
         await db.execute(
@@ -386,6 +394,39 @@ async def notify_event_offer_attachment(
     )
 
     return {"sent": sent}
+
+
+@router.delete("/offers/{offer_id}/events/{cleanup_id}")
+async def remove_event_offer_attachment(
+    offer_id: UUID,
+    cleanup_id: UUID,
+    organizer_user_id: UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detaches an event-eligible offer from a cleanup event. Goes through the backend
+    (rather than a direct client-side Supabase delete, the way attachment is created)
+    because cleanup_event_offers' RLS delete policy only recognizes group admins, while
+    an event's actual organizer (or a co-hosting group's admin) should be able to manage
+    offers on their own event too -- same can_manage_event check as the attendee-reminder
+    endpoints."""
+    row = (
+        await db.execute(
+            text("SELECT group_id FROM cleanups WHERE id = :cleanup_id"),
+            {"cleanup_id": str(cleanup_id)},
+        )
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cleanup event not found")
+
+    if not await can_manage_event(db, row.group_id, cleanup_id, organizer_user_id):
+        raise HTTPException(status_code=403, detail="Not authorized to manage this event")
+
+    await db.execute(
+        text("DELETE FROM cleanup_event_offers WHERE cleanup_id = :cleanup_id AND offer_id = :offer_id"),
+        {"cleanup_id": str(cleanup_id), "offer_id": str(offer_id)},
+    )
+    await db.commit()
+    return {"status": "removed"}
 
 
 @router.get("/businesses/{business_id}/admins")

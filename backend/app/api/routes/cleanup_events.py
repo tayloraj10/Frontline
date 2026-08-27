@@ -15,6 +15,10 @@ from app.core.config import settings as app_settings
 from app.db.database import get_db
 from app.services.contribution_scoring import record_contribution
 from app.services.email import send_email, format_event_datetime
+from app.services.event_permissions import (
+    is_group_admin as _is_group_admin,
+    can_manage_event as _can_manage_event,
+)
 from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
@@ -232,51 +236,6 @@ class LogTeamTotalRequest(BaseModel):
         if v is not None and any(share < 0 for share in v.values()):
             raise ValueError("override values must be non-negative")
         return v
-
-
-async def _is_group_admin(db: AsyncSession, group_id: UUID, user_id: UUID) -> bool:
-    result = await db.execute(
-        text("""
-            SELECT 1 FROM group_members
-            WHERE group_id = :group_id AND user_id = :user_id AND role = 'admin'
-        """),
-        {"group_id": str(group_id), "user_id": str(user_id)},
-    )
-    return result.fetchone() is not None
-
-
-async def _is_event_organizer(db: AsyncSession, cleanup_id: UUID, user_id: UUID) -> bool:
-    result = await db.execute(
-        text("""
-            SELECT 1 FROM cleanup_rsvps
-            WHERE cleanup_id = :cleanup_id AND user_id = :user_id AND is_organizer = true
-        """),
-        {"cleanup_id": str(cleanup_id), "user_id": str(user_id)},
-    )
-    return result.fetchone() is not None
-
-
-async def _is_any_cohost_admin(db: AsyncSession, cleanup_id: UUID, user_id: UUID) -> bool:
-    result = await db.execute(
-        text("""
-            SELECT 1 FROM cleanup_event_cohosts h
-            JOIN group_members gm ON gm.group_id = h.group_id
-            WHERE h.cleanup_id = :cleanup_id AND gm.user_id = :user_id AND gm.role = 'admin'
-        """),
-        {"cleanup_id": str(cleanup_id), "user_id": str(user_id)},
-    )
-    return result.fetchone() is not None
-
-
-async def _can_manage_event(db: AsyncSession, group_id: UUID, cleanup_id: UUID, user_id: UUID) -> bool:
-    """Group admins retain their existing blanket override, as do admins of any
-    co-hosting group; real per-event organizers (the creator, or anyone an organizer
-    has promoted) get the same powers without needing to be a group admin."""
-    if await _is_group_admin(db, group_id, user_id):
-        return True
-    if await _is_event_organizer(db, cleanup_id, user_id):
-        return True
-    return await _is_any_cohost_admin(db, cleanup_id, user_id)
 
 
 async def _build_attendee_reminder(db: AsyncSession, cleanup_id: UUID, message: str | None) -> tuple[str, str, int]:

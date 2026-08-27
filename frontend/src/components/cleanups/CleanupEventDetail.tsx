@@ -807,6 +807,31 @@ export default function CleanupEventDetail({
           </div>
         );
 
+        const manageEventOffersSection = effectiveIsOrganizer && !isCancelled && event.event_offers.length > 0 && (
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+              <span className="text-sm font-semibold text-zinc-300">Attached event offers</span>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Attendees who check in to this event can redeem these offers. Removing one here only detaches it
+                from this event, it stops new redemptions but doesn&apos;t delete the offer itself or undo past redemptions.
+              </p>
+            </div>
+            <ul className="p-3 space-y-2">
+              {event.event_offers.map((offer) => (
+                <li key={offer.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-zinc-200">
+                    {offer.title} <span className="text-zinc-500">at {offer.business_name}</span>
+                    {offer.redeemed_count > 0 && (
+                      <span className="text-xs text-zinc-500"> (redeemed {offer.redeemed_count}x)</span>
+                    )}
+                  </span>
+                  <RemoveEventOfferButton cleanupId={event.id} offerId={offer.id} organizerUserId={userId!} onRemoved={refresh} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+
         const logSection = effectiveIsOrganizer && !isCancelled && event.logging_mode === "organizer_total" && (
           <LogTeamTotalForm
             cleanupId={event.id}
@@ -1034,14 +1059,14 @@ export default function CleanupEventDetail({
               onClick={() => setGuidedStep(attendeesStepIndex)}
               className="w-full text-left px-3 py-2 text-xs text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg hover:border-zinc-600 hover:text-zinc-300 active:border-zinc-600 active:text-zinc-300 transition-colors duration-150 touch-manipulation"
             >
-              Need to add someone, see bag/point totals, or manage organizers? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
+              Need to add someone, see bag/point totals, manage organizers, or remove an attached event offer? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
             </button>
           );
           const steps: { key: string; label: string; content: React.ReactNode }[] = [
             { key: "checkin", label: "Check in attendees", content: <>{checkinSection}{joinCodeSection}{checkinSummarySection}{checkinRosterSection}</> },
             { key: "clean", label: "Do the cleanup", content: doCleanupSection },
             ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
-            { key: "attendees", label: "Manage attendee data", content: <>{attendeesSection}{eventOffersSection}</> },
+            { key: "attendees", label: "Manage attendee data", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
             ...(photosSection ? [{ key: "photos", label: "Photos", content: photosSection as React.ReactNode }] : []),
           ];
           const activeStepIndex = Math.min(guidedStep, steps.length - 1);
@@ -1100,6 +1125,7 @@ export default function CleanupEventDetail({
             {checkinSummarySection}
             {joinCodeSection}
             {eventOffersSection}
+            {manageEventOffersSection}
             {logSection}
             {attendeesSection}
             {photosSection}
@@ -1644,6 +1670,65 @@ function OrganizerLogButton({
         </div>
       </div>
     </div>
+  );
+}
+
+function RemoveEventOfferButton({
+  cleanupId,
+  offerId,
+  organizerUserId,
+  onRemoved,
+}: {
+  cleanupId: string;
+  offerId: string;
+  organizerUserId: string;
+  onRemoved: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+
+  const handleRemove = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${fastapiUrl}/api/partners/offers/${offerId}/events/${cleanupId}?organizer_user_id=${organizerUserId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail || "Failed to remove offer");
+      }
+      setConfirming(false);
+      onRemoved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove offer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setConfirming(true)}
+        className="text-xs text-red-400/80 hover:text-red-300 active:text-red-300 transition-colors duration-150 underline shrink-0"
+      >
+        Remove
+      </button>
+      <ConfirmModal
+        open={confirming}
+        title="Remove this offer?"
+        message="Attendees will no longer be able to redeem this offer for this event. This doesn't affect the offer itself, just this event's attachment."
+        confirmLabel={loading ? "Removing…" : "Remove"}
+        cancelLabel="Keep"
+        onConfirm={handleRemove}
+        onCancel={() => setConfirming(false)}
+      />
+      {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
+    </>
   );
 }
 
