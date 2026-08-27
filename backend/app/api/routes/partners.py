@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.services.email import send_email, format_event_datetime
+from app.services.email import send_email, format_event_datetime, wrap_email_html, render_cta_button
 from app.services.event_permissions import can_manage_event
 from app.services.game_settings import get_game_settings
 
@@ -375,13 +375,14 @@ async def notify_event_offer_attachment(
         else ""
     )
     when_line = format_event_datetime(row.scheduled_start) if row.scheduled_start else "TBD"
-    html = f"""
+    html = wrap_email_html(f"""
         <p>Your offer <strong>{row.offer_title}</strong> has been attached to an upcoming cleanup event{f" hosted by {row.group_name}" if row.group_name else ""}:</p>
         <p><strong>{row.cleanup_title}</strong><br>{when_line}</p>
         {limit_line}
         <p>Attendees who check in to this event will be able to redeem it for free.</p>
-        <p><a href="{event_link}">View the event</a></p>
-    """
+        <p>Feel free to coordinate details here.</p>
+        <p style="margin-top:24px;">{render_cta_button(event_link, "View the event")}</p>
+    """)
 
     sent = await send_email(
         db,
