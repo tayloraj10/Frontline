@@ -13,6 +13,13 @@ export type RouteLineString = {
   coordinates: [number, number][];
 };
 
+export type RoutePhoto = {
+  url: string;
+  lat: number;
+  lng: number;
+  taken_at?: string | null;
+};
+
 export type IntersectingGeoUnit = {
   geo_unit_id: string;
   unit_id: string;
@@ -49,6 +56,7 @@ export type CleanupRouteDetailData = {
   metrics_pounds: number | null;
   created_at: string | null;
   route: RouteLineString;
+  route_photos: RoutePhoto[];
   geo_unit_display_name: string | null;
   submitted_by: {
     user_id: string | null;
@@ -69,6 +77,7 @@ export async function getCleanupRoute(cleanupId: string): Promise<CleanupRouteDe
 export type CampaignCleanupRoute = {
   id: string;
   route: RouteLineString;
+  route_photos: RoutePhoto[];
   group_id: string | null;
   group_name: string | null;
   group_logo_url: string | null;

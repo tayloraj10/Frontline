@@ -5,16 +5,15 @@ import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Camera } from "@capacitor/camera";
-import type { MediaResult } from "@capacitor/camera";
-import { Filesystem } from "@capacitor/filesystem";
-import { isNativePlatform, isIOSNative } from "@/lib/capacitor";
+import { isIOSNative } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import { formatPoints } from "@/lib/formatPoints";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
-import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString } from "@/lib/cleanupRoutes";
+import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString, type RoutePhoto } from "@/lib/cleanupRoutes";
+import { PhotoCaptureInput } from "@/components/contributions/photoCapture";
+import { useRouteTracking, type CapturedRoutePhoto, type RouteTrackingSession } from "@/lib/useRouteTracking";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import NearbyPartnersPanel from "@/components/cleanups/NearbyPartnersPanel";
 import { useNearbyPartners } from "@/lib/nearbyPartners";
@@ -37,6 +36,18 @@ const TrackRouteScreen = dynamic(() => import("@/components/contributions/TrackR
   ssr: false,
   loading: () => <div className="w-full h-[70vh] min-h-[420px] rounded-lg bg-zinc-800 animate-pulse" />,
 });
+
+function formatElapsedShort(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatDistanceShort(meters: number): string {
+  const miles = meters / 1609.34;
+  return miles >= 0.1 ? `${miles.toFixed(2)} mi` : `${Math.round(meters)} m`;
+}
 
 interface Coords {
   latitude: number;
@@ -278,6 +289,10 @@ interface ContributionPanelProps {
   onClaimReportUpdated?: (reportId: string, patch: Partial<ClickedReport>) => void;
   onClaimReportResolved?: (reportId: string) => void;
   myActiveClaimReport?: ClickedReport | null;
+  // Reports the in-progress Track Route session's live coords up to the parent so
+  // the main map can render them while this panel's own modal is closed. Null once
+  // tracking isn't active (idle, or the reviewing phase, which has its own map).
+  onLiveRouteChange?: (coords: [number, number][] | null) => void;
 }
 
 // Trimmed shape of ProblemReportMapData needed by the claim flow — avoids importing the
@@ -476,225 +491,6 @@ function GpsIndicator({
   return null;
 }
 
-// ─── Camera capture ───────────────────────────────────────────────────────────
-
-// Native camera/gallery results come back as a native file uri (and a
-// capacitor://localhost webPath alias of it), but uploadToR2 needs a real
-// File. This used to fetch() the webPath, which works fine while the WebView's
-// own page is served from a local/dev origin — but in production the page
-// loads from the real https://www.frontlinemaps.com origin, and WKWebView's
-// mixed-content policy blocks an HTTPS page from fetching a non-https
-// capacitor:// resource, silently breaking photo capture in TestFlight/App
-// Store builds only. Filesystem.readFile reads the bytes through the native
-// plugin bridge instead of a WebView network request, so it isn't subject to
-// that same-origin/mixed-content policy at all.
-async function mediaResultToFile(result: MediaResult, index = 0): Promise<File> {
-  const path = result.uri ?? result.webPath;
-  if (!path) throw new Error("Photo capture returned no file");
-  const format = result.metadata?.format?.toLowerCase();
-  const ext = format === "png" ? "png" : "jpg";
-  const type = ext === "png" ? "image/png" : "image/jpeg";
-  const { data } = await Filesystem.readFile({ path });
-  const base64 = typeof data === "string" ? data : await data.text();
-  const bytes = atob(base64);
-  const buffer = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
-  return new File([buffer], `photo-${Date.now()}-${index}.${ext}`, { type });
-}
-
-function CameraModal({
-  onCapture,
-  onClose,
-}: {
-  onCapture: (file: File) => void;
-  onClose: () => void;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(() =>
-    typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia
-      ? "Camera not supported on this browser — use gallery instead."
-      : null,
-  );
-
-  useEffect(() => {
-    if (error) return;
-    let cancelled = false;
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
-      .then((stream) => {
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => { });
-        }
-        setReady(true);
-      })
-      .catch(() => setError("Camera unavailable — check permissions or use gallery instead."));
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
-  const capture = () => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        onCapture(new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
-        onClose();
-      },
-      "image/jpeg",
-      0.9,
-    );
-  };
-
-  return (
-    <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-4 p-4">
-      {error ? (
-        <>
-          <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
-          <button onClick={onClose} className="text-zinc-400 text-sm underline">
-            Close
-          </button>
-        </>
-      ) : (
-        <>
-          <video ref={videoRef} playsInline muted className="w-full max-w-md rounded-lg bg-black" />
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={capture}
-              disabled={!ready}
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              📸 Capture
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// Capacitor rejects with this exact message (iOS and Android both use it) when the user
-// dismisses the native camera/gallery sheet without picking anything — every other
-// rejection (permission denial, webPath→Blob conversion failure, etc.) is a real error
-// that must not be swallowed the same way, or a photo can silently fail to appear with
-// no feedback at all.
-function isUserCancellation(err: unknown): boolean {
-  return err instanceof Error && err.message === "User cancelled photos app";
-}
-
-function PhotoCaptureInput({
-  multiple,
-  onFilesSelected,
-}: {
-  multiple: boolean;
-  onFilesSelected: (files: File[]) => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showCamera, setShowCamera] = useState(false);
-  const [captureError, setCaptureError] = useState<string | null>(null);
-
-  // On native iOS/Android, use the Capacitor plugin for a real native camera
-  // and gallery picker — the getUserMedia/<input type=file> paths below are
-  // web-only fallbacks (WKWebView doesn't support getUserMedia, and routing
-  // through the plain file input's "Take Photo" action sheet option crashed
-  // the app before NSCameraUsageDescription was added to Info.plist).
-  const handleTakePhoto = async () => {
-    if (!isNativePlatform()) {
-      setShowCamera(true);
-      return;
-    }
-    setCaptureError(null);
-    try {
-      const result = await Camera.takePhoto({ quality: 90 });
-      onFilesSelected([await mediaResultToFile(result)]);
-    } catch (err) {
-      if (!isUserCancellation(err)) {
-        console.error("Camera.takePhoto failed", err);
-        setCaptureError("Couldn't add that photo — please try again.");
-      }
-    }
-  };
-
-  const handleChooseFromGallery = async () => {
-    if (!isNativePlatform()) {
-      fileInputRef.current?.click();
-      return;
-    }
-    setCaptureError(null);
-    try {
-      const { results } = await Camera.chooseFromGallery({
-        allowMultipleSelection: multiple,
-        limit: multiple ? 0 : 1,
-      });
-      const files = await Promise.all(results.map((r, i) => mediaResultToFile(r, i)));
-      if (files.length) onFilesSelected(files);
-    } catch (err) {
-      if (!isUserCancellation(err)) {
-        console.error("Camera.chooseFromGallery failed", err);
-        setCaptureError("Couldn't add that photo — please try again.");
-      }
-    }
-  };
-
-  return (
-    <>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={handleTakePhoto}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 active:border-zinc-500 active:text-zinc-100 active:scale-[0.97] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
-        >
-          📷 Take Photo
-        </button>
-        <button
-          type="button"
-          onClick={handleChooseFromGallery}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-zinc-700 bg-zinc-800/60 text-zinc-300 text-xs font-medium hover:border-zinc-500 hover:text-zinc-100 active:border-zinc-500 active:text-zinc-100 active:scale-[0.97] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
-        >
-          🖼️ Choose from Gallery
-        </button>
-      </div>
-      {captureError && <p className="text-red-400 text-xs mt-1.5">{captureError}</p>}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple={multiple}
-        onChange={(e) => {
-          onFilesSelected(Array.from(e.target.files ?? []));
-          e.target.value = "";
-        }}
-        className="hidden"
-      />
-      {showCamera && (
-        <CameraModal onCapture={(file) => onFilesSelected([file])} onClose={() => setShowCamera(false)} />
-      )}
-    </>
-  );
-}
-
 // ─── Contribute modal ─────────────────────────────────────────────────────────
 
 function ContributeModal({
@@ -715,6 +511,7 @@ function ContributeModal({
   claimedReportId,
   prefillPhotoUrls,
   isSiteAdmin,
+  routeTracking,
 }: {
   campaignId: string;
   campaignContributionType: string;
@@ -746,6 +543,10 @@ function ContributeModal({
   // Gates the still-in-progress live route "Track" mode to site admins only, ahead of a
   // full rollout — see profiles.is_admin.
   isSiteAdmin?: boolean;
+  // Owned by the outer, always-mounted ContributionPanel so a live tracking session
+  // survives this modal being closed/reopened (navigating back to the main map, an
+  // accidental dismiss, or the resume chip re-entering Track mode mid-session).
+  routeTracking: RouteTrackingSession;
 }) {
   const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
@@ -780,11 +581,17 @@ function ContributeModal({
   const [photos, setPhotos] = useState<File[]>([]);
   const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>(() => prefillPhotoUrls ?? []);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [contributeMode, setContributeMode] = useState<"point" | "route" | "track">("point");
+  // Jumps straight into the Track screen on mount when reopened via the "resume tracking"
+  // chip (ContributeModal remounts fresh each time mode goes back to "contribute", so this
+  // needs to read routeTracking.active at that moment rather than always defaulting to "point").
+  const [contributeMode, setContributeMode] = useState<"point" | "route" | "track">(
+    routeTracking.active ? "track" : "point",
+  );
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [intersectingUnits, setIntersectingUnits] = useState<IntersectingGeoUnit[]>([]);
   const [selectedRouteGeoUnitId, setSelectedRouteGeoUnitId] = useState<string | null>(null);
   const [loadingIntersecting, setLoadingIntersecting] = useState(false);
+  const [pendingRoutePhotos, setPendingRoutePhotos] = useState<CapturedRoutePhoto[]>([]);
 
   // A freshly finished route arrives via routeOverride (set by the parent once the map's
   // route-picker reports "Finish route") — look up which zips it crosses so the user can
@@ -804,11 +611,12 @@ function ContributeModal({
   }, [routeOverride, campaignId]);
 
   // TrackRouteScreen (Track mode) hands off a confirmed, possibly node-edited path directly
-  // here — bypassing routeOverride/routePickerActive entirely, since track capture uses its
+  // here, bypassing routeOverride/routePickerActive entirely, since track capture uses its
   // own standalone map instance rather than CampaignMap's lifted route-picker state.
-  const handleTrackRouteConfirmed = (coordinates: [number, number][]) => {
+  const handleTrackRouteConfirmed = (coordinates: [number, number][], photos: CapturedRoutePhoto[]) => {
     const trackedRoute: RouteLineString = { type: "LineString", coordinates };
     setRoute(trackedRoute);
+    setPendingRoutePhotos(photos);
     setSelectedRouteGeoUnitId(null);
     setLoadingIntersecting(true);
     getIntersectingGeoUnits({ campaignId, route: trackedRoute })
@@ -835,7 +643,9 @@ function ContributeModal({
     setViewMode(mode);
     localStorage.setItem("frontline:contribute-cleanup-view-mode", mode);
   };
-  const [guidedStep, setGuidedStep] = useState(0);
+  // Also resume-aware, for the same reason as contributeMode above: jumps straight to
+  // the "How & Where" step (which holds the Track tab/screen) when reopened mid-session.
+  const [guidedStep, setGuidedStep] = useState(routeTracking.active ? 1 : 0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [hotspotCleared, setHotspotCleared] = useState(false);
@@ -993,6 +803,19 @@ function ContributeModal({
       const newlyUploadedUrls = photos.length > 0 ? await Promise.all(photos.map((p) => uploadToR2(p))) : [];
       const photoUrls = [...existingPhotoUrls, ...newlyUploadedUrls];
 
+      // Dev-sample route photos are already-hosted URLs (kind "uploaded"); real
+      // in-tracking captures are still bare Files (kind "captured") until now.
+      const uploadedRoutePhotos =
+        pendingRoutePhotos.length > 0
+          ? await Promise.all(
+              pendingRoutePhotos.map(async (p) =>
+                p.kind === "uploaded"
+                  ? { url: p.url, lat: p.lat, lng: p.lng }
+                  : { url: await uploadToR2(p.file), lat: p.lat, lng: p.lng },
+              ),
+            )
+          : [];
+
       // canSubmit already requires bagValuesReady for cleanups, so these are guaranteed
       // defined by the time handleSubmit can run.
       const value = isCleanup
@@ -1023,6 +846,7 @@ function ContributeModal({
       if (isRouteMode && route && selectedRouteGeoUnitId) {
         body.route = route;
         body.route_geo_unit_id = selectedRouteGeoUnitId;
+        if (uploadedRoutePhotos.length > 0) body.route_photos = uploadedRoutePhotos satisfies RoutePhoto[];
       } else if (submitCoords) {
         body.latitude = submitCoords.latitude;
         body.longitude = submitCoords.longitude;
@@ -1280,10 +1104,13 @@ function ContributeModal({
               >
                 🛤️ Route
               </button>
-              {isIOSNative() && isSiteAdmin && (
+              {(isIOSNative() || process.env.NODE_ENV !== "production") && isSiteAdmin && (
                 <button
                   type="button"
-                  onClick={() => setContributeMode("track")}
+                  onClick={() => {
+                    setContributeMode("track");
+                    if (routeTracking.phase === "idle") routeTracking.openTracker();
+                  }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "track"
                     ? "bg-zinc-600 text-zinc-100"
                     : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
@@ -1340,7 +1167,7 @@ function ContributeModal({
         {isRouteMode && (
           <div>
             {!route && contributeMode === "track" ? (
-              <TrackRouteScreen onConfirm={handleTrackRouteConfirmed} onCancel={() => setContributeMode("point")} />
+              <TrackRouteScreen session={routeTracking} onConfirm={handleTrackRouteConfirmed} onCancel={() => setContributeMode("point")} />
             ) : !route ? (
               <button
                 type="button"
@@ -1367,7 +1194,7 @@ function ContributeModal({
                     Redraw
                   </button>
                 </div>
-                <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" />
+                <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" interactive />
                 {loadingIntersecting ? (
                   <p className="text-xs text-zinc-500">Finding zips along your route…</p>
                 ) : intersectingUnits.length === 0 ? (
@@ -3218,7 +3045,7 @@ function HostEventModal({
                   Redraw
                 </button>
               </div>
-              <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" />
+              <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" interactive />
             </div>
           )}
         </div>
@@ -3955,7 +3782,7 @@ function ModalShell({
           />
         )}
         <div
-          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[75vh] sm:max-h-[90vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
+          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[95vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
             }`}
         >
           {title && (
@@ -4017,10 +3844,22 @@ export default function ContributionPanel({
   onClaimReportUpdated,
   onClaimReportResolved,
   myActiveClaimReport,
+  onLiveRouteChange,
 }: ContributionPanelProps) {
   const isSolarpunk = campaignContributionType === "solarpunk_action";
 
   const gps = useGPS(requestLocation, userLocation, locationError);
+  // Owned here, not inside ContributeModal, so a live Track Route session survives the
+  // user backing out of the Log Cleanup flow (ContributeModal unmounts whenever `mode`
+  // changes away from "contribute" — this component doesn't).
+  const routeTracking = useRouteTracking(campaignId);
+  // Surface live coords to the parent while actively tracking, so the main map can
+  // draw them with this panel's modal closed. Not during "reviewing" — that phase has
+  // its own dedicated RouteNodeEditor map instance, matching the resume pill's own
+  // phase !== "reviewing" distinction for its pulsing dot.
+  useEffect(() => {
+    onLiveRouteChange?.(routeTracking.phase === "tracking" ? routeTracking.coords : null);
+  }, [routeTracking.phase, routeTracking.coords, onLiveRouteChange]);
   const [mode, setMode] = useState<"contribute" | "report" | "solarpunk_photo" | "all_actions" | "host_event" | "claim" | null>(null);
   const [contributeOverrideCoords, setContributeOverrideCoords] = useState<Coords | null>(null);
   const [solarpunkPhotoOverrideCoords, setSolarpunkPhotoOverrideCoords] = useState<Coords | null>(null);
@@ -4162,6 +4001,27 @@ export default function ContributionPanel({
 
   return (
     <>
+      {routeTracking.active && mode !== "contribute" && (
+        <button
+          onClick={() => setMode("contribute")}
+          className="absolute top-24 sm:top-10 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 pl-2.5 pr-4 py-2 rounded-full border border-sky-500/40 bg-sky-600 shadow-elevation-3 backdrop-blur-md transition-[background-color,transform] duration-150 hover:bg-sky-500 active:scale-[0.96] touch-manipulation"
+        >
+          <span className="relative flex items-center justify-center w-7 h-7 rounded-full bg-white/15">
+            <span className="text-sm leading-none">🛰️</span>
+            {routeTracking.phase !== "reviewing" && (
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            )}
+          </span>
+          <span className="flex flex-col items-start leading-tight">
+            <span className="text-xs font-semibold text-white">
+              {routeTracking.phase === "reviewing" ? "Review your route" : "Tracking your route"}
+            </span>
+            <span className="text-[11px] text-sky-100 tabular-nums">
+              {formatElapsedShort(routeTracking.elapsedMs)} · {formatDistanceShort(routeTracking.distance)} · tap to review
+            </span>
+          </span>
+        </button>
+      )}
       {pendingChallengeCompletion && mode !== "contribute" && (
         <button
           onClick={() => {
@@ -4375,6 +4235,7 @@ export default function ContributionPanel({
               nearbyEvent={nearbyCleanupEvent ?? null}
               claimedReportId={claimedReportIdForContribute}
               prefillPhotoUrls={claimedPhotoUrlsForContribute}
+              routeTracking={routeTracking}
             />
           )}
         </div>

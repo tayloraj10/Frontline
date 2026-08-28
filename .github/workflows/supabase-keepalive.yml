@@ -1,10 +1,9 @@
 name: Supabase Keepalive
 
 on:
-  # Disabled: not needed on Supabase Pro (no free-tier auto-pause). Re-add the
-  # schedule below to resume, or run manually via workflow_dispatch.
-  # schedule:
-  #   - cron: '0 0 * * 0,3'
+  # Free tier auto-pauses projects after a week of inactivity; ping twice a week to prevent that.
+  schedule:
+    - cron: '0 0 * * 0,3'
   workflow_dispatch:
 
 jobs:

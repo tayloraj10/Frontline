@@ -403,6 +403,9 @@ interface Props {
   onRoutePickerChange?: (coordinates: [number, number][]) => void;
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;
+  // Live coordinates from an in-progress Track Route session, shown on the main map
+  // while the Log Cleanup modal is closed — null/omitted hides the layer entirely.
+  liveTrackingCoords?: [number, number][] | null;
   cleanupRoutes?: CampaignCleanupRoute[];
   userId?: string | null;
   newContribution?: { id?: string | null; lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
@@ -1672,6 +1675,7 @@ export default function CampaignMap({
   onRoutePickerChange,
   onRoutePickerFinish,
   onRoutePickerCancel,
+  liveTrackingCoords,
   cleanupRoutes,
   userId,
   newContribution,
@@ -1843,6 +1847,8 @@ export default function CampaignMap({
   const cleanupRouteMarkersRef = useRef<maplibregl.Marker[]>([]);
   const cleanupRouteMarkerIsEventRef = useRef<boolean[]>([]);
   const cleanupRouteDateLabelsRef = useRef<maplibregl.Marker[]>([]);
+  const routePhotoMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const routePhotoMarkerIsEventRef = useRef<boolean[]>([]);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
   const bonusSpotPopupRef = useRef<maplibregl.Popup | null>(null);
   const contributionPopupRef = useRef<maplibregl.Popup | null>(null);
@@ -2453,6 +2459,26 @@ export default function CampaignMap({
     updateCleanupRoutesLayer(cleanupRoutesRef.current, cleanupEvents ?? []);
   }, [cleanupRoutes, cleanupEvents, updateCleanupRoutesLayer]);
 
+  const updateLiveTrackingLayer = useCallback((coords: [number, number][] | null | undefined) => {
+    if (!map.current) return;
+    const src = map.current.getSource("live-tracking") as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    const features: GeoJSON.Feature[] = [];
+    if (coords && coords.length >= 2) {
+      features.push({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
+    }
+    if (coords && coords.length >= 1) {
+      features.push({ type: "Feature", geometry: { type: "Point", coordinates: coords[coords.length - 1] }, properties: {} });
+    }
+    src.setData({ type: "FeatureCollection", features });
+  }, []);
+
+  const liveTrackingCoordsRef = useRef<[number, number][] | null | undefined>(liveTrackingCoords);
+  useEffect(() => {
+    liveTrackingCoordsRef.current = liveTrackingCoords;
+    updateLiveTrackingLayer(liveTrackingCoords);
+  }, [liveTrackingCoords, updateLiveTrackingLayer]);
+
   // Lightweight popup for an individual/group (non-event) route marker click — a point-based
   // cleanup gets a hover tooltip, not a full page, so a route gets the equivalent: a small
   // popup card instead of navigating away to /routes/{id}.
@@ -2503,6 +2529,9 @@ export default function CampaignMap({
       cleanupRouteMarkerIsEventRef.current = [];
       cleanupRouteDateLabelsRef.current.forEach((m) => m.remove());
       cleanupRouteDateLabelsRef.current = [];
+      routePhotoMarkersRef.current.forEach((m) => m.remove());
+      routePhotoMarkersRef.current = [];
+      routePhotoMarkerIsEventRef.current = [];
 
       const eventById = new Map(events.map((e) => [e.id, e]));
 
@@ -2595,6 +2624,18 @@ export default function CampaignMap({
             }
             cleanupRouteDateLabelsRef.current.push(dateLabel);
           }
+        }
+
+        for (const photo of r.route_photos ?? []) {
+          const photoMarker = addPhotoMarker(
+            map.current!,
+            { id: r.id, latitude: photo.lat, longitude: photo.lng, photo_url: photo.url },
+            (p) => setSelectedPhoto(p.contentId ? p : { url: p.url }),
+            24,
+          );
+          if (!routeVisible) photoMarker.getElement().style.display = "none";
+          routePhotoMarkersRef.current.push(photoMarker);
+          routePhotoMarkerIsEventRef.current.push(!!event);
         }
       }
     },
@@ -3418,6 +3459,43 @@ export default function CampaignMap({
       },
     });
 
+    // In-progress Track Route session, shown live on the main map while the Log
+    // Cleanup modal is closed. Emerald (not amber/cyan, both already used by
+    // cleanup-routes-line above) so an active session reads as distinct from any
+    // already-submitted route, with a pulsing head marker at the current position.
+    m.addSource("live-tracking", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "live-tracking-casing",
+      type: "line",
+      source: "live-tracking",
+      filter: ["==", ["geometry-type"], "LineString"],
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.85 },
+    });
+    m.addLayer({
+      id: "live-tracking-line",
+      type: "line",
+      source: "live-tracking",
+      filter: ["==", ["geometry-type"], "LineString"],
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#10b981", "line-width": 4, "line-dasharray": [0.2, 1.5] },
+    });
+    m.addLayer({
+      id: "live-tracking-head",
+      type: "circle",
+      source: "live-tracking",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        "circle-radius": 7,
+        "circle-color": "#10b981",
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#ffffff",
+      },
+    });
+
     m.addSource("cleanup-routes", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -3505,7 +3583,8 @@ export default function CampaignMap({
     updateCleanupRoutesLayer(cleanupRoutesRef.current, cleanupEventsRef.current);
     updateCleanupRouteMarkers(cleanupRoutesRef.current, cleanupEventsRef.current);
     updateBonusSpotMarkers(bonusSpotsRef.current);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers, updateCleanupRoutesLayer, updateCleanupRouteMarkers, updateBonusSpotMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+    updateLiveTrackingLayer(liveTrackingCoordsRef.current);
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers, updateCleanupRoutesLayer, updateCleanupRouteMarkers, updateBonusSpotMarkers, updateLiveTrackingLayer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Legend layer-visibility toggles: re-apply to the live map whenever any toggle
   // changes, and keep layerToggleRef in sync so setupCustomLayers (initial load +
@@ -3562,6 +3641,11 @@ export default function CampaignMap({
     });
     cleanupRouteMarkersRef.current.forEach((marker, i) => {
       const isEvent = cleanupRouteMarkerIsEventRef.current[i];
+      const visible = isEvent ? showGroupEvents : showAdhocRoutes;
+      marker.getElement().style.display = visible ? "" : "none";
+    });
+    routePhotoMarkersRef.current.forEach((marker, i) => {
+      const isEvent = routePhotoMarkerIsEventRef.current[i];
       const visible = isEvent ? showGroupEvents : showAdhocRoutes;
       marker.getElement().style.display = visible ? "" : "none";
     });
@@ -4327,6 +4411,8 @@ export default function CampaignMap({
       cleanupEventDateLabelsRef.current.forEach((m) => m.remove());
       cleanupRouteMarkersRef.current.forEach((m) => m.remove());
       cleanupRouteDateLabelsRef.current.forEach((m) => m.remove());
+      routePhotoMarkersRef.current.forEach((m) => m.remove());
+      routePhotoMarkersRef.current = [];
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
       bonusSpotTweensRef.current.forEach((t) => t.kill());

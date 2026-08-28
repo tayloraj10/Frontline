@@ -582,6 +582,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    ST_AsGeoJSON(c.route)::json AS route,
                    ST_AsGeoJSON(ST_Buffer(c.route::geography, :radius))::json AS route_buffer,
+                   c.route_photos,
                    g.id AS group_id, g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url,
                    COALESCE(cohosts.cohost_groups, '[]'::json) AS cohost_groups
             FROM cleanups c
@@ -863,6 +864,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "country": row.country,
         "route": row.route,
         "route_buffer": row.route_buffer,
+        "route_photos": row.route_photos or [],
         "group_id": str(row.group_id),
         "group_name": row.group_name,
         "group_slug": row.group_slug,
@@ -2026,6 +2028,7 @@ async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Dep
         text("""
             SELECT
                 c.id, ST_AsGeoJSON(c.route)::json AS route,
+                c.route_photos,
                 c.group_id, g.name AS group_name, g.image_url AS group_logo_url,
                 CASE WHEN c.is_group_event
                     THEN ST_AsGeoJSON(ST_Buffer(c.route::geography, :radius))::json
@@ -2059,6 +2062,7 @@ async def list_campaign_cleanup_routes(campaign_id: UUID, db: AsyncSession = Dep
         {
             "id": str(row.id),
             "route": row.route,
+            "route_photos": row.route_photos or [],
             "group_id": str(row.group_id) if row.group_id else None,
             "group_name": row.group_name,
             "group_logo_url": row.group_logo_url,
@@ -2078,6 +2082,7 @@ async def get_cleanup_route(cleanup_id: UUID, db: AsyncSession = Depends(get_db)
                 c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
                 c.created_at, c.submitted_by_user_id,
                 ST_AsGeoJSON(c.route)::json AS route,
+                c.route_photos,
                 gu.display_name AS geo_unit_display_name,
                 p.username, p.display_name AS user_display_name, p.avatar_url,
                 cam.title AS campaign_title, cam.slug AS campaign_slug,
@@ -2111,6 +2116,7 @@ async def get_cleanup_route(cleanup_id: UUID, db: AsyncSession = Depends(get_db)
         "metrics_pounds": float(row.metrics_pounds) if row.metrics_pounds is not None else None,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "route": row.route,
+        "route_photos": row.route_photos or [],
         "geo_unit_display_name": row.geo_unit_display_name,
         "submitted_by": {
             "user_id": str(row.submitted_by_user_id) if row.submitted_by_user_id else None,

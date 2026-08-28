@@ -52,6 +52,7 @@ interface Props {
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;
   cleanupRoutes?: CampaignCleanupRoute[];
+  liveTrackingCoords?: [number, number][] | null;
   userId?: string | null;
 }
 

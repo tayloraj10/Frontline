@@ -920,6 +920,9 @@ export default function CampaignPageClient({
   const [pickedAreas, setPickedAreas] = useState<SelectedArea[]>([]);
   const [routePickerActive, setRoutePickerActive] = useState(false);
   const [liveRouteVertices, setLiveRouteVertices] = useState<[number, number][]>([]);
+  // Live coords from an in-progress Track Route session, shown on the main map while
+  // ContributionPanel's own Log Cleanup modal is closed.
+  const [liveTrackingCoords, setLiveTrackingCoords] = useState<[number, number][] | null>(null);
   const [placedRouteVertices, setPlacedRouteVertices] = useState<[number, number][] | null>(null);
   const [showTimedEventModal, setShowTimedEventModal] = useState(false);
   const [timedEventFormKey, setTimedEventFormKey] = useState(0);
@@ -1019,6 +1022,7 @@ export default function CampaignPageClient({
     const full: CampaignCleanupRoute = {
       id: route.id,
       route: route.route,
+      route_photos: [],
       group_id: null,
       group_name: null,
       group_logo_url: null,
@@ -1241,6 +1245,7 @@ export default function CampaignPageClient({
         eventCentroids={eventCentroids}
         eventGeoUnitIds={localEventGeoUnitIds}
         cleanupRoutes={cleanupRoutesList}
+        liveTrackingCoords={liveTrackingCoords}
         partnerBusinesses={partnerBusinesses}
         cleanupEvents={cleanupEvents}
         onUserLocationChange={(coords) => {
@@ -1530,6 +1535,7 @@ export default function CampaignPageClient({
         onClaimReportUpdated={handleReportClaimUpdated}
         onClaimReportResolved={handleReportClaimResolved}
         myActiveClaimReport={myActiveClaimReport}
+        onLiveRouteChange={setLiveTrackingCoords}
       />
 
       <ConfirmModal
