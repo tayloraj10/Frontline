@@ -51,7 +51,12 @@ LOCAL_SERVICE_ROLE_KEY="${LOCAL_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6Ik
 # cascade-wiped by something else) so local reflects real prod partner/offer data instead
 # of local-only test rows. They're also added to the TRUNCATE list below so re-running this
 # doesn't just append prod rows alongside stale local test businesses/offers.
-TABLES=(profiles groups group_members geo_units campaigns cleanups contributions territory_claims problem_reports partner_businesses partner_offers partner_redemptions partner_offer_codes cleanup_rsvps cleanup_team_total_logs event_triggers campaign_events campaign_event_geo_units leaderboard_entries user_notifications campaign_partner_businesses partner_business_admins problem_report_flags cleanup_event_cohosts cleanup_event_photos geo_unit_adjacency game_settings)
+# partner_business_locations is cascade-wiped via partner_businesses's TRUNCATE ... CASCADE
+# (see the general rule above) but was missing from this dump list for a while, which left
+# it permanently empty after every sync (silently — no FK error, just zero rows) and made
+# every partner business look location-less locally (e.g. dropped off the campaign map,
+# which requires an active location row per business).
+TABLES=(profiles groups group_members geo_units campaigns cleanups contributions territory_claims problem_reports partner_businesses partner_business_locations partner_offers partner_redemptions partner_offer_codes cleanup_rsvps cleanup_team_total_logs event_triggers campaign_events campaign_event_geo_units leaderboard_entries user_notifications campaign_partner_businesses partner_business_admins problem_report_flags cleanup_event_cohosts cleanup_event_photos geo_unit_adjacency game_settings)
 
 TABLE_ARGS=()
 for t in "${TABLES[@]}"; do

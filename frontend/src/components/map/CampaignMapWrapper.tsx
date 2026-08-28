@@ -29,8 +29,10 @@ interface Props {
   onAreaPickerChange?: (areas: SelectedArea[]) => void;
   onAreaPickerConfirm?: () => void;
   onAreaPickerCancel?: () => void;
-  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
+  newContribution?: { id?: string | null; lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
+  removedContribution?: { id: string; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
+  removedReport?: { id: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   activeStyle?: string;

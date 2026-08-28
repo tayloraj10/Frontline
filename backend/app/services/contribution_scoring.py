@@ -21,6 +21,7 @@ from app.services.game_settings import get_game_settings
 class RecordedContribution:
     contribution_id: str
     value: float
+    bonus_spot_event_id: str | None = None
 
 
 async def record_contribution(
@@ -82,10 +83,31 @@ async def record_contribution(
         if multiplier_row:
             hotspot_multiplier = float((multiplier_row[0] or {}).get("multiplier", settings.get("hotspot_multiplier", 1)))
 
-    # The claim-challenge bonus and an active hotspot multiplier don't stack — take
-    # whichever is larger so a claimed report inside a hotspot still earns a bonus,
-    # but never both multiplied together.
-    effective_value = effective_value * max(hotspot_multiplier, challenge_multiplier)
+    bonus_spot_multiplier = 1.0
+    bonus_spot_event_id: str | None = None
+    if apply_multiplier and has_location:
+        bonus_spot_result = await db.execute(
+            text("""
+                SELECT id, effect_config FROM campaign_events
+                WHERE campaign_id = :campaign_id
+                  AND status = 'active'
+                  AND event_type = 'bonus_spot'
+                  AND (ends_at IS NULL OR ends_at > NOW())
+                  AND ST_DWithin(location, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, radius_m)
+                ORDER BY (effect_config->>'multiplier')::float DESC
+                LIMIT 1
+            """),
+            {"campaign_id": str(campaign_id), "lon": longitude, "lat": latitude},
+        )
+        bonus_spot_row = bonus_spot_result.fetchone()
+        if bonus_spot_row:
+            bonus_spot_event_id = str(bonus_spot_row[0])
+            bonus_spot_multiplier = float((bonus_spot_row[1] or {}).get("multiplier", settings.get("bonus_spot_multiplier", 1)))
+
+    # The claim-challenge bonus, an active hotspot multiplier, and an active bonus spot
+    # don't stack — take whichever is larger so a claimed report inside a hotspot (or
+    # bonus spot) still earns a bonus, but never multiplied together.
+    effective_value = effective_value * max(hotspot_multiplier, challenge_multiplier, bonus_spot_multiplier)
 
     insert_params = {
         "campaign_id": str(campaign_id),
@@ -180,4 +202,4 @@ async def record_contribution(
             },
         )
 
-    return RecordedContribution(contribution_id=contribution_id, value=effective_value)
+    return RecordedContribution(contribution_id=contribution_id, value=effective_value, bonus_spot_event_id=bonus_spot_event_id)

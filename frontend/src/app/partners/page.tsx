@@ -11,27 +11,34 @@ export default async function PartnersPage() {
 
   const nowIso = new Date().toISOString();
 
-  const [{ data: businesses }, { data: offers }, profileResult] = await Promise.all([
+  const [{ data: businesses }, { data: offers }, { data: campaignLinks }, { data: activeCampaigns }, profileResult] = await Promise.all([
     supabase
       .schema("public")
       .from("partner_businesses")
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, partner_business_locations(id, label, city, state, status)"
+        "id, name, slug, description, logo_url, website_url, social_links, partner_business_locations(id, label, address_line1, city, state, lat, lng, status)"
       )
       .eq("status", "active")
       .order("name"),
     supabase
       .schema("public")
       .from("partner_offers")
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, starts_at, ends_at, location_id")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, starts_at, ends_at, location_id, event_eligible")
       .eq("status", "active")
       .lte("starts_at", nowIso)
       .or(`ends_at.is.null,ends_at.gt.${nowIso}`)
       .order("created_at", { ascending: false }),
+    supabase.schema("public").from("campaign_partner_businesses").select("business_id, campaign_id"),
+    supabase.schema("public").from("campaigns").select("id").eq("status", "active"),
     user
       ? supabase.schema("public").from("profiles").select("spendable_points, is_business_only").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
+
+  const activeCampaignIds = new Set((activeCampaigns ?? []).map((c) => c.id));
+  const businessIdsInActiveCampaign = new Set(
+    (campaignLinks ?? []).filter((l) => activeCampaignIds.has(l.campaign_id)).map((l) => l.business_id)
+  );
 
   const isBusinessOnly = profileResult?.data?.is_business_only ?? false;
 
@@ -45,7 +52,7 @@ export default async function PartnersPage() {
   type RawBusinessRow = {
     id: string; name: string; slug: string; description: string | null; logo_url: string | null;
     website_url: string | null; social_links: Record<string, string> | null;
-    partner_business_locations: { id: string; label: string | null; city: string | null; state: string | null; status: string }[];
+    partner_business_locations: { id: string; label: string | null; address_line1: string | null; city: string | null; state: string | null; lat: number; lng: number; status: string }[];
   };
   const businessesWithLocations: BrowseBusiness[] = ((businesses ?? []) as unknown as RawBusinessRow[]).map((b) => ({
     id: b.id,
@@ -57,11 +64,11 @@ export default async function PartnersPage() {
     social_links: b.social_links,
     locations: b.partner_business_locations
       .filter((l) => l.status === "active")
-      .map((l) => ({ id: l.id, label: l.label, city: l.city, state: l.state })),
+      .map((l) => ({ id: l.id, label: l.label, address_line1: l.address_line1, city: l.city, state: l.state, lat: l.lat, lng: l.lng })),
   }));
 
   const businessesWithOffers = businessesWithLocations.filter(
-    (b) => (offersByBusiness.get(b.id) ?? []).length > 0
+    (b) => (offersByBusiness.get(b.id) ?? []).length > 0 && businessIdsInActiveCampaign.has(b.id)
   );
 
   return (

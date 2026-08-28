@@ -11,6 +11,7 @@ import type { SelectedArea } from "./EventAreaMapPicker";
 import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
 import AddressAutocomplete from "./AddressAutocomplete";
 import TimedEventForm from "@/components/events/TimedEventForm";
+import BonusSpotForm from "@/components/events/BonusSpotForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
@@ -94,17 +95,19 @@ export type PartnerOffer = {
   business_id: string;
   title: string;
   description: string | null;
-  redemption_mode: "spend" | "threshold";
+  redemption_mode: "spend" | "threshold" | "event_only";
   points_cost: number | null;
   points_threshold: number | null;
   max_redemptions_per_user: number | null;
   max_total_redemptions: number | null;
+  event_redemption_limit: number | null;
   code: string | null;
   status: string;
   starts_at: string;
   ends_at: string | null;
   created_at: string;
   location_id: string | null;
+  event_eligible: boolean;
 };
 
 export type OfferRedemption = {
@@ -232,6 +235,7 @@ const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = 
   seasonal_reset: { desc: "Signals a campaign-wide or weighted score reset. The event record is created but no reset logic is implemented yet.", implemented: false },
   decay_start:    { desc: "Marks the start of a score decay period. The event record is created but no decay logic is implemented yet.", implemented: false },
   timed_event:    { desc: "Admin-created timed bonus event over one or more areas (effect_config is always {\"type\": \"score_multiplier\", \"multiplier\": N}). Never auto-triggered — created manually here or from the campaign page. Fully implemented.", implemented: true },
+  bonus_spot:     { desc: "Admin-spawned point-on-the-map jackpot: cleanups within its radius earn a score multiplier until it expires or is claimed. Location can be picked manually or auto-suggested from nearby problem reports. Fully implemented.", implemented: true },
 };
 
 const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 transition-[border-color] duration-150 focus:outline-none focus:border-zinc-500";
@@ -544,6 +548,12 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                     {c.counts_toward_spendable_points ? "Counts" : "Doesn't count"}
                   </label>
                 </div>
+                <Link
+                  href={`/admin/campaigns/${c.slug}/dashboard`}
+                  className="block text-center text-xs font-medium text-emerald-400 hover:text-emerald-300 active:text-emerald-500 transition-colors duration-150 pt-1 border-t border-zinc-800/60"
+                >
+                  Dashboard →
+                </Link>
               </div>
             ))}
           </div>
@@ -555,6 +565,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                   <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Type</th>
                   <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium">Spendable points</th>
+                  <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
@@ -589,6 +600,14 @@ function CampaignsTab({ campaigns, setCampaigns }: {
                         />
                         {c.counts_toward_spendable_points ? "Counts" : "Doesn't count"}
                       </label>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/admin/campaigns/${c.slug}/dashboard`}
+                        className="text-xs font-medium text-emerald-400 hover:text-emerald-300 active:text-emerald-500 transition-colors duration-150"
+                      >
+                        Dashboard →
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -1066,17 +1085,19 @@ const EVENT_ICON: Record<string, string> = {
   seasonal_reset: "🔄",
   decay_start: "📉",
   timed_event: "✨",
+  bonus_spot: "💎",
 };
 
-function EventsTab({ campaigns, events, setEvents }: {
+function EventsTab({ campaigns, events, setEvents, currentUserId }: {
   campaigns: Campaign[];
   events: ActiveEvent[];
   setEvents: (e: ActiveEvent[]) => void;
+  currentUserId: string;
 }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [campaignId, setCampaignId] = useState(campaigns.find((c) => c.slug === "trash-war")?.id ?? campaigns[0]?.id ?? "");
-  const [eventType, setEventType] = useState("boss_spawn");
+  const [eventType, setEventType] = useState("bonus_spot");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedAreas, setSelectedAreas] = useState<SelectedArea[]>([]);
@@ -1289,16 +1310,10 @@ function EventsTab({ campaigns, events, setEvents }: {
           <div className="space-y-1">
             <label className="text-xs text-zinc-500">Event type</label>
             <select className={inputCls} value={eventType} onChange={e => setEventType(e.target.value)}>
-              <option value="boss_spawn">boss_spawn</option>
-              <option value="cascade_unlock">cascade_unlock</option>
-              <option value="notification">notification</option>
-              <option value="seasonal_reset">seasonal_reset</option>
-              <option value="decay_start">decay_start</option>
+              <option value="bonus_spot">bonus_spot</option>
               <option value="timed_event">timed_event</option>
+              <option value="boss_spawn">boss_spawn</option>
             </select>
-            {EVENT_TYPE_INFO[eventType] && !EVENT_TYPE_INFO[eventType].implemented && (
-              <p className="text-amber-400 text-xs mt-1">⚠ Stub — effect not yet implemented, event will be created but has no gameplay effect.</p>
-            )}
           </div>
 
           {eventType === "timed_event" ? (
@@ -1334,6 +1349,32 @@ function EventsTab({ campaigns, events, setEvents }: {
                 </>
               );
             })()
+          ) : eventType === "bonus_spot" ? (
+            <BonusSpotForm
+              campaignId={campaignId}
+              campaigns={campaigns}
+              onCampaignChange={setCampaignId}
+              viewerUserId={currentUserId}
+              onCreated={(spot) => {
+                const campaign = campaigns.find(c => c.id === spot.campaign_id);
+                const newEvent: ActiveEvent = {
+                  id: spot.id,
+                  event_type: "bonus_spot",
+                  title: spot.title,
+                  description: spot.description,
+                  image_url: null,
+                  effect_config: spot.effect_config,
+                  status: spot.status,
+                  started_at: spot.started_at ?? new Date().toISOString(),
+                  ends_at: spot.ends_at,
+                  campaign_id: spot.campaign_id,
+                  campaigns: campaign ? { title: campaign.title, slug: campaign.slug } : null,
+                };
+                setEvents([newEvent, ...events]);
+                setShowCreate(false);
+              }}
+              onCancel={() => setShowCreate(false)}
+            />
           ) : (
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1717,7 +1758,7 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
       .from("partner_offers")
       .update(payload)
       .eq("id", offer.id)
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
       .single();
 
     if (updateErr) return updateErr.message;
@@ -1759,15 +1800,25 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
   return (
     <div className="border border-zinc-800 rounded-lg px-4 py-3 shadow-elevation-1">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-zinc-200">{offer.title}</p>
           {offer.description && <p className="text-xs text-zinc-500 mt-0.5">{offer.description}</p>}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs">
             <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">{offer.redemption_mode}</span>
             {offer.redemption_mode === "spend"
               ? <span className="text-zinc-500">{offer.points_cost} pts</span>
-              : <span className="text-zinc-500">{offer.points_threshold}+ pts to unlock</span>}
+              : offer.redemption_mode === "threshold"
+              ? <span className="text-zinc-500">{offer.points_threshold}+ pts to unlock</span>
+              : <span className="text-zinc-500">event check-in only</span>}
             <StatusBadge status={offer.status} />
+            {offer.event_eligible && (
+              <span
+                title="Event offers can be attached to a cleanup event by its organizer. Attendees who check in can redeem it for free, no points required, within 4 hours after the event ends."
+                className="px-1.5 py-0.5 rounded bg-amber-950/50 border border-amber-800/60 text-amber-400 font-semibold flex items-center gap-1 cursor-help"
+              >
+                Event offer
+              </span>
+            )}
             {redemptionCount > 0 ? (
               <button
                 type="button"
@@ -1781,40 +1832,6 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
             )}
             {offer.code && <span className="text-zinc-600 font-mono">code: {offer.code}</span>}
           </div>
-          {showRedemptions && (
-            <div className="mt-2 border border-zinc-800 rounded-lg divide-y divide-zinc-800/60 overflow-hidden shadow-elevation-1">
-              {loadingRedemptions ? (
-                <p className="px-3 py-2 text-xs text-zinc-600">Loading…</p>
-              ) : redemptions && redemptions.length > 0 ? (
-                redemptions.map((r) => (
-                  <div key={r.id} className="px-3 py-1.5 flex items-center justify-between gap-3 text-xs">
-                    <span className="text-zinc-400 truncate">
-                      {r.profiles?.display_name ?? r.profiles?.username ?? "Unknown user"}
-                    </span>
-                    <span className="flex items-center gap-2 shrink-0">
-                      <span className="text-zinc-600">
-                        {new Date(r.redeemed_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                      </span>
-                      {r.used_at ? (
-                        <span
-                          title={`Used ${new Date(r.used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`}
-                          className="text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 cursor-help"
-                        >
-                          Used
-                        </span>
-                      ) : (
-                        <span className="text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5">
-                          Not used
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="px-3 py-2 text-xs text-zinc-600">No redemptions yet.</p>
-              )}
-            </div>
-          )}
         </div>
         {offer.status !== "cancelled" && (
           <div className="flex items-center gap-2 shrink-0">
@@ -1834,6 +1851,40 @@ export function OfferRow({ offer, redemptionCount, locations, onUpdated, onCance
           </div>
         )}
       </div>
+      {showRedemptions && (
+        <div className="mt-2 w-full border border-zinc-800 rounded-lg divide-y divide-zinc-800/60 overflow-hidden shadow-elevation-1">
+          {loadingRedemptions ? (
+            <p className="px-3 py-2 text-xs text-zinc-600">Loading…</p>
+          ) : redemptions && redemptions.length > 0 ? (
+            redemptions.map((r) => (
+              <div key={r.id} className="px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-xs">
+                <span className="text-zinc-400">
+                  {r.profiles?.display_name ?? r.profiles?.username ?? "Unknown user"}
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="text-zinc-600">
+                    {new Date(r.redeemed_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </span>
+                  {r.used_at ? (
+                    <span
+                      title={`Used ${new Date(r.used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`}
+                      className="text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 cursor-help"
+                    >
+                      Used
+                    </span>
+                  ) : (
+                    <span className="text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5">
+                      Not used
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-xs text-zinc-600">No redemptions yet.</p>
+          )}
+        </div>
+      )}
       <ConfirmModal
         open={confirmingCancel}
         title="Cancel offer?"
@@ -2058,7 +2109,7 @@ function BusinessCard({
       .schema("public")
       .from("partner_offers")
       .insert({ ...payload, business_id: business.id, status: "active" })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, code, status, starts_at, ends_at, created_at, location_id")
+      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
       .single();
 
     if (insertErr) return insertErr.message;
@@ -3443,7 +3494,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   triggers: "Trigger defaults",
   moderation: "Moderation",
   milestones: "Milestone ladders",
+  notifications: "Email notifications",
+  bonus_spots: "Bonus spots",
 };
+
+// Settings that are conceptually booleans (stored as 0/1 in the numeric game_settings
+// column) get a toggle switch instead of a number input.
+const BOOLEAN_SETTING_KEYS = new Set([
+  "email_partner_coordination_enabled",
+  "email_attendee_reminder_enabled",
+  "email_organizer_stats_reminder_enabled",
+]);
 
 const METERS_TO_FEET = 3.28084;
 
@@ -3464,6 +3525,8 @@ const UNIT_LABELS: Record<string, string> = {
   time_elapsed_event_duration_hours_default: "hr",
   claim_challenge_multiplier: "×",
   hotspot_multiplier: "×",
+  bonus_spot_multiplier: "×",
+  bonus_spot_default_duration_minutes: "min",
   small_bag_value: "pts",
   large_bag_value: "pts",
   pound_value: "pts",
@@ -3506,12 +3569,15 @@ function SettingsTab({ settings, setSettings }: {
     return groups;
   }, [settings]);
 
-  const handleSave = async (setting: GameSetting) => {
-    const raw = drafts[setting.key];
-    const parsed = Number(raw);
-    if (raw === "" || Number.isNaN(parsed)) {
-      setErrorKey(setting.key);
-      return;
+  const handleSave = async (setting: GameSetting, overrideValue?: number) => {
+    let parsed = overrideValue;
+    if (parsed === undefined) {
+      const raw = drafts[setting.key];
+      parsed = Number(raw);
+      if (raw === "" || Number.isNaN(parsed)) {
+        setErrorKey(setting.key);
+        return;
+      }
     }
     setSavingKey(setting.key);
     setErrorKey(null);
@@ -3527,7 +3593,8 @@ function SettingsTab({ settings, setSettings }: {
       setErrorKey(setting.key);
       return;
     }
-    setSettings(settings.map(s => s.key === setting.key ? { ...s, value: parsed } : s));
+    setSettings(settings.map(s => s.key === setting.key ? { ...s, value: parsed! } : s));
+    setDrafts(d => ({ ...d, [setting.key]: String(parsed) }));
     setSavedKey(setting.key);
     setTimeout(() => setSavedKey(k => k === setting.key ? null : k), 1500);
   };
@@ -3560,10 +3627,43 @@ function SettingsTab({ settings, setSettings }: {
           <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 shadow-elevation-1">
             {rows.map(setting => {
               const dirty = drafts[setting.key] !== String(setting.value);
-              const isProximity = setting.category === "proximity";
+              const isProximity = setting.category === "proximity" || setting.key === "bonus_spot_default_radius_m";
               const isSolarpunkTieIn = setting.key === "trash_war_solarpunk_credit";
+              const isBoolean = BOOLEAN_SETTING_KEYS.has(setting.key);
               const metersDraft = Number(drafts[setting.key]);
               const feetDraft = Number.isFinite(metersDraft) ? Math.round(metersDraft * METERS_TO_FEET) : NaN;
+              if (isBoolean) {
+                const on = setting.value !== 0;
+                return (
+                  <div key={setting.key} className="flex items-center gap-4 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-zinc-200">{setting.label}</p>
+                      {setting.description && (
+                        <p className="text-xs text-zinc-500 mt-0.5">{setting.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {savedKey === setting.key && <span className="text-xs text-emerald-400">Saved ✓</span>}
+                      {errorKey === setting.key && <span className="text-xs text-red-400">Error</span>}
+                      <button
+                        role="switch"
+                        aria-checked={on}
+                        disabled={savingKey === setting.key}
+                        onClick={() => handleSave(setting, on ? 0 : 1)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-150 disabled:opacity-50 touch-manipulation ${
+                          on ? "bg-emerald-600" : "bg-zinc-700"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-150 ${
+                            on ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div
                   key={setting.key}
@@ -3824,7 +3924,7 @@ export default function AdminPanel({
 
       {tab === "campaigns" && <CampaignsTab campaigns={sortedCampaigns} setCampaigns={setCampaigns} />}
       {tab === "triggers" && <TriggersTab campaigns={activeCampaigns} triggers={triggers} setTriggers={setTriggers} hotspotMultiplier={hotspotMultiplier} />}
-      {tab === "events" && <EventsTab campaigns={activeCampaigns} events={events} setEvents={setEvents} />}
+      {tab === "events" && <EventsTab campaigns={activeCampaigns} events={events} setEvents={setEvents} currentUserId={currentUserId} />}
       {tab === "partners" && (
         <PartnersTab
           businesses={businesses}

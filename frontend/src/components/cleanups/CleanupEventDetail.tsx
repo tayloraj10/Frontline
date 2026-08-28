@@ -16,9 +16,13 @@ import {
   addEventPhotos,
   uploadEventPhoto,
   getNearbyReports,
+  previewAttendeeReminder,
+  sendAttendeeReminder,
   type CleanupEventDetailData,
   type TeamTotalLogEntry,
   type NearbyReport,
+  type CleanupEventOffer,
+  type CleanupEventOfferLocation,
 } from "@/lib/cleanupEvents";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
 import { searchUsers, type UserSearchResult } from "@/lib/users";
@@ -31,6 +35,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
+import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -150,8 +155,9 @@ export default function CleanupEventDetail({
       window.localStorage.setItem("cleanup-event-view-mode", mode);
     }
   };
-  const { values: checkinPointValues } = useGameSettings(["cleanup_event_checkin_value"]);
-  const checkinPointValue = checkinPointValues.cleanup_event_checkin_value;
+  const { values: eventSettingValues } = useGameSettings(["cleanup_event_checkin_value", "email_attendee_reminder_enabled"]);
+  const checkinPointValue = eventSettingValues.cleanup_event_checkin_value;
+  const attendeeReminderEnabled = eventSettingValues.email_attendee_reminder_enabled === 1;
 
   const viewerCheckedInInitial = !!initialEvent.viewer_rsvp?.checked_in_at;
 
@@ -436,6 +442,29 @@ export default function CleanupEventDetail({
             Check-in window: {formatCheckInWindow(event.check_in_window_start, event.check_in_window_end)}
           </p>
         )}
+        {!isCancelled && event.event_offers.length > 0 && (
+          <div className="mt-3 rounded-xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/60 to-amber-900/15 px-4 py-3.5 shadow-elevation-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xl" aria-hidden="true">🎁</span>
+              <p className="text-sm font-black text-amber-300 uppercase tracking-wide">
+                Free reward
+              </p>
+            </div>
+            <ul className="mt-2 space-y-1.5">
+              {event.event_offers.map((offer) => (
+                <li key={offer.id} className="text-sm text-zinc-100">
+                  <span className="font-semibold text-amber-100">{offer.title}</span> at{" "}
+                  <a href={`/partners/${offer.business_slug}`} className="text-sky-400 hover:underline">
+                    {offer.business_name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs font-medium text-amber-400/90">
+              No points needed -- just check in during the event to redeem.
+            </p>
+          </div>
+        )}
         {!viewerCheckedInInitial && userId && (
           <div className="mt-2">
             {locationStatus === "checking" && (
@@ -450,7 +479,7 @@ export default function CleanupEventDetail({
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/60 bg-amber-900/20 px-2.5 py-1 text-xs font-semibold text-amber-400">
-                  🟠 {formatFeetAndMeters(distanceMeters)} away — outside the {formatApproxFeetAndMeters(event.check_in_radius_meters)} check-in range
+                  🟠 {formatFeetAndMeters(distanceMeters)} away -- outside the {formatApproxFeetAndMeters(event.check_in_radius_meters)} check-in range
                 </span>
               )
             )}
@@ -719,10 +748,11 @@ export default function CleanupEventDetail({
 
         const checkinRosterSection = effectiveIsOrganizer && !isCancelled && event.rsvps.length > 0 && (
           <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-zinc-300">
                 Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
               </span>
+              {attendeeReminderEnabled && <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />}
             </div>
             <ul className="divide-y divide-zinc-800/60">
               {event.rsvps.map((r) => (
@@ -779,6 +809,31 @@ export default function CleanupEventDetail({
           </div>
         );
 
+        const manageEventOffersSection = effectiveIsOrganizer && !isCancelled && event.event_offers.length > 0 && (
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+              <span className="text-sm font-semibold text-zinc-300">Attached event offers</span>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Attendees who check in to this event can redeem these offers. Removing one here only detaches it
+                from this event, it stops new redemptions but doesn&apos;t delete the offer itself or undo past redemptions.
+              </p>
+            </div>
+            <ul className="p-3 space-y-2">
+              {event.event_offers.map((offer) => (
+                <li key={offer.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-zinc-200">
+                    {offer.title} <span className="text-zinc-500">at {offer.business_name}</span>
+                    {offer.redeemed_count > 0 && (
+                      <span className="text-xs text-zinc-500"> (redeemed {offer.redeemed_count}x)</span>
+                    )}
+                  </span>
+                  <RemoveEventOfferButton cleanupId={event.id} offerId={offer.id} organizerUserId={userId!} onRemoved={refresh} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+
         const logSection = effectiveIsOrganizer && !isCancelled && event.logging_mode === "organizer_total" && (
           <LogTeamTotalForm
             cleanupId={event.id}
@@ -799,11 +854,14 @@ export default function CleanupEventDetail({
                 Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
               </span>
               {effectiveIsOrganizer && !isCancelled && (
-                <AddAttendeeControl
-                  cleanupId={event.id}
-                  existingUserIds={event.rsvps.map((r) => r.user_id)}
-                  onAdded={refresh}
-                />
+                <div className="flex items-center gap-3">
+                  {attendeeReminderEnabled && <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />}
+                  <AddAttendeeControl
+                    cleanupId={event.id}
+                    existingUserIds={event.rsvps.map((r) => r.user_id)}
+                    onAdded={refresh}
+                  />
+                </div>
               )}
             </div>
             {event.rsvps.length === 0 ? (
@@ -941,6 +999,33 @@ export default function CleanupEventDetail({
           </div>
         );
 
+        const eventOffersSection = userId && viewerCheckedIn && event.event_offers.length > 0 && (
+          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+              <span className="text-sm font-semibold text-zinc-300">Redeem event offers</span>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Free perks from local businesses for attending this event, no points needed. You have until 4 hours after the event ends to redeem.
+              </p>
+              {!event.event_offer_redemption_open && (
+                <p className="text-xs text-zinc-600 mt-0.5">The redemption window for this event has closed.</p>
+              )}
+            </div>
+            <div className="p-3 space-y-2">
+              {event.event_offers.map((offer) => (
+                <EventOfferRedemptionCard
+                  key={offer.id}
+                  offer={offer}
+                  cleanupId={event.id}
+                  userId={userId}
+                  redemptionOpen={event.event_offer_redemption_open}
+                  eventLat={event.lat}
+                  eventLng={event.lng}
+                />
+              ))}
+            </div>
+          </div>
+        );
+
         const photosSection = (event.photos.length > 0 || (userId && !isCancelled)) && (
           <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
             <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
@@ -976,14 +1061,14 @@ export default function CleanupEventDetail({
               onClick={() => setGuidedStep(attendeesStepIndex)}
               className="w-full text-left px-3 py-2 text-xs text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg hover:border-zinc-600 hover:text-zinc-300 active:border-zinc-600 active:text-zinc-300 transition-colors duration-150 touch-manipulation"
             >
-              Need to add someone, see bag/point totals, or manage organizers? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
+              Need to add someone, see bag/point totals, manage organizers, or remove an attached event offer? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
             </button>
           );
           const steps: { key: string; label: string; content: React.ReactNode }[] = [
             { key: "checkin", label: "Check in attendees", content: <>{checkinSection}{joinCodeSection}{checkinSummarySection}{checkinRosterSection}</> },
             { key: "clean", label: "Do the cleanup", content: doCleanupSection },
             ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
-            { key: "attendees", label: "Manage attendee data", content: attendeesSection },
+            { key: "attendees", label: "Manage attendee data", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
             ...(photosSection ? [{ key: "photos", label: "Photos", content: photosSection as React.ReactNode }] : []),
           ];
           const activeStepIndex = Math.min(guidedStep, steps.length - 1);
@@ -1041,6 +1126,8 @@ export default function CleanupEventDetail({
             {checkinSection}
             {checkinSummarySection}
             {joinCodeSection}
+            {eventOffersSection}
+            {manageEventOffersSection}
             {logSection}
             {attendeesSection}
             {photosSection}
@@ -1227,6 +1314,156 @@ function AddAttendeeControl({
               </button>
             ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function nearestCleanupOfferLocationId(
+  locations: CleanupEventOfferLocation[],
+  eventLat: number,
+  eventLng: number
+): string | null {
+  if (locations.length === 0) return null;
+  let nearest = locations[0];
+  let nearestDistance = haversineMeters(eventLat, eventLng, nearest.lat, nearest.lng);
+  for (const l of locations.slice(1)) {
+    const distance = haversineMeters(eventLat, eventLng, l.lat, l.lng);
+    if (distance < nearestDistance) {
+      nearest = l;
+      nearestDistance = distance;
+    }
+  }
+  return nearest.id;
+}
+
+function EventOfferRedemptionCard({
+  offer,
+  cleanupId,
+  userId,
+  redemptionOpen,
+  eventLat,
+  eventLng,
+}: {
+  offer: CleanupEventOffer;
+  cleanupId: string;
+  userId: string;
+  redemptionOpen: boolean;
+  eventLat: number;
+  eventLng: number;
+}) {
+  const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+  const [loading, setLoading] = useState(true);
+  const [redeeming, setRedeeming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [proof, setProof] = useState<RedemptionProof | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${fastapiUrl}/api/partners/offers/${offer.id}/redemptions/me?user_id=${userId}`);
+        const data = await res.json();
+        if (!cancelled && res.ok && Array.isArray(data) && data.length > 0) {
+          const r = data[0];
+          setProof({
+            redemptionId: r.id,
+            businessName: offer.business_name,
+            offerTitle: offer.title,
+            code: r.code ?? null,
+            pointsSpent: r.points_spent ?? 0,
+            redeemedAt: r.redeemed_at ?? null,
+            usedAt: r.used_at ?? null,
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offer.id, userId]);
+
+  const handleRedeem = async () => {
+    setRedeeming(true);
+    setError(null);
+    try {
+      const locationId = offer.location_id ?? nearestCleanupOfferLocationId(offer.locations, eventLat, eventLng);
+      const res = await fetch(`${fastapiUrl}/api/partners/offers/${offer.id}/redeem`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, cleanup_id: cleanupId, location_id: locationId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to redeem offer");
+      setProof({
+        redemptionId: data.id,
+        businessName: offer.business_name,
+        offerTitle: offer.title,
+        code: data.code ?? null,
+        pointsSpent: data.points_spent ?? 0,
+        redeemedAt: new Date().toISOString(),
+        usedAt: null,
+      });
+      setShowModal(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to redeem offer");
+    } finally {
+      setRedeeming(false);
+    }
+  };
+
+  return (
+    <div className="border border-zinc-800 rounded-lg p-3 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-zinc-100 truncate">{offer.title}</p>
+        <a
+          href={`/partners/${offer.business_slug}`}
+          className="text-xs text-sky-400 hover:underline"
+        >
+          {offer.business_name}
+        </a>
+        {offer.description && <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{offer.description}</p>}
+        {offer.max_redemptions !== null && (
+          <p className="text-[11px] text-zinc-600 mt-0.5">
+            {Math.max(offer.max_redemptions - offer.redeemed_count, 0)} of {offer.max_redemptions} left
+          </p>
+        )}
+        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+      </div>
+      <div className="shrink-0">
+        {loading ? null : proof ? (
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation"
+          >
+            View code
+          </button>
+        ) : !redemptionOpen ? (
+          <span className="text-xs text-zinc-600">Window closed</span>
+        ) : offer.max_redemptions !== null && offer.redeemed_count >= offer.max_redemptions ? (
+          <span className="text-xs text-zinc-600">Fully claimed</span>
+        ) : (
+          <button
+            onClick={handleRedeem}
+            disabled={redeeming}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+          >
+            {redeeming ? "Redeeming…" : "Redeem"}
+          </button>
+        )}
+      </div>
+      {showModal && proof && (
+        <RedemptionConfirmationModal
+          proof={proof}
+          onClose={() => setShowModal(false)}
+          onMarkedUsed={(redemptionId, usedAt) =>
+            setProof((prev) => (prev && prev.redemptionId === redemptionId ? { ...prev, usedAt } : prev))
+          }
+        />
       )}
     </div>
   );
@@ -1433,6 +1670,205 @@ function OrganizerLogButton({
             Cancel
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function RemoveEventOfferButton({
+  cleanupId,
+  offerId,
+  organizerUserId,
+  onRemoved,
+}: {
+  cleanupId: string;
+  offerId: string;
+  organizerUserId: string;
+  onRemoved: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
+
+  const handleRemove = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${fastapiUrl}/api/partners/offers/${offerId}/events/${cleanupId}?organizer_user_id=${organizerUserId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail || "Failed to remove offer");
+      }
+      setConfirming(false);
+      onRemoved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove offer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setConfirming(true)}
+        className="text-xs text-red-400/80 hover:text-red-300 active:text-red-300 transition-colors duration-150 underline shrink-0"
+      >
+        Remove
+      </button>
+      <ConfirmModal
+        open={confirming}
+        title="Remove this offer?"
+        message="Attendees will no longer be able to redeem this offer for this event. This doesn't affect the offer itself, just this event's attachment."
+        confirmLabel={loading ? "Removing…" : "Remove"}
+        cancelLabel="Keep"
+        onConfirm={handleRemove}
+        onCancel={() => setConfirming(false)}
+      />
+      {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
+    </>
+  );
+}
+
+function SendAttendeeReminderButton({
+  cleanupId,
+  organizerUserId,
+}: {
+  cleanupId: string;
+  organizerUserId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const [preview, setPreview] = useState<{ subject: string; html: string; recipient_count: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ sent: boolean; recipient_count: number; reason?: string } | null>(null);
+
+  const close = () => {
+    setOpen(false);
+    setPreview(null);
+    setMessage("");
+    setError(null);
+    setResult(null);
+  };
+
+  const loadPreview = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const p = await previewAttendeeReminder({ cleanupId, organizerUserId, message: message.trim() || undefined });
+      setPreview(p);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to build preview");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const send = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await sendAttendeeReminder({ cleanupId, organizerUserId, message: message.trim() || undefined });
+      setResult(r);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send reminder");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0"
+      >
+        Send reminder
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={close}>
+      <div
+        className="relative max-w-md w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl space-y-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h4 className="text-sm font-semibold text-zinc-100">Send reminder to attendees</h4>
+
+        {result ? (
+          <>
+            {result.sent ? (
+              <p className="text-sm text-emerald-400">Sent to {result.recipient_count} attendee{result.recipient_count === 1 ? "" : "s"}.</p>
+            ) : (
+              <p className="text-sm text-amber-400">Not sent{result.reason ? `: ${result.reason}` : "."}</p>
+            )}
+            <button
+              onClick={close}
+              className="w-full px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+            >
+              Close
+            </button>
+          </>
+        ) : preview ? (
+          <>
+            <p className="text-xs text-zinc-500">
+              Preview — will send to {preview.recipient_count} attendee{preview.recipient_count === 1 ? "" : "s"} marked &ldquo;going&rdquo;.
+            </p>
+            <div className="rounded-lg border border-zinc-800 bg-white text-black p-3 max-h-64 overflow-y-auto text-sm">
+              <p className="font-semibold mb-2">{preview.subject}</p>
+              <div dangerouslySetInnerHTML={{ __html: preview.html }} />
+            </div>
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={send}
+                disabled={loading || preview.recipient_count === 0}
+                className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                {loading ? "Sending…" : "Send"}
+              </button>
+              <button
+                onClick={() => setPreview(null)}
+                className="px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+              >
+                Back
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Optional custom note to include (e.g. meeting spot, what to bring)…"
+              maxLength={2000}
+              rows={4}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500"
+            />
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadPreview}
+                disabled={loading}
+                className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                {loading ? "Loading…" : "Preview"}
+              </button>
+              <button
+                onClick={close}
+                className="px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -2,14 +2,21 @@ import json
 from uuid import UUID
 
 import h3
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.groups import _is_site_admin
 from app.db.database import AsyncSessionLocal, get_db
 from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+
+async def _require_site_admin(db: AsyncSession, viewer_user_id: UUID) -> None:
+    if not await _is_site_admin(db, viewer_user_id):
+        raise HTTPException(403, "Admin access required")
 
 
 @router.get("/campaign/{campaign_id}/active-multiplier")
@@ -54,39 +61,293 @@ async def get_active_multiplier(
         geo_row = geo_result.fetchone()
         geo_unit_id = str(geo_row[0]) if geo_row else None
 
-    if not geo_unit_id:
-        return {"active": False}
+    event_row = None
+    if geo_unit_id:
+        result = await db.execute(
+            text("""
+                SELECT effect_config, title FROM campaign_events ce
+                WHERE campaign_id = :campaign_id
+                  AND status = 'active'
+                  AND (started_at IS NULL OR started_at <= NOW())
+                  AND (ends_at IS NULL OR ends_at > NOW())
+                  AND effect_config->>'type' = 'score_multiplier'
+                  AND (
+                    geo_unit_id = :geo_unit_id
+                    OR EXISTS (
+                      SELECT 1 FROM campaign_event_geo_units cegu
+                      WHERE cegu.event_id = ce.id AND cegu.geo_unit_id = :geo_unit_id
+                    )
+                  )
+                ORDER BY (effect_config->>'multiplier')::float DESC
+                LIMIT 1
+            """),
+            {"campaign_id": str(campaign_id), "geo_unit_id": geo_unit_id},
+        )
+        event_row = result.fetchone()
 
-    result = await db.execute(
+    bonus_spot_result = await db.execute(
         text("""
-            SELECT effect_config, title FROM campaign_events ce
+            SELECT effect_config, title FROM campaign_events
             WHERE campaign_id = :campaign_id
               AND status = 'active'
+              AND event_type = 'bonus_spot'
               AND (started_at IS NULL OR started_at <= NOW())
               AND (ends_at IS NULL OR ends_at > NOW())
-              AND effect_config->>'type' = 'score_multiplier'
-              AND (
-                geo_unit_id = :geo_unit_id
-                OR EXISTS (
-                  SELECT 1 FROM campaign_event_geo_units cegu
-                  WHERE cegu.event_id = ce.id AND cegu.geo_unit_id = :geo_unit_id
-                )
-              )
+              AND ST_DWithin(location, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, radius_m)
             ORDER BY (effect_config->>'multiplier')::float DESC
             LIMIT 1
         """),
-        {"campaign_id": str(campaign_id), "geo_unit_id": geo_unit_id},
+        {"campaign_id": str(campaign_id), "lon": lng, "lat": lat},
+    )
+    bonus_spot_row = bonus_spot_result.fetchone()
+
+    event_multiplier = float((event_row[0] or {}).get("multiplier", settings.get("hotspot_multiplier", 1))) if event_row else 0.0
+    bonus_spot_multiplier = float((bonus_spot_row[0] or {}).get("multiplier", settings.get("bonus_spot_multiplier", 1))) if bonus_spot_row else 0.0
+
+    if not event_row and not bonus_spot_row:
+        return {"active": False}
+
+    if bonus_spot_multiplier >= event_multiplier and bonus_spot_row:
+        return {"active": True, "multiplier": bonus_spot_multiplier, "title": bonus_spot_row[1], "kind": "bonus_spot"}
+
+    return {"active": True, "multiplier": event_multiplier, "title": event_row[1], "kind": "event"}
+
+
+@router.get("/campaign/{campaign_id}/bonus-spots")
+async def get_bonus_spots(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Active bonus spots for the map layer -- point + radius, unlike the geo_unit-shaped
+    events covered by /centroids."""
+    result = await db.execute(
+        text("""
+            SELECT id, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng,
+                   radius_m, effect_config, title, ends_at
+            FROM campaign_events
+            WHERE campaign_id = :campaign_id
+              AND status = 'active'
+              AND event_type = 'bonus_spot'
+              AND (started_at IS NULL OR started_at <= NOW())
+              AND (ends_at IS NULL OR ends_at > NOW())
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    return [
+        {
+            "id": str(r.id),
+            "lat": r.lat,
+            "lng": r.lng,
+            "radius_m": r.radius_m,
+            "multiplier": float((r.effect_config or {}).get("multiplier", 1)),
+            "title": r.title,
+            "ends_at": r.ends_at.isoformat() if r.ends_at else None,
+        }
+        for r in result.fetchall()
+    ]
+
+
+class BonusSpotCreate(BaseModel):
+    viewer_user_id: UUID
+    lat: float
+    lng: float
+    radius_m: float | None = None
+    duration_minutes: int | None = None
+    multiplier: float | None = None
+    title: str | None = None
+    description: str | None = None
+    source_problem_report_id: UUID | None = None
+
+
+@router.post("/campaign/{campaign_id}/bonus-spot")
+async def create_bonus_spot(
+    campaign_id: UUID,
+    payload: BonusSpotCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin-triggered spawn of a bonus spot -- a manual pin or a suggested
+    problem_reports-backed point, with defaults for radius/duration/multiplier
+    pulled from game_settings (see 088_bonus_spots.sql)."""
+    await _require_site_admin(db, payload.viewer_user_id)
+    settings = await get_game_settings(db)
+
+    radius_m = round(payload.radius_m or settings.get("bonus_spot_default_radius_m", 182.88))
+    duration_minutes = payload.duration_minutes or int(settings.get("bonus_spot_default_duration_minutes", 4320))
+    multiplier = payload.multiplier or settings.get("bonus_spot_multiplier", 3)
+
+    result = await db.execute(
+        text("""
+            INSERT INTO campaign_events
+                (campaign_id, event_type, title, description, effect_config,
+                 location, radius_m, source_problem_report_id, ends_at)
+            VALUES
+                (:campaign_id, 'bonus_spot', :title, :description, :effect_config,
+                 ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :radius_m,
+                 :source_problem_report_id, NOW() + (:duration_minutes * INTERVAL '1 minute'))
+            RETURNING id, title, description, effect_config, status, started_at, ends_at, radius_m
+        """),
+        {
+            "campaign_id": str(campaign_id),
+            "title": payload.title or "Bonus Spot",
+            "description": payload.description,
+            "effect_config": json.dumps({"type": "score_multiplier", "multiplier": multiplier}),
+            "lon": payload.lng,
+            "lat": payload.lat,
+            "radius_m": radius_m,
+            "source_problem_report_id": str(payload.source_problem_report_id) if payload.source_problem_report_id else None,
+            "duration_minutes": duration_minutes,
+        },
+    )
+    row = result.fetchone()
+    await db.commit()
+
+    return {
+        "id": str(row.id),
+        "title": row.title,
+        "description": row.description,
+        "effect_config": row.effect_config,
+        "status": row.status,
+        "started_at": row.started_at.isoformat() if row.started_at else None,
+        "ends_at": row.ends_at.isoformat() if row.ends_at else None,
+        "radius_m": row.radius_m,
+        "lat": payload.lat,
+        "lng": payload.lng,
+        "campaign_id": str(campaign_id),
+    }
+
+
+@router.get("/campaign/{campaign_id}/bonus-spot/suggest")
+async def suggest_bonus_spot(
+    campaign_id: UUID,
+    viewer_user_id: UUID = Query(...),
+    exclude_report_id: UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rank candidate problem_reports for an admin to spawn a bonus spot on, blending
+    local report density (the has-trash signal Option A relies on) with proximity to a
+    partner business (drives foot traffic to partners, borrowed as a ranking signal
+    from business-proximity-cleanup-bonus-scoping-2026-08-14.md). Doesn't create
+    anything -- the admin previews/re-rolls (pass the previous report_id as
+    exclude_report_id) before calling POST .../bonus-spot to confirm."""
+    await _require_site_admin(db, viewer_user_id)
+
+    result = await db.execute(
+        text("""
+            WITH candidate AS (
+                SELECT pr.id,
+                       pr.location,
+                       pr.severity,
+                       pr.reported_at,
+                       (
+                         SELECT COUNT(*) FROM problem_reports pr2
+                         WHERE pr2.campaign_id = pr.campaign_id
+                           AND pr2.status IN ('open', 'verified')
+                           AND pr2.id != pr.id
+                           AND ST_DWithin(pr2.location, pr.location, 150)
+                       ) AS nearby_report_count,
+                       EXISTS (
+                         SELECT 1 FROM partner_business_locations pbl
+                         JOIN campaign_partner_businesses cpb ON cpb.business_id = pbl.business_id
+                         WHERE cpb.campaign_id = pr.campaign_id
+                           AND pbl.status = 'active'
+                           AND ST_DWithin(
+                                 pr.location,
+                                 ST_SetSRID(ST_MakePoint(pbl.lng, pbl.lat), 4326)::geography,
+                                 300
+                               )
+                       ) AS near_partner
+                FROM problem_reports pr
+                WHERE pr.campaign_id = :campaign_id
+                  AND pr.status IN ('open', 'verified')
+                  AND pr.severity IN ('medium', 'high')
+                  AND pr.reported_at > NOW() - INTERVAL '30 days'
+                  AND (CAST(:exclude_report_id AS uuid) IS NULL OR pr.id != CAST(:exclude_report_id AS uuid))
+                  AND NOT EXISTS (
+                    SELECT 1 FROM campaign_events ce
+                    WHERE ce.source_problem_report_id = pr.id AND ce.status = 'active'
+                  )
+                ORDER BY nearby_report_count DESC, near_partner DESC, random()
+                LIMIT 1
+            ),
+            -- Nudge the spot 15-40m off the report itself in a random direction so it
+            -- doesn't render exactly on top of the report marker on the map, while
+            -- staying well within the bonus spot's own claim radius.
+            jittered AS (
+                SELECT id, severity, reported_at, nearby_report_count, near_partner,
+                       ST_Project(location, 15 + random() * 25, random() * 2 * pi()) AS point
+                FROM candidate
+            )
+            SELECT id,
+                   ST_Y(point::geometry) AS lat,
+                   ST_X(point::geometry) AS lng,
+                   severity,
+                   reported_at,
+                   nearby_report_count,
+                   near_partner
+            FROM jittered
+        """),
+        {
+            "campaign_id": str(campaign_id),
+            "exclude_report_id": str(exclude_report_id) if exclude_report_id else None,
+        },
     )
     row = result.fetchone()
     if not row:
-        return {"active": False}
+        return {"found": False}
 
-    effect_config = row[0] or {}
     return {
-        "active": True,
-        "multiplier": float(effect_config.get("multiplier", settings.get("hotspot_multiplier", 1))),
-        "title": row[1],
+        "found": True,
+        "report_id": str(row.id),
+        "lat": row.lat,
+        "lng": row.lng,
+        "severity": row.severity,
+        "reported_at": row.reported_at.isoformat() if row.reported_at else None,
+        "nearby_report_count": row.nearby_report_count,
+        "near_partner": row.near_partner,
     }
+
+
+@router.get("/campaign/{campaign_id}/map-context")
+async def get_map_context(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Campaign-wide point layers (cleanups, trash reports, partners) for the
+    simplified map shown in the bonus-spot admin picker -- same kind/point shape
+    partners.py's radius-points uses for the radius-of-influence map, but without
+    a distance filter since this covers the whole campaign, not one location."""
+    cleanups_result = await db.execute(
+        text("""
+            SELECT id, 'cleanup' AS kind, ST_Y(location::geometry) AS lat,
+                   ST_X(location::geometry) AS lng, title AS label
+            FROM cleanups
+            WHERE campaign_id = :campaign_id AND location IS NOT NULL AND status != 'cancelled'
+            LIMIT 500
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    reports_result = await db.execute(
+        text("""
+            SELECT id, 'trash_report' AS kind, ST_Y(location::geometry) AS lat,
+                   ST_X(location::geometry) AS lng, NULL AS label
+            FROM problem_reports
+            WHERE campaign_id = :campaign_id AND location IS NOT NULL
+              AND status IN ('open', 'verified')
+            LIMIT 500
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+    partners_result = await db.execute(
+        text("""
+            SELECT pbl.id, 'partner' AS kind, pbl.lat, pbl.lng, pb.name AS label
+            FROM partner_business_locations pbl
+            JOIN campaign_partner_businesses cpb ON cpb.business_id = pbl.business_id
+            JOIN partner_businesses pb ON pb.id = pbl.business_id
+            WHERE cpb.campaign_id = :campaign_id AND pbl.status = 'active'
+            LIMIT 500
+        """),
+        {"campaign_id": str(campaign_id)},
+    )
+
+    points = [
+        {"id": str(r.id), "kind": r.kind, "lat": r.lat, "lng": r.lng, "label": r.label}
+        for r in [*cleanups_result.fetchall(), *reports_result.fetchall(), *partners_result.fetchall()]
+    ]
+    return {"points": points}
 
 
 @router.get("/campaign/{campaign_id}/centroids")

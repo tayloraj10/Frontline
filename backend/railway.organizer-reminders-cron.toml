@@ -1,0 +1,8 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python scripts/run_organizer_reminders.py"
+cronSchedule = "0 12 * * *"
+restartPolicyType = "NEVER"

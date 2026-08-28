@@ -23,6 +23,16 @@ type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
+type BonusSpotMapData = {
+  id: string;
+  lat: number;
+  lng: number;
+  radius_m: number;
+  multiplier: number;
+  title: string | null;
+  ends_at: string | null;
+};
+
 const CONTINENTAL_US_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-125, 24.5],
   [-66.9, 49.5],
@@ -88,6 +98,18 @@ function circlePolygon(lat: number, lng: number, radiusMeters: number, steps = 4
     coords.push([lng + dLng, lat + dLat]);
   }
   return coords;
+}
+
+function formatBonusSpotCountdown(endsAt: string | null): string {
+  if (!endsAt) return "";
+  const msLeft = new Date(endsAt).getTime() - Date.now();
+  if (msLeft <= 0) return "ending…";
+  const totalSeconds = Math.floor(msLeft / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 // Builds an overlapping row of same-size host-group logo circles (primary + cohosts),
@@ -322,7 +344,7 @@ export type MapBusinessLocation = {
   activeOfferTitle?: string | null;
   // Public offer catalog (safe to cache); used server-side, after the cache read, to
   // derive affordableOfferTitle below for the current viewer. Not otherwise rendered.
-  offers?: { title: string; mode: "spend" | "threshold"; requirement: number }[];
+  offers?: { title: string; mode: "spend" | "threshold" | "event_only"; requirement: number }[];
   // Server-computed per-viewer (never cached alongside the rest of this object — see
   // campaigns/[slug]/page.tsx's cache-boundary comment): set when the signed-in viewer
   // currently has enough points for at least one of this location's active offers.
@@ -383,8 +405,10 @@ interface Props {
   onRoutePickerCancel?: () => void;
   cleanupRoutes?: CampaignCleanupRoute[];
   userId?: string | null;
-  newContribution?: { lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
+  newContribution?: { id?: string | null; lat: number; lng: number; value: number; photoUrl?: string; isGroupEvent?: boolean; key: number } | null;
+  removedContribution?: { id: string; key: number } | null;
   newReport?: { id: string; lat: number; lng: number; severity: string; photoUrl?: string; key: number } | null;
+  removedReport?: { id: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   activeStyle?: StyleId;
@@ -529,6 +553,7 @@ type LayerToggleState = {
   showGroupEvents: boolean;
   showMapEvents: boolean;
   showPartners: boolean;
+  showBonusSpots: boolean;
   showZipStats: boolean;
   showNeighborhoodStats: boolean;
   showBoroughStats: boolean;
@@ -656,6 +681,8 @@ function applyLayerVisibility(m: maplibregl.Map, t: LayerToggleState): void {
   setVis("cleanup-event-radius-line", t.showEventRadius && t.showGroupEvents);
   setVis("cleanup-routes-buffer-fill", t.showEventRadius && t.showGroupEvents);
   setVis("cleanup-routes-buffer-line", t.showEventRadius && t.showGroupEvents);
+  setVis("bonus-spot-radius-fill", t.showBonusSpots);
+  setVis("bonus-spot-radius-line", t.showBonusSpots);
   setVis("zip-stats-fill", t.showZipStats);
   setVis("zip-stats-outline", t.showZipStats);
   setVis("nyc-neighborhoods-stats-fill", t.showNeighborhoodStats);
@@ -1648,7 +1675,9 @@ export default function CampaignMap({
   cleanupRoutes,
   userId,
   newContribution,
+  removedContribution,
   newReport,
+  removedReport,
   userLocation,
   focusCoords,
   activeStyle = "outdoor",
@@ -1707,6 +1736,7 @@ export default function CampaignMap({
   const [showGroupEvents, setShowGroupEvents] = useState(() => storedToggle("showGroupEvents"));
   const [showMapEvents, setShowMapEvents] = useState(() => storedToggle("showMapEvents"));
   const [showPartners, setShowPartners] = useState(() => storedToggle("showPartners"));
+  const [showBonusSpots, setShowBonusSpots] = useState(() => storedToggle("showBonusSpots"));
   // Drives the "Zip"/"Postcode" segmented-control label — reflects whichever region
   // (US vs UK) the map is currently centered over, not the campaign's static geo_unit
   // config, so a campaign spanning both regions relabels as the user pans around.
@@ -1767,6 +1797,7 @@ export default function CampaignMap({
     showGroupEvents,
     showMapEvents,
     showPartners,
+    showBonusSpots,
     showZipStats,
     showNeighborhoodStats,
     showBoroughStats,
@@ -1800,6 +1831,12 @@ export default function CampaignMap({
   const businessTweensRef = useRef<gsap.core.Tween[]>([]);
   const businessMarkerScaleElsRef = useRef<HTMLDivElement[]>([]);
   const businessMarkerZoomListenerRef = useRef(false);
+  const bonusSpotsRef = useRef<BonusSpotMapData[]>([]);
+  const bonusSpotMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const bonusSpotTweensRef = useRef<gsap.core.Tween[]>([]);
+  const bonusSpotCountdownRef = useRef<{ el: HTMLDivElement; endsAt: string | null }[]>([]);
+  const bonusSpotCountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bonusSpotPulseFrameRef = useRef<number | null>(null);
   const cleanupEventsRef = useRef(cleanupEvents ?? []);
   const cleanupEventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const cleanupEventDateLabelsRef = useRef<maplibregl.Marker[]>([]);
@@ -1807,6 +1844,7 @@ export default function CampaignMap({
   const cleanupRouteMarkerIsEventRef = useRef<boolean[]>([]);
   const cleanupRouteDateLabelsRef = useRef<maplibregl.Marker[]>([]);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
+  const bonusSpotPopupRef = useRef<maplibregl.Popup | null>(null);
   const contributionPopupRef = useRef<maplibregl.Popup | null>(null);
   const setSelectedZipRef = useRef(setSelectedZip);
   const hoverDivRef = useRef<HTMLDivElement | null>(null);
@@ -2247,6 +2285,136 @@ export default function CampaignMap({
     problemReportsRef.current = problemReports;
     updateReportMarkers(problemReports?.reports ?? []);
   }, [problemReports, updateReportMarkers]);
+
+  const updateBonusSpotMarkers = useCallback((spots: BonusSpotMapData[]) => {
+    if (!map.current) return;
+
+    bonusSpotTweensRef.current.forEach((t) => t.kill());
+    bonusSpotTweensRef.current = [];
+    bonusSpotMarkersRef.current.forEach((m) => m.remove());
+    bonusSpotMarkersRef.current = [];
+    bonusSpotCountdownRef.current = [];
+
+    for (const spot of spots) {
+      // Deliberately not the emoji-badge style used by boss_spawn/timed_event markers.
+      // Bonus spots are short-lived "jackpot" spawns and need to read as unmissable at a
+      // glance, so they get their own gold/glow treatment plus a live countdown.
+      const el = document.createElement("div");
+      el.style.cssText = "width:44px;height:52px;display:flex;flex-direction:column;align-items:center;cursor:pointer;z-index:11";
+
+      // Radar-ping ripple behind the glow -- expands and fades on a loop so the spot
+      // reads as "live"/urgent at a glance, distinct from the static emoji-badge markers.
+      const rippleEl = document.createElement("div");
+      rippleEl.style.cssText =
+        "position:absolute;z-index:0;top:0;left:3px;width:38px;height:38px;border-radius:50%;" +
+        "background:rgba(251,191,36,0.55);pointer-events:none;transform-origin:center";
+      el.style.position = "relative";
+      el.appendChild(rippleEl);
+
+      const glowEl = document.createElement("div");
+      glowEl.style.cssText =
+        "width:38px;height:38px;min-width:38px;min-height:38px;border-radius:50%;box-sizing:border-box;" +
+        "display:flex;align-items:center;justify-content:center;overflow:hidden;line-height:1;position:relative;z-index:1;" +
+        "font-size:20px;background:radial-gradient(circle,#fef3c7 0%,#fbbf24 55%,#b45309 100%);" +
+        "border:2px solid #fde68a;box-shadow:0 0 14px rgba(251,191,36,0.9),0 0 4px rgba(255,255,255,0.8),0 2px 6px rgba(0,0,0,0.6);" +
+        "transform-origin:center";
+      glowEl.textContent = "💎";
+      el.appendChild(glowEl);
+
+      const countdownEl = document.createElement("div");
+      countdownEl.style.cssText =
+        "margin-top:2px;padding:1px 5px;border-radius:6px;background:rgba(120,53,15,0.95);" +
+        "border:1px solid #fbbf24;color:#fef3c7;font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap";
+      countdownEl.textContent = formatBonusSpotCountdown(spot.ends_at);
+      el.appendChild(countdownEl);
+      bonusSpotCountdownRef.current.push({ el: countdownEl, endsAt: spot.ends_at });
+
+      const titleSuffix = spot.title ? `${spot.title} — ` : "";
+      el.title = `${titleSuffix}${spot.multiplier}x bonus spot`;
+
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!map.current) return;
+        bonusSpotPopupRef.current?.remove();
+        const radiusFt = Math.round(spot.radius_m * 3.28084);
+        const html = `
+          <div style="font-family:inherit;min-width:150px;">
+            <div style="font-size:13px;font-weight:700;color:#fde68a;">💎 ${spot.title ?? "Bonus spot"}</div>
+            <div style="font-size:12px;color:#e4e4e7;margin-top:2px;">${spot.multiplier}x score multiplier</div>
+            <div style="font-size:11px;color:#a1a1aa;margin-top:2px;">Within ${radiusFt} ft of this point</div>
+            ${spot.ends_at ? `<div style="font-size:11px;color:#a1a1aa;">Ends in ${formatBonusSpotCountdown(spot.ends_at)}</div>` : ""}
+          </div>
+        `;
+        bonusSpotPopupRef.current = new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: true,
+          maxWidth: "220px",
+          anchor: "bottom",
+          offset: 44,
+        })
+          .setLngLat([spot.lng, spot.lat])
+          .setHTML(html)
+          .addTo(map.current);
+        // Other markers (partner/reward icons) set their own z-index and re-render on a
+        // poll, so they can land later in the DOM than this popup and paint over it.
+        bonusSpotPopupRef.current.getElement().style.zIndex = "100";
+      });
+
+      el.style.display = layerToggleRef.current.showBonusSpots ? "" : "none";
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([spot.lng, spot.lat])
+        .addTo(map.current!);
+      bonusSpotMarkersRef.current.push(marker);
+
+      const entranceTween = gsap.from(glowEl, { scale: 0, duration: 0.45, ease: "back.out(1.6)" });
+      const pulseTween = gsap.to(glowEl, { scale: 1.18, duration: 0.9, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.3 });
+      const rippleTween = gsap.fromTo(
+        rippleEl,
+        { scale: 0.6, opacity: 0.7 },
+        { scale: 1.9, opacity: 0, duration: 1.6, repeat: -1, ease: "sine.out" }
+      );
+      bonusSpotTweensRef.current.push(entranceTween, pulseTween, rippleTween);
+    }
+
+    const radiusSource = map.current.getSource("bonus-spot-radius") as maplibregl.GeoJSONSource | undefined;
+    if (radiusSource) {
+      radiusSource.setData({
+        type: "FeatureCollection",
+        features: spots.map((spot) => ({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [circlePolygon(spot.lat, spot.lng, spot.radius_m)] },
+          properties: { id: spot.id },
+        })),
+      });
+    }
+
+    if (bonusSpotCountdownIntervalRef.current) clearInterval(bonusSpotCountdownIntervalRef.current);
+    if (spots.length > 0) {
+      bonusSpotCountdownIntervalRef.current = setInterval(() => {
+        bonusSpotCountdownRef.current.forEach(({ el, endsAt }) => {
+          el.textContent = formatBonusSpotCountdown(endsAt);
+        });
+      }, 1000);
+    }
+
+    if (bonusSpotPulseFrameRef.current !== null) {
+      cancelAnimationFrame(bonusSpotPulseFrameRef.current);
+      bonusSpotPulseFrameRef.current = null;
+    }
+    if (spots.length > 0) {
+      const animatePulse = () => {
+        if (!map.current) return;
+        const src = map.current.getSource("bonus-spot-radius");
+        if (src) {
+          const opacity = 0.45 + 0.35 * Math.sin(Date.now() / 450);
+          map.current.setPaintProperty("bonus-spot-radius-line", "line-opacity", opacity);
+        }
+        bonusSpotPulseFrameRef.current = requestAnimationFrame(animatePulse);
+      };
+      bonusSpotPulseFrameRef.current = requestAnimationFrame(animatePulse);
+    }
+  }, []);
 
   const updateCleanupRoutesLayer = useCallback(
     (routes: CampaignCleanupRoute[], events: MapCleanupEvent[]) => {
@@ -3194,6 +3362,33 @@ export default function CampaignMap({
       },
     });
 
+    m.addSource("bonus-spot-radius", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    m.addLayer({
+      id: "bonus-spot-radius-fill",
+      type: "fill",
+      source: "bonus-spot-radius",
+      paint: {
+        // Deliberately a dark amber/brown, not the lighter orange used by partner
+        // radius-of-influence circles nearby -- those were blending together visually.
+        "fill-color": "#78350f",
+        "fill-opacity": 0.28,
+      },
+    });
+    m.addLayer({
+      id: "bonus-spot-radius-line",
+      type: "line",
+      source: "bonus-spot-radius",
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": 3,
+        "line-opacity": 0.95,
+        "line-dasharray": [2, 1],
+      },
+    });
+
     m.addSource("route-picker", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -3309,7 +3504,8 @@ export default function CampaignMap({
     updateReportMarkers(problemReportsRef.current?.reports ?? []);
     updateCleanupRoutesLayer(cleanupRoutesRef.current, cleanupEventsRef.current);
     updateCleanupRouteMarkers(cleanupRoutesRef.current, cleanupEventsRef.current);
-  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers, updateCleanupRoutesLayer, updateCleanupRouteMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+    updateBonusSpotMarkers(bonusSpotsRef.current);
+  }, [campaign.id, isCollage, isChoropleth, isHeatmap, isHexBloom, refreshHexBloom, updateEventMarkers, updateBusinessMarkers, updateCleanupEventMarkers, updateReportMarkers, updateCleanupRoutesLayer, updateCleanupRouteMarkers, updateBonusSpotMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Legend layer-visibility toggles: re-apply to the live map whenever any toggle
   // changes, and keep layerToggleRef in sync so setupCustomLayers (initial load +
@@ -3329,6 +3525,7 @@ export default function CampaignMap({
       showGroupEvents,
       showMapEvents,
       showPartners,
+      showBonusSpots,
       showZipStats,
       showNeighborhoodStats,
       showBoroughStats,
@@ -3350,6 +3547,9 @@ export default function CampaignMap({
     });
     businessMarkersRef.current.forEach((marker) => {
       marker.getElement().style.display = showPartners ? "" : "none";
+    });
+    bonusSpotMarkersRef.current.forEach((marker) => {
+      marker.getElement().style.display = showBonusSpots ? "" : "none";
     });
     cleanupEventMarkersRef.current.forEach((marker) => {
       marker.getElement().style.display = showGroupEvents ? "" : "none";
@@ -3379,6 +3579,7 @@ export default function CampaignMap({
     showGroupEvents,
     showMapEvents,
     showPartners,
+    showBonusSpots,
     showZipStats,
     showNeighborhoodStats,
     showBoroughStats,
@@ -4128,6 +4329,10 @@ export default function CampaignMap({
       cleanupRouteDateLabelsRef.current.forEach((m) => m.remove());
       photoMarkersRef.current.forEach((m) => m.remove());
       photoMarkersRef.current = [];
+      bonusSpotTweensRef.current.forEach((t) => t.kill());
+      bonusSpotMarkersRef.current.forEach((m) => m.remove());
+      if (bonusSpotCountdownIntervalRef.current) clearInterval(bonusSpotCountdownIntervalRef.current);
+      if (bonusSpotPulseFrameRef.current !== null) cancelAnimationFrame(bonusSpotPulseFrameRef.current);
       map.current?.remove();
       map.current = null;
     };
@@ -4327,6 +4532,7 @@ export default function CampaignMap({
         },
         (photo) => setSelectedPhoto(photo.contentId ? photo : { url: photo.url }),
       );
+      if (newContribution.id) marker.getElement().dataset.contributionId = newContribution.id;
       photoMarkersRef.current.push(marker);
       gsap.from(marker.getElement(), { y: -40, opacity: 0, duration: 0.5, ease: "bounce.out" });
       return;
@@ -4355,6 +4561,7 @@ export default function CampaignMap({
             (photo) => setSelectedPhoto(photo.contentId ? photo : { url: photo.url }),
             32,
           );
+          if (newContribution.id) marker.getElement().dataset.contributionId = newContribution.id;
           photoMarkersRef.current.push(marker);
           gsap.from(marker.getElement(), { y: -30, opacity: 0, duration: 0.5, ease: "bounce.out" });
         }
@@ -4370,6 +4577,7 @@ export default function CampaignMap({
       type: "Feature",
       geometry: { type: "Point", coordinates: [newContribution.lng, newContribution.lat] },
       properties: {
+        id: newContribution.id ?? undefined,
         value: newContribution.value,
         submitted_at: new Date().toISOString(),
         is_group_event: newContribution.isGroupEvent ?? false,
@@ -4378,6 +4586,26 @@ export default function CampaignMap({
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
     source.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
   }, [newContribution, isCollage, isHexBloom, refreshHexBloom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Remove a just-undone contribution's marker from the live map (Undo on the success screen)
+  useEffect(() => {
+    if (!removedContribution || !map.current) return;
+    const { id } = removedContribution;
+
+    contributionFeaturesRef.current = contributionFeaturesRef.current.filter(
+      (f) => f.properties?.id !== id,
+    );
+    const source = map.current.getSource("contribution-pts") as maplibregl.GeoJSONSource | undefined;
+    source?.setData({ type: "FeatureCollection", features: contributionFeaturesRef.current });
+
+    photoMarkersRef.current = photoMarkersRef.current.filter((marker) => {
+      if (marker.getElement().dataset.contributionId === id) {
+        marker.remove();
+        return false;
+      }
+      return true;
+    });
+  }, [removedContribution]);
 
   // Append freshly-submitted problem report to the live map immediately, without waiting on Realtime
   useEffect(() => {
@@ -4414,6 +4642,25 @@ export default function CampaignMap({
     updateReportMarkers(nextReports);
   }, [newReport, updateReportMarkers]);
 
+  // Remove a just-undone problem report's marker from the live map (Undo on the report success screen)
+  useEffect(() => {
+    if (!removedReport || !map.current) return;
+
+    const nextReports = (problemReportsRef.current?.reports ?? []).filter((r) => r.id !== removedReport.id);
+    const nextData: ProblemReports = {
+      reports: nextReports,
+      counts_by_geo_unit: problemReportsRef.current?.counts_by_geo_unit ?? {},
+      threshold: problemReportsRef.current?.threshold ?? null,
+      flag_auto_hide_threshold:
+        problemReportsRef.current?.flag_auto_hide_threshold ??
+        mapGameSettingsRef.current.flag_auto_hide_threshold ??
+        FLAG_AUTO_HIDE_THRESHOLD_FALLBACK,
+    };
+    problemReportsRef.current = nextData;
+    setLiveReports(nextData);
+    updateReportMarkers(nextReports);
+  }, [removedReport, updateReportMarkers]);
+
   // Supabase Realtime
   useEffect(() => {
     const supabase = createClient();
@@ -4433,6 +4680,25 @@ export default function CampaignMap({
           setLiveReports(data);
           if (map.current) updateReportMarkers(data.reports);
         },
+      )
+      .subscribe();
+
+    // Bonus spots are short-lived admin-spawned events, so unlike most map layers they
+    // need to appear/disappear live rather than waiting for a page refresh. Any change
+    // to this campaign's campaign_events re-fetches the (cheap) active bonus-spots list.
+    const fetchBonusSpots = async () => {
+      const res = await fetch(`${fastapiUrl}/api/events/campaign/${campaign.id}/bonus-spots`).catch(() => null);
+      if (!res?.ok) return;
+      const data = await res.json() as BonusSpotMapData[];
+      bonusSpotsRef.current = data;
+      if (map.current) updateBonusSpotMarkers(data);
+    };
+    const bonusSpotChannel = supabase
+      .channel(`campaign_events:${campaign.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "campaign_events", filter: `campaign_id=eq.${campaign.id}` },
+        fetchBonusSpots,
       )
       .subscribe();
 
@@ -4498,8 +4764,26 @@ export default function CampaignMap({
     return () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(reportChannel);
+      supabase.removeChannel(bonusSpotChannel);
     };
-  }, [campaign.id, isChoropleth, isHexBloom, refreshHexBloom, updateReportMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign.id, isChoropleth, isHexBloom, refreshHexBloom, updateReportMarkers, updateBonusSpotMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch active bonus spots once on mount / campaign change, then keep them live via the
+  // campaign_events Realtime subscription above.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/events/campaign/${campaign.id}/bonus-spots`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: BonusSpotMapData[]) => {
+        if (cancelled) return;
+        bonusSpotsRef.current = data;
+        updateBonusSpotMarkers(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign.id, updateBonusSpotMarkers]);
 
   const supportsZipSearch = campaign.geo_unit?.includes("zip") ?? false;
   const supportsUkPostcodeSearch = campaign.geo_unit?.includes("uk_postcode_district") ?? false;
@@ -4901,6 +5185,12 @@ export default function CampaignMap({
                   <span className="text-sm leading-none">🔥</span>
                 </span>
                 <span className="text-zinc-300">Hotspot</span>
+              </LegendToggle>
+              <LegendToggle checked={showBonusSpots} onChange={setShowBonusSpots}>
+                <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm leading-none">💎</span>
+                </span>
+                <span className="text-zinc-300">Bonus spot</span>
               </LegendToggle>
               <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>
                 <span className="w-3 h-3 rounded-full border border-sky-400 bg-sky-400/10 flex-shrink-0" />

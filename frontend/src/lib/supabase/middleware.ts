@@ -40,6 +40,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/users") ||
     request.nextUrl.pathname.startsWith("/leaderboard") ||
     request.nextUrl.pathname.startsWith("/groups") ||
+    request.nextUrl.pathname.startsWith("/cleanup-events") ||
+    request.nextUrl.pathname.startsWith("/routes") ||
     request.nextUrl.pathname.startsWith("/partners");
 
   if (!user && !isAuthPage && !isPublicPage) {

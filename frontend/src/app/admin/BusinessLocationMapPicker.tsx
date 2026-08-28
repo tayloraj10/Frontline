@@ -20,11 +20,19 @@ export default function BusinessLocationMapPicker({
   lng,
   onChange,
   locationNoun = "business",
+  interactive = true,
+  initialCenter,
+  initialZoom = 12,
+  square = false,
 }: {
   lat: number | null;
   lng: number | null;
   onChange: (lat: number, lng: number) => void;
   locationNoun?: string;
+  interactive?: boolean;
+  initialCenter?: [number, number];
+  initialZoom?: number;
+  square?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -42,38 +50,47 @@ export default function BusinessLocationMapPicker({
       container: containerRef.current,
       style: styleUrl(),
       ...(lat !== null && lng !== null
-        ? { center: [lng, lat] as [number, number], zoom: 12 }
+        ? { center: [lng, lat] as [number, number], zoom: initialZoom }
+        : initialCenter
+        ? { center: initialCenter, zoom: initialZoom }
         : { bounds: CONTINENTAL_US_BOUNDS, fitBoundsOptions: { padding: 20 } }),
       attributionControl: false,
+      interactive,
     });
     mapRef.current = m;
-    m.addControl(new maplibregl.NavigationControl(), "top-right");
-    if (navigator.geolocation) {
-      m.addControl(
-        new maplibregl.GeolocateControl({
-          positionOptions: { enableHighAccuracy: true },
-          trackUserLocation: false,
-          showUserLocation: true,
-        }),
-        "top-right"
-      );
+    if (interactive) {
+      m.addControl(new maplibregl.NavigationControl(), "top-right");
+      if (navigator.geolocation) {
+        m.addControl(
+          new maplibregl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: false,
+            showUserLocation: true,
+          }),
+          "top-right"
+        );
+      }
     }
 
-    const marker = new maplibregl.Marker({ color: "#f59e0b", draggable: true });
+    const marker = new maplibregl.Marker({ color: "#f59e0b", draggable: interactive });
     if (lat !== null && lng !== null) {
       marker.setLngLat([lng, lat]).addTo(m);
     }
-    marker.on("dragend", () => {
-      const { lat: newLat, lng: newLng } = marker.getLngLat();
-      onChangeRef.current(newLat, newLng);
-    });
+    if (interactive) {
+      marker.on("dragend", () => {
+        const { lat: newLat, lng: newLng } = marker.getLngLat();
+        onChangeRef.current(newLat, newLng);
+      });
+    }
     markerRef.current = marker;
 
-    m.on("click", (e) => {
-      marker.setLngLat(e.lngLat);
-      if (!marker.getElement().isConnected) marker.addTo(m);
-      onChangeRef.current(e.lngLat.lat, e.lngLat.lng);
-    });
+    if (interactive) {
+      m.on("click", (e) => {
+        marker.setLngLat(e.lngLat);
+        if (!marker.getElement().isConnected) marker.addTo(m);
+        onChangeRef.current(e.lngLat.lat, e.lngLat.lng);
+      });
+    }
 
     return () => {
       m.remove();
@@ -101,10 +118,10 @@ export default function BusinessLocationMapPicker({
     <div>
       <div
         ref={containerRef}
-        className="w-full h-[220px] rounded-lg overflow-hidden border border-zinc-700/50 shadow-elevation-1"
+        className={`w-full ${square ? "h-[280px]" : "h-[220px]"} rounded-lg overflow-hidden border border-zinc-700/50 shadow-elevation-1`}
       />
       <p className="text-xs text-zinc-400 mt-1">
-        Click or drag the pin to set the {locationNoun} location.{" "}
+        {interactive ? `Click or drag the pin to set the ${locationNoun} location. ` : ""}
         {lat !== null && lng !== null ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "No location set."}
       </p>
     </div>

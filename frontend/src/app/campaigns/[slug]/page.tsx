@@ -76,7 +76,7 @@ type PartnerBusinessRow = {
   website_url: string | null; status: string;
   partner_business_locations: { id: string; label: string | null; lat: number; lng: number; google_maps_url: string | null; status: string }[];
 };
-type OfferRequirement = { title: string; mode: "spend" | "threshold"; requirement: number; location_id: string | null };
+type OfferRequirement = { title: string; mode: "spend" | "threshold" | "event_only"; requirement: number; location_id: string | null };
 
 // Everything here is public, RLS-open data (or FastAPI-computed data with no
 // per-user variance), so it's safe to share one cache entry across all
@@ -160,7 +160,7 @@ const getCampaignPageData = unstable_cache(
       : {
           data: [] as {
             business_id: string; title: string; starts_at: string; ends_at: string | null;
-            redemption_mode: "spend" | "threshold"; points_cost: number | null; points_threshold: number | null;
+            redemption_mode: "spend" | "threshold" | "event_only"; points_cost: number | null; points_threshold: number | null;
             location_id: string | null;
           }[],
         };
@@ -174,7 +174,9 @@ const getCampaignPageData = unstable_cache(
     for (const row of activeOfferRows ?? []) {
       if (row.starts_at > nowIso) continue;
       if (row.ends_at && row.ends_at <= nowIso) continue;
-      const requirement = row.redemption_mode === "spend" ? row.points_cost ?? 0 : row.points_threshold ?? 0;
+      const requirement = row.redemption_mode === "spend" ? row.points_cost ?? 0
+        : row.redemption_mode === "threshold" ? row.points_threshold ?? 0
+        : 0; // event_only: no points requirement, never counts as "affordable" below
       const list = activeOffersByBusiness.get(row.business_id) ?? [];
       list.push({ title: row.title, mode: row.redemption_mode, requirement, location_id: row.location_id });
       activeOffersByBusiness.set(row.business_id, list);
@@ -274,13 +276,26 @@ export default async function CampaignPage({ params, searchParams }: Props) {
     : null;
   const problemReports: ProblemReports | null = problemReportsRes?.ok ? await problemReportsRes.json() : null;
 
-  const [{ data: membershipData }, { data: adminProfile }] = await Promise.all([
+  const [{ data: membershipData }, { data: adminProfile }, { data: myContribsData }] = await Promise.all([
     user
       ? supabase.from("group_members").select("group_id, role").eq("user_id", user.id)
       : Promise.resolve({ data: [] as { group_id: string; role: string }[] }),
     user
       ? supabase.schema("public").from("profiles").select("is_admin, points, spendable_points").eq("id", user.id).single()
       : Promise.resolve({ data: null as { is_admin: boolean; points: number; spendable_points: number } | null }),
+    // Per-viewer, so fetched here rather than inside getCampaignPageData's shared cache — the
+    // cached "activity" feed above is only the 20 most-recent contributions campaign-wide, so a
+    // user's own contributions can easily fall out of that window on an active campaign even
+    // though they still have plenty of history. This guarantees "Mine" always reflects reality.
+    user
+      ? supabase
+          .from("contributions")
+          .select("id, user_id, group_id, value, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags, metrics_pounds)")
+          .eq("campaign_id", campaign.id)
+          .eq("user_id", user.id)
+          .order("submitted_at", { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [] as typeof actContribs }),
   ]);
   const isAdmin = adminProfile?.is_admin ?? false;
 
@@ -295,7 +310,9 @@ export default async function CampaignPage({ params, searchParams }: Props) {
         ? offers.find((o) =>
             o.mode === "spend"
               ? adminProfile.spendable_points >= o.requirement
-              : adminProfile.points >= o.requirement
+              : o.mode === "threshold"
+              ? adminProfile.points >= o.requirement
+              : false // event_only offers have no points path, never "affordable"
           )
         : undefined;
       return { ...l, affordableOfferTitle: affordable?.title ?? null };
@@ -322,8 +339,9 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   const claimedGroupIds = [...new Set(claims.filter((c) => c.claimed_by_group).map((c) => c.claimed_by_group!))];
   const lbUserIds = lbRaw.users.map((u) => u.entity_id);
   const lbGroupIds = lbRaw.groups.map((g) => g.entity_id);
-  const actUserIds = [...new Set(actContribs.filter((c) => c.user_id).map((c) => c.user_id!))];
-  const actGroupIds = [...new Set(actContribs.filter((c) => c.group_id).map((c) => c.group_id!))];
+  const myContribs = myContribsData ?? [];
+  const actUserIds = [...new Set([...actContribs, ...myContribs].filter((c) => c.user_id).map((c) => c.user_id!))];
+  const actGroupIds = [...new Set([...actContribs, ...myContribs].filter((c) => c.group_id).map((c) => c.group_id!))];
 
   const allUserIds = [...new Set([...claimedUserIds, ...lbUserIds, ...actUserIds, ...(user?.id ? [user.id] : [])])];
   const allGroupIds = [...new Set([...claimedGroupIds, ...lbGroupIds, ...actGroupIds, ...userGroupIds])];
@@ -377,8 +395,14 @@ export default async function CampaignPage({ params, searchParams }: Props) {
     })),
   };
 
-  // Enriched activity
-  const activity: ActivityItem[] = actContribs.map((c) => {
+  // Enriched activity — merges the shared cached "recent global" feed with the current
+  // viewer's own contributions (fetched uncached above) so "Mine" doesn't miss real
+  // history that fell outside the global feed's top-20 window; deduped by id.
+  const mergedContribsById = new Map([...actContribs, ...myContribs].map((c) => [c.id, c]));
+  const mergedContribs = [...mergedContribsById.values()].sort(
+    (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+  );
+  const activity: ActivityItem[] = mergedContribs.map((c) => {
     const profile = c.user_id ? profilesById.get(c.user_id) : null;
     const group = c.group_id ? groupsById.get(c.group_id) : null;
     const cleanup = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null; metrics_pounds: number | null } | null;
