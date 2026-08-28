@@ -2,6 +2,11 @@ import { isNativePlatform } from "@/lib/capacitor";
 
 export type TrackingPermissionResult = "granted" | "whenInUseOnly" | "denied";
 
+// Dev-only escape hatch so Track Route's UI (map, controls, review screen) can be
+// worked on from a desktop browser, where there's no native plugin to talk to.
+// Never true in production — isNativePlatform() gates the real plugin path there.
+const isDevWebFallback = process.env.NODE_ENV !== "production" && !isNativePlatform();
+
 export interface TrackedPoint {
   latitude: number;
   longitude: number;
@@ -36,6 +41,10 @@ async function loadPlugin() {
  */
 export async function requestTrackingPermission(): Promise<TrackingPermissionResult> {
   console.log("[track] requestTrackingPermission: start");
+  if (isDevWebFallback) {
+    console.log("[track] requestTrackingPermission: dev web fallback, returning granted");
+    return "granted";
+  }
   if (!isNativePlatform()) {
     console.log("[track] requestTrackingPermission: not native, returning denied");
     return "denied";
@@ -73,8 +82,13 @@ export async function openLocationSettings(): Promise<void> {
 export async function startRouteTracking(
   onPoint: (point: TrackedPoint) => void,
   onError: (message: string) => void,
-  intervalSeconds = 12,
+  intervalSeconds = 30,
 ): Promise<{ stop: () => Promise<void> }> {
+  if (isDevWebFallback) {
+    // No real plugin on web — just leave the map sitting at its default center
+    // so the tracking screen's UI can be styled without a location fix.
+    return { stop: async () => {} };
+  }
   const { plugin } = await loadPlugin();
 
   const locationHandle = await plugin.addListener("location", onPoint);

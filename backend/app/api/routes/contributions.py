@@ -73,6 +73,7 @@ class ContributionRequest(BaseModel):
     cleanup_event_id: UUID | None = None
     route: dict | None = None
     route_geo_unit_id: UUID | None = None
+    route_photos: list[dict] | None = None
     from_solarpunk_redirect: bool = False
 
     @field_validator("small_bags", "large_bags", "pounds")
@@ -92,6 +93,18 @@ class ContributionRequest(BaseModel):
         coords = v.get("coordinates")
         if not isinstance(coords, list) or len(coords) < 2:
             raise ValueError("route must have at least 2 coordinates")
+        return v
+
+    @field_validator("route_photos")
+    @classmethod
+    def _valid_route_photos(cls, v: list[dict] | None) -> list[dict] | None:
+        if v is None:
+            return v
+        for p in v:
+            if not isinstance(p.get("url"), str) or not p["url"]:
+                raise ValueError("each route photo needs a url")
+            if not isinstance(p.get("lat"), (int, float)) or not isinstance(p.get("lng"), (int, float)):
+                raise ValueError("each route photo needs numeric lat/lng")
         return v
 
 
@@ -191,6 +204,9 @@ async def submit_contribution(
         if not event_result.fetchone():
             raise HTTPException(status_code=404, detail="Cleanup event not found")
 
+    if payload.route_photos and not payload.route:
+        raise HTTPException(status_code=400, detail="route_photos requires a route")
+
     if payload.route:
         if not payload.route_geo_unit_id:
             raise HTTPException(status_code=400, detail="route_geo_unit_id is required when submitting a route")
@@ -249,7 +265,7 @@ async def submit_contribution(
         cleanup_result = await db.execute(
             text("""
                 INSERT INTO cleanups
-                    (campaign_id, geo_unit_id, location, route, status, image_urls,
+                    (campaign_id, geo_unit_id, location, route, route_photos, status, image_urls,
                      metrics_small_bags, metrics_large_bags, metrics_pounds, submitted_by_user_id, attended_user_ids)
                 VALUES
                     (:campaign_id, :geo_unit_id,
@@ -258,6 +274,9 @@ async def submit_contribution(
                           ELSE NULL END,
                      CASE WHEN CAST(:route AS text) IS NOT NULL
                           THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
+                          ELSE NULL END,
+                     CASE WHEN CAST(:route_photos AS text) IS NOT NULL
+                          THEN CAST(:route_photos AS jsonb)
                           ELSE NULL END,
                      'completed', :image_urls, :metrics_small_bags, :metrics_large_bags, :metrics_pounds, :user_id, ARRAY[:user_id]::uuid[])
                 RETURNING id
@@ -268,6 +287,7 @@ async def submit_contribution(
                 "lon": payload.longitude,
                 "lat": payload.latitude,
                 "route": json.dumps(payload.route) if payload.route else None,
+                "route_photos": json.dumps(payload.route_photos) if payload.route_photos else None,
                 "image_urls": cleanup_image_urls,
                 "metrics_small_bags": payload.small_bags,
                 "metrics_large_bags": payload.large_bags,
