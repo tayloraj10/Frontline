@@ -15,11 +15,18 @@ export interface TrackedPoint {
 // iOS-only for now; Android support would live in the same plugin package with
 // no changes needed here (see capacitor-background-geolocation-frontline).
 
+// Wrapped in an object rather than returned bare: this function is async, so its
+// return value is resolved through JS's promise machinery, which treats any object
+// with a callable `.then` as a thenable. The plugin proxy's Proxy `get` trap returns
+// a callable wrapper for *any* property name (including "then"), so returning it
+// directly here makes JS call `proxy.then(resolve, reject)` as if resolving a real
+// promise — which the proxy interprets as a call to a native method literally named
+// "then", producing `"BackgroundGeolocationFrontline.then()" is not implemented on ios"`.
 async function loadPlugin() {
   const { BackgroundGeolocationFrontline } = await import(
     "capacitor-background-geolocation-frontline"
   );
-  return BackgroundGeolocationFrontline;
+  return { plugin: BackgroundGeolocationFrontline };
 }
 
 /**
@@ -34,7 +41,7 @@ export async function requestTrackingPermission(): Promise<TrackingPermissionRes
     return "denied";
   }
   console.log("[track] requestTrackingPermission: loading plugin");
-  const plugin = await loadPlugin();
+  const { plugin } = await loadPlugin();
   console.log("[track] requestTrackingPermission: plugin loaded, calling checkPermissions");
 
   const current = await plugin.checkPermissions();
@@ -58,7 +65,7 @@ export async function requestTrackingPermission(): Promise<TrackingPermissionRes
 
 export async function openLocationSettings(): Promise<void> {
   if (!isNativePlatform()) return;
-  const plugin = await loadPlugin();
+  const { plugin } = await loadPlugin();
   await plugin.openSettings();
 }
 
@@ -68,7 +75,7 @@ export async function startRouteTracking(
   onError: (message: string) => void,
   intervalSeconds = 12,
 ): Promise<{ stop: () => Promise<void> }> {
-  const plugin = await loadPlugin();
+  const { plugin } = await loadPlugin();
 
   const locationHandle = await plugin.addListener("location", onPoint);
   const errorHandle = await plugin.addListener("error", (data) => onError(data.message));
