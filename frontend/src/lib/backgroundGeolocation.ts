@@ -28,20 +28,31 @@ async function loadPlugin() {
  * after When-In-Use is granted, so these calls must happen back-to-back.
  */
 export async function requestTrackingPermission(): Promise<TrackingPermissionResult> {
-  if (!isNativePlatform()) return "denied";
+  console.log("[track] requestTrackingPermission: start");
+  if (!isNativePlatform()) {
+    console.log("[track] requestTrackingPermission: not native, returning denied");
+    return "denied";
+  }
+  console.log("[track] requestTrackingPermission: loading plugin");
   const plugin = await loadPlugin();
+  console.log("[track] requestTrackingPermission: plugin loaded, calling checkPermissions");
 
   const current = await plugin.checkPermissions();
+  console.log("[track] checkPermissions resolved:", current);
   if (current.location === "granted") return "granted";
 
   if (current.location === "prompt") {
+    console.log("[track] calling requestWhenInUsePermission");
     const whenInUse = await plugin.requestWhenInUsePermission();
+    console.log("[track] requestWhenInUsePermission resolved:", whenInUse);
     if (whenInUse.location !== "granted") return "denied";
   } else if (current.location === "denied") {
     return "denied";
   }
 
+  console.log("[track] calling requestAlwaysPermission");
   const always = await plugin.requestAlwaysPermission();
+  console.log("[track] requestAlwaysPermission resolved:", always);
   return always.location;
 }
 
