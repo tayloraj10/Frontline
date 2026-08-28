@@ -41,6 +41,8 @@ yarn-error.log*
 
 # Xcode local user state (e.g. local Swift packages under packages/)
 .swiftpm/
+packages/**/.build/
+packages/**/Package.resolved
 
 # typescript
 *.tsbuildinfo

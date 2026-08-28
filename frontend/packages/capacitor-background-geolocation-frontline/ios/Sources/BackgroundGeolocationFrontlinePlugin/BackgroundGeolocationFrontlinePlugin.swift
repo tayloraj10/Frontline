@@ -40,6 +40,18 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
         }
         pendingWhenInUseCall = call
         tracker.requestWhenInUseAuthorization()
+
+        // Defensive symmetry with requestAlwaysPermission: fail safe if the callback is
+        // ever missed, without racing the user's actual response time (see helper below).
+        resolveIfNoSystemPromptAppears(
+            for: call,
+            getPending: { [weak self] in self?.pendingWhenInUseCall },
+            clearPending: { [weak self] in self?.pendingWhenInUseCall = nil },
+            resolvedLocation: { [weak self] in
+                guard let self else { return "denied" }
+                return self.whenInUseResult(for: self.tracker.authorizationStatus)
+            }
+        )
     }
 
     @objc func requestAlwaysPermission(_ call: CAPPluginCall) {
@@ -55,6 +67,70 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
         }
         pendingAlwaysCall = call
         tracker.requestAlwaysAuthorization()
+
+        // iOS only shows the "upgrade to Always" system alert once per install, and won't
+        // show it at all if it's already been presented (or dismissed) previously — in that
+        // case requestAlwaysAuthorization() is a silent no-op: authorizationStatus never
+        // changes, so didChangeAuthorization never fires, and this call would otherwise hang
+        // forever. resolveIfNoSystemPromptAppears tells that case apart from "the alert is
+        // genuinely still on screen" so we don't cut off a slow-to-respond user.
+        resolveIfNoSystemPromptAppears(
+            for: call,
+            getPending: { [weak self] in self?.pendingAlwaysCall },
+            clearPending: { [weak self] in self?.pendingAlwaysCall = nil },
+            resolvedLocation: { [weak self] in
+                guard let self else { return "denied" }
+                return self.permissionState(for: self.tracker.authorizationStatus).rawValue
+            }
+        )
+    }
+
+    // When iOS actually presents a system permission alert, the app immediately resigns
+    // active (UIApplication.willResignActiveNotification). If that doesn't happen shortly
+    // after requesting authorization, no alert was shown at all — a known silent no-op case
+    // for the Always upgrade prompt — so it's safe to resolve immediately. If the alert *is*
+    // showing, we cancel the fallback and wait indefinitely for the real answer instead of
+    // racing a fixed timer against however long the user takes to respond.
+    private func resolveIfNoSystemPromptAppears(
+        for call: CAPPluginCall,
+        getPending: @escaping () -> CAPPluginCall?,
+        clearPending: @escaping () -> Void,
+        resolvedLocation: @escaping () -> String
+    ) {
+        final class ObserverBox { var observer: NSObjectProtocol? }
+        let box = ObserverBox()
+
+        let resolveOnce = {
+            guard let pending = getPending(), pending === call else { return }
+            clearPending()
+            if let observer = box.observer {
+                NotificationCenter.default.removeObserver(observer)
+                box.observer = nil
+            }
+            pending.resolve(["location": resolvedLocation()])
+        }
+
+        let noPromptWorkItem = DispatchWorkItem(block: resolveOnce)
+
+        box.observer = NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            noPromptWorkItem.cancel()
+            if let observer = box.observer {
+                NotificationCenter.default.removeObserver(observer)
+                box.observer = nil
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: noPromptWorkItem)
+
+        // Absolute last resort: even if a real system prompt does appear (so the fast check
+        // above backs off and waits), never wait forever — cap total wait time in case the
+        // willResignActive heuristic ever false-positives on something unrelated to a
+        // location dialog, or the delegate callback is missed for some other reason.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: DispatchWorkItem(block: resolveOnce))
     }
 
     @objc func start(_ call: CAPPluginCall) {
