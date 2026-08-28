@@ -1211,7 +1211,7 @@ function ContributeModal({
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/60 bg-amber-950/30 text-xs text-amber-200">
               <span className="text-base shrink-0">💎</span>
               <span>
-                💎 BONUS SPOT: cleanups here earn a{" "}
+                BONUS SPOT: cleanups here earn a{" "}
                 <span className="font-bold text-amber-100">{activeMultiplier.multiplier}×</span> score multiplier.
               </span>
             </div>
