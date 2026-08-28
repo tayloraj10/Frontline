@@ -123,7 +123,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 504EC2FF1FED79650016851F /* Build configuration list for PBXProject "Frontline Maps" */;
+			buildConfigurationList = 504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */;
 			compatibilityVersion = "Xcode 8.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -320,6 +320,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.3.5;
+				"OTHER_LDFLAGS[arch=*]" = "-ObjC";
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.frontlinemaps.app;
 				PRODUCT_NAME = "Frontline Maps";
@@ -346,6 +347,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.3.5;
+				"OTHER_LDFLAGS[arch=*]" = "-ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.frontlinemaps.app;
 				PRODUCT_NAME = "Frontline Maps";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -358,7 +360,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "Frontline Maps" */ = {
+		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				504EC3141FED79650016851F /* Debug */,

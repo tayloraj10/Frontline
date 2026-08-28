@@ -29,12 +29,10 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
     }
 
     @objc override public func checkPermissions(_ call: CAPPluginCall) {
-        print("[BGGeo] checkPermissions called, status=\(tracker.authorizationStatus.rawValue)")
         call.resolve(["location": permissionState(for: tracker.authorizationStatus).rawValue])
     }
 
     @objc func requestWhenInUsePermission(_ call: CAPPluginCall) {
-        print("[BGGeo] requestWhenInUsePermission called, status=\(tracker.authorizationStatus.rawValue)")
         let status = tracker.authorizationStatus
         if status != .notDetermined {
             call.resolve(["location": whenInUseResult(for: status)])
@@ -57,7 +55,6 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
     }
 
     @objc func requestAlwaysPermission(_ call: CAPPluginCall) {
-        print("[BGGeo] requestAlwaysPermission called, status=\(tracker.authorizationStatus.rawValue)")
         let status = tracker.authorizationStatus
         if status == .authorizedAlways {
             call.resolve(["location": "granted"])
