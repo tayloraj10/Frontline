@@ -11,6 +11,7 @@ import type { SelectedArea } from "./EventAreaMapPicker";
 import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
 import AddressAutocomplete from "./AddressAutocomplete";
 import TimedEventForm from "@/components/events/TimedEventForm";
+import BonusSpotForm from "@/components/events/BonusSpotForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
@@ -234,6 +235,7 @@ const EVENT_TYPE_INFO: Record<string, { desc: string; implemented: boolean }> = 
   seasonal_reset: { desc: "Signals a campaign-wide or weighted score reset. The event record is created but no reset logic is implemented yet.", implemented: false },
   decay_start:    { desc: "Marks the start of a score decay period. The event record is created but no decay logic is implemented yet.", implemented: false },
   timed_event:    { desc: "Admin-created timed bonus event over one or more areas (effect_config is always {\"type\": \"score_multiplier\", \"multiplier\": N}). Never auto-triggered — created manually here or from the campaign page. Fully implemented.", implemented: true },
+  bonus_spot:     { desc: "Admin-spawned point-on-the-map jackpot: cleanups within its radius earn a score multiplier until it expires or is claimed. Location can be picked manually or auto-suggested from nearby problem reports. Fully implemented.", implemented: true },
 };
 
 const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 transition-[border-color] duration-150 focus:outline-none focus:border-zinc-500";
@@ -1083,17 +1085,19 @@ const EVENT_ICON: Record<string, string> = {
   seasonal_reset: "🔄",
   decay_start: "📉",
   timed_event: "✨",
+  bonus_spot: "💎",
 };
 
-function EventsTab({ campaigns, events, setEvents }: {
+function EventsTab({ campaigns, events, setEvents, currentUserId }: {
   campaigns: Campaign[];
   events: ActiveEvent[];
   setEvents: (e: ActiveEvent[]) => void;
+  currentUserId: string;
 }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [campaignId, setCampaignId] = useState(campaigns.find((c) => c.slug === "trash-war")?.id ?? campaigns[0]?.id ?? "");
-  const [eventType, setEventType] = useState("boss_spawn");
+  const [eventType, setEventType] = useState("bonus_spot");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedAreas, setSelectedAreas] = useState<SelectedArea[]>([]);
@@ -1306,16 +1310,10 @@ function EventsTab({ campaigns, events, setEvents }: {
           <div className="space-y-1">
             <label className="text-xs text-zinc-500">Event type</label>
             <select className={inputCls} value={eventType} onChange={e => setEventType(e.target.value)}>
-              <option value="boss_spawn">boss_spawn</option>
-              <option value="cascade_unlock">cascade_unlock</option>
-              <option value="notification">notification</option>
-              <option value="seasonal_reset">seasonal_reset</option>
-              <option value="decay_start">decay_start</option>
+              <option value="bonus_spot">bonus_spot</option>
               <option value="timed_event">timed_event</option>
+              <option value="boss_spawn">boss_spawn</option>
             </select>
-            {EVENT_TYPE_INFO[eventType] && !EVENT_TYPE_INFO[eventType].implemented && (
-              <p className="text-amber-400 text-xs mt-1">⚠ Stub — effect not yet implemented, event will be created but has no gameplay effect.</p>
-            )}
           </div>
 
           {eventType === "timed_event" ? (
@@ -1351,6 +1349,32 @@ function EventsTab({ campaigns, events, setEvents }: {
                 </>
               );
             })()
+          ) : eventType === "bonus_spot" ? (
+            <BonusSpotForm
+              campaignId={campaignId}
+              campaigns={campaigns}
+              onCampaignChange={setCampaignId}
+              viewerUserId={currentUserId}
+              onCreated={(spot) => {
+                const campaign = campaigns.find(c => c.id === spot.campaign_id);
+                const newEvent: ActiveEvent = {
+                  id: spot.id,
+                  event_type: "bonus_spot",
+                  title: spot.title,
+                  description: spot.description,
+                  image_url: null,
+                  effect_config: spot.effect_config,
+                  status: spot.status,
+                  started_at: spot.started_at ?? new Date().toISOString(),
+                  ends_at: spot.ends_at,
+                  campaign_id: spot.campaign_id,
+                  campaigns: campaign ? { title: campaign.title, slug: campaign.slug } : null,
+                };
+                setEvents([newEvent, ...events]);
+                setShowCreate(false);
+              }}
+              onCancel={() => setShowCreate(false)}
+            />
           ) : (
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3471,6 +3495,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   moderation: "Moderation",
   milestones: "Milestone ladders",
   notifications: "Email notifications",
+  bonus_spots: "Bonus spots",
 };
 
 // Settings that are conceptually booleans (stored as 0/1 in the numeric game_settings
@@ -3500,6 +3525,8 @@ const UNIT_LABELS: Record<string, string> = {
   time_elapsed_event_duration_hours_default: "hr",
   claim_challenge_multiplier: "×",
   hotspot_multiplier: "×",
+  bonus_spot_multiplier: "×",
+  bonus_spot_default_duration_minutes: "min",
   small_bag_value: "pts",
   large_bag_value: "pts",
   pound_value: "pts",
@@ -3600,7 +3627,7 @@ function SettingsTab({ settings, setSettings }: {
           <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 shadow-elevation-1">
             {rows.map(setting => {
               const dirty = drafts[setting.key] !== String(setting.value);
-              const isProximity = setting.category === "proximity";
+              const isProximity = setting.category === "proximity" || setting.key === "bonus_spot_default_radius_m";
               const isSolarpunkTieIn = setting.key === "trash_war_solarpunk_credit";
               const isBoolean = BOOLEAN_SETTING_KEYS.has(setting.key);
               const metersDraft = Number(drafts[setting.key]);
@@ -3897,7 +3924,7 @@ export default function AdminPanel({
 
       {tab === "campaigns" && <CampaignsTab campaigns={sortedCampaigns} setCampaigns={setCampaigns} />}
       {tab === "triggers" && <TriggersTab campaigns={activeCampaigns} triggers={triggers} setTriggers={setTriggers} hotspotMultiplier={hotspotMultiplier} />}
-      {tab === "events" && <EventsTab campaigns={activeCampaigns} events={events} setEvents={setEvents} />}
+      {tab === "events" && <EventsTab campaigns={activeCampaigns} events={events} setEvents={setEvents} currentUserId={currentUserId} />}
       {tab === "partners" && (
         <PartnersTab
           businesses={businesses}
