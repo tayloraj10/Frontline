@@ -336,6 +336,23 @@ async def submit_contribution(
                     {"campaign_id": str(payload.campaign_id), "geo_unit_id": report_geo_unit_id},
                 )
 
+            # A bonus spot's source report may be resolved without the resolving
+            # contribution having landed inside radius_m (e.g. claimed from just
+            # outside it) - clear the bonus spot too so it doesn't sit active with
+            # nothing left to find.
+            await db.execute(
+                text("""
+                    UPDATE campaign_events
+                    SET status = 'resolved',
+                        resolved_at = NOW()
+                    WHERE campaign_id = :campaign_id
+                      AND source_problem_report_id = :report_id
+                      AND event_type = 'bonus_spot'
+                      AND status = 'active'
+                """),
+                {"campaign_id": str(payload.campaign_id), "report_id": str(payload.resolve_report_id)},
+            )
+
     # Challenge-mode completion: the report was already resolved by POST
     # /problem-reports/{id}/claim/after-photo (which verified the claim/timers); this just
     # links the resulting cleanup contribution to it and applies the challenge bonus.
@@ -383,6 +400,20 @@ async def submit_contribution(
         challenge_multiplier=settings.get("claim_challenge_multiplier", 1.5) if challenge_bonus_applied else 1.0,
         cleanup_event_id=str(payload.cleanup_event_id) if payload.cleanup_event_id else None,
     )
+
+    if recorded.bonus_spot_event_id:
+        # First contribution to land inside the bonus spot's radius claims it -
+        # single-claim "jackpot" semantics, same as a boss_spawn resolving once
+        # its last report clears.
+        await db.execute(
+            text("""
+                UPDATE campaign_events
+                SET status = 'resolved',
+                    resolved_at = NOW()
+                WHERE id = :id AND status = 'active'
+            """),
+            {"id": recorded.bonus_spot_event_id},
+        )
 
     if payload.cleanup_event_id:
         # Self-log attendance: an RSVP row is "attended" once it has a linked

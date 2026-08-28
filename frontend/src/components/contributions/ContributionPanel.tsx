@@ -817,7 +817,7 @@ function ContributeModal({
   const [nearbyReport, setNearbyReport] = useState<{ id: string; distance_m: number; unit_type: string | null } | null>(null);
   const [resolveHotspot, setResolveHotspot] = useState(true);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
-  const [activeMultiplier, setActiveMultiplier] = useState<{ multiplier: number; title: string } | null>(null);
+  const [activeMultiplier, setActiveMultiplier] = useState<{ multiplier: number; title: string; kind: "bonus_spot" | "event" } | null>(null);
   const [appliedMultiplier, setAppliedMultiplier] = useState<{ multiplier: number; title: string } | null>(null);
   const [valueFlash, setValueFlash] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -920,7 +920,7 @@ function ContributeModal({
       { signal: controller.signal },
     )
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setActiveMultiplier(data?.active ? { multiplier: data.multiplier, title: data.title } : null))
+      .then((data) => setActiveMultiplier(data?.active ? { multiplier: data.multiplier, title: data.title, kind: data.kind } : null))
       .catch(() => { });
     return () => controller.abort();
   }, [isCleanup, isRouteMode, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
@@ -1207,11 +1207,19 @@ function ContributeModal({
                 A <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> hotspot is also active here, but event cleanups don&apos;t earn a bonus multiplier.
               </span>
             </div>
+          ) : activeMultiplier.kind === "bonus_spot" ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/60 bg-amber-950/30 text-xs text-amber-200">
+              <span className="text-base shrink-0">💎</span>
+              <span>
+                💎 BONUS SPOT: cleanups here earn a{" "}
+                <span className="font-bold text-amber-100">{activeMultiplier.multiplier}×</span> score multiplier.
+              </span>
+            </div>
           ) : (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
               <span className="text-base shrink-0">🔥</span>
               <span>
-                Hotspot active — cleanups here earn a{" "}
+                Hotspot active. Cleanups here earn a{" "}
                 <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> score multiplier.
               </span>
             </div>
@@ -1460,7 +1468,7 @@ function ContributeModal({
                   </span>
                   {combinedMultiplier > 1 ? (
                     <span className="ml-1 text-orange-400/80">
-                      ({combinedMultiplier}× {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "challenge" : "hotspot"} multiplier applied)
+                      ({combinedMultiplier}× {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "challenge" : effectiveMultiplier && "kind" in effectiveMultiplier && effectiveMultiplier.kind === "bonus_spot" ? "bonus spot" : "hotspot"} multiplier applied)
                     </span>
                   ) : (
                     <span className="ml-1 text-zinc-600">(large bags count {gameSettings.large_bag_value!}x)</span>
