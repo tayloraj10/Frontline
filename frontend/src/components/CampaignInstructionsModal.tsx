@@ -146,9 +146,9 @@ export default function CampaignInstructionsModal({
           i
         </button>
         {open && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setOpen(false)}>
             <div
-              className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md max-h-[85vh] max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
@@ -203,9 +203,9 @@ export default function CampaignInstructionsModal({
       </div>
 
       {description && descOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setDescOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setDescOpen(false)}>
           <div
-            className="relative w-full max-w-md max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md max-h-[85vh] max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
@@ -224,8 +224,8 @@ export default function CampaignInstructionsModal({
       )}
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="relative w-full max-w-md sm:max-w-2xl max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-md sm:max-w-2xl max-h-[85vh] max-h-[85dvh] flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto">
             <div className="px-6 pt-5 pb-3 shrink-0 border-b border-zinc-800/60">
               <div className="text-3xl mb-2 text-center">{instructions.icon}</div>
               <h2 className="text-lg font-black text-zinc-100 text-center mb-1 tracking-tight">
