@@ -1505,6 +1505,7 @@ export default function CampaignPageClient({
         campaignContributionType={campaign.contribution_type}
         userId={userId}
         userGroups={userGroups}
+        isSiteAdmin={isAdmin}
         onEnterPinPicker={handleEnterPinPicker}
         pinPickerActive={pinPickerActive}
         placedPinCoords={placedPinCoords}

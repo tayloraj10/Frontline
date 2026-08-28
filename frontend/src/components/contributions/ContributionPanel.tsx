@@ -245,6 +245,9 @@ interface ContributionPanelProps {
   campaignContributionType: string;
   userId: string | null;
   userGroups?: { id: string; name: string; image_url?: string | null; isAdmin?: boolean }[];
+  // Site-wide admin flag (profiles.is_admin) — distinct from the per-group isAdmin above.
+  // Currently only used to gate the still-in-progress "Track" logging mode.
+  isSiteAdmin?: boolean;
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
@@ -711,6 +714,7 @@ function ContributeModal({
   nearbyEvent,
   claimedReportId,
   prefillPhotoUrls,
+  isSiteAdmin,
 }: {
   campaignId: string;
   campaignContributionType: string;
@@ -739,6 +743,9 @@ function ContributeModal({
   // Before/after photos already captured (and uploaded to R2) during the claim challenge —
   // prefilled here so the user isn't asked to retake/reselect photos they just took.
   prefillPhotoUrls?: string[];
+  // Gates the still-in-progress live route "Track" mode to site admins only, ahead of a
+  // full rollout — see profiles.is_admin.
+  isSiteAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
@@ -1273,7 +1280,7 @@ function ContributeModal({
               >
                 🛤️ Route
               </button>
-              {isIOSNative() && (
+              {isIOSNative() && isSiteAdmin && (
                 <button
                   type="button"
                   onClick={() => setContributeMode("track")}
@@ -3985,6 +3992,7 @@ export default function ContributionPanel({
   campaignContributionType,
   userId,
   userGroups = [],
+  isSiteAdmin,
   onEnterPinPicker,
   pinPickerActive,
   placedPinCoords,
@@ -4347,6 +4355,7 @@ export default function ContributionPanel({
               campaignContributionType={campaignContributionType}
               userId={userId}
               userGroups={userGroups}
+              isSiteAdmin={isSiteAdmin}
               gps={gps}
               overrideCoords={contributeOverrideCoords}
               onEnterPinPicker={handleEnterPinPickerForContribute}
