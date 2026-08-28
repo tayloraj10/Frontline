@@ -39,6 +39,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Xcode local user state (e.g. local Swift packages under packages/)
+.swiftpm/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
