@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "prebuild": "npm run build --prefix packages/capacitor-background-geolocation-frontline",
     "build": "next build",
     "build:android": "node scripts/build-android.mjs",
     "sync:ios-version": "node scripts/sync-ios-version.mjs",

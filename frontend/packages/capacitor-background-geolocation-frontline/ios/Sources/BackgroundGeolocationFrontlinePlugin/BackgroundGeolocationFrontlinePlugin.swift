@@ -28,7 +28,7 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
         tracker.delegate = self
     }
 
-    @objc func checkPermissions(_ call: CAPPluginCall) {
+    @objc override public func checkPermissions(_ call: CAPPluginCall) {
         call.resolve(["location": permissionState(for: tracker.authorizationStatus).rawValue])
     }
 
@@ -87,7 +87,7 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
 
     // MARK: - CLLocationManagerDelegate (via LocationTracker)
 
-    public func locationTracker(_ tracker: LocationTracker, didEmit point: CLLocation) {
+    func locationTracker(_ tracker: LocationTracker, didEmit point: CLLocation) {
         notifyListeners("location", data: [
             "latitude": point.coordinate.latitude,
             "longitude": point.coordinate.longitude,
@@ -96,7 +96,7 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
         ])
     }
 
-    public func locationTracker(_ tracker: LocationTracker, didFailWithError error: Error) {
+    func locationTracker(_ tracker: LocationTracker, didFailWithError error: Error) {
         notifyListeners("error", data: ["message": error.localizedDescription])
     }
 
@@ -104,7 +104,7 @@ public class BackgroundGeolocationFrontlinePlugin: CAPPlugin, CAPBridgedPlugin, 
     // reports the new status — request*Authorization is async, so the
     // promises parked in requestWhenInUsePermission/requestAlwaysPermission
     // are fulfilled here instead of at the call site.
-    public func locationTracker(_ tracker: LocationTracker, didChangeAuthorization status: CLAuthorizationStatus) {
+    func locationTracker(_ tracker: LocationTracker, didChangeAuthorization status: CLAuthorizationStatus) {
         if let call = pendingWhenInUseCall, status != .notDetermined {
             pendingWhenInUseCall = nil
             call.resolve(["location": whenInUseResult(for: status)])
