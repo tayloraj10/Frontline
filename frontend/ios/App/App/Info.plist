@@ -27,7 +27,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Frontline uses your location to show nearby activity and data.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Frontline uses your location to show nearby activity and data.</string>
+	<string>Frontline uses Always location access to keep recording your cleanup route while your phone is locked or the app is in the background, so your walked path stays accurate even if you're not looking at your screen.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Frontline uses your camera to photograph cleanups and trash reports.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -36,6 +36,10 @@
 	<string>Frontline can save photos you take to your library.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

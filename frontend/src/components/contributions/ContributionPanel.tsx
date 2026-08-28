@@ -8,7 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Camera } from "@capacitor/camera";
 import type { MediaResult } from "@capacitor/camera";
 import { Filesystem } from "@capacitor/filesystem";
-import { isNativePlatform } from "@/lib/capacitor";
+import { isNativePlatform, isIOSNative } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
@@ -31,6 +31,11 @@ const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), 
 const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap"), {
   ssr: false,
   loading: () => <div className="w-full h-[140px] rounded-lg bg-zinc-800 animate-pulse" />,
+});
+
+const TrackRouteScreen = dynamic(() => import("@/components/contributions/TrackRouteScreen"), {
+  ssr: false,
+  loading: () => <div className="w-full h-[70vh] min-h-[420px] rounded-lg bg-zinc-800 animate-pulse" />,
 });
 
 interface Coords {
@@ -240,6 +245,9 @@ interface ContributionPanelProps {
   campaignContributionType: string;
   userId: string | null;
   userGroups?: { id: string; name: string; image_url?: string | null; isAdmin?: boolean }[];
+  // Site-wide admin flag (profiles.is_admin) — distinct from the per-group isAdmin above.
+  // Currently only used to gate the still-in-progress "Track" logging mode.
+  isSiteAdmin?: boolean;
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
@@ -706,6 +714,7 @@ function ContributeModal({
   nearbyEvent,
   claimedReportId,
   prefillPhotoUrls,
+  isSiteAdmin,
 }: {
   campaignId: string;
   campaignContributionType: string;
@@ -734,6 +743,9 @@ function ContributeModal({
   // Before/after photos already captured (and uploaded to R2) during the claim challenge —
   // prefilled here so the user isn't asked to retake/reselect photos they just took.
   prefillPhotoUrls?: string[];
+  // Gates the still-in-progress live route "Track" mode to site admins only, ahead of a
+  // full rollout — see profiles.is_admin.
+  isSiteAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
@@ -768,7 +780,7 @@ function ContributeModal({
   const [photos, setPhotos] = useState<File[]>([]);
   const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>(() => prefillPhotoUrls ?? []);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [contributeMode, setContributeMode] = useState<"point" | "route">("point");
+  const [contributeMode, setContributeMode] = useState<"point" | "route" | "track">("point");
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [intersectingUnits, setIntersectingUnits] = useState<IntersectingGeoUnit[]>([]);
   const [selectedRouteGeoUnitId, setSelectedRouteGeoUnitId] = useState<string | null>(null);
@@ -790,6 +802,23 @@ function ContributeModal({
       .catch(() => setIntersectingUnits([]))
       .finally(() => setLoadingIntersecting(false));
   }, [routeOverride, campaignId]);
+
+  // TrackRouteScreen (Track mode) hands off a confirmed, possibly node-edited path directly
+  // here — bypassing routeOverride/routePickerActive entirely, since track capture uses its
+  // own standalone map instance rather than CampaignMap's lifted route-picker state.
+  const handleTrackRouteConfirmed = (coordinates: [number, number][]) => {
+    const trackedRoute: RouteLineString = { type: "LineString", coordinates };
+    setRoute(trackedRoute);
+    setSelectedRouteGeoUnitId(null);
+    setLoadingIntersecting(true);
+    getIntersectingGeoUnits({ campaignId, route: trackedRoute })
+      .then((units) => {
+        setIntersectingUnits(units);
+        if (units.length === 1) setSelectedRouteGeoUnitId(units[0].geo_unit_id);
+      })
+      .catch(() => setIntersectingUnits([]))
+      .finally(() => setLoadingIntersecting(false));
+  };
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("frontline:contrib:group");
@@ -843,7 +872,7 @@ function ContributeModal({
     if (preferredGroupId) setSelectedGroupId(preferredGroupId);
   }, [isEventMode, nearbyEvent, userGroups]);
 
-  const isRouteMode = isCleanup && contributeMode === "route";
+  const isRouteMode = isCleanup && (contributeMode === "route" || contributeMode === "track");
 
   // Route mode's multiplier comes from whichever zip the user has chosen to credit, using
   // the per-zip active_multiplier data returned alongside the intersecting-zips lookup —
@@ -1251,6 +1280,18 @@ function ContributeModal({
               >
                 🛤️ Route
               </button>
+              {isIOSNative() && isSiteAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setContributeMode("track")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "track"
+                    ? "bg-zinc-600 text-zinc-100"
+                    : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
+                    }`}
+                >
+                  🛰️ Track
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1298,7 +1339,9 @@ function ContributeModal({
 
         {isRouteMode && (
           <div>
-            {!route ? (
+            {!route && contributeMode === "track" ? (
+              <TrackRouteScreen onConfirm={handleTrackRouteConfirmed} onCancel={() => setContributeMode("point")} />
+            ) : !route ? (
               <button
                 type="button"
                 onClick={onEnterRoutePicker}
@@ -1315,7 +1358,10 @@ function ContributeModal({
                   </span>
                   <button
                     type="button"
-                    onClick={onEnterRoutePicker}
+                    onClick={() => {
+                      setRoute(null);
+                      if (contributeMode !== "track") onEnterRoutePicker();
+                    }}
                     className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
                   >
                     Redraw
@@ -3946,6 +3992,7 @@ export default function ContributionPanel({
   campaignContributionType,
   userId,
   userGroups = [],
+  isSiteAdmin,
   onEnterPinPicker,
   pinPickerActive,
   placedPinCoords,
@@ -4308,6 +4355,7 @@ export default function ContributionPanel({
               campaignContributionType={campaignContributionType}
               userId={userId}
               userGroups={userGroups}
+              isSiteAdmin={isSiteAdmin}
               gps={gps}
               overrideCoords={contributeOverrideCoords}
               onEnterPinPicker={handleEnterPinPickerForContribute}

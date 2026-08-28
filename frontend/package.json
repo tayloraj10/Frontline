@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "prebuild": "npm run build --prefix packages/capacitor-background-geolocation-frontline",
     "build": "next build",
     "build:android": "node scripts/build-android.mjs",
     "sync:ios-version": "node scripts/sync-ios-version.mjs",
@@ -20,6 +21,7 @@
     "@capacitor/core": "^8.5.0",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/geolocation": "^8.2.1",
+    "capacitor-background-geolocation-frontline": "file:packages/capacitor-background-geolocation-frontline",
     "@capacitor/ios": "^8.5.0",
     "@capacitor/push-notifications": "^8.1.2",
     "@capacitor/share": "^8.0.1",
