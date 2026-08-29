@@ -613,20 +613,41 @@ function ContributeModal({
   // TrackRouteScreen (Track mode) hands off a confirmed, possibly node-edited path directly
   // here, bypassing routeOverride/routePickerActive entirely, since track capture uses its
   // own standalone map instance rather than CampaignMap's lifted route-picker state.
+  const hydrateTrackRoute = useCallback(
+    (coordinates: [number, number][], photos: CapturedRoutePhoto[]) => {
+      const trackedRoute: RouteLineString = { type: "LineString", coordinates };
+      setRoute(trackedRoute);
+      setPendingRoutePhotos(photos);
+      setSelectedRouteGeoUnitId(null);
+      setLoadingIntersecting(true);
+      getIntersectingGeoUnits({ campaignId, route: trackedRoute })
+        .then((units) => {
+          setIntersectingUnits(units);
+          if (units.length === 1) setSelectedRouteGeoUnitId(units[0].geo_unit_id);
+        })
+        .catch(() => setIntersectingUnits([]))
+        .finally(() => setLoadingIntersecting(false));
+    },
+    [campaignId],
+  );
+
   const handleTrackRouteConfirmed = (coordinates: [number, number][], photos: CapturedRoutePhoto[]) => {
-    const trackedRoute: RouteLineString = { type: "LineString", coordinates };
-    setRoute(trackedRoute);
-    setPendingRoutePhotos(photos);
-    setSelectedRouteGeoUnitId(null);
-    setLoadingIntersecting(true);
-    getIntersectingGeoUnits({ campaignId, route: trackedRoute })
-      .then((units) => {
-        setIntersectingUnits(units);
-        if (units.length === 1) setSelectedRouteGeoUnitId(units[0].geo_unit_id);
-      })
-      .catch(() => setIntersectingUnits([]))
-      .finally(() => setLoadingIntersecting(false));
+    hydrateTrackRoute(coordinates, photos);
   };
+
+  // routeTracking.confirm() deliberately no longer resets itself (see the comment on confirm
+  // in useRouteTracking.ts) specifically so this can happen: ContributeModal remounts fresh
+  // whenever mode goes back to "contribute" (see the comment on contributeMode above), which
+  // wipes the local route/pendingRoutePhotos state below even though the user already
+  // confirmed a tracked route. Since routeTracking lives above ContributeModal and survives
+  // that remount, rehydrate from it here rather than silently submitting without the route's
+  // photos (or losing the route entirely). Runs once per mount, only when there's a
+  // confirmed-but-not-yet-submitted session waiting.
+  useEffect(() => {
+    if (routeTracking.phase !== "confirmed" || route) return;
+    hydrateTrackRoute(routeTracking.reviewCoords, routeTracking.routePhotos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("frontline:contrib:group");
@@ -875,6 +896,9 @@ function ContributeModal({
         Boolean(effectiveEventId),
         data.contribution_id,
       );
+      // The confirmed track-route session (kept alive since confirm() specifically to survive
+      // a ContributeModal remount) is only fully done with once the submission succeeds.
+      if (contributeMode === "track") routeTracking.reset();
       setHotspotCleared(Boolean(data.hotspot_cleared));
       setSubmittedContributionId(data.contribution_id ?? null);
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");

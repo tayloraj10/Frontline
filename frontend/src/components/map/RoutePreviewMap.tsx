@@ -41,6 +41,8 @@ function addRouteLayers(
   coordinates: [number, number][],
   isEvent: boolean,
   bufferCoordinates?: [number, number][][],
+  photos?: { url: string; lat: number; lng: number }[],
+  onPhotoSelect?: (url: string) => void,
 ) {
   // Buffer corridor first so the route line/casing render on top of it — same fill/line
   // styling as CampaignMap's cleanup-routes-buffer, for visual parity with the main map.
@@ -115,6 +117,40 @@ function addRouteLayers(
   });
   new maplibregl.Marker({ color: "#22c55e" }).setLngLat(coordinates[0]).addTo(m);
   new maplibregl.Marker({ color: "#ef4444" }).setLngLat(coordinates[coordinates.length - 1]).addTo(m);
+
+  if (photos && onPhotoSelect) {
+    const start = coordinates[0];
+    const end = coordinates[coordinates.length - 1];
+    // A photo taken right at the route's start/end otherwise lands exactly on top of the
+    // green/red endpoint pin, hiding both. Nudge it up out of the way in that case.
+    const isNearEndpoint = (p: { lat: number; lng: number }, c: [number, number]) =>
+      Math.abs(p.lng - c[0]) < 1e-5 && Math.abs(p.lat - c[1]) < 1e-5;
+    for (const photo of photos) {
+      const offset: [number, number] = isNearEndpoint(photo, start) || isNearEndpoint(photo, end) ? [32, 0] : [0, 0];
+      addRoutePhotoMarker(m, photo, onPhotoSelect, offset);
+    }
+  }
+}
+
+// Photo marker along a route — thumbnail circle, matching CampaignMap's addPhotoMarker
+// styling so a route's photos look the same here as they do on the main map.
+function addRoutePhotoMarker(
+  m: maplibregl.Map,
+  photo: { url: string; lat: number; lng: number },
+  onSelect: (url: string) => void,
+  offset: [number, number] = [0, 0],
+) {
+  const size = 36;
+  const el = document.createElement("div");
+  el.style.cssText =
+    `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.7);` +
+    "box-shadow:0 2px 10px rgba(0,0,0,0.6);cursor:pointer;flex-shrink:0;background:#27272a";
+  const img = document.createElement("img");
+  img.src = photo.url;
+  img.style.cssText = "width:100%;height:100%;object-fit:cover";
+  el.appendChild(img);
+  el.onclick = () => onSelect(photo.url);
+  return new maplibregl.Marker({ element: el, anchor: "center", offset }).setLngLat([photo.lng, photo.lat]).addTo(m);
 }
 
 // Point-event equivalent of addRouteLayers: same buffer layer ids/styling (so the
@@ -169,6 +205,8 @@ function RouteMap({
   onToggleBuffer,
   logoOffset,
   onLogoOffsetChange,
+  photos,
+  onPhotoSelect,
 }: {
   coordinates: [number, number][];
   bufferCoordinates?: [number, number][][];
@@ -185,6 +223,8 @@ function RouteMap({
   onToggleBuffer?: () => void;
   logoOffset: { x: number; y: number };
   onLogoOffsetChange: (offset: { x: number; y: number }) => void;
+  photos?: { url: string; lat: number; lng: number }[];
+  onPhotoSelect?: (url: string) => void;
 }) {
   const isPointMode = !!point;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -238,7 +278,7 @@ function RouteMap({
             (b, c) => b.extend(c as [number, number]),
             new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
           ),
-          fitBoundsOptions: { padding: 30 },
+          fitBoundsOptions: { padding: 70 },
         },
     );
     mapRef.current = m;
@@ -256,7 +296,7 @@ function RouteMap({
       if (isPointMode) {
         addPointLayers(m, point!, pointRadiusMeters);
       } else {
-        addRouteLayers(m, coordinates, isEvent, bufferCoordinates);
+        addRouteLayers(m, coordinates, isEvent, bufferCoordinates, photos, onPhotoSelect);
       }
       applyBufferVisibility(m, showBuffer);
       updateLogoScale();
@@ -399,6 +439,8 @@ export default function RoutePreviewMap({
   cohostLogoUrls,
   enlargeable = false,
   isEvent = false,
+  photos,
+  onPhotoSelect,
 }: {
   coordinates?: [number, number][];
   bufferCoordinates?: [number, number][][];
@@ -411,6 +453,8 @@ export default function RoutePreviewMap({
   cohostLogoUrls?: (string | null)[];
   enlargeable?: boolean;
   isEvent?: boolean;
+  photos?: { url: string; lat: number; lng: number }[];
+  onPhotoSelect?: (url: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [activeMapStyle, setActiveMapStyle] = useState<(typeof MAP_STYLES)[number]["id"]>(styleId);
@@ -435,6 +479,8 @@ export default function RoutePreviewMap({
         onToggleBuffer={() => setShowBuffer((v) => !v)}
         logoOffset={logoOffset}
         onLogoOffsetChange={setLogoOffset}
+        photos={photos}
+        onPhotoSelect={onPhotoSelect}
       />
       {enlargeable && (
         <button
@@ -473,6 +519,8 @@ export default function RoutePreviewMap({
               onToggleBuffer={() => setShowBuffer((v) => !v)}
               logoOffset={logoOffset}
               onLogoOffsetChange={setLogoOffset}
+              photos={photos}
+              onPhotoSelect={onPhotoSelect}
             />
           </div>
           <p className="text-xs text-zinc-400">Screenshot this view to share on social media</p>
