@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "./AdminPanel";
 import type { Campaign, ActiveEvent, Trigger, PartnerBusiness, PartnerOffer, OfferRedemption, BusinessCampaignLink, PartnerBusinessLocation, AdminGroup, GameSetting } from "./AdminPanel";
+import { listTeamEvents } from "@/lib/teamEvents";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -28,6 +29,7 @@ export default async function AdminPage() {
     { data: redemptions },
     { data: groups },
     { data: gameSettings },
+    teamEvents,
   ] = await Promise.all([
     supabase
       .schema("public")
@@ -69,6 +71,7 @@ export default async function AdminPage() {
       .from("game_settings")
       .select("key, value, category, label, description, sort_order")
       .order("sort_order"),
+    listTeamEvents(user.id).catch(() => []),
   ]);
 
   const { data: businessCampaignLinks } = await supabase
@@ -125,6 +128,7 @@ export default async function AdminPage() {
         initialBusinessCampaignLinks={(businessCampaignLinks ?? []) as BusinessCampaignLink[]}
         initialBusinessLocations={(businessLocations ?? []) as PartnerBusinessLocation[]}
         initialGroups={groupsWithApplicant as AdminGroup[]}
+        initialTeamEvents={teamEvents}
         currentUserId={user.id}
         initialSettings={(gameSettings ?? []) as GameSetting[]}
       />

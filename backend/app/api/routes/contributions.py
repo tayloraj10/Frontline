@@ -222,13 +222,11 @@ async def submit_contribution(
                 SELECT tep.team_id, tet.geo_unit_id
                 FROM team_event_participants tep
                 JOIN team_event_teams tet ON tet.id = tep.team_id
-                WHERE tep.team_event_id = :event_id
-                  AND (tep.user_id = :user_id OR tep.group_id = :group_id)
+                WHERE tep.team_event_id = :event_id AND tep.user_id = :user_id
             """),
             {
                 "event_id": str(payload.team_event_id),
                 "user_id": str(payload.user_id),
-                "group_id": str(payload.group_id) if payload.group_id else None,
             },
         )
         participant_row = participant_result.fetchone()

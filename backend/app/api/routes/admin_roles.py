@@ -27,8 +27,11 @@ class GrantRolesRequest(BaseModel):
 
 @router.get("/{user_id}")
 async def get_user_roles(user_id: UUID, requesting_user_id: UUID, db: AsyncSession = Depends(get_db)):
-    if not await is_site_admin(db, requesting_user_id):
-        raise HTTPException(status_code=403, detail="Only a site admin can view admin roles")
+    # Anyone may read their own roles (needed to gate scoped-role UI client-side,
+    # since admin_roles' RLS only allows site admins to query it directly);
+    # viewing someone else's roles still requires site-admin.
+    if requesting_user_id != user_id and not await is_site_admin(db, requesting_user_id):
+        raise HTTPException(status_code=403, detail="Only a site admin can view another user's admin roles")
     return {"user_id": str(user_id), "roles": await list_roles(db, user_id)}
 
 

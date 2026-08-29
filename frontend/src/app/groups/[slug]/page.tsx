@@ -111,6 +111,23 @@ export default async function GroupProfilePage({ params }: Props) {
   const adminCount = members.filter((m) => m.role === "admin").length;
   const isOnlyAdmin = isAdmin && adminCount === 1;
 
+  const { data: groupTeamEventsData } = await supabase
+    .from("team_event_group_participants")
+    .select(
+      "cascade_mode, team_event:team_events(id, slug, title, status, starts_at, ends_at), team:team_event_teams(name, color)"
+    )
+    .eq("group_id", group.id);
+
+  type GroupTeamEvent = {
+    cascade_mode: string;
+    team_event: { id: string; slug: string; title: string; status: string; starts_at: string; ends_at: string | null } | null;
+    team: { name: string; color: string | null } | null;
+  };
+
+  const groupTeamEvents = ((groupTeamEventsData ?? []) as unknown as GroupTeamEvent[])
+    .filter((r) => r.team_event)
+    .sort((a, b) => (b.team_event!.starts_at ?? "").localeCompare(a.team_event!.starts_at ?? ""));
+
   const groupEvents = await listGroupCleanupEvents(group.id).catch(() => []);
   const upcomingEvents = groupEvents.filter((e) => !e.is_past && e.status !== "cancelled");
   const pastEvents = groupEvents
@@ -270,6 +287,47 @@ export default async function GroupProfilePage({ params }: Props) {
           </ul>
         )}
       </div>
+
+      {groupTeamEvents.length > 0 && (
+        <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
+          <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
+            <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+              Team Events <span className="text-zinc-500 font-normal">({groupTeamEvents.length})</span>
+            </span>
+          </div>
+          <ul className="divide-y divide-zinc-800/60">
+            {groupTeamEvents.map(({ team_event: te, team, cascade_mode }) => (
+              <li key={te!.id}>
+                <Link
+                  href={`/team-events/${te!.id}`}
+                  className="px-5 py-3 flex items-center justify-between gap-3 transition-[background-color] duration-150 hover:bg-zinc-900/40 active:bg-zinc-900/60 touch-manipulation"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {team?.color && (
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: team.color }}
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm text-zinc-200 break-words">{te!.title}</p>
+                      <p className="text-xs text-zinc-500">
+                        {team ? `Playing for ${team.name}` : "Team pending"}
+                        {cascade_mode === "individual_opt_in" ? " · members opt in" : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {te!.status === "active" && (
+                    <span className="text-xs text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 shrink-0">
+                      Live
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">

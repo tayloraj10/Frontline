@@ -2,6 +2,9 @@
 
 import { forwardRef } from "react";
 import { formatPoints } from "@/lib/formatPoints";
+import { cardBackgroundCss, type CardBgStyle } from "@/lib/cardBackground";
+
+const BASE_COLOR = "#065f46";
 
 interface ShareCardProps {
   groupName: string;
@@ -14,27 +17,28 @@ interface ShareCardProps {
   smallBags: number;
   largeBags: number;
   pounds: number;
+  bgStyle: CardBgStyle;
 }
 
 function StatCell({ value, label }: { value: string; label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg bg-black/20 py-2.5 text-center">
+    <div className="flex flex-col items-center justify-center rounded-lg bg-black/35 py-2.5 text-center">
       <div className="text-xl font-black tabular-nums text-white">{value}</div>
-      <div className="text-[9px] uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-[9px] uppercase tracking-wide text-white">{label}</div>
     </div>
   );
 }
 
 function BagCell({ icon, value, label }: { icon: string; value: number; label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg bg-black/20 py-2.5 text-center">
+    <div className="flex flex-col items-center justify-center rounded-lg bg-black/35 py-2.5 text-center">
       <div className="flex items-center gap-1">
         <span className="text-base leading-none" aria-hidden>
           {icon}
         </span>
         <span className="text-xl font-black tabular-nums text-white">{value.toLocaleString()}</span>
       </div>
-      <div className="text-[9px] uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-[9px] uppercase tracking-wide text-white">{label}</div>
     </div>
   );
 }
@@ -51,13 +55,15 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
     smallBags,
     largeBags,
     pounds,
+    bgStyle,
   },
   ref
 ) {
   return (
     <div
       ref={ref}
-      className="relative flex h-[360px] w-[360px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-800 via-black to-emerald-800 p-7"
+      className="relative flex h-[360px] w-[360px] flex-col justify-between overflow-hidden rounded-2xl p-7"
+      style={{ background: cardBackgroundCss(BASE_COLOR, bgStyle) }}
     >
 
       <div className="relative flex items-center gap-3">
@@ -71,7 +77,9 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
           />
         )}
         <div className="min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-widest text-emerald-400">{intervalLabel}</div>
+          <div className="text-[11px] font-bold uppercase tracking-widest text-white">
+            {intervalLabel}
+          </div>
           <div className="mt-0.5 truncate text-xl font-black leading-tight text-white">{groupName}</div>
           <div className="truncate text-xs text-zinc-400">{campaignName}</div>
         </div>
@@ -89,7 +97,9 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
       </div>
 
       <div className="relative flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Frontline</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
+          Frontline
+        </span>
       </div>
     </div>
   );

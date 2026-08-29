@@ -284,6 +284,13 @@ interface ContributionPanelProps {
     cohost_groups?: { group_id: string; group_name: string; group_slug: string; group_logo_url: string | null }[];
     logging_mode?: "organizer_total" | "individual";
   } | null;
+  activeTeamEvent?: {
+    id: string;
+    title: string;
+    submission_mode: "automatic" | "manual_opt_in";
+    requires_photo: boolean;
+    teamId: string | null;
+  } | null;
   clickedReport?: ClickedReport | null;
   onClickedReportConsumed?: () => void;
   onClaimReportUpdated?: (reportId: string, patch: Partial<ClickedReport>) => void;
@@ -508,6 +515,7 @@ function ContributeModal({
   onContributionRemoved,
   activeMapStyle,
   nearbyEvent,
+  activeTeamEvent,
   claimedReportId,
   prefillPhotoUrls,
   isSiteAdmin,
@@ -532,6 +540,15 @@ function ContributeModal({
     group_id: string;
     cohost_groups?: { group_id: string; group_name: string; group_slug: string; group_logo_url: string | null }[];
     logging_mode?: "organizer_total" | "individual";
+  } | null;
+  // The campaign's active Team Event, if any — set regardless of whether the viewer has
+  // joined a team; teamId is only non-null once they have (see activeTeamEvent below).
+  activeTeamEvent?: {
+    id: string;
+    title: string;
+    submission_mode: "automatic" | "manual_opt_in";
+    requires_photo: boolean;
+    teamId: string | null;
   } | null;
   // Set when arriving from the claim-a-report challenge flow: the report is already
   // resolved server-side by that point, so the proximity nearby-hotspot checkbox below
@@ -670,6 +687,17 @@ function ContributeModal({
   const effectiveEventId = useNearbyEvent ? nearbyEvent?.id ?? null : null;
   const isEventMode = isCleanup && Boolean(effectiveEventId);
 
+  // Team Event: only relevant once the viewer has actually joined a team for it (teamId set).
+  // "automatic" mode attaches every cleanup logged while active, same as organizer_total events
+  // for regular Cleanup Events — no opt-out checkbox. "manual_opt_in" mirrors the nearby-event
+  // checkbox: pre-checked, but the user can uncheck to log an unrelated cleanup instead.
+  const joinedTeamEvent = isCleanup && activeTeamEvent?.teamId ? activeTeamEvent : null;
+  const [useTeamEvent, setUseTeamEvent] = useState(true);
+  useEffect(() => setUseTeamEvent(true), [joinedTeamEvent?.id]);
+  const effectiveTeamEventId =
+    joinedTeamEvent && (joinedTeamEvent.submission_mode === "automatic" || useTeamEvent) ? joinedTeamEvent.id : null;
+  const isTeamEventMode = Boolean(effectiveTeamEventId);
+
   // When logging toward a co-hosted event, default the credit-group pill to whichever
   // host group the user belongs to, preferring the primary host over a co-host —
   // mirrors the backend's _group_for_credit preference order used for organizer-logged
@@ -696,7 +724,8 @@ function ContributeModal({
   // display banner below uses raw activeMultiplier so it can still show it informationally.
   // Route mode ignores the point-based activeMultiplier entirely (stale GPS/pin location)
   // in favor of selectedRouteMultiplier, computed above from the chosen zip.
-  const effectiveMultiplier = effectiveEventId ? null : isRouteMode ? selectedRouteMultiplier : activeMultiplier;
+  const effectiveMultiplier =
+    effectiveEventId || effectiveTeamEventId ? null : isRouteMode ? selectedRouteMultiplier : activeMultiplier;
 
   const submitCoords = overrideCoords ?? gps.coords;
   const baseValue = isCleanup && bagValuesReady
@@ -786,6 +815,7 @@ function ContributeModal({
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
     if (isCleanup && nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total") return false;
+    if (isTeamEventMode && joinedTeamEvent?.requires_photo && photos.length === 0 && existingPhotoUrls.length === 0) return false;
     return true;
   })();
 
@@ -842,6 +872,8 @@ function ContributeModal({
         if (claimedReportId) body.claimed_report_id = claimedReportId;
         if (fromSolarpunk) body.from_solarpunk_redirect = true;
       }
+
+      if (effectiveTeamEventId) body.team_event_id = effectiveTeamEventId;
 
       if (isRouteMode && route && selectedRouteGeoUnitId) {
         body.route = route;
@@ -952,6 +984,9 @@ function ContributeModal({
           {isCleanup && isEventMode && (
             <p className="text-sm text-sky-400 font-semibold text-center">📅 Counted toward the event</p>
           )}
+          {isCleanup && isTeamEventMode && (
+            <p className="text-sm text-emerald-400 font-semibold text-center">🏁 Counted toward {joinedTeamEvent?.title}</p>
+          )}
           {isCleanup && fromSolarpunk && (
             <>
               <p className="text-xs text-lime-400 text-center">+<SettingValue value={gameSettings.trash_war_solarpunk_credit} loading={settingsLoading} /> Solarpunk bloom points earned 🌱</p>
@@ -1052,8 +1087,36 @@ function ContributeModal({
           </label>
         )}
 
+        {joinedTeamEvent && joinedTeamEvent.submission_mode === "automatic" ? (
+          <div className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300">
+            <span>
+              🏁 Logging toward <span className="font-semibold text-emerald-200">{joinedTeamEvent.title}</span>.
+              Cleanups you log while this event is active count toward your team automatically.
+              {joinedTeamEvent.requires_photo && (
+                <span className="block text-emerald-400/70 mt-0.5">A photo is required for this event.</span>
+              )}
+            </span>
+          </div>
+        ) : joinedTeamEvent && (
+          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useTeamEvent}
+              onChange={(e) => setUseTeamEvent(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              🏁 Count this toward <span className="font-semibold text-emerald-200">{joinedTeamEvent.title}</span>?
+              <span className="block text-emerald-400/70 mt-0.5">
+                No bonus multiplier applies to team-event cleanups.
+                {joinedTeamEvent.requires_photo && " A photo is required for this event."}
+              </span>
+            </span>
+          </label>
+        )}
+
         {isCleanup && activeMultiplier && (
-          effectiveEventId ? (
+          effectiveEventId || effectiveTeamEventId ? (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
               <span className="text-base shrink-0">🔥</span>
               <span>
@@ -3844,6 +3907,7 @@ export default function ContributionPanel({
   pendingCleanupEventId,
   onPendingCleanupEventConsumed,
   nearbyCleanupEvent,
+  activeTeamEvent,
   clickedReport,
   onClickedReportConsumed,
   onClaimReportUpdated,
@@ -4238,6 +4302,7 @@ export default function ContributionPanel({
               onContributionRemoved={onContributionRemoved}
               activeMapStyle={activeMapStyle}
               nearbyEvent={nearbyCleanupEvent ?? null}
+              activeTeamEvent={activeTeamEvent ?? null}
               claimedReportId={claimedReportIdForContribute}
               prefillPhotoUrls={claimedPhotoUrlsForContribute}
               routeTracking={routeTracking}
