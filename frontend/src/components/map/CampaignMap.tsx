@@ -2459,6 +2459,10 @@ export default function CampaignMap({
     updateCleanupRoutesLayer(cleanupRoutesRef.current, cleanupEvents ?? []);
   }, [cleanupRoutes, cleanupEvents, updateCleanupRoutesLayer]);
 
+  // Orange pin at the live session's starting point, distinct from the emerald head
+  // marker (current position) — dropped once and left in place for the whole session.
+  const liveTrackingStartMarkerRef = useRef<maplibregl.Marker | null>(null);
+
   const updateLiveTrackingLayer = useCallback((coords: [number, number][] | null | undefined) => {
     if (!map.current) return;
     const src = map.current.getSource("live-tracking") as maplibregl.GeoJSONSource | undefined;
@@ -2471,6 +2475,15 @@ export default function CampaignMap({
       features.push({ type: "Feature", geometry: { type: "Point", coordinates: coords[coords.length - 1] }, properties: {} });
     }
     src.setData({ type: "FeatureCollection", features });
+
+    if (coords && coords.length >= 1) {
+      if (!liveTrackingStartMarkerRef.current) {
+        liveTrackingStartMarkerRef.current = new maplibregl.Marker({ color: "#f59e0b" }).setLngLat(coords[0]).addTo(map.current);
+      }
+    } else {
+      liveTrackingStartMarkerRef.current?.remove();
+      liveTrackingStartMarkerRef.current = null;
+    }
   }, []);
 
   const liveTrackingCoordsRef = useRef<[number, number][] | null | undefined>(liveTrackingCoords);

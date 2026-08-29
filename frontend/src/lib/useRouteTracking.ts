@@ -105,7 +105,10 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     setCoords(coordsRef.current);
   }, []);
 
-  const beginTracking = useCallback(async () => {
+  // startCoords: the campaign map's already-known current location, if any. Seeds the
+  // route with an immediate first point rather than waiting on the native plugin's
+  // ~30s polling interval for its first fix, so a pin drops the moment tracking starts.
+  const beginTracking = useCallback(async (startCoords?: [number, number]) => {
     setRequesting(true);
     setPermissionError(null);
     try {
@@ -114,8 +117,8 @@ export function useRouteTracking(campaignId: string | null | undefined) {
         setPermissionError(result === "whenInUseOnly" ? "whenInUseOnly" : "denied");
         return;
       }
-      coordsRef.current = [];
-      setCoords([]);
+      coordsRef.current = startCoords ? [startCoords] : [];
+      setCoords(coordsRef.current);
       setRoutePhotos([]);
       setStartedAt(Date.now());
       setPhase("tracking");
