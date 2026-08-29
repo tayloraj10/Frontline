@@ -56,6 +56,7 @@ export type CleanupRouteDetailData = {
   metrics_pounds: number | null;
   created_at: string | null;
   route: RouteLineString;
+  route_distance_meters: number | null;
   route_photos: RoutePhoto[];
   geo_unit_display_name: string | null;
   submitted_by: {

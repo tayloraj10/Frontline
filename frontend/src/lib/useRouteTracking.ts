@@ -37,14 +37,14 @@ export function totalDistanceMeters(coords: [number, number][]): number {
   return total;
 }
 
-export type RouteTrackingPhase = "idle" | "permission" | "tracking" | "reviewing";
+export type RouteTrackingPhase = "idle" | "permission" | "tracking" | "reviewing" | "confirmed";
 
 type PersistedPhoto =
   | { kind: "captured"; dataUrl: string; lat: number; lng: number }
   | { kind: "uploaded"; url: string; lat: number; lng: number };
 
 type PersistedSession = {
-  phase: "tracking" | "reviewing";
+  phase: "tracking" | "reviewing" | "confirmed";
   startedAt: number;
   coords: [number, number][];
   photos: PersistedPhoto[];
@@ -230,14 +230,19 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     reset();
   }, [reset]);
 
-  /** Called on confirm, hands off {coordinates, photos} and clears session state. */
+  // Called on confirm, hands off {coordinates, photos} to the caller. Deliberately does NOT
+  // reset() here: ContributeModal (which is not itself remount-safe — see its comment about
+  // remounting fresh whenever mode goes back to "contribute") reads the confirmed route/photos
+  // back out of this hook to rehydrate itself if a remount happens between confirming and the
+  // user actually tapping the final Submit button. The caller must call reset() once the
+  // contribution has actually been submitted (or the user explicitly discards it).
   const confirm = useCallback(
     (finalCoords: [number, number][]) => {
-      const photos = routePhotos;
-      reset();
-      return { coordinates: finalCoords, photos };
+      setReviewCoords(finalCoords);
+      setPhase("confirmed");
+      return { coordinates: finalCoords, photos: routePhotos };
     },
-    [routePhotos, reset],
+    [routePhotos],
   );
 
   // Elapsed-time ticker while tracking, lives here (not TrackRouteScreen) so the chip
@@ -253,9 +258,9 @@ export function useRouteTracking(campaignId: string | null | undefined) {
   // by this hook living in the always-mounted ContributionPanel).
   useEffect(() => {
     if (!campaignId) return;
-    if (phase !== "tracking" && phase !== "reviewing") return;
+    if (phase !== "tracking" && phase !== "reviewing" && phase !== "confirmed") return;
     if (startedAt === null) return;
-    const activeCoords = phase === "reviewing" ? reviewCoords : coords;
+    const activeCoords = phase === "tracking" ? coords : reviewCoords;
     let cancelled = false;
     (async () => {
       const photos: PersistedPhoto[] = await Promise.all(
@@ -340,7 +345,7 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     showShortRouteConfirm,
     distance,
     hasEnoughPoints,
-    active: phase === "tracking" || phase === "reviewing",
+    active: phase === "tracking" || phase === "reviewing" || phase === "confirmed",
     setReviewCoords,
     setCaptureError,
     setShowShortRouteConfirm,
