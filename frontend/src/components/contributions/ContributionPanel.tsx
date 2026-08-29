@@ -1165,9 +1165,14 @@ function ContributeModal({
         )}
 
         {isRouteMode && (
-          <div>
+          <div className={!route && contributeMode === "track" ? "-mt-2" : undefined}>
             {!route && contributeMode === "track" ? (
-              <TrackRouteScreen session={routeTracking} onConfirm={handleTrackRouteConfirmed} onCancel={() => setContributeMode("point")} />
+              <TrackRouteScreen
+                session={routeTracking}
+                currentCoords={gps.coords ? [gps.coords.longitude, gps.coords.latitude] : null}
+                onConfirm={handleTrackRouteConfirmed}
+                onCancel={() => setContributeMode("point")}
+              />
             ) : !route ? (
               <button
                 type="button"

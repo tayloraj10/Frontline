@@ -66,10 +66,15 @@ function formatDistance(meters: number): string {
  */
 export default function TrackRouteScreen({
   session,
+  currentCoords,
   onConfirm,
   onCancel,
 }: {
   session: RouteTrackingSession;
+  // The campaign map's already-known current location, if any — used to seed the
+  // route's first point immediately when tracking starts, instead of waiting on the
+  // native plugin's first fix.
+  currentCoords?: [number, number] | null;
   onConfirm: (coordinates: [number, number][], photos: CapturedRoutePhoto[]) => void;
   onCancel: () => void;
 }) {
@@ -79,6 +84,7 @@ export default function TrackRouteScreen({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const startMarkerRef = useRef<maplibregl.Marker | null>(null);
   const coordsRef = useRef<[number, number][]>(session.coords);
   coordsRef.current = session.coords;
 
@@ -108,6 +114,11 @@ export default function TrackRouteScreen({
         c.length >= 2 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: c } }] : [],
     });
     if (c.length > 0) m.panTo(c[c.length - 1]);
+    // Orange pin at the route's starting point, dropped once and left in place for
+    // the whole session (distinct from the moving line, which tracks current position).
+    if (c.length > 0 && !startMarkerRef.current) {
+      startMarkerRef.current = new maplibregl.Marker({ color: "#f59e0b" }).setLngLat(c[0]).addTo(m);
+    }
   };
 
   // Redraw as new points arrive (and once immediately on resume, if the map's
@@ -165,6 +176,7 @@ export default function TrackRouteScreen({
     return () => {
       m.remove();
       mapRef.current = null;
+      startMarkerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -237,7 +249,7 @@ export default function TrackRouteScreen({
           </button>
           <button
             type="button"
-            onClick={session.beginTracking}
+            onClick={() => session.beginTracking(currentCoords ?? undefined)}
             disabled={requesting}
             className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 active:bg-red-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 text-white text-sm font-medium shadow-elevation-3 transition-[background-color,transform] duration-150 touch-manipulation"
           >
@@ -260,20 +272,22 @@ export default function TrackRouteScreen({
 
   if (phase === "tracking") {
     return (
-      <div className="relative w-full h-[45vh] min-h-[300px]">
-        <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden border border-zinc-700/50" />
-
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1">
-          <div className="px-4 py-2 bg-zinc-900/95 border border-red-800/60 rounded-lg text-xs text-zinc-100 shadow-elevation-3 backdrop-blur-sm whitespace-nowrap flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            Recording route, {formatElapsed(elapsedMs)} · {formatDistance(distance)}
-          </div>
-          <div className="px-3 py-1 bg-zinc-900/80 rounded-full text-[10px] text-zinc-400 shadow-elevation-3 backdrop-blur-sm whitespace-nowrap">
-            You can close this window, tracking keeps running
-          </div>
+      <div className="flex flex-col gap-0.5 pb-6">
+        <div className="text-center text-[11px] font-bold text-amber-300 leading-tight px-2 py-1.5 rounded-md bg-amber-950/40 border border-amber-800/50">
+          You can close this window, tracking keeps running · Location updates every 30s
         </div>
 
-        {trackingError && (
+        <div className="relative w-full h-[45vh] min-h-[300px]">
+          <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden border border-zinc-700/50" />
+
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1">
+            <div className="px-4 py-2 bg-zinc-900/95 border border-red-800/60 rounded-lg text-xs text-zinc-100 shadow-elevation-3 backdrop-blur-sm whitespace-nowrap flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              Recording route, {formatElapsed(elapsedMs)} · {formatDistance(distance)}
+            </div>
+          </div>
+
+          {trackingError && (
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10 max-w-[85%] px-3 py-1.5 bg-orange-950/95 border border-orange-800 rounded-lg text-[11px] text-orange-300 shadow-elevation-3 backdrop-blur-sm text-center">
             {trackingError}
           </div>
@@ -390,7 +404,8 @@ export default function TrackRouteScreen({
               </div>
             </div>
           </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
@@ -398,6 +413,11 @@ export default function TrackRouteScreen({
   // phase === "reviewing"
   return (
     <div className="flex flex-col gap-3">
+      {routePhotos.length === 0 && (
+        <div className="text-center text-xs font-medium text-amber-300 leading-tight px-3 py-2 rounded-md bg-amber-950/40 border border-amber-800/50">
+          No photos were taken during tracking. Don&apos;t forget to add photos before you submit.
+        </div>
+      )}
       <RouteNodeEditor
         coordinates={reviewCoords}
         onChange={session.setReviewCoords}
