@@ -221,6 +221,22 @@ function getBusinessMarkerScale(zoom: number): number {
   return 1 + t * (BUSINESS_MARKER_SCALE_MAX - 1);
 }
 
+// Route photo markers are dense along a route and, unlike event markers, aren't the
+// primary thing being scanned for at a glance — so they shrink more aggressively as you
+// zoom out, instead of staying full-size and dominating the viewport.
+const ROUTE_PHOTO_MARKER_SCALE_MAX_ZOOM = 14;
+const ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM = 6;
+const ROUTE_PHOTO_MARKER_SCALE_MIN = 0.2;
+
+function getRoutePhotoMarkerScale(zoom: number): number {
+  if (zoom >= ROUTE_PHOTO_MARKER_SCALE_MAX_ZOOM) return 1;
+  if (zoom <= ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM) return ROUTE_PHOTO_MARKER_SCALE_MIN;
+  const t =
+    (zoom - ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM) /
+    (ROUTE_PHOTO_MARKER_SCALE_MAX_ZOOM - ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM);
+  return ROUTE_PHOTO_MARKER_SCALE_MIN + t * (1 - ROUTE_PHOTO_MARKER_SCALE_MIN);
+}
+
 // Zero-cost, no-permission-prompt signal for a UK vs. US default view. Only consulted
 // for campaigns whose geo_unit already covers uk_postcode_district (e.g. Trash War).
 function isLikelyUK(): boolean {
@@ -648,6 +664,17 @@ function routeCategoryFactor(t: LayerToggleState): unknown {
   return ["case", ["get", "is_event"], t.showGroupRoutes ? 1 : 0, t.showAdhocRoutes ? 1 : 0];
 }
 
+// Maps legend toggles to the data-bbox endpoint's category keys, so the fit-to-extent button
+// can zoom to only what's currently visible instead of always fitting to every category.
+function dataBboxCategoriesForToggles(t: LayerToggleState): string[] {
+  const categories: string[] = [];
+  if (t.showCleanupDots || t.showGroupEventDots) categories.push("contributions");
+  if (t.showGroupRoutes || t.showAdhocRoutes) categories.push("routes");
+  if (t.showReports) categories.push("reports");
+  if (t.showGroupEvents || t.showMapEvents) categories.push("events");
+  return categories;
+}
+
 // The territory-event-highlight layer's dashed border is driven by two separate
 // feature-state flags (event_highlight_hotspot / event_highlight_map, set in
 // applyEventAreaHighlights) so each category's toggle can independently hide its
@@ -821,24 +848,42 @@ function addPhotoMarker(
   onSelect: (photo: { url: string; contentType: "contribution_photo"; contentId: string }) => void,
   size = 48,
   offset?: [number, number],
+  // When provided, the photo is wrapped in its own zoom-scalable element (pushed here) instead
+  // of being sized directly on the positioning element — MapLibre applies its own `transform`
+  // to the positioning element for geo-placement, so scaling needs an independent inner wrapper.
+  scaleElsRef?: { current: HTMLDivElement[] },
+  initialScale = 1,
 ): maplibregl.Marker {
   const el = document.createElement("div");
-  el.style.cssText =
+  el.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0`;
+
+  const inner = scaleElsRef ? document.createElement("div") : el;
+  if (scaleElsRef) {
+    inner.style.cssText =
+      `width:${size}px;height:${size}px;transform-origin:center;` +
+      `transform:scale(${initialScale});transition:transform 0.15s ease-out`;
+    el.appendChild(inner);
+    scaleElsRef.current.push(inner);
+  }
+
+  const photoEl = scaleElsRef ? document.createElement("div") : inner;
+  photoEl.style.cssText =
     `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.7);` +
     "box-shadow:0 2px 10px rgba(0,0,0,0.6);cursor:pointer;flex-shrink:0;background:#27272a";
+  if (scaleElsRef) inner.appendChild(photoEl);
 
   if (loc.photo_url) {
     const img = document.createElement("img");
     img.src = loc.photo_url;
     img.style.cssText = "width:100%;height:100%;object-fit:cover";
-    el.appendChild(img);
-    el.onclick = () => onSelect({ url: loc.photo_url!, contentType: "contribution_photo", contentId: loc.id });
+    photoEl.appendChild(img);
+    photoEl.onclick = () => onSelect({ url: loc.photo_url!, contentType: "contribution_photo", contentId: loc.id });
   } else {
-    el.style.display = "flex";
-    el.style.alignItems = "center";
-    el.style.justifyContent = "center";
-    el.style.fontSize = "20px";
-    el.textContent = "📷";
+    photoEl.style.display = "flex";
+    photoEl.style.alignItems = "center";
+    photoEl.style.justifyContent = "center";
+    photoEl.style.fontSize = "20px";
+    photoEl.textContent = "📷";
   }
 
   return new maplibregl.Marker({ element: el, anchor: "center", offset })
@@ -1858,6 +1903,8 @@ export default function CampaignMap({
   const cleanupRouteDateLabelsRef = useRef<maplibregl.Marker[]>([]);
   const routePhotoMarkersRef = useRef<maplibregl.Marker[]>([]);
   const routePhotoMarkerIsEventRef = useRef<boolean[]>([]);
+  const routePhotoMarkerScaleElsRef = useRef<HTMLDivElement[]>([]);
+  const routePhotoMarkerZoomListenerRef = useRef(false);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
   const bonusSpotPopupRef = useRef<maplibregl.Popup | null>(null);
   const contributionPopupRef = useRef<maplibregl.Popup | null>(null);
@@ -1887,6 +1934,10 @@ export default function CampaignMap({
   const choroplethListenerRef = useRef(false);
   const eventHighlightListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
+  // Per-category data extent (choropleth/territory campaigns only) so the fit-to-extent button
+  // can zoom to only the categories whose layers are currently toggled on in the legend, rather
+  // than always fitting to every category regardless of what's actually visible on screen.
+  const dataBoundsByCategoryRef = useRef<Record<string, [number, number, number, number] | null> | null>(null);
   const hexDataRef = useRef<HexBloomEntry[]>([]);
   const nycNeighborhoodsVisibleRef = useRef(false);
   const nycAdjacencyRef = useRef<Record<string, string[]> | null>(null);
@@ -2554,6 +2605,7 @@ export default function CampaignMap({
       routePhotoMarkersRef.current.forEach((m) => m.remove());
       routePhotoMarkersRef.current = [];
       routePhotoMarkerIsEventRef.current = [];
+      routePhotoMarkerScaleElsRef.current = [];
 
       const eventById = new Map(events.map((e) => [e.id, e]));
 
@@ -2658,6 +2710,8 @@ export default function CampaignMap({
             // otherwise sits fully hidden underneath (and unclickable) when a photo happens
             // to have been taken at that exact node.
             [0, -30],
+            routePhotoMarkerScaleElsRef,
+            map.current ? getRoutePhotoMarkerScale(map.current.getZoom()) : 1,
           );
           if (!routeVisible) photoMarker.getElement().style.display = "none";
           routePhotoMarkersRef.current.push(photoMarker);
@@ -3074,9 +3128,20 @@ export default function CampaignMap({
         `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/data-bbox`,
       );
       if (res.ok) {
-        const data = (await res.json()) as { bbox: [number, number, number, number] | null };
-        if (data.bbox) {
-          dataBoundsRef.current = [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]];
+        const data = (await res.json()) as {
+          bboxes: Record<string, [number, number, number, number] | null>;
+        };
+        dataBoundsByCategoryRef.current = data.bboxes;
+        const allBoxes = Object.values(data.bboxes).filter(
+          (b): b is [number, number, number, number] => b != null,
+        );
+        if (allBoxes.length > 0) {
+          const bounds = new maplibregl.LngLatBounds();
+          for (const b of allBoxes) {
+            bounds.extend([b[0], b[1]]);
+            bounds.extend([b[2], b[3]]);
+          }
+          dataBoundsRef.current = bounds;
         }
       }
     } catch {
@@ -3377,6 +3442,15 @@ export default function CampaignMap({
       m.on("zoom", () => {
         const scale = getBusinessMarkerScale(m.getZoom());
         businessMarkerScaleElsRef.current.forEach((wrapperEl) => {
+          wrapperEl.style.transform = `scale(${scale})`;
+        });
+      });
+    }
+    if (!routePhotoMarkerZoomListenerRef.current) {
+      routePhotoMarkerZoomListenerRef.current = true;
+      m.on("zoom", () => {
+        const scale = getRoutePhotoMarkerScale(m.getZoom());
+        routePhotoMarkerScaleElsRef.current.forEach((wrapperEl) => {
           wrapperEl.style.transform = `scale(${scale})`;
         });
       });
@@ -3908,7 +3982,27 @@ export default function CampaignMap({
       });
     }
     map.current.addControl(
-      new FitExtentControl(() => dataBoundsRef.current),
+      new FitExtentControl(() => {
+        const byCategory = dataBoundsByCategoryRef.current;
+        if (!byCategory) return dataBoundsRef.current;
+
+        // Only zoom to the categories whose layers are currently toggled on. If every
+        // relevant layer is off, fall back to the full data extent rather than fitting
+        // to nothing.
+        let categories = dataBboxCategoriesForToggles(layerToggleRef.current);
+        if (categories.length === 0) categories = Object.keys(byCategory);
+
+        const bounds = new maplibregl.LngLatBounds();
+        let any = false;
+        for (const category of categories) {
+          const b = byCategory[category];
+          if (!b) continue;
+          bounds.extend([b[0], b[1]]);
+          bounds.extend([b[2], b[3]]);
+          any = true;
+        }
+        return any ? bounds : dataBoundsRef.current;
+      }),
       "top-right",
     );
     map.current.addControl(

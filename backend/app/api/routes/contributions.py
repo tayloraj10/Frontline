@@ -615,41 +615,52 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
 
 @router.get("/{campaign_id}/data-bbox")
 async def get_campaign_data_bbox(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Bounding box of this campaign's actual activity (contributions, cleanup spots/routes,
-    problem reports, events) — used by the map's "zoom to data extent" button. Deliberately
-    distinct from the choropleth's initial US/UK camera bounds, which cover the full geo-unit
-    coverage area rather than where contributions have actually happened."""
-    row = (
+    """Per-category bounding boxes of this campaign's actual activity — used by the map's
+    "zoom to data extent" button. Broken out by category (rather than one combined box) so
+    the frontend can union only the categories whose layers are currently toggled on, instead
+    of always zooming to everything. Deliberately distinct from the choropleth's initial US/UK
+    camera bounds, which cover the full geo-unit coverage area rather than where contributions
+    have actually happened."""
+    rows = (
         await db.execute(
             text("""
                 SELECT
+                    category,
                     ST_XMin(ext) AS min_lng, ST_YMin(ext) AS min_lat,
                     ST_XMax(ext) AS max_lng, ST_YMax(ext) AS max_lat
                 FROM (
-                    SELECT ST_Extent(geom) AS ext FROM (
-                        SELECT location::geometry AS geom FROM contributions
+                    SELECT category, ST_Extent(geom) AS ext FROM (
+                        SELECT 'contributions' AS category, location::geometry AS geom FROM contributions
                         WHERE campaign_id = :campaign_id AND location IS NOT NULL
                         UNION ALL
-                        SELECT location::geometry FROM cleanups
+                        SELECT 'contributions', location::geometry FROM cleanups
                         WHERE campaign_id = :campaign_id AND location IS NOT NULL
                         UNION ALL
-                        SELECT route::geometry FROM cleanups
+                        SELECT 'routes', route::geometry FROM cleanups
                         WHERE campaign_id = :campaign_id AND route IS NOT NULL
                         UNION ALL
-                        SELECT location::geometry FROM problem_reports
+                        SELECT 'reports', location::geometry FROM problem_reports
                         WHERE campaign_id = :campaign_id
                         UNION ALL
-                        SELECT location::geometry FROM campaign_events
+                        SELECT 'events', location::geometry FROM campaign_events
                         WHERE campaign_id = :campaign_id AND location IS NOT NULL
                     ) pts
+                    GROUP BY category
                 ) e
             """),
             {"campaign_id": str(campaign_id)},
         )
-    ).fetchone()
-    if not row or row.min_lng is None:
-        return {"bbox": None}
-    return {"bbox": [row.min_lng, row.min_lat, row.max_lng, row.max_lat]}
+    ).fetchall()
+    bboxes: dict[str, list[float] | None] = {
+        "contributions": None,
+        "routes": None,
+        "reports": None,
+        "events": None,
+    }
+    for row in rows:
+        if row.min_lng is not None:
+            bboxes[row.category] = [row.min_lng, row.min_lat, row.max_lng, row.max_lat]
+    return {"bboxes": bboxes}
 
 
 @router.get("/{campaign_id}/geo-unit-at")
