@@ -3060,10 +3060,28 @@ export default function CampaignMap({
       return;
     }
 
-    // Territory/choropleth campaigns are US-scoped, unless they also cover UK postcode districts
+    // Territory/choropleth campaigns are US-scoped, unless they also cover UK postcode districts.
+    // This is only a fallback for the fit-to-extent button (e.g. a brand-new campaign with no
+    // activity yet) — below we try to replace it with the real extent of this campaign's data
+    // (cleanups, routes, reports, events), since the geo-unit coverage area itself can be much
+    // larger than where anything has actually happened (e.g. Trash War covers the whole US/UK).
     dataBoundsRef.current = (campaign.geo_unit?.includes("uk_postcode_district") ?? false)
       ? [[-125, 24], [2, 61]]
       : [[-125, 24], [-66, 49]];
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/data-bbox`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { bbox: [number, number, number, number] | null };
+        if (data.bbox) {
+          dataBoundsRef.current = [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]];
+        }
+      }
+    } catch {
+      // fit-to-extent button just falls back to the US/UK bounds above
+    }
 
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
 

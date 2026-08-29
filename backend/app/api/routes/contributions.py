@@ -613,6 +613,45 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
     ]
 
 
+@router.get("/{campaign_id}/data-bbox")
+async def get_campaign_data_bbox(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Bounding box of this campaign's actual activity (contributions, cleanup spots/routes,
+    problem reports, events) — used by the map's "zoom to data extent" button. Deliberately
+    distinct from the choropleth's initial US/UK camera bounds, which cover the full geo-unit
+    coverage area rather than where contributions have actually happened."""
+    row = (
+        await db.execute(
+            text("""
+                SELECT
+                    ST_XMin(ext) AS min_lng, ST_YMin(ext) AS min_lat,
+                    ST_XMax(ext) AS max_lng, ST_YMax(ext) AS max_lat
+                FROM (
+                    SELECT ST_Extent(geom) AS ext FROM (
+                        SELECT location::geometry AS geom FROM contributions
+                        WHERE campaign_id = :campaign_id AND location IS NOT NULL
+                        UNION ALL
+                        SELECT location::geometry FROM cleanups
+                        WHERE campaign_id = :campaign_id AND location IS NOT NULL
+                        UNION ALL
+                        SELECT route::geometry FROM cleanups
+                        WHERE campaign_id = :campaign_id AND route IS NOT NULL
+                        UNION ALL
+                        SELECT location::geometry FROM problem_reports
+                        WHERE campaign_id = :campaign_id
+                        UNION ALL
+                        SELECT location::geometry FROM campaign_events
+                        WHERE campaign_id = :campaign_id AND location IS NOT NULL
+                    ) pts
+                ) e
+            """),
+            {"campaign_id": str(campaign_id)},
+        )
+    ).fetchone()
+    if not row or row.min_lng is None:
+        return {"bbox": None}
+    return {"bbox": [row.min_lng, row.min_lat, row.max_lng, row.max_lat]}
+
+
 @router.get("/{campaign_id}/geo-unit-at")
 async def get_geo_unit_at_point(
     campaign_id: UUID,
