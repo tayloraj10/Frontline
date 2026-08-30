@@ -8,6 +8,7 @@ import BackToCampaignButton from "@/components/ui/BackToCampaignButton";
 import Avatar from "@/components/ui/Avatar";
 import ShareButton from "@/components/ShareButton";
 import type { CleanupRouteDetailData } from "@/lib/cleanupRoutes";
+import { formatDistance } from "@/lib/nearbyPartners";
 
 const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap"), {
   ssr: false,
@@ -21,7 +22,9 @@ function formatDate(iso: string | null): string {
 
 export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetailData }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [routePhotoLightboxIndex, setRoutePhotoLightboxIndex] = useState<number | null>(null);
   const submitterName = route.submitted_by.display_name ?? route.submitted_by.username ?? "A volunteer";
+  const routePhotoUrls = route.route_photos.map((p) => p.url);
 
   return (
     <div>
@@ -40,6 +43,12 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
         coordinates={route.route.coordinates}
         groupLogoUrl={route.group_logo_url}
         enlargeable
+        interactive
+        photos={route.route_photos}
+        onPhotoSelect={(url) => {
+          const i = routePhotoUrls.indexOf(url);
+          if (i !== -1) setRoutePhotoLightboxIndex(i);
+        }}
       />
 
       <div className="mt-4 flex items-center gap-3">
@@ -78,6 +87,9 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
       )}
 
       <div className="mt-4 flex gap-4 text-sm text-zinc-400">
+        {route.route_distance_meters != null && route.route_distance_meters > 0 && (
+          <span>{formatDistance(route.route_distance_meters)}</span>
+        )}
         {route.metrics_small_bags != null && route.metrics_small_bags > 0 && (
           <span>{route.metrics_small_bags} small bag{route.metrics_small_bags === 1 ? "" : "s"}</span>
         )}
@@ -86,6 +98,24 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
         )}
         {route.metrics_pounds != null && route.metrics_pounds > 0 && <span>{route.metrics_pounds} lbs</span>}
       </div>
+
+      {routePhotoUrls.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs text-zinc-500 mb-2">Photos from the route</p>
+          <div className="flex flex-wrap gap-2">
+            {routePhotoUrls.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={url}
+                src={url}
+                alt="Route photo"
+                className="h-24 w-24 object-cover rounded-lg cursor-pointer border border-zinc-800 hover:border-emerald-600 active:border-emerald-600 active:scale-[0.96] transition-[border-color,transform] duration-150 touch-manipulation shadow-elevation-1"
+                onClick={() => setRoutePhotoLightboxIndex(i)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {route.image_urls.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -114,6 +144,15 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
           index={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onNavigate={setLightboxIndex}
+        />
+      )}
+
+      {routePhotoLightboxIndex !== null && (
+        <Lightbox
+          images={routePhotoUrls}
+          index={routePhotoLightboxIndex}
+          onClose={() => setRoutePhotoLightboxIndex(null)}
+          onNavigate={setRoutePhotoLightboxIndex}
         />
       )}
     </div>

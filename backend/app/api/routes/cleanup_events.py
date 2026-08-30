@@ -2082,6 +2082,7 @@ async def get_cleanup_route(cleanup_id: UUID, db: AsyncSession = Depends(get_db)
                 c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
                 c.created_at, c.submitted_by_user_id,
                 ST_AsGeoJSON(c.route)::json AS route,
+                ST_Length(c.route::geography) AS route_distance_meters,
                 c.route_photos,
                 gu.display_name AS geo_unit_display_name,
                 p.username, p.display_name AS user_display_name, p.avatar_url,
@@ -2116,6 +2117,7 @@ async def get_cleanup_route(cleanup_id: UUID, db: AsyncSession = Depends(get_db)
         "metrics_pounds": float(row.metrics_pounds) if row.metrics_pounds is not None else None,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "route": row.route,
+        "route_distance_meters": round(row.route_distance_meters, 1) if row.route_distance_meters is not None else None,
         "route_photos": row.route_photos or [],
         "geo_unit_display_name": row.geo_unit_display_name,
         "submitted_by": {

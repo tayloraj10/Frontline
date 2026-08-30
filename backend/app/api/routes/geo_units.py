@@ -133,8 +133,7 @@ async def get_geo_unit_stats(
             text("""
                 SELECT COALESCE(SUM(c.value), 0) AS total_points
                 FROM contributions c
-                JOIN geo_units t ON t.id = :geo_unit_id
-                WHERE c.campaign_id = :campaign_id AND ST_Contains(t.geometry, c.location::geometry)
+                WHERE c.campaign_id = :campaign_id AND c.geo_unit_id = :geo_unit_id
             """),
             {"geo_unit_id": geo_unit_id, "campaign_id": campaign_id},
         )
@@ -147,11 +146,10 @@ async def get_geo_unit_stats(
                        g.name AS group_name, p.display_name, p.username,
                        cl.metrics_small_bags, cl.metrics_large_bags
                 FROM contributions c
-                JOIN geo_units t ON t.id = :geo_unit_id
                 LEFT JOIN groups g ON g.id = c.group_id
                 LEFT JOIN profiles p ON p.id = c.user_id
                 LEFT JOIN cleanups cl ON cl.id = c.cleanup_id
-                WHERE c.campaign_id = :campaign_id AND ST_Contains(t.geometry, c.location::geometry)
+                WHERE c.campaign_id = :campaign_id AND c.geo_unit_id = :geo_unit_id
                 ORDER BY c.submitted_at DESC
                 LIMIT 20
             """),
@@ -162,10 +160,10 @@ async def get_geo_unit_stats(
     cleanups = (
         await db.execute(
             text("""
-                SELECT cl.id, cl.metrics_small_bags, cl.metrics_large_bags, cl.image_urls
+                SELECT cl.id, cl.metrics_small_bags, cl.metrics_large_bags, cl.image_urls, cl.route_photos
                 FROM cleanups cl
-                JOIN geo_units t ON t.id = :geo_unit_id
-                WHERE cl.campaign_id = :campaign_id AND ST_Contains(t.geometry, cl.location::geometry)
+                WHERE cl.campaign_id = :campaign_id AND cl.geo_unit_id = :geo_unit_id
+                ORDER BY cl.created_at DESC
             """),
             {"geo_unit_id": geo_unit_id, "campaign_id": campaign_id},
         )
@@ -190,6 +188,7 @@ async def get_geo_unit_stats(
         bag_totals["small"] += c.metrics_small_bags or 0
         bag_totals["large"] += c.metrics_large_bags or 0
         cleanup_photos.extend({"url": url, "cleanup_id": str(c.id)} for url in (c.image_urls or []))
+        cleanup_photos.extend({"url": p["url"], "cleanup_id": str(c.id)} for p in (c.route_photos or []))
 
     return {
         "total_points": totals_row.total_points,

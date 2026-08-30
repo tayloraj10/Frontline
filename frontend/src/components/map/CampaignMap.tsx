@@ -238,6 +238,22 @@ function getBusinessMarkerScale(zoom: number): number {
   return 1 + t * (BUSINESS_MARKER_SCALE_MAX - 1);
 }
 
+// Route photo markers are dense along a route and, unlike event markers, aren't the
+// primary thing being scanned for at a glance — so they shrink more aggressively as you
+// zoom out, instead of staying full-size and dominating the viewport.
+const ROUTE_PHOTO_MARKER_SCALE_MAX_ZOOM = 14;
+const ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM = 6;
+const ROUTE_PHOTO_MARKER_SCALE_MIN = 0.2;
+
+function getRoutePhotoMarkerScale(zoom: number): number {
+  if (zoom >= ROUTE_PHOTO_MARKER_SCALE_MAX_ZOOM) return 1;
+  if (zoom <= ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM) return ROUTE_PHOTO_MARKER_SCALE_MIN;
+  const t =
+    (zoom - ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM) /
+    (ROUTE_PHOTO_MARKER_SCALE_MAX_ZOOM - ROUTE_PHOTO_MARKER_SCALE_MIN_ZOOM);
+  return ROUTE_PHOTO_MARKER_SCALE_MIN + t * (1 - ROUTE_PHOTO_MARKER_SCALE_MIN);
+}
+
 // Zero-cost, no-permission-prompt signal for a UK vs. US default view. Only consulted
 // for campaigns whose geo_unit already covers uk_postcode_district (e.g. Trash War).
 function isLikelyUK(): boolean {
@@ -669,6 +685,17 @@ function routeCategoryFactor(t: LayerToggleState): unknown {
   return ["case", ["get", "is_event"], t.showGroupRoutes ? 1 : 0, t.showAdhocRoutes ? 1 : 0];
 }
 
+// Maps legend toggles to the data-bbox endpoint's category keys, so the fit-to-extent button
+// can zoom to only what's currently visible instead of always fitting to every category.
+function dataBboxCategoriesForToggles(t: LayerToggleState): string[] {
+  const categories: string[] = [];
+  if (t.showCleanupDots || t.showGroupEventDots) categories.push("contributions");
+  if (t.showGroupRoutes || t.showAdhocRoutes) categories.push("routes");
+  if (t.showReports) categories.push("reports");
+  if (t.showGroupEvents || t.showMapEvents) categories.push("events");
+  return categories;
+}
+
 // The territory-event-highlight layer's dashed border is driven by two separate
 // feature-state flags (event_highlight_hotspot / event_highlight_map, set in
 // applyEventAreaHighlights) so each category's toggle can independently hide its
@@ -849,27 +876,46 @@ function addPhotoMarker(
   loc: { id: string; latitude: number; longitude: number; photo_url: string | null; submitted_at?: string | null },
   onSelect: (photo: { url: string; contentType: "contribution_photo"; contentId: string }) => void,
   size = 48,
+  offset?: [number, number],
+  // When provided, the photo is wrapped in its own zoom-scalable element (pushed here) instead
+  // of being sized directly on the positioning element — MapLibre applies its own `transform`
+  // to the positioning element for geo-placement, so scaling needs an independent inner wrapper.
+  scaleElsRef?: { current: HTMLDivElement[] },
+  initialScale = 1,
 ): maplibregl.Marker {
   const el = document.createElement("div");
-  el.style.cssText =
+  el.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0`;
+
+  const inner = scaleElsRef ? document.createElement("div") : el;
+  if (scaleElsRef) {
+    inner.style.cssText =
+      `width:${size}px;height:${size}px;transform-origin:center;` +
+      `transform:scale(${initialScale});transition:transform 0.15s ease-out`;
+    el.appendChild(inner);
+    scaleElsRef.current.push(inner);
+  }
+
+  const photoEl = scaleElsRef ? document.createElement("div") : inner;
+  photoEl.style.cssText =
     `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.7);` +
     "box-shadow:0 2px 10px rgba(0,0,0,0.6);cursor:pointer;flex-shrink:0;background:#27272a";
+  if (scaleElsRef) inner.appendChild(photoEl);
 
   if (loc.photo_url) {
     const img = document.createElement("img");
     img.src = loc.photo_url;
     img.style.cssText = "width:100%;height:100%;object-fit:cover";
-    el.appendChild(img);
-    el.onclick = () => onSelect({ url: loc.photo_url!, contentType: "contribution_photo", contentId: loc.id });
+    photoEl.appendChild(img);
+    photoEl.onclick = () => onSelect({ url: loc.photo_url!, contentType: "contribution_photo", contentId: loc.id });
   } else {
-    el.style.display = "flex";
-    el.style.alignItems = "center";
-    el.style.justifyContent = "center";
-    el.style.fontSize = "20px";
-    el.textContent = "📷";
+    photoEl.style.display = "flex";
+    photoEl.style.alignItems = "center";
+    photoEl.style.justifyContent = "center";
+    photoEl.style.fontSize = "20px";
+    photoEl.textContent = "📷";
   }
 
-  return new maplibregl.Marker({ element: el, anchor: "center" })
+  return new maplibregl.Marker({ element: el, anchor: "center", offset })
     .setLngLat([loc.longitude, loc.latitude])
     .addTo(m);
 }
@@ -902,6 +948,8 @@ type SelectablePhoto = {
   url: string;
   contentType?: "contribution_photo" | "cleanup_log_photo";
   contentId?: string;
+  gallery?: { url: string; contentId: string }[];
+  galleryIndex?: number;
 };
 
 type CleanupPhoto = { url: string; cleanupId: string };
@@ -1098,7 +1146,7 @@ function TerritoryPanel({
 
   return (
     <>
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
 
       {/* Header */}
@@ -1183,7 +1231,7 @@ function TerritoryPanel({
         </div>
       </div>
 
-      <div className="overflow-y-auto max-h-80">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {/* Group battle bars */}
         {isContested && (
           <div className="border-b border-zinc-800 px-4 py-3">
@@ -1267,7 +1315,13 @@ function TerritoryPanel({
                 <button
                   key={i}
                   onClick={() =>
-                    onPhotoSelect({ url: photo.url, contentType: "cleanup_log_photo", contentId: photo.cleanupId })
+                    onPhotoSelect({
+                      url: photo.url,
+                      contentType: "cleanup_log_photo",
+                      contentId: photo.cleanupId,
+                      gallery: cleanupPhotos.map((p) => ({ url: p.url, contentId: p.cleanupId })),
+                      galleryIndex: i,
+                    })
                   }
                   className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 active:border-emerald-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
                 >
@@ -1403,7 +1457,7 @@ function StatePanel({
   const party = Math.abs(lean) < 0.15 ? "Swing" : isR ? "Republican" : "Democrat";
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -1501,7 +1555,7 @@ function HexPanel({
   }, [campaignId, entry.h3_index, refreshKey]);
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-auto right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: stageColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -2013,6 +2067,8 @@ export default function CampaignMap({
   const cleanupRouteDateLabelsRef = useRef<maplibregl.Marker[]>([]);
   const routePhotoMarkersRef = useRef<maplibregl.Marker[]>([]);
   const routePhotoMarkerIsEventRef = useRef<boolean[]>([]);
+  const routePhotoMarkerScaleElsRef = useRef<HTMLDivElement[]>([]);
+  const routePhotoMarkerZoomListenerRef = useRef(false);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
   const bonusSpotPopupRef = useRef<maplibregl.Popup | null>(null);
   const contributionPopupRef = useRef<maplibregl.Popup | null>(null);
@@ -2042,6 +2098,10 @@ export default function CampaignMap({
   const choroplethListenerRef = useRef(false);
   const eventHighlightListenerRef = useRef(false);
   const dataBoundsRef = useRef<maplibregl.LngLatBoundsLike | null>(null);
+  // Per-category data extent (choropleth/territory campaigns only) so the fit-to-extent button
+  // can zoom to only the categories whose layers are currently toggled on in the legend, rather
+  // than always fitting to every category regardless of what's actually visible on screen.
+  const dataBoundsByCategoryRef = useRef<Record<string, [number, number, number, number] | null> | null>(null);
   const hexDataRef = useRef<HexBloomEntry[]>([]);
   const nycNeighborhoodsVisibleRef = useRef(false);
   const nycAdjacencyRef = useRef<Record<string, string[]> | null>(null);
@@ -2715,6 +2775,7 @@ export default function CampaignMap({
       routePhotoMarkersRef.current.forEach((m) => m.remove());
       routePhotoMarkersRef.current = [];
       routePhotoMarkerIsEventRef.current = [];
+      routePhotoMarkerScaleElsRef.current = [];
 
       const eventById = new Map(events.map((e) => [e.id, e]));
 
@@ -2814,7 +2875,13 @@ export default function CampaignMap({
             map.current!,
             { id: r.id, latitude: photo.lat, longitude: photo.lng, photo_url: photo.url },
             (p) => setSelectedPhoto(p.contentId ? p : { url: p.url }),
-            24,
+            36,
+            // Offset up and out of the way of the route's midpoint waypoint icon, which
+            // otherwise sits fully hidden underneath (and unclickable) when a photo happens
+            // to have been taken at that exact node.
+            [0, -30],
+            routePhotoMarkerScaleElsRef,
+            map.current ? getRoutePhotoMarkerScale(map.current.getZoom()) : 1,
           );
           if (!routeVisible) photoMarker.getElement().style.display = "none";
           routePhotoMarkersRef.current.push(photoMarker);
@@ -3446,10 +3513,39 @@ export default function CampaignMap({
       return;
     }
 
-    // Territory/choropleth campaigns are US-scoped, unless they also cover UK postcode districts
+    // Territory/choropleth campaigns are US-scoped, unless they also cover UK postcode districts.
+    // This is only a fallback for the fit-to-extent button (e.g. a brand-new campaign with no
+    // activity yet) — below we try to replace it with the real extent of this campaign's data
+    // (cleanups, routes, reports, events), since the geo-unit coverage area itself can be much
+    // larger than where anything has actually happened (e.g. Trash War covers the whole US/UK).
     dataBoundsRef.current = (campaign.geo_unit?.includes("uk_postcode_district") ?? false)
       ? [[-125, 24], [2, 61]]
       : [[-125, 24], [-66, 49]];
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/${campaign.id}/data-bbox`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as {
+          bboxes: Record<string, [number, number, number, number] | null>;
+        };
+        dataBoundsByCategoryRef.current = data.bboxes;
+        const allBoxes = Object.values(data.bboxes).filter(
+          (b): b is [number, number, number, number] => b != null,
+        );
+        if (allBoxes.length > 0) {
+          const bounds = new maplibregl.LngLatBounds();
+          for (const b of allBoxes) {
+            bounds.extend([b[0], b[1]]);
+            bounds.extend([b[2], b[3]]);
+          }
+          dataBoundsRef.current = bounds;
+        }
+      }
+    } catch {
+      // fit-to-extent button just falls back to the US/UK bounds above
+    }
 
     const tileUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/${campaign.id}/{z}/{x}/{y}.mvt`;
 
@@ -3745,6 +3841,15 @@ export default function CampaignMap({
       m.on("zoom", () => {
         const scale = getBusinessMarkerScale(m.getZoom());
         businessMarkerScaleElsRef.current.forEach((wrapperEl) => {
+          wrapperEl.style.transform = `scale(${scale})`;
+        });
+      });
+    }
+    if (!routePhotoMarkerZoomListenerRef.current) {
+      routePhotoMarkerZoomListenerRef.current = true;
+      m.on("zoom", () => {
+        const scale = getRoutePhotoMarkerScale(m.getZoom());
+        routePhotoMarkerScaleElsRef.current.forEach((wrapperEl) => {
           wrapperEl.style.transform = `scale(${scale})`;
         });
       });
@@ -4284,7 +4389,27 @@ export default function CampaignMap({
       });
     }
     map.current.addControl(
-      new FitExtentControl(() => dataBoundsRef.current),
+      new FitExtentControl(() => {
+        const byCategory = dataBoundsByCategoryRef.current;
+        if (!byCategory) return dataBoundsRef.current;
+
+        // Only zoom to the categories whose layers are currently toggled on. If every
+        // relevant layer is off, fall back to the full data extent rather than fitting
+        // to nothing.
+        let categories = dataBboxCategoriesForToggles(layerToggleRef.current);
+        if (categories.length === 0) categories = Object.keys(byCategory);
+
+        const bounds = new maplibregl.LngLatBounds();
+        let any = false;
+        for (const category of categories) {
+          const b = byCategory[category];
+          if (!b) continue;
+          bounds.extend([b[0], b[1]]);
+          bounds.extend([b[2], b[3]]);
+          any = true;
+        }
+        return any ? bounds : dataBoundsRef.current;
+      }),
       "top-right",
     );
     map.current.addControl(
@@ -5741,6 +5866,48 @@ export default function CampaignMap({
             </>
           ) : (
             <>
+              <div className="flex items-center gap-1 px-1 pb-0.5">
+                <button
+                  onClick={() => {
+                    setShowCleanupDots(true);
+                    setShowGroupEventDots(true);
+                    setShowGroupEvents(true);
+                    setShowMapEvents(true);
+                    setShowHotspots(true);
+                    setShowBonusSpots(true);
+                    setShowEventRadius(true);
+                    setShowGroupRoutes(true);
+                    setShowAdhocRoutes(true);
+                    setShowReports(true);
+                    setShowPartners(true);
+                  }}
+                  className="flex-1 px-2 py-1 rounded-md border border-zinc-700/70 bg-zinc-800/60 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 active:scale-[0.97] transition-all text-[11px] font-medium"
+                >
+                  All on
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCleanupDots(false);
+                    setShowGroupEventDots(false);
+                    setShowGroupEvents(false);
+                    setShowMapEvents(false);
+                    setShowHotspots(false);
+                    setShowBonusSpots(false);
+                    setShowEventRadius(false);
+                    setShowGroupRoutes(false);
+                    setShowAdhocRoutes(false);
+                    setShowReports(false);
+                    setShowPartners(false);
+                    setShowGroupTerritory(false);
+                    setShowIndividualTerritory(false);
+                    setShowUnclaimedTerritory(false);
+                  }}
+                  className="flex-1 px-2 py-1 rounded-md border border-zinc-700/70 bg-zinc-800/60 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 active:scale-[0.97] transition-all text-[11px] font-medium"
+                >
+                  All off
+                </button>
+              </div>
+              <div className="mb-0.5 border-t border-zinc-800" />
               <LegendToggle checked={showCleanupDots} onChange={setShowCleanupDots}>
                 <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
                 <span className="text-zinc-300">Cleanup logged</span>
@@ -5867,6 +6034,47 @@ export default function CampaignMap({
               >
                 ×
               </IconButton>
+              {selectedPhoto.gallery && selectedPhoto.gallery.length > 1 && selectedPhoto.galleryIndex != null && (
+                <>
+                  <IconButton
+                    onClick={() => {
+                      const gallery = selectedPhoto.gallery!;
+                      const i = (selectedPhoto.galleryIndex! - 1 + gallery.length) % gallery.length;
+                      setSelectedPhoto({
+                        url: gallery[i].url,
+                        contentType: "cleanup_log_photo",
+                        contentId: gallery[i].contentId,
+                        gallery,
+                        galleryIndex: i,
+                      });
+                    }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+                    aria-label="Previous photo"
+                  >
+                    &#8249;
+                  </IconButton>
+                  <IconButton
+                    onClick={() => {
+                      const gallery = selectedPhoto.gallery!;
+                      const i = (selectedPhoto.galleryIndex! + 1) % gallery.length;
+                      setSelectedPhoto({
+                        url: gallery[i].url,
+                        contentType: "cleanup_log_photo",
+                        contentId: gallery[i].contentId,
+                        gallery,
+                        galleryIndex: i,
+                      });
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+                    aria-label="Next photo"
+                  >
+                    &#8250;
+                  </IconButton>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-zinc-300 text-xs tabular-nums bg-black/50 px-2 py-0.5 rounded-full">
+                    {selectedPhoto.galleryIndex + 1} / {selectedPhoto.gallery.length}
+                  </div>
+                </>
+              )}
             </div>
             {selectedPhoto.contentType && selectedPhoto.contentId && (
               <ReportPhotoButton
