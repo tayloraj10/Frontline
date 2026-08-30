@@ -6,6 +6,7 @@ import StatsClient from "./StatsClient";
 import EventLeaderboardSection from "./EventLeaderboardSection";
 import EventGeoSection from "./EventGeoSection";
 import EventStatsSection from "./EventStatsSection";
+import EventShareExportSection from "./EventShareExportSection";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -30,28 +31,27 @@ export default async function TeamEventStatsPage({ params }: Props) {
         <Link href={`/team-events/${id}`} className="text-xs font-medium text-sky-400 hover:text-sky-300">
           ← Back to event
         </Link>
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-black text-zinc-100 leading-tight">{event.title} stats</h1>
-          <Link
-            href={`/team-events/${id}/stats/admin`}
-            className="touch-manipulation active:scale-[0.97] shrink-0 text-xs font-semibold text-sky-400 border border-sky-900 rounded-lg px-3 py-1.5"
-          >
-            Full dashboard
-          </Link>
+        <div className="mt-2">
+          <h1 className="text-2xl font-black text-zinc-100 leading-tight">{event.title} Stats</h1>
         </div>
       </div>
 
-      <EventLeaderboardSection teamEventId={id} />
-      <EventGeoSection teamEventId={id} />
+      <div>
+        <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider mb-3">Event stats</h2>
+        <EventStatsSection teamEventId={id} />
+      </div>
 
       <div>
         <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider mb-3">Team scoreboard</h2>
         <StatsClient teamEventId={id} initialStats={stats} />
       </div>
 
+      <EventLeaderboardSection teamEventId={id} />
+      <EventGeoSection teamEventId={id} />
+
       <div>
-        <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider mb-3">Event stats</h2>
-        <EventStatsSection
+        <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider mb-3">Share &amp; export</h2>
+        <EventShareExportSection
           teamEventId={id}
           eventTitle={event.title}
           eventLogoUrl={event.image_url}

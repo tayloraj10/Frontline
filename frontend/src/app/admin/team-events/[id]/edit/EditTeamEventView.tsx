@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   patchTeamEvent,
   addTeamEventOrganizer,
   removeTeamEventOrganizer,
-  listTeamEventSubmissions,
-  patchTeamEventSubmission,
   updateTeamEventTeam,
   addTeamEventTeam,
   uploadTeamEventLogo,
@@ -15,10 +14,9 @@ import {
   type TeamEventOrganizer,
   type TeamEventStatus,
   type TeamEventSubmissionMode,
-  type TeamEventSubmission,
-  type ReviewStatus,
 } from "@/lib/teamEvents";
 import { resolveTeamColor, TEAM_COLORS } from "@/lib/teamColors";
+import GeofencePicker, { type GeofenceArea } from "../../GeofencePicker";
 
 type UserSearchResult = { id: string; username: string | null; email: string };
 
@@ -47,7 +45,6 @@ function toLocalDateTimeInput(iso: string | null): string {
 }
 
 const STATUSES: TeamEventStatus[] = ["draft", "active", "completed", "cancelled"];
-const REVIEW_STATUSES: ReviewStatus[] = ["pending", "approved", "flagged"];
 
 const STATUS_BADGE: Record<TeamEventStatus, string> = {
   active: "bg-emerald-900/60 text-emerald-400 border-emerald-800",
@@ -104,18 +101,6 @@ export default function EditTeamEventView({
   const [organizerSearching, setOrganizerSearching] = useState(false);
   const [organizerError, setOrganizerError] = useState<string | null>(null);
 
-  const [submissions, setSubmissions] = useState<TeamEventSubmission[] | null>(null);
-  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
-  const [savingId, setSavingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    listTeamEventSubmissions({ teamEventId: event.id, requestingUserId })
-      .then(setSubmissions)
-      .catch((err) => setSubmissionsError(extractErrorMessage(err, "Failed to load submissions")));
-  }, [event.id, requestingUserId]);
-
-  const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
-
   const handleStatusChange = async (next: TeamEventStatus) => {
     setStatusSaving(true);
     setStatusError(null);
@@ -157,8 +142,39 @@ export default function EditTeamEventView({
     }
   };
 
-  const updateTeamDraft = (id: string, fields: Partial<{ name: string; color: string | null }>) => {
+  const updateTeamDraft = (
+    id: string,
+    fields: Partial<{ name: string; color: string | null; geo_unit_ids: string[]; geo_display_names: string[] }>
+  ) => {
     setTeams((prev) => prev.map((t) => (t.id === id ? { ...t, ...fields } : t)));
+  };
+
+  const [geofenceEditingId, setGeofenceEditingId] = useState<string | null>(null);
+  const [geofenceSavingId, setGeofenceSavingId] = useState<string | null>(null);
+
+  const handleSetGeofence = async (id: string, areas: GeofenceArea[]) => {
+    setGeofenceSavingId(id);
+    setTeamErrors((prev) => ({ ...prev, [id]: "" }));
+    try {
+      await updateTeamEventTeam({
+        teamEventId: event.id,
+        teamId: id,
+        requestingUserId,
+        geoUnitIds: areas.map((a) => a.geoUnitId),
+      });
+      updateTeamDraft(id, {
+        geo_unit_ids: areas.map((a) => a.geoUnitId),
+        geo_display_names: areas.map((a) => a.displayName),
+      });
+    } catch (err) {
+      setTeamErrors((prev) => ({ ...prev, [id]: extractErrorMessage(err, "Failed to save area") }));
+    } finally {
+      setGeofenceSavingId(null);
+    }
+  };
+
+  const handleClearGeofences = async (id: string) => {
+    await handleSetGeofence(id, []);
   };
 
   const updateTeamLogoFile = (id: string, file: File | null) => {
@@ -207,7 +223,16 @@ export default function EditTeamEventView({
       });
       setTeams((prev) => [
         ...prev,
-        { id: created.id, name: newTeamName.trim(), color: newTeamColor, logo_url: logoUrl, has_boundary: false, logoFile: null, logoPreview: null },
+        {
+          id: created.id,
+          name: newTeamName.trim(),
+          color: newTeamColor,
+          logo_url: logoUrl,
+          geo_unit_ids: [],
+          geo_display_names: [],
+          logoFile: null,
+          logoPreview: null,
+        },
       ]);
       setNewTeamName("");
       setNewTeamColor(TEAM_COLORS[(teams.length + 1) % TEAM_COLORS.length].value);
@@ -266,27 +291,6 @@ export default function EditTeamEventView({
       setOrganizers((prev) => prev.filter((o) => o.user_id !== userId));
     } catch (err) {
       setOrganizerError(extractErrorMessage(err, "Failed to remove organizer"));
-    }
-  };
-
-  const handlePatchSubmission = async (sub: TeamEventSubmission, fields: Partial<TeamEventSubmission>) => {
-    setSavingId(sub.id);
-    try {
-      await patchTeamEventSubmission({
-        teamEventId: event.id,
-        contributionId: sub.id,
-        requestingUserId,
-        smallBags: fields.small_bags ?? undefined,
-        largeBags: fields.large_bags ?? undefined,
-        pounds: fields.pounds ?? undefined,
-        value: fields.value ?? undefined,
-        reviewStatus: fields.review_status ?? undefined,
-      });
-      setSubmissions((prev) => prev?.map((s) => (s.id === sub.id ? { ...s, ...fields } : s)) ?? prev);
-    } catch (err) {
-      setSubmissionsError(extractErrorMessage(err, "Failed to save submission"));
-    } finally {
-      setSavingId(null);
     }
   };
 
@@ -367,6 +371,43 @@ export default function EditTeamEventView({
                     />
                   ))}
                 </div>
+                <div className="flex flex-wrap items-center gap-2 pl-14">
+                  <span className="text-xs text-zinc-400">
+                    {t.geo_display_names.length > 0
+                      ? `Areas: ${t.geo_display_names.join(", ")}`
+                      : "No areas assigned"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setGeofenceEditingId(geofenceEditingId === t.id ? null : t.id)}
+                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+                  >
+                    {geofenceEditingId === t.id ? "Close" : t.geo_display_names.length > 0 ? "Change" : "Assign areas"}
+                  </button>
+                  {t.geo_unit_ids.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleClearGeofences(t.id)}
+                      disabled={geofenceSavingId === t.id}
+                      className="text-xs font-semibold text-red-400 hover:text-red-300 disabled:opacity-40"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {geofenceEditingId === t.id && (
+                  <div className="pl-14">
+                    <GeofencePicker
+                      initialSelected={t.geo_unit_ids.map((id, i) => ({
+                        geoUnitId: id,
+                        displayName: t.geo_display_names[i] ?? id,
+                        unitType: "",
+                      }))}
+                      onChange={(areas) => handleSetGeofence(t.id, areas)}
+                    />
+                    {geofenceSavingId === t.id && <p className="text-xs text-zinc-400 mt-1">Saving area...</p>}
+                  </div>
+                )}
                 {teamErrors[t.id] && <p className="text-sm text-red-400 pl-14">{teamErrors[t.id]}</p>}
               </div>
             ))}
@@ -660,57 +701,12 @@ export default function EditTeamEventView({
 
       <div className={cardCls}>
         <h2 className={sectionTitleCls}>Submissions</h2>
-        {submissionsError && <p className="text-sm text-red-400">{submissionsError}</p>}
-        {!submissions ? (
-          <p className="text-sm text-zinc-500">Loading...</p>
-        ) : submissions.length === 0 ? (
-          <p className="text-sm text-zinc-500">No submissions yet.</p>
-        ) : (
-          <div className="overflow-x-auto -mx-5 px-5">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-zinc-500 border-b border-zinc-800">
-                  <th className="py-2 pr-3 font-medium">Team</th>
-                  <th className="py-2 pr-3 font-medium">Value</th>
-                  <th className="py-2 pr-3 font-medium">Status</th>
-                  <th className="py-2 pr-3 font-medium">Submitted</th>
-                </tr>
-              </thead>
-              <tbody>
-                {submissions.map((s) => (
-                  <tr key={s.id} className="border-b border-zinc-900">
-                    <td className="py-2 pr-3">{s.team_id ? teamNameById.get(s.team_id) ?? "—" : "—"}</td>
-                    <td className="py-2 pr-3">
-                      <input
-                        type="number"
-                        className={`${inputCls} w-24`}
-                        defaultValue={s.value ?? 0}
-                        disabled={savingId === s.id}
-                        onBlur={(e) => {
-                          const v = Number(e.target.value);
-                          if (v !== s.value) handlePatchSubmission(s, { value: v });
-                        }}
-                      />
-                    </td>
-                    <td className="py-2 pr-3">
-                      <select
-                        className={inputCls}
-                        value={s.review_status ?? "pending"}
-                        disabled={savingId === s.id}
-                        onChange={(e) => handlePatchSubmission(s, { review_status: e.target.value as ReviewStatus })}
-                      >
-                        {REVIEW_STATUSES.map((rs) => (
-                          <option key={rs} value={rs}>{rs}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-2 pr-3 text-zinc-500">{new Date(s.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <p className="text-xs text-zinc-500 -mt-2">
+          Verify, correct, or delete individual submissions on the{" "}
+          <Link href={`/team-events/${event.id}/review`} className="text-emerald-400 hover:underline">
+            review page
+          </Link>.
+        </p>
       </div>
     </div>
   );

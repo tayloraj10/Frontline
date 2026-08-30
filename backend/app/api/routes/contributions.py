@@ -206,6 +206,8 @@ async def submit_contribution(
             raise HTTPException(status_code=404, detail="Cleanup event not found")
 
     team_event_team_id = None
+    effective_team_event_id = payload.team_event_id
+    team_event_excluded_reason = None
     if payload.team_event_id:
         team_event_result = await db.execute(
             text("SELECT status, requires_photo FROM team_events WHERE id = :id"),
@@ -219,7 +221,7 @@ async def submit_contribution(
 
         participant_result = await db.execute(
             text("""
-                SELECT tep.team_id, tet.geo_unit_id
+                SELECT tep.team_id, tet.geo_unit_ids
                 FROM team_event_participants tep
                 JOIN team_event_teams tet ON tet.id = tep.team_id
                 WHERE tep.team_event_id = :event_id AND tep.user_id = :user_id
@@ -233,23 +235,36 @@ async def submit_contribution(
         if not participant_row:
             raise HTTPException(status_code=403, detail="You are not opted into this event")
         team_event_team_id = str(participant_row.team_id)
-        team_geo_unit_id = participant_row.geo_unit_id
+        team_geo_unit_ids = list(participant_row.geo_unit_ids) if participant_row.geo_unit_ids else []
 
-        if team_event_row.requires_photo and not (payload.photo_url or payload.photo_urls):
-            raise HTTPException(status_code=400, detail="This event requires a photo with every submission")
-
-        # Soft-skip when the team has no boundary polygon loaded yet (Phase 3
+        # Soft-skip when the team has no boundary polygon(s) loaded yet (Phase 3
         # city-limits geo data) — event still runs on active + membership alone.
-        if team_geo_unit_id and has_location:
+        #
+        # When a boundary IS set and the submission falls outside every assigned
+        # area, we don't reject the submission (an "automatic" event silently
+        # attaches team_event_id to every cleanup a member logs while it's active,
+        # including ones that have nothing to do with the event) — we just drop
+        # the event attribution and let it go through as a normal, unattributed
+        # contribution. The caller is told why via team_event_excluded_reason.
+        if team_geo_unit_ids and has_location:
             boundary_check = await db.execute(
                 text("""
-                    SELECT ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
-                    FROM geo_units WHERE id = :geo_unit_id
+                    SELECT bool_or(ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)))
+                    FROM geo_units WHERE id = ANY(CAST(:geo_unit_ids AS uuid[]))
                 """),
-                {"lon": payload.longitude, "lat": payload.latitude, "geo_unit_id": team_geo_unit_id},
+                {"lon": payload.longitude, "lat": payload.latitude, "geo_unit_ids": team_geo_unit_ids},
             )
             if not boundary_check.scalar():
-                raise HTTPException(status_code=400, detail="Submission location is outside your team's boundary")
+                team_event_team_id = None
+                effective_team_event_id = None
+                team_event_excluded_reason = "outside_team_area"
+
+        if (
+            effective_team_event_id
+            and team_event_row.requires_photo
+            and not (payload.photo_url or payload.photo_urls)
+        ):
+            raise HTTPException(status_code=400, detail="This event requires a photo with every submission")
 
     if payload.route_photos and not payload.route:
         raise HTTPException(status_code=400, detail="route_photos requires a route")
@@ -463,10 +478,10 @@ async def submit_contribution(
         longitude=payload.longitude,
         notes=payload.notes,
         location_verified=location_verified,
-        apply_multiplier=payload.cleanup_event_id is None and payload.team_event_id is None,
+        apply_multiplier=payload.cleanup_event_id is None and effective_team_event_id is None,
         challenge_multiplier=settings.get("claim_challenge_multiplier", 1.5) if challenge_bonus_applied else 1.0,
         cleanup_event_id=str(payload.cleanup_event_id) if payload.cleanup_event_id else None,
-        team_event_id=str(payload.team_event_id) if payload.team_event_id else None,
+        team_event_id=str(effective_team_event_id) if effective_team_event_id else None,
         team_event_team_id=team_event_team_id,
     )
 
@@ -555,6 +570,7 @@ async def submit_contribution(
         "hotspot_cleared": hotspot_cleared,
         "cleanup_id": cleanup_id,
         "contribution_id": recorded.contribution_id,
+        "team_event_excluded_reason": team_event_excluded_reason,
     }
 
 

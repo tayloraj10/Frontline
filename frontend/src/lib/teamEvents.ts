@@ -18,9 +18,14 @@ async function patchJson<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function deleteJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api${path}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<T>;
+}
+
 export type TeamEventStatus = "draft" | "active" | "completed" | "cancelled";
 export type TeamEventSubmissionMode = "automatic" | "manual_opt_in";
-export type ReviewStatus = "pending" | "approved" | "flagged";
 
 export type TeamEventListItem = {
   id: string;
@@ -37,7 +42,8 @@ export type TeamEventTeam = {
   name: string;
   color: string | null;
   logo_url: string | null;
-  has_boundary: boolean;
+  geo_unit_ids: string[];
+  geo_display_names: string[];
 };
 
 export type TeamEventOrganizer = {
@@ -116,14 +122,25 @@ export type ScoreboardEntry = {
 export type TeamEventSubmission = {
   id: string;
   user_id: string | null;
+  username: string | null;
+  display_name: string | null;
   team_id: string | null;
+  team_name: string | null;
+  team_color: string | null;
   contribution_type: string;
   value: number | null;
   small_bags: number | null;
   large_bags: number | null;
   pounds: number | null;
   photo_url: string | null;
-  review_status: ReviewStatus | null;
+  image_urls: string[] | null;
+  description: string | null;
+  notes: string | null;
+  lat: number | null;
+  lng: number | null;
+  route: { type: "LineString"; coordinates: [number, number][] } | null;
+  route_photos: { url: string; lat: number; lng: number }[];
+  representing_group_name: string | null;
   created_at: string;
 };
 
@@ -243,6 +260,7 @@ export async function updateTeamEventTeam({
   name,
   color,
   logoUrl,
+  geoUnitIds,
 }: {
   teamEventId: string;
   teamId: string;
@@ -250,12 +268,14 @@ export async function updateTeamEventTeam({
   name?: string;
   color?: string | null;
   logoUrl?: string | null;
+  geoUnitIds?: string[];
 }): Promise<{ updated: boolean }> {
   return patchJson(`/team-events/${teamEventId}/teams/${teamId}`, {
     requesting_user_id: requestingUserId,
     name: name?.trim(),
     color,
     logo_url: logoUrl,
+    geo_unit_ids: geoUnitIds,
   });
 }
 
@@ -265,18 +285,21 @@ export async function addTeamEventTeam({
   name,
   color,
   logoUrl,
+  geoUnitIds,
 }: {
   teamEventId: string;
   requestingUserId: string;
   name: string;
   color?: string | null;
   logoUrl?: string | null;
+  geoUnitIds?: string[];
 }): Promise<{ id: string }> {
   return postJson(`/team-events/${teamEventId}/teams`, {
     requesting_user_id: requestingUserId,
     name: name.trim(),
     color: color ?? null,
     logo_url: logoUrl ?? null,
+    geo_unit_ids: geoUnitIds ?? [],
   });
 }
 
@@ -430,7 +453,6 @@ export async function patchTeamEventSubmission({
   largeBags,
   pounds,
   value,
-  reviewStatus,
 }: {
   teamEventId: string;
   contributionId: string;
@@ -439,7 +461,6 @@ export async function patchTeamEventSubmission({
   largeBags?: number;
   pounds?: number;
   value?: number;
-  reviewStatus?: ReviewStatus;
 }): Promise<{ updated: boolean }> {
   return patchJson(`/team-events/${teamEventId}/submissions/${contributionId}`, {
     requesting_user_id: requestingUserId,
@@ -447,8 +468,21 @@ export async function patchTeamEventSubmission({
     large_bags: largeBags,
     pounds,
     value,
-    review_status: reviewStatus,
   });
+}
+
+export async function deleteTeamEventSubmission({
+  teamEventId,
+  contributionId,
+  requestingUserId,
+}: {
+  teamEventId: string;
+  contributionId: string;
+  requestingUserId: string;
+}): Promise<{ deleted: boolean }> {
+  return deleteJson(
+    `/team-events/${teamEventId}/submissions/${contributionId}?requesting_user_id=${requestingUserId}`
+  );
 }
 
 export type StatsInterval = "today" | "week" | "month" | "all";
@@ -504,6 +538,9 @@ export type TeamEventAdminSummary = {
   submission_count: number;
   active_participants: number;
   pending_review_count: number;
+  total_small_bags: number;
+  total_large_bags: number;
+  total_pounds: number;
   total_participants: number;
   total_groups: number;
   total_teams: number;

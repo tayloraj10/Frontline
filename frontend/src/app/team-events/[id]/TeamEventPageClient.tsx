@@ -14,6 +14,7 @@ import {
   type CascadeMode,
 } from "@/lib/teamEvents";
 import { resolveTeamColor } from "@/lib/teamColors";
+import TerritoryMapModal, { type TerritoryMapArea } from "@/components/geo/TerritoryMapModal";
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;
@@ -70,6 +71,7 @@ export default function TeamEventPageClient({
   const [groupOptInTeamId, setGroupOptInTeamId] = useState<string>("");
   const [groupOptInCascade, setGroupOptInCascade] = useState<CascadeMode>("cascade_all_members");
   const [groupOptInSaving, setGroupOptInSaving] = useState(false);
+  const [territoryMapTeamId, setTerritoryMapTeamId] = useState<string | null>(null);
   const [groupLeavingId, setGroupLeavingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -230,6 +232,151 @@ export default function TeamEventPageClient({
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
+      {showJoinFlow && eligibleRepresentGroups.length > 0 && (
+        <div className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
+          <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Join as</p>
+          <div className="flex flex-col gap-1.5 text-sm text-zinc-300">
+            <label className="flex items-center gap-2">
+              <input type="radio" checked={joinAs === "self"} onChange={() => setJoinAs("self")} />
+              Myself, no group attribution
+            </label>
+            {eligibleRepresentGroups.map((g) => (
+              <label key={g.group_id} className="flex items-center gap-2">
+                <input type="radio" checked={joinAs === g.group_id} onChange={() => setJoinAs(g.group_id)} />
+                Representing {g.group_name} ({teamNameById.get(g.joined_team_id!) ?? g.joined_team_id})
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {event.teams.map((team) => {
+          const score = scoreByTeam.get(team.id);
+          const isMyTeam = viewerTeamId === team.id;
+          const pct = score ? Math.round((score.total_value / maxValue) * 100) : 0;
+          const representingSelected = joinAs !== "self";
+          return (
+            <div
+              key={team.id}
+              className={`border rounded-xl p-4 space-y-2 shadow-elevation-1 ${
+                isMyTeam && !changingJoin ? "border-sky-600 bg-sky-950/20" : "border-zinc-800"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                  {team.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={team.logo_url}
+                      alt=""
+                      className="w-6 h-6 rounded-full object-cover shrink-0 border border-zinc-700"
+                    />
+                  ) : team.color ? (
+                    <span
+                      className="inline-block w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: resolveTeamColor(team.color) }}
+                    />
+                  ) : null}
+                  {team.name}
+                  {isMyTeam && !changingJoin && (
+                    <span className="text-[10px] font-semibold text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5">
+                      Your team
+                    </span>
+                  )}
+                </span>
+                <span className="text-sm font-black text-zinc-100">
+                  {(score?.total_value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} pts
+                </span>
+              </div>
+              {team.geo_display_names.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTerritoryMapTeamId(team.id)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 rounded-full pl-2.5 pr-2 py-1 transition-colors"
+                >
+                  <span>
+                    📍 Assigned area{team.geo_display_names.length > 1 ? "s" : ""}: {team.geo_display_names.join(", ")}
+                  </span>
+                  <span className="text-sky-400/70">→</span>
+                </button>
+              )}
+              <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
+                <div
+                  className="h-full bg-sky-500 transition-[width] duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              {showJoinFlow && !representingSelected && (!isMyTeam || changingJoin) && (
+                <button
+                  onClick={() => handleJoin(team.id)}
+                  disabled={joiningTeamId !== null}
+                  className="w-full mt-1 px-3 py-2 text-sm font-medium bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] disabled:opacity-50 text-sky-950 rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  {joiningTeamId === team.id ? "Joining…" : isMyTeam ? `Stay on ${team.name}` : `Join ${team.name}`}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {showJoinFlow && joinAs !== "self" && (
+        <button
+          onClick={() => handleJoin(eligibleRepresentGroups.find((g) => g.group_id === joinAs)?.joined_team_id ?? "")}
+          disabled={joiningTeamId !== null}
+          className="w-full px-3 py-2.5 text-sm font-medium bg-sky-500 hover:bg-sky-400 active:scale-[0.97] disabled:opacity-50 text-sky-950 rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+        >
+          {joiningTeamId !== null
+            ? "Joining…"
+            : `Join representing ${eligibleRepresentGroups.find((g) => g.group_id === joinAs)?.group_name ?? "group"}`}
+        </button>
+      )}
+
+      {!userId && !isCancelled && (
+        <Link
+          href={`/login?next=/team-events/${event.id}`}
+          className="block text-center px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+        >
+          Log in to join a team
+        </Link>
+      )}
+
+      {userId && viewerTeamId && !isCancelled && !changingJoin && (
+        <div className="border border-zinc-800 rounded-xl p-4 text-center space-y-1.5 shadow-elevation-1">
+          <p className="text-sm font-semibold text-zinc-200">
+            You&apos;re in{currentRepresentingGroup ? `, representing ${currentRepresentingGroup.group_name}` : " as yourself"}!
+          </p>
+          {event.status === "active" && (
+            <p className="text-xs text-zinc-500 max-w-xs mx-auto">
+              {event.submission_mode === "manual_opt_in"
+                ? "Log a cleanup as usual and check the box to attribute it to this event."
+                : "Cleanups you log while this event is active will count toward your team automatically."}
+            </p>
+          )}
+          <div className="flex items-center justify-center gap-2">
+            {canJoin && (eligibleRepresentGroups.length > 0 || currentRepresentingGroup) && (
+              <button
+                onClick={() => {
+                  setJoinAs(currentRepresentingGroup ? currentRepresentingGroup.group_id : "self");
+                  setChangingJoin(true);
+                }}
+                className="px-3 py-2 text-xs font-medium text-sky-400 border border-sky-900/50 bg-sky-950/20 hover:bg-sky-950/40 active:bg-sky-950/40 active:scale-[0.97] rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                {currentRepresentingGroup ? "Switch to myself" : "Switch to a group"}
+              </button>
+            )}
+            <button
+              onClick={handleLeave}
+              disabled={leaving}
+              className="px-3 py-2 text-xs font-medium text-red-400 border border-red-900/50 bg-red-950/20 hover:bg-red-950/40 active:bg-red-950/40 active:scale-[0.97] disabled:opacity-50 rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              {leaving ? "Leaving…" : "Leave this event"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {userId && myGroups && myGroups.length > 0 && (
         <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Your groups</p>
@@ -325,138 +472,6 @@ export default function TeamEventPageClient({
         </div>
       )}
 
-      {showJoinFlow && eligibleRepresentGroups.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
-          <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Join as</p>
-          <div className="flex flex-col gap-1.5 text-sm text-zinc-300">
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={joinAs === "self"} onChange={() => setJoinAs("self")} />
-              Myself, no group attribution
-            </label>
-            {eligibleRepresentGroups.map((g) => (
-              <label key={g.group_id} className="flex items-center gap-2">
-                <input type="radio" checked={joinAs === g.group_id} onChange={() => setJoinAs(g.group_id)} />
-                Representing {g.group_name} ({teamNameById.get(g.joined_team_id!) ?? g.joined_team_id})
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {event.teams.map((team) => {
-          const score = scoreByTeam.get(team.id);
-          const isMyTeam = viewerTeamId === team.id;
-          const pct = score ? Math.round((score.total_value / maxValue) * 100) : 0;
-          const representingSelected = joinAs !== "self";
-          return (
-            <div
-              key={team.id}
-              className={`border rounded-xl p-4 space-y-2 shadow-elevation-1 ${
-                isMyTeam && !changingJoin ? "border-sky-600 bg-sky-950/20" : "border-zinc-800"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
-                  {team.logo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={team.logo_url}
-                      alt=""
-                      className="w-6 h-6 rounded-full object-cover shrink-0 border border-zinc-700"
-                    />
-                  ) : team.color ? (
-                    <span
-                      className="inline-block w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: resolveTeamColor(team.color) }}
-                    />
-                  ) : null}
-                  {team.name}
-                  {isMyTeam && !changingJoin && (
-                    <span className="text-[10px] font-semibold text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5">
-                      Your team
-                    </span>
-                  )}
-                </span>
-                <span className="text-sm font-black text-zinc-100">
-                  {(score?.total_value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} pts
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
-                <div
-                  className="h-full bg-sky-500 transition-[width] duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              {showJoinFlow && !representingSelected && (!isMyTeam || changingJoin) && (
-                <button
-                  onClick={() => handleJoin(team.id)}
-                  disabled={joiningTeamId !== null}
-                  className="w-full mt-1 px-3 py-2 text-sm font-medium bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] disabled:opacity-50 text-sky-950 rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-                >
-                  {joiningTeamId === team.id ? "Joining…" : isMyTeam ? `Stay on ${team.name}` : `Join ${team.name}`}
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {showJoinFlow && joinAs !== "self" && (
-        <button
-          onClick={() => handleJoin(eligibleRepresentGroups.find((g) => g.group_id === joinAs)?.joined_team_id ?? "")}
-          disabled={joiningTeamId !== null}
-          className="w-full px-3 py-2.5 text-sm font-medium bg-sky-500 hover:bg-sky-400 active:scale-[0.97] disabled:opacity-50 text-sky-950 rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-        >
-          {joiningTeamId !== null
-            ? "Joining…"
-            : `Join representing ${eligibleRepresentGroups.find((g) => g.group_id === joinAs)?.group_name ?? "group"}`}
-        </button>
-      )}
-
-      {!userId && !isCancelled && (
-        <Link
-          href={`/login?next=/team-events/${event.id}`}
-          className="block text-center px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-        >
-          Log in to join a team
-        </Link>
-      )}
-
-      {userId && viewerTeamId && !isCancelled && !changingJoin && (
-        <div className="border border-zinc-800 rounded-xl p-4 text-center space-y-1.5 shadow-elevation-1">
-          <p className="text-sm font-semibold text-zinc-200">
-            You&apos;re in{currentRepresentingGroup ? `, representing ${currentRepresentingGroup.group_name}` : " as yourself"}!
-          </p>
-          {event.status === "active" && (
-            <p className="text-xs text-zinc-500 max-w-xs mx-auto">
-              {event.submission_mode === "manual_opt_in"
-                ? "Log a cleanup as usual and check the box to attribute it to this event."
-                : "Cleanups you log while this event is active will count toward your team automatically."}
-            </p>
-          )}
-          <div className="flex items-center justify-center gap-2">
-            {canJoin && (eligibleRepresentGroups.length > 0 || currentRepresentingGroup) && (
-              <button
-                onClick={() => {
-                  setJoinAs(currentRepresentingGroup ? currentRepresentingGroup.group_id : "self");
-                  setChangingJoin(true);
-                }}
-                className="px-3 py-2 text-xs font-medium text-sky-400 border border-sky-900/50 bg-sky-950/20 hover:bg-sky-950/40 active:bg-sky-950/40 active:scale-[0.97] rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                {currentRepresentingGroup ? "Switch to myself" : "Switch to a group"}
-              </button>
-            )}
-            <button
-              onClick={handleLeave}
-              disabled={leaving}
-              className="px-3 py-2 text-xs font-medium text-red-400 border border-red-900/50 bg-red-950/20 hover:bg-red-950/40 active:bg-red-950/40 active:scale-[0.97] disabled:opacity-50 rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              {leaving ? "Leaving…" : "Leave this event"}
-            </button>
-          </div>
-        </div>
-      )}
       {changingJoin && (
         <button
           onClick={() => setChangingJoin(false)}
@@ -465,6 +480,23 @@ export default function TeamEventPageClient({
           Cancel change
         </button>
       )}
+      {territoryMapTeamId &&
+        (() => {
+          const mapTeam = event.teams.find((t) => t.id === territoryMapTeamId);
+          if (!mapTeam) return null;
+          const areas: TerritoryMapArea[] = mapTeam.geo_unit_ids.map((geoUnitId, i) => ({
+            geoUnitId,
+            displayName: mapTeam.geo_display_names[i] ?? geoUnitId,
+            color: resolveTeamColor(mapTeam.color),
+          }));
+          return (
+            <TerritoryMapModal
+              title={`${mapTeam.name}'s assigned area${areas.length > 1 ? "s" : ""}`}
+              areas={areas}
+              onClose={() => setTerritoryMapTeamId(null)}
+            />
+          );
+        })()}
     </div>
   );
 }
