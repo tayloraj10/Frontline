@@ -14,9 +14,56 @@ router = APIRouter(prefix="/tiles", tags=["tiles"])
 _tile_cache: dict[tuple, bytes] = {}
 _TILE_CACHE_MAX = 2000
 
+# GeoUnitType value -> cache_key prefix used by that type's tile endpoint above.
+_TILE_CACHE_PREFIX_BY_UNIT_TYPE = {
+    "nyc_borough": "nyc_boroughs",
+    "nyc_neighborhood": "nyc_neighborhoods",
+    "city": "cities",
+    "philadelphia_neighborhood": "philadelphia_neighborhoods",
+    "chicago_neighborhood": "chicago_neighborhoods",
+    "la_neighborhood": "la_neighborhoods",
+}
+
+
+def reset_tile_cache(unit_type: str) -> None:
+    """Evict cached MVT tiles for one unit_type after a reload.
+
+    Without this, any (z, x, y) tile requested before a reload finished (e.g.
+    while the geo_units table was still empty) keeps serving its stale cached
+    bytes forever, regardless of how much later the data actually arrives.
+    """
+    prefix = _TILE_CACHE_PREFIX_BY_UNIT_TYPE.get(unit_type)
+    if prefix is None:
+        return
+    for key in [k for k in _tile_cache if k[0] == prefix]:
+        del _tile_cache[key]
+
 # Adjacency rarely changes (only on a re-seed), so cache the whole map in-process
-# rather than per-request. None means "not yet computed"; reset on backend restart.
+# rather than per-request. None means "not yet computed"; reset on backend restart,
+# or explicitly via reset_adjacency_cache() when a reload repopulates the data.
 _nyc_adjacency_cache: dict[str, list[str]] | None = None
+_philadelphia_adjacency_cache: dict[str, list[str]] | None = None
+_chicago_adjacency_cache: dict[str, list[str]] | None = None
+_la_adjacency_cache: dict[str, list[str]] | None = None
+
+
+def reset_adjacency_cache(unit_type: str) -> None:
+    """Clear the in-process adjacency cache for one unit_type after a reload.
+
+    Without this, a reload that runs after an earlier empty-result cache hit
+    (e.g. seeding before the geo_units table had any rows) leaves that empty
+    result cached for the life of the process, since `is not None` treats an
+    empty dict as "already computed".
+    """
+    global _nyc_adjacency_cache, _philadelphia_adjacency_cache, _chicago_adjacency_cache, _la_adjacency_cache
+    if unit_type == "nyc_neighborhood":
+        _nyc_adjacency_cache = None
+    elif unit_type == "philadelphia_neighborhood":
+        _philadelphia_adjacency_cache = None
+    elif unit_type == "chicago_neighborhood":
+        _chicago_adjacency_cache = None
+    elif unit_type == "la_neighborhood":
+        _la_adjacency_cache = None
 
 _SIMPLIFY_TOLERANCE = {
     range(0, 6): 0.05,
@@ -35,6 +82,15 @@ _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE: dict[GeoUnitType, dict] = {
         range(0, 9): 0.0001,
     },
     GeoUnitType.NYC_NEIGHBORHOOD: {
+        range(0, 9): 0.0001,
+    },
+    GeoUnitType.PHILADELPHIA_NEIGHBORHOOD: {
+        range(0, 9): 0.0001,
+    },
+    GeoUnitType.CHICAGO_NEIGHBORHOOD: {
+        range(0, 9): 0.0001,
+    },
+    GeoUnitType.LA_NEIGHBORHOOD: {
         range(0, 9): 0.0001,
     },
 }
@@ -245,6 +301,343 @@ async def get_nyc_neighborhoods_tile(
                   AND ST_Intersects(g.geometry, bounds.geom_4326)
             )
             SELECT ST_AsMVT(mvt_geom.*, 'nyc_neighborhoods', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y},
+    )
+
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        evict = list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]
+        for k in evict:
+            _tile_cache.pop(k, None)
+    _tile_cache[cache_key] = tile_bytes
+
+    return Response(
+        content=tile_bytes,
+        media_type="application/x-protobuf",
+        headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+    )
+
+
+@router.get("/philadelphia-neighborhoods/adjacency")
+async def get_philadelphia_neighborhoods_adjacency(db: AsyncSession = Depends(get_db)):
+    global _philadelphia_adjacency_cache
+    if _philadelphia_adjacency_cache is not None:
+        return _philadelphia_adjacency_cache
+
+    all_units = await db.execute(
+        text("SELECT unit_id FROM geo_units WHERE unit_type = 'philadelphia_neighborhood'")
+    )
+    adjacency: dict[str, list[str]] = {row.unit_id: [] for row in all_units}
+
+    result = await db.execute(
+        text("""
+            SELECT a.unit_id AS unit_id, b.unit_id AS adjacent_unit_id
+            FROM geo_unit_adjacency ga
+            JOIN geo_units a ON a.id = ga.geo_unit_id
+            JOIN geo_units b ON b.id = ga.adjacent_geo_unit_id
+            WHERE a.unit_type = 'philadelphia_neighborhood'
+        """)
+    )
+    for row in result:
+        adjacency.setdefault(row.unit_id, []).append(row.adjacent_unit_id)
+
+    _philadelphia_adjacency_cache = adjacency
+    return _philadelphia_adjacency_cache
+
+
+@router.get("/chicago-neighborhoods/adjacency")
+async def get_chicago_neighborhoods_adjacency(db: AsyncSession = Depends(get_db)):
+    global _chicago_adjacency_cache
+    if _chicago_adjacency_cache is not None:
+        return _chicago_adjacency_cache
+
+    all_units = await db.execute(
+        text("SELECT unit_id FROM geo_units WHERE unit_type = 'chicago_neighborhood'")
+    )
+    adjacency: dict[str, list[str]] = {row.unit_id: [] for row in all_units}
+
+    result = await db.execute(
+        text("""
+            SELECT a.unit_id AS unit_id, b.unit_id AS adjacent_unit_id
+            FROM geo_unit_adjacency ga
+            JOIN geo_units a ON a.id = ga.geo_unit_id
+            JOIN geo_units b ON b.id = ga.adjacent_geo_unit_id
+            WHERE a.unit_type = 'chicago_neighborhood'
+        """)
+    )
+    for row in result:
+        adjacency.setdefault(row.unit_id, []).append(row.adjacent_unit_id)
+
+    _chicago_adjacency_cache = adjacency
+    return _chicago_adjacency_cache
+
+
+@router.get("/la-neighborhoods/adjacency")
+async def get_la_neighborhoods_adjacency(db: AsyncSession = Depends(get_db)):
+    global _la_adjacency_cache
+    if _la_adjacency_cache is not None:
+        return _la_adjacency_cache
+
+    all_units = await db.execute(
+        text("SELECT unit_id FROM geo_units WHERE unit_type = 'la_neighborhood'")
+    )
+    adjacency: dict[str, list[str]] = {row.unit_id: [] for row in all_units}
+
+    result = await db.execute(
+        text("""
+            SELECT a.unit_id AS unit_id, b.unit_id AS adjacent_unit_id
+            FROM geo_unit_adjacency ga
+            JOIN geo_units a ON a.id = ga.geo_unit_id
+            JOIN geo_units b ON b.id = ga.adjacent_geo_unit_id
+            WHERE a.unit_type = 'la_neighborhood'
+        """)
+    )
+    for row in result:
+        adjacency.setdefault(row.unit_id, []).append(row.adjacent_unit_id)
+
+    _la_adjacency_cache = adjacency
+    return _la_adjacency_cache
+
+
+@router.get("/cities/{z}/{x}/{y}.mvt")
+async def get_cities_tile(
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """City-limits polygons (4 features: NYC, Philadelphia, Chicago, LA)."""
+    cache_key = ("cities", z, x, y)
+    if cache_key in _tile_cache:
+        return Response(
+            content=_tile_cache[cache_key],
+            media_type="application/x-protobuf",
+            headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+        )
+
+    result = await db.execute(
+        text("""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y) AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    g.id::text AS geo_unit_id,
+                    g.unit_id AS unit_id,
+                    COALESCE(g.display_name, g.unit_id) AS display_name,
+                    ST_AsMVTGeom(
+                        ST_Transform(g.geometry, 3857),
+                        bounds.geom_3857,
+                        4096, 8, true
+                    ) AS geom
+                FROM geo_units g
+                CROSS JOIN bounds
+                WHERE g.unit_type = 'city'
+                  AND g.geometry && bounds.geom_4326
+                  AND ST_Intersects(g.geometry, bounds.geom_4326)
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'cities', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y},
+    )
+
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        evict = list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]
+        for k in evict:
+            _tile_cache.pop(k, None)
+    _tile_cache[cache_key] = tile_bytes
+
+    return Response(
+        content=tile_bytes,
+        media_type="application/x-protobuf",
+        headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+    )
+
+
+@router.get("/philadelphia-neighborhoods/{z}/{x}/{y}.mvt")
+async def get_philadelphia_neighborhoods_tile(
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    cache_key = ("philadelphia_neighborhoods", z, x, y)
+    if cache_key in _tile_cache:
+        return Response(
+            content=_tile_cache[cache_key],
+            media_type="application/x-protobuf",
+            headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+        )
+
+    tolerance = _tolerance(z, _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE.get(GeoUnitType.PHILADELPHIA_NEIGHBORHOOD))
+    geom_expr = (
+        f"ST_SimplifyPreserveTopology(g.geometry, {tolerance})" if tolerance > 0 else "g.geometry"
+    )
+
+    result = await db.execute(
+        text(f"""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y) AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    g.id::text AS geo_unit_id,
+                    g.unit_id AS unit_id,
+                    COALESCE(g.display_name, g.unit_id) AS display_name,
+                    ST_AsMVTGeom(
+                        ST_Transform({geom_expr}, 3857),
+                        bounds.geom_3857,
+                        4096, 8, true
+                    ) AS geom
+                FROM geo_units g
+                CROSS JOIN bounds
+                WHERE g.unit_type = 'philadelphia_neighborhood'
+                  AND g.geometry && bounds.geom_4326
+                  AND ST_Intersects(g.geometry, bounds.geom_4326)
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'philadelphia_neighborhoods', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y},
+    )
+
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        evict = list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]
+        for k in evict:
+            _tile_cache.pop(k, None)
+    _tile_cache[cache_key] = tile_bytes
+
+    return Response(
+        content=tile_bytes,
+        media_type="application/x-protobuf",
+        headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+    )
+
+
+@router.get("/chicago-neighborhoods/{z}/{x}/{y}.mvt")
+async def get_chicago_neighborhoods_tile(
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    cache_key = ("chicago_neighborhoods", z, x, y)
+    if cache_key in _tile_cache:
+        return Response(
+            content=_tile_cache[cache_key],
+            media_type="application/x-protobuf",
+            headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+        )
+
+    tolerance = _tolerance(z, _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE.get(GeoUnitType.CHICAGO_NEIGHBORHOOD))
+    geom_expr = (
+        f"ST_SimplifyPreserveTopology(g.geometry, {tolerance})" if tolerance > 0 else "g.geometry"
+    )
+
+    result = await db.execute(
+        text(f"""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y) AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    g.id::text AS geo_unit_id,
+                    g.unit_id AS unit_id,
+                    COALESCE(g.display_name, g.unit_id) AS display_name,
+                    ST_AsMVTGeom(
+                        ST_Transform({geom_expr}, 3857),
+                        bounds.geom_3857,
+                        4096, 8, true
+                    ) AS geom
+                FROM geo_units g
+                CROSS JOIN bounds
+                WHERE g.unit_type = 'chicago_neighborhood'
+                  AND g.geometry && bounds.geom_4326
+                  AND ST_Intersects(g.geometry, bounds.geom_4326)
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'chicago_neighborhoods', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y},
+    )
+
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        evict = list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]
+        for k in evict:
+            _tile_cache.pop(k, None)
+    _tile_cache[cache_key] = tile_bytes
+
+    return Response(
+        content=tile_bytes,
+        media_type="application/x-protobuf",
+        headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+    )
+
+
+@router.get("/la-neighborhoods/{z}/{x}/{y}.mvt")
+async def get_la_neighborhoods_tile(
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    cache_key = ("la_neighborhoods", z, x, y)
+    if cache_key in _tile_cache:
+        return Response(
+            content=_tile_cache[cache_key],
+            media_type="application/x-protobuf",
+            headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
+        )
+
+    tolerance = _tolerance(z, _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE.get(GeoUnitType.LA_NEIGHBORHOOD))
+    geom_expr = (
+        f"ST_SimplifyPreserveTopology(g.geometry, {tolerance})" if tolerance > 0 else "g.geometry"
+    )
+
+    result = await db.execute(
+        text(f"""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y) AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    g.id::text AS geo_unit_id,
+                    g.unit_id AS unit_id,
+                    COALESCE(g.display_name, g.unit_id) AS display_name,
+                    ST_AsMVTGeom(
+                        ST_Transform({geom_expr}, 3857),
+                        bounds.geom_3857,
+                        4096, 8, true
+                    ) AS geom
+                FROM geo_units g
+                CROSS JOIN bounds
+                WHERE g.unit_type = 'la_neighborhood'
+                  AND g.geometry && bounds.geom_4326
+                  AND ST_Intersects(g.geometry, bounds.geom_4326)
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'la_neighborhoods', 4096, 'geom')
             FROM mvt_geom
             WHERE mvt_geom.geom IS NOT NULL
         """),

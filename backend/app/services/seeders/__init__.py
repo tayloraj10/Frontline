@@ -1,9 +1,13 @@
 from enum import Enum
 
 from .campaigns import CampaignSeeder
+from .chicago_neighborhoods import ChicagoNeighborhoodSeeder
+from .cities import CitySeeder
 from .demo_data import DemoDataSeeder
+from .la_neighborhoods import LaNeighborhoodSeeder
 from .nyc_boroughs import NycBoroughSeeder
 from .nyc_neighborhoods import NycNeighborhoodSeeder
+from .philadelphia_neighborhoods import PhiladelphiaNeighborhoodSeeder
 from .states import StatesSeeder
 from .uk_postcode_districts import UkPostcodeDistrictSeeder
 from .zip_codes import ZipCodeSeeder
@@ -28,6 +32,10 @@ class GeoUnitType(str, Enum):
     UK_POSTCODE_DISTRICT = "uk_postcode_district"
     NYC_NEIGHBORHOOD = "nyc_neighborhood"
     NYC_BOROUGH = "nyc_borough"
+    CITY = "city"
+    PHILADELPHIA_NEIGHBORHOOD = "philadelphia_neighborhood"
+    CHICAGO_NEIGHBORHOOD = "chicago_neighborhood"
+    LA_NEIGHBORHOOD = "la_neighborhood"
 
 
 GEO_UNIT_SEEDERS: dict[GeoUnitType, type] = {
@@ -36,4 +44,8 @@ GEO_UNIT_SEEDERS: dict[GeoUnitType, type] = {
     GeoUnitType.UK_POSTCODE_DISTRICT: UkPostcodeDistrictSeeder,
     GeoUnitType.NYC_NEIGHBORHOOD: NycNeighborhoodSeeder,
     GeoUnitType.NYC_BOROUGH: NycBoroughSeeder,
+    GeoUnitType.CITY: CitySeeder,
+    GeoUnitType.PHILADELPHIA_NEIGHBORHOOD: PhiladelphiaNeighborhoodSeeder,
+    GeoUnitType.CHICAGO_NEIGHBORHOOD: ChicagoNeighborhoodSeeder,
+    GeoUnitType.LA_NEIGHBORHOOD: LaNeighborhoodSeeder,
 }

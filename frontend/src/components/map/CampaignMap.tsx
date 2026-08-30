@@ -47,6 +47,23 @@ const NYC_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-74.26, 40.49],
   [-73.68, 40.92],
 ];
+// City of LA proper — matches the extent of the LA neighborhoods mosaic layer
+// (LaNeighborhoodSeeder), not the greater metro area. The irregular "shoestring
+// strip" shape (LA annexed a thin corridor down to the port at San Pedro) means
+// this bounding box necessarily includes some Culver City/Inglewood/etc. enclaves
+// it doesn't actually contain, same tradeoff NYC_BOUNDS makes at its edges.
+const LA_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-118.67, 33.70],
+  [-118.15, 34.34],
+];
+const PHILLY_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-75.28, 39.87],
+  [-74.96, 40.14],
+];
+const CHICAGO_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [-87.94, 41.64],
+  [-87.52, 42.02],
+];
 const WORLD_BOUNDS: maplibregl.LngLatBoundsLike = [
   [-170, -58],
   [179, 80],
@@ -560,6 +577,10 @@ type LayerToggleState = {
   showZipStats: boolean;
   showNeighborhoodStats: boolean;
   showBoroughStats: boolean;
+  showCityStats: boolean;
+  showPhiladelphiaNeighborhoodStats: boolean;
+  showChicagoNeighborhoodStats: boolean;
+  showLaNeighborhoodStats: boolean;
 };
 
 // Persists the legend's layer-visibility toggles across page visits (per browser,
@@ -692,6 +713,14 @@ function applyLayerVisibility(m: maplibregl.Map, t: LayerToggleState): void {
   setVis("nyc-neighborhoods-stats-outline", t.showNeighborhoodStats);
   setVis("nyc-boroughs-stats-fill", t.showBoroughStats);
   setVis("nyc-boroughs-stats-outline", t.showBoroughStats);
+  setVis("cities-stats-fill", t.showCityStats);
+  setVis("cities-stats-outline", t.showCityStats);
+  setVis("philadelphia-neighborhoods-stats-fill", t.showPhiladelphiaNeighborhoodStats);
+  setVis("philadelphia-neighborhoods-stats-outline", t.showPhiladelphiaNeighborhoodStats);
+  setVis("chicago-neighborhoods-stats-fill", t.showChicagoNeighborhoodStats);
+  setVis("chicago-neighborhoods-stats-outline", t.showChicagoNeighborhoodStats);
+  setVis("la-neighborhoods-stats-fill", t.showLaNeighborhoodStats);
+  setVis("la-neighborhoods-stats-outline", t.showLaNeighborhoodStats);
 
   if (m.getLayer("territory-event-highlight")) {
     m.setPaintProperty("territory-event-highlight", "line-opacity", territoryEventHighlightOpacityExpr(t) as never);
@@ -1602,14 +1631,102 @@ const UK_FLAG_SVG =
   `<path d="M8 0V11M0 5.5H16" stroke="#fff" stroke-width="3.6"/>` +
   `<path d="M8 0V11M0 5.5H16" stroke="#CF142B" stroke-width="1.6"/>` +
   `</svg>`;
-// Statue of Liberty icon for the "zoom to NYC" shortcut — a skyline reads as
-// "generic city" to most people, but the Statue of Liberty is recognized as NYC
-// specifically worldwide. A raster/SVG silhouette turns to mud at the ~16px size
-// the flag buttons use; the 🗽 emoji glyph (not a flag sequence, so unlike US_FLAG/
-// UK_FLAG it renders fine via Segoe UI Emoji on Windows) stays crisp and readable
-// at any size since it's drawn by the OS emoji font, not scaled art.
-const NYC_STATUE_ICON_SVG =
-  `<div style="font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center">🗽</div>`;
+// Cities offered by the "zoom to city" radial FAB below, in display order.
+// Emoji icons (not SVG) are fine here since Segoe UI Emoji ships these glyphs on
+// Windows — unlike the flag sequences above, which need hand-drawn SVGs instead.
+const CITY_ZOOM_REGIONS: { bounds: maplibregl.LngLatBoundsLike; icon: string; label: string }[] = [
+  { bounds: NYC_BOUNDS, icon: "🗽", label: "NYC" },
+  { bounds: LA_BOUNDS, icon: "🌴", label: "LA" },
+  { bounds: PHILLY_BOUNDS, icon: "🔔", label: "Philly" },
+  { bounds: CHICAGO_BOUNDS, icon: "🌭", label: "Chicago" },
+];
+
+// Radial FAB (mirrors ContributionPanel's mobile Log Cleanup/Host Event arc pattern)
+// offering a zoom-to shortcut per supported city, replacing what used to be a single
+// "Zoom to NYC" ZoomToRegionControl. Implemented as a vanilla IControl (like the
+// flag buttons above) rather than a React component since it lives in MapLibre's
+// native top-right control stack, not the React overlay tree — CSS transitions
+// stand in for framer-motion's spring animations.
+class MultiCityZoomControl implements maplibregl.IControl {
+  private _map: maplibregl.Map | null = null;
+  private _container: HTMLDivElement | null = null;
+  private _mainBtn: HTMLButtonElement | null = null;
+  private _subButtons: HTMLButtonElement[] = [];
+  private _expanded = false;
+  private _onDocClick = (e: MouseEvent) => {
+    if (this._expanded && this._container && !this._container.contains(e.target as Node)) {
+      this._setExpanded(false);
+    }
+  };
+
+  onAdd(map: maplibregl.Map): HTMLElement {
+    this._map = map;
+    const container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    container.style.position = "relative";
+
+    const menu = document.createElement("div");
+    menu.style.cssText =
+      "position:absolute;top:0;right:32px;display:flex;flex-direction:row-reverse;gap:4px;";
+
+    this._subButtons = CITY_ZOOM_REGIONS.map((city, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.title = `Zoom to ${city.label}`;
+      b.style.cssText =
+        "width:38px;height:38px;display:flex;flex-direction:column;align-items:center;" +
+        "justify-content:center;gap:1px;background:#fff;border:none;border-radius:6px;" +
+        "cursor:pointer;padding:0;box-shadow:0 1px 4px rgba(0,0,0,0.35);opacity:0;" +
+        "pointer-events:none;transform:translateX(10px) scale(0.6);" +
+        `transition:opacity 160ms ease,transform 160ms ease;transition-delay:${i * 30}ms`;
+      b.innerHTML =
+        `<span style="font-size:15px;line-height:1">${city.icon}</span>` +
+        `<span style="font-size:8px;line-height:1;color:#3f3f46">${city.label}</span>`;
+      b.onclick = (e) => {
+        e.stopPropagation();
+        this._map?.fitBounds(city.bounds, {
+          padding: 60,
+          duration: 800,
+        });
+        this._setExpanded(false);
+      };
+      menu.appendChild(b);
+      return b;
+    });
+
+    const mainBtn = document.createElement("button");
+    mainBtn.type = "button";
+    mainBtn.title = "Zoom to city";
+    mainBtn.style.cssText =
+      "width:29px;height:29px;display:flex;align-items:center;justify-content:center;" +
+      "background:none;border:none;cursor:pointer;padding:0;font-size:16px";
+    mainBtn.textContent = "🏙️";
+    mainBtn.onclick = () => this._setExpanded(!this._expanded);
+    this._mainBtn = mainBtn;
+
+    container.appendChild(menu);
+    container.appendChild(mainBtn);
+    this._container = container;
+    document.addEventListener("click", this._onDocClick);
+    return container;
+  }
+
+  private _setExpanded(expanded: boolean): void {
+    this._expanded = expanded;
+    if (this._mainBtn) this._mainBtn.textContent = expanded ? "✕" : "🏙️";
+    for (const b of this._subButtons) {
+      b.style.pointerEvents = expanded ? "auto" : "none";
+      b.style.opacity = expanded ? "1" : "0";
+      b.style.transform = expanded ? "translateX(0) scale(1)" : "translateX(10px) scale(0.6)";
+    }
+  }
+
+  onRemove(): void {
+    document.removeEventListener("click", this._onDocClick);
+    this._container?.parentNode?.removeChild(this._container);
+    this._map = null;
+  }
+}
 
 // Zoom-to-region shortcut buttons (flag icon) — one control per region so
 // they can each be conditionally added/omitted per campaign type.
@@ -1748,11 +1865,15 @@ export default function CampaignMap({
   const [showZipStats, setShowZipStatsRaw] = useState(() => storedToggle("showZipStats", false));
   const [showNeighborhoodStats, setShowNeighborhoodStatsRaw] = useState(() => storedToggle("showNeighborhoodStats", false));
   const [showBoroughStats, setShowBoroughStatsRaw] = useState(() => storedToggle("showBoroughStats", false));
-  // The territory layer (claim/contested/unclaimed) and the three geographic-stats
-  // layers (zip/neighborhood/borough) are visually incompatible outlines/fills over
-  // the same geo units, so at most one of the four can be on at once — turning any
-  // one on clears the other three, even though they live in separate UI controls
-  // (segmented control vs. Legend) by design.
+  const [showCityStats, setShowCityStatsRaw] = useState(() => storedToggle("showCityStats", false));
+  const [showPhiladelphiaNeighborhoodStats, setShowPhiladelphiaNeighborhoodStatsRaw] = useState(() => storedToggle("showPhiladelphiaNeighborhoodStats", false));
+  const [showChicagoNeighborhoodStats, setShowChicagoNeighborhoodStatsRaw] = useState(() => storedToggle("showChicagoNeighborhoodStats", false));
+  const [showLaNeighborhoodStats, setShowLaNeighborhoodStatsRaw] = useState(() => storedToggle("showLaNeighborhoodStats", false));
+  // The territory layer (claim/contested/unclaimed) and the geographic-stats layers
+  // (zip/neighborhood/borough/city/philadelphia/chicago/la) are visually incompatible
+  // outlines/fills over the same geo units, so at most one of these can be on at
+  // once — turning any one on clears the others, even though they live in separate
+  // UI controls (segmented control vs. Legend) by design.
   const clearTerritoryToggles = () => {
     setShowUnclaimedTerritoryRaw(false);
     setShowGroupTerritoryRaw(false);
@@ -1762,6 +1883,10 @@ export default function CampaignMap({
     setShowZipStatsRaw(false);
     setShowNeighborhoodStatsRaw(false);
     setShowBoroughStatsRaw(false);
+    setShowCityStatsRaw(false);
+    setShowPhiladelphiaNeighborhoodStatsRaw(false);
+    setShowChicagoNeighborhoodStatsRaw(false);
+    setShowLaNeighborhoodStatsRaw(false);
   };
   const setShowUnclaimedTerritory = (show: boolean) => {
     setShowUnclaimedTerritoryRaw(show);
@@ -1777,15 +1902,50 @@ export default function CampaignMap({
   };
   const setShowZipStats = (show: boolean) => {
     setShowZipStatsRaw(show);
-    if (show) { setShowNeighborhoodStatsRaw(false); setShowBoroughStatsRaw(false); clearTerritoryToggles(); }
+    if (show) { clearStatsToggles(); setShowZipStatsRaw(true); clearTerritoryToggles(); }
   };
   const setShowNeighborhoodStats = (show: boolean) => {
     setShowNeighborhoodStatsRaw(show);
-    if (show) { setShowZipStatsRaw(false); setShowBoroughStatsRaw(false); clearTerritoryToggles(); }
+    if (show) { clearStatsToggles(); setShowNeighborhoodStatsRaw(true); clearTerritoryToggles(); }
   };
   const setShowBoroughStats = (show: boolean) => {
     setShowBoroughStatsRaw(show);
-    if (show) { setShowZipStatsRaw(false); setShowNeighborhoodStatsRaw(false); clearTerritoryToggles(); }
+    if (show) { clearStatsToggles(); setShowBoroughStatsRaw(true); clearTerritoryToggles(); }
+  };
+  const setShowCityStats = (show: boolean) => {
+    setShowCityStatsRaw(show);
+    if (show) { clearStatsToggles(); setShowCityStatsRaw(true); clearTerritoryToggles(); }
+  };
+  const setShowPhiladelphiaNeighborhoodStats = (show: boolean) => {
+    setShowPhiladelphiaNeighborhoodStatsRaw(show);
+    if (show) { clearStatsToggles(); setShowPhiladelphiaNeighborhoodStatsRaw(true); clearTerritoryToggles(); }
+  };
+  const setShowChicagoNeighborhoodStats = (show: boolean) => {
+    setShowChicagoNeighborhoodStatsRaw(show);
+    if (show) { clearStatsToggles(); setShowChicagoNeighborhoodStatsRaw(true); clearTerritoryToggles(); }
+  };
+  const setShowLaNeighborhoodStats = (show: boolean) => {
+    setShowLaNeighborhoodStatsRaw(show);
+    if (show) { clearStatsToggles(); setShowLaNeighborhoodStatsRaw(true); clearTerritoryToggles(); }
+  };
+  // Single "Neighborhood" toggle in the panel controls all four city-specific
+  // neighborhood layers (NYC/PHL/CHI/LA) together — they're kept as separate booleans
+  // above because each drives its own MapLibre layers/adjacency coloring, but the
+  // UI presents them as one entry with NYC/PHL/CHI/LA badges rather than 4 rows.
+  const showAnyNeighborhoodStats = showNeighborhoodStats || showPhiladelphiaNeighborhoodStats || showChicagoNeighborhoodStats || showLaNeighborhoodStats;
+  const setShowAnyNeighborhoodStats = (show: boolean) => {
+    setShowNeighborhoodStatsRaw(show);
+    setShowPhiladelphiaNeighborhoodStatsRaw(show);
+    setShowChicagoNeighborhoodStatsRaw(show);
+    setShowLaNeighborhoodStatsRaw(show);
+    if (show) {
+      clearStatsToggles();
+      setShowNeighborhoodStatsRaw(true);
+      setShowPhiladelphiaNeighborhoodStatsRaw(true);
+      setShowChicagoNeighborhoodStatsRaw(true);
+      setShowLaNeighborhoodStatsRaw(true);
+      clearTerritoryToggles();
+    }
   };
   const layerToggleRef = useRef<LayerToggleState>({
     showUnclaimedTerritory,
@@ -1805,6 +1965,10 @@ export default function CampaignMap({
     showZipStats,
     showNeighborhoodStats,
     showBoroughStats,
+    showCityStats,
+    showPhiladelphiaNeighborhoodStats,
+    showChicagoNeighborhoodStats,
+    showLaNeighborhoodStats,
   });
   const eventMarkerIsHotspotRef = useRef<boolean[]>([]);
   const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
@@ -1882,6 +2046,12 @@ export default function CampaignMap({
   const nycNeighborhoodsVisibleRef = useRef(false);
   const nycAdjacencyRef = useRef<Record<string, string[]> | null>(null);
   const nycColorAssignmentRef = useRef<Record<string, number> | null>(null);
+  const philadelphiaAdjacencyRef = useRef<Record<string, string[]> | null>(null);
+  const philadelphiaColorAssignmentRef = useRef<Record<string, number> | null>(null);
+  const chicagoAdjacencyRef = useRef<Record<string, string[]> | null>(null);
+  const chicagoColorAssignmentRef = useRef<Record<string, number> | null>(null);
+  const laAdjacencyRef = useRef<Record<string, string[]> | null>(null);
+  const laColorAssignmentRef = useRef<Record<string, number> | null>(null);
 
   useEffect(() => { claimsRef.current = claims; }, [claims]);
   useEffect(() => { activeEventsRef.current = activeEvents; }, [activeEvents]);
@@ -2829,8 +2999,237 @@ export default function CampaignMap({
           "line-opacity": 0.9,
         },
       });
+
+      // City-limits boundaries — a handful of fixed cities (currently NYC,
+      // Philadelphia, Chicago, LA), keyed by Census GEOID, so a plain categorical
+      // match (no graph-coloring needed) gives each a stable, distinct color.
+      const cityFillColorExpr = [
+        "match", ["get", "unit_id"],
+        "3651000", "#22c55e", // New York (green)
+        "4260000", "#f97316", // Philadelphia (orange)
+        "1714000", "#06b6d4", // Chicago (cyan)
+        "51445", "#a855f7", // Los Angeles Metro Area (purple)
+        "#a1a1aa",
+      ];
+
+      m.addSource("cities", {
+        type: "vector",
+        tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/cities/{z}/{x}/{y}.mvt`],
+        minzoom: 0,
+        maxzoom: 14,
+        promoteId: "unit_id",
+      });
+
+      m.addLayer({
+        id: "cities-stats-fill",
+        type: "fill",
+        source: "cities",
+        "source-layer": "cities",
+        layout: { visibility: layerToggleRef.current.showCityStats ? "visible" : "none" },
+        paint: {
+          "fill-color": cityFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.45,
+            0.25,
+          ],
+        },
+      });
+      m.addLayer({
+        id: "cities-stats-outline",
+        type: "line",
+        source: "cities",
+        "source-layer": "cities",
+        layout: { visibility: layerToggleRef.current.showCityStats ? "visible" : "none" },
+        paint: {
+          "line-color": cityFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "line-width": 2,
+          "line-opacity": 0.9,
+        },
+      });
+
+      // Philadelphia + Chicago neighborhood "stats" layers — same pastel
+      // graph-coloring pattern as the NYC neighborhoods layer above, gated by
+      // their own Geographic Stats toggles.
+      if (!philadelphiaAdjacencyRef.current) {
+        const adjRes = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/philadelphia-neighborhoods/adjacency`,
+        );
+        if (adjRes.ok) {
+          philadelphiaAdjacencyRef.current = await adjRes.json();
+        }
+      }
+      if (philadelphiaAdjacencyRef.current && !philadelphiaColorAssignmentRef.current) {
+        philadelphiaColorAssignmentRef.current = computeGraphColoring(
+          philadelphiaAdjacencyRef.current,
+          NYC_NEIGHBORHOOD_PALETTE.length,
+        );
+      }
+      const philadelphiaFillColorExpr: unknown[] = ["match", ["get", "unit_id"]];
+      if (philadelphiaColorAssignmentRef.current) {
+        for (const [unitId, colorIdx] of Object.entries(philadelphiaColorAssignmentRef.current)) {
+          philadelphiaFillColorExpr.push(unitId, NYC_NEIGHBORHOOD_PALETTE[colorIdx % NYC_NEIGHBORHOOD_PALETTE.length]);
+        }
+      }
+      philadelphiaFillColorExpr.push("#a1a1aa");
+
+      m.addSource("philadelphia-neighborhoods", {
+        type: "vector",
+        tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/philadelphia-neighborhoods/{z}/{x}/{y}.mvt`],
+        minzoom: 0,
+        maxzoom: 14,
+        promoteId: "unit_id",
+      });
+
+      m.addLayer({
+        id: "philadelphia-neighborhoods-stats-fill",
+        type: "fill",
+        source: "philadelphia-neighborhoods",
+        "source-layer": "philadelphia_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showPhiladelphiaNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "fill-color": philadelphiaFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.4,
+            0.22,
+          ],
+        },
+      });
+      m.addLayer({
+        id: "philadelphia-neighborhoods-stats-outline",
+        type: "line",
+        source: "philadelphia-neighborhoods",
+        "source-layer": "philadelphia_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showPhiladelphiaNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "line-color": philadelphiaFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "line-width": 1.5,
+          "line-opacity": 0.9,
+        },
+      });
+
+      if (!chicagoAdjacencyRef.current) {
+        const adjRes = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/chicago-neighborhoods/adjacency`,
+        );
+        if (adjRes.ok) {
+          chicagoAdjacencyRef.current = await adjRes.json();
+        }
+      }
+      if (chicagoAdjacencyRef.current && !chicagoColorAssignmentRef.current) {
+        chicagoColorAssignmentRef.current = computeGraphColoring(
+          chicagoAdjacencyRef.current,
+          NYC_NEIGHBORHOOD_PALETTE.length,
+        );
+      }
+      const chicagoFillColorExpr: unknown[] = ["match", ["get", "unit_id"]];
+      if (chicagoColorAssignmentRef.current) {
+        for (const [unitId, colorIdx] of Object.entries(chicagoColorAssignmentRef.current)) {
+          chicagoFillColorExpr.push(unitId, NYC_NEIGHBORHOOD_PALETTE[colorIdx % NYC_NEIGHBORHOOD_PALETTE.length]);
+        }
+      }
+      chicagoFillColorExpr.push("#a1a1aa");
+
+      m.addSource("chicago-neighborhoods", {
+        type: "vector",
+        tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/chicago-neighborhoods/{z}/{x}/{y}.mvt`],
+        minzoom: 0,
+        maxzoom: 14,
+        promoteId: "unit_id",
+      });
+
+      m.addLayer({
+        id: "chicago-neighborhoods-stats-fill",
+        type: "fill",
+        source: "chicago-neighborhoods",
+        "source-layer": "chicago_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showChicagoNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "fill-color": chicagoFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.4,
+            0.22,
+          ],
+        },
+      });
+      m.addLayer({
+        id: "chicago-neighborhoods-stats-outline",
+        type: "line",
+        source: "chicago-neighborhoods",
+        "source-layer": "chicago_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showChicagoNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "line-color": chicagoFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "line-width": 1.5,
+          "line-opacity": 0.9,
+        },
+      });
+
+      if (!laAdjacencyRef.current) {
+        const adjRes = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/la-neighborhoods/adjacency`,
+        );
+        if (adjRes.ok) {
+          laAdjacencyRef.current = await adjRes.json();
+        }
+      }
+      if (laAdjacencyRef.current && !laColorAssignmentRef.current) {
+        laColorAssignmentRef.current = computeGraphColoring(
+          laAdjacencyRef.current,
+          NYC_NEIGHBORHOOD_PALETTE.length,
+        );
+      }
+      const laFillColorExpr: unknown[] = ["match", ["get", "unit_id"]];
+      if (laColorAssignmentRef.current) {
+        for (const [unitId, colorIdx] of Object.entries(laColorAssignmentRef.current)) {
+          laFillColorExpr.push(unitId, NYC_NEIGHBORHOOD_PALETTE[colorIdx % NYC_NEIGHBORHOOD_PALETTE.length]);
+        }
+      }
+      laFillColorExpr.push("#a1a1aa");
+
+      m.addSource("la-neighborhoods", {
+        type: "vector",
+        tiles: [`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/tiles/la-neighborhoods/{z}/{x}/{y}.mvt`],
+        minzoom: 0,
+        maxzoom: 14,
+        promoteId: "unit_id",
+      });
+
+      m.addLayer({
+        id: "la-neighborhoods-stats-fill",
+        type: "fill",
+        source: "la-neighborhoods",
+        "source-layer": "la_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showLaNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "fill-color": laFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.4,
+            0.22,
+          ],
+        },
+      });
+      m.addLayer({
+        id: "la-neighborhoods-stats-outline",
+        type: "line",
+        source: "la-neighborhoods",
+        "source-layer": "la_neighborhoods",
+        layout: { visibility: layerToggleRef.current.showLaNeighborhoodStats ? "visible" : "none" },
+        paint: {
+          "line-color": laFillColorExpr as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          "line-width": 1.5,
+          "line-opacity": 0.9,
+        },
+      });
     } catch {
-      // NYC neighborhoods overlay is non-critical — map still works without it
+      // NYC/Philadelphia/Chicago/LA neighborhoods + cities overlay is non-critical — map still works without it
     }
 
     if (isCollage) {
@@ -3621,6 +4020,10 @@ export default function CampaignMap({
       showZipStats,
       showNeighborhoodStats,
       showBoroughStats,
+      showCityStats,
+      showPhiladelphiaNeighborhoodStats,
+      showChicagoNeighborhoodStats,
+      showLaNeighborhoodStats,
     };
     if (typeof window !== "undefined") {
       try {
@@ -3680,6 +4083,10 @@ export default function CampaignMap({
     showZipStats,
     showNeighborhoodStats,
     showBoroughStats,
+    showCityStats,
+    showPhiladelphiaNeighborhoodStats,
+    showChicagoNeighborhoodStats,
+    showLaNeighborhoodStats,
   ]);
 
   // Style switcher — setStyle wipes sources/layers; re-add them on style.load
@@ -3888,10 +4295,7 @@ export default function CampaignMap({
       new ZoomToRegionControl(UK_BOUNDS, UK_FLAG_SVG, "Zoom to UK"),
       "top-right",
     );
-    map.current.addControl(
-      new ZoomToRegionControl(NYC_BOUNDS, NYC_STATUE_ICON_SVG, "Zoom to NYC"),
-      "top-right",
-    );
+    map.current.addControl(new MultiCityZoomControl(), "top-right");
     map.current.addControl(
       // Standard bottom-right placement — the custom Layers button (see the
       // `bottom-12 right-4` overlay below) is bumped up above this control's
@@ -4216,6 +4620,58 @@ export default function CampaignMap({
         });
       }
 
+      for (const layerId of ["cities-stats-fill", "cities-stats-outline"]) {
+        map.current.on("click", layerId, (e) => {
+          if (!e.features?.[0] || routePickerActiveRef.current || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+          const feature = e.features[0];
+          const props = feature.properties as { display_name?: string; geo_unit_id?: string };
+          const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+          const displayName = props.display_name ?? geoUnitId;
+          hoverDiv.style.display = "none";
+          setSelectedZip({ geoUnitId, displayName, unitLabel: "City", variant: "stats" });
+          setLegendOpen(false);
+        });
+      }
+
+      for (const layerId of ["philadelphia-neighborhoods-stats-fill", "philadelphia-neighborhoods-stats-outline"]) {
+        map.current.on("click", layerId, (e) => {
+          if (!e.features?.[0] || routePickerActiveRef.current || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+          const feature = e.features[0];
+          const props = feature.properties as { display_name?: string; geo_unit_id?: string };
+          const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+          const displayName = props.display_name ?? geoUnitId;
+          hoverDiv.style.display = "none";
+          setSelectedZip({ geoUnitId, displayName, unitLabel: "Neighborhood", variant: "stats" });
+          setLegendOpen(false);
+        });
+      }
+
+      for (const layerId of ["chicago-neighborhoods-stats-fill", "chicago-neighborhoods-stats-outline"]) {
+        map.current.on("click", layerId, (e) => {
+          if (!e.features?.[0] || routePickerActiveRef.current || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+          const feature = e.features[0];
+          const props = feature.properties as { display_name?: string; geo_unit_id?: string };
+          const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+          const displayName = props.display_name ?? geoUnitId;
+          hoverDiv.style.display = "none";
+          setSelectedZip({ geoUnitId, displayName, unitLabel: "Neighborhood", variant: "stats" });
+          setLegendOpen(false);
+        });
+      }
+
+      for (const layerId of ["la-neighborhoods-stats-fill", "la-neighborhoods-stats-outline"]) {
+        map.current.on("click", layerId, (e) => {
+          if (!e.features?.[0] || routePickerActiveRef.current || pinPickerActiveRef.current || areaPickerActiveRef.current) return;
+          const feature = e.features[0];
+          const props = feature.properties as { display_name?: string; geo_unit_id?: string };
+          const geoUnitId = String(props.geo_unit_id ?? feature.id ?? "");
+          const displayName = props.display_name ?? geoUnitId;
+          hoverDiv.style.display = "none";
+          setSelectedZip({ geoUnitId, displayName, unitLabel: "Neighborhood", variant: "stats" });
+          setLegendOpen(false);
+        });
+      }
+
       // Hover tooltips + highlight for the three Geographic Stats layers: area name +
       // a quick "total points" stat pulled from the same endpoint the click-through
       // stats panel uses, cached per geo_unit_id so continuous mousemove doesn't
@@ -4232,6 +4688,14 @@ export default function CampaignMap({
         "nyc-neighborhoods-stats-outline": { source: "nyc-neighborhoods", sourceLayer: "nyc_neighborhoods" },
         "nyc-boroughs-stats-fill": { source: "nyc-boroughs", sourceLayer: "nyc_boroughs" },
         "nyc-boroughs-stats-outline": { source: "nyc-boroughs", sourceLayer: "nyc_boroughs" },
+        "cities-stats-fill": { source: "cities", sourceLayer: "cities" },
+        "cities-stats-outline": { source: "cities", sourceLayer: "cities" },
+        "philadelphia-neighborhoods-stats-fill": { source: "philadelphia-neighborhoods", sourceLayer: "philadelphia_neighborhoods" },
+        "philadelphia-neighborhoods-stats-outline": { source: "philadelphia-neighborhoods", sourceLayer: "philadelphia_neighborhoods" },
+        "chicago-neighborhoods-stats-fill": { source: "chicago-neighborhoods", sourceLayer: "chicago_neighborhoods" },
+        "chicago-neighborhoods-stats-outline": { source: "chicago-neighborhoods", sourceLayer: "chicago_neighborhoods" },
+        "la-neighborhoods-stats-fill": { source: "la-neighborhoods", sourceLayer: "la_neighborhoods" },
+        "la-neighborhoods-stats-outline": { source: "la-neighborhoods", sourceLayer: "la_neighborhoods" },
       };
       const statsHoverIdBySourceRef = { current: new Map<string, string | number>() };
       const clearStatsHover = (source: string, sourceLayer: string) => {
@@ -5155,15 +5619,20 @@ export default function CampaignMap({
           >
             <span>🗺️ Layers</span>
             <span className="text-zinc-500">{legendOpen ? "▾" : "▸"}</span>
-            {!legendOpen && (showZipStats || showNeighborhoodStats || showBoroughStats) && (
+            {!legendOpen && (showZipStats || showAnyNeighborhoodStats || showBoroughStats || showCityStats) && (
               // At-a-glance indicator of which Geographic Stats layer is active without
-              // having to open the panel — one letter is enough since the three are
+              // having to open the panel — one letter is enough since these are
               // mutually exclusive (single-select), so at most one can ever be lit.
               <span
-                title={`${showZipStats ? (isUkViewport ? "Postcodes" : "Zip codes") : showNeighborhoodStats ? "Neighborhood" : "Borough"} stats layer is on`}
+                title={`${
+                  showZipStats ? (isUkViewport ? "Postcodes" : "Zip codes")
+                  : showAnyNeighborhoodStats ? "Neighborhood"
+                  : showBoroughStats ? "Borough"
+                  : "City"
+                } stats layer is on`}
                 className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-emerald-950 text-[9px] font-bold leading-none shadow"
               >
-                {showZipStats ? "Z" : showNeighborhoodStats ? "N" : "B"}
+                {showZipStats ? "Z" : showAnyNeighborhoodStats ? "N" : showBoroughStats ? "B" : "C"}
               </span>
             )}
           </button>
@@ -5174,19 +5643,28 @@ export default function CampaignMap({
                   <p className="px-1 pt-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Geographic Stats</p>
                   <div className="flex flex-col gap-1">
                     {([
-                      { id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes", nycOnly: false },
+                      { id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes", badges: null },
                       ...(campaign.slug === "trash-war" ? [
-                        { id: "neighborhood", label: "Neighborhood", nycOnly: true },
-                        { id: "borough", label: "Borough", nycOnly: true },
+                        { id: "neighborhood", label: "Neighborhood", badges: ["NYC", "PHL", "CHI", "LA"] },
+                        { id: "borough", label: "Borough", badges: ["NYC"] },
+                        { id: "city", label: "Cities", badges: null },
                       ] as const : []),
                     ] as const).map((opt) => {
-                      const active = opt.id === "zip" ? showZipStats : opt.id === "neighborhood" ? showNeighborhoodStats : showBoroughStats;
-                      const setActive = opt.id === "zip" ? setShowZipStats : opt.id === "neighborhood" ? setShowNeighborhoodStats : setShowBoroughStats;
+                      const active =
+                        opt.id === "zip" ? showZipStats
+                        : opt.id === "neighborhood" ? showAnyNeighborhoodStats
+                        : opt.id === "borough" ? showBoroughStats
+                        : showCityStats;
+                      const setActive =
+                        opt.id === "zip" ? setShowZipStats
+                        : opt.id === "neighborhood" ? setShowAnyNeighborhoodStats
+                        : opt.id === "borough" ? setShowBoroughStats
+                        : setShowCityStats;
                       return (
                         <button
                           key={opt.id}
                           onClick={() => setActive(!active)}
-                          title={opt.nycOnly ? "Currently only shows data for NYC" : undefined}
+                          title={opt.badges ? `Currently only shows data for ${opt.badges.map((b) => (b === "PHL" ? "Philadelphia" : b === "CHI" ? "Chicago" : b === "NYC" ? "New York City" : b === "LA" ? "Los Angeles" : b)).join(", ")}` : undefined}
                           aria-pressed={active}
                           className={`group flex items-center justify-between gap-2 px-2.5 py-1.5 font-medium rounded-md border cursor-pointer transition-all active:scale-[0.98] ${
                             active
@@ -5206,13 +5684,18 @@ export default function CampaignMap({
                             </span>
                             {opt.label}
                           </span>
-                          {opt.nycOnly && (
-                            <span
-                              className={`text-[9px] font-semibold px-1 py-px rounded ${
-                                active ? "bg-emerald-800/60 text-emerald-100" : "bg-zinc-700/60 text-zinc-400"
-                              }`}
-                            >
-                              NYC
+                          {opt.badges && (
+                            <span className="flex flex-wrap justify-end content-start gap-0.5 w-16 flex-shrink-0">
+                              {opt.badges.map((badge) => (
+                                <span
+                                  key={badge}
+                                  className={`w-7 text-center text-[9px] font-semibold py-px rounded ${
+                                    active ? "bg-emerald-800/60 text-emerald-100" : "bg-zinc-700/60 text-zinc-400"
+                                  }`}
+                                >
+                                  {badge}
+                                </span>
+                              ))}
                             </span>
                           )}
                         </button>

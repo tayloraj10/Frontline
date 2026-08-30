@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.content_flags import _HIDE_HANDLERS
+from app.api.routes.tiles import reset_adjacency_cache, reset_tile_cache
 from app.core.config import settings
 from app.db.database import get_db
 from app.services import geo
@@ -148,6 +149,132 @@ async def simplify_nyc_boroughs(tolerance: float = 0.0001, precision: int = 5):
     }
 
 
+@router.post("/simplify-cities")
+async def simplify_cities(tolerance: float = 0.0002, precision: int = 5):
+    """
+    Convert and simplify backend/data/cities_raw.geojson → backend/data/cities.geojson.
+    CPU-bound; takes under a second (4 features: NYC, Philadelphia, Chicago, LA).
+    Run this before POST /admin/geo-units/city/reload.
+    """
+    if not geo.RAW_CITIES_FILE.exists():
+        raise HTTPException(
+            404,
+            f"Source file not found: {geo.RAW_CITIES_FILE}. "
+            "Fetch city-limits polygons from the Census TIGERweb Incorporated Places "
+            "layer (queried by GEOID) and save the combined GeoJSON to backend/data/.",
+        )
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            partial(geo.simplify_cities, tolerance=tolerance, precision=precision),
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Simplification failed: {exc}")
+
+    return {
+        "input_size_mb": round(result.input_size_mb, 1),
+        "output_size_mb": round(result.output_size_mb, 1),
+        "feature_count": result.feature_count,
+        "skipped_count": result.skipped_count,
+    }
+
+
+@router.post("/simplify-philadelphia-neighborhoods")
+async def simplify_philadelphia_neighborhoods(tolerance: float = 0.0001, precision: int = 5):
+    """
+    Convert and simplify backend/data/philadelphia_neighborhoods_raw.geojson →
+    backend/data/philadelphia_neighborhoods.geojson. CPU-bound; takes a few seconds.
+    Run this before POST /admin/geo-units/philadelphia_neighborhood/reload.
+    """
+    if not geo.RAW_PHILADELPHIA_NEIGHBORHOODS_FILE.exists():
+        raise HTTPException(
+            404,
+            f"Source file not found: {geo.RAW_PHILADELPHIA_NEIGHBORHOODS_FILE}. "
+            "Copy the OpenDataPhilly Philadelphia Neighborhoods GeoJSON export to backend/data/.",
+        )
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            partial(geo.simplify_philadelphia_neighborhoods, tolerance=tolerance, precision=precision),
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Simplification failed: {exc}")
+
+    return {
+        "input_size_mb": round(result.input_size_mb, 1),
+        "output_size_mb": round(result.output_size_mb, 1),
+        "feature_count": result.feature_count,
+        "skipped_count": result.skipped_count,
+    }
+
+
+@router.post("/simplify-chicago-neighborhoods")
+async def simplify_chicago_neighborhoods(tolerance: float = 0.0001, precision: int = 5):
+    """
+    Convert and simplify backend/data/chicago_neighborhoods_raw.geojson →
+    backend/data/chicago_neighborhoods.geojson. CPU-bound; takes a few seconds.
+    Run this before POST /admin/geo-units/chicago_neighborhood/reload.
+    """
+    if not geo.RAW_CHICAGO_NEIGHBORHOODS_FILE.exists():
+        raise HTTPException(
+            404,
+            f"Source file not found: {geo.RAW_CHICAGO_NEIGHBORHOODS_FILE}. "
+            "Fetch the Chicago Data Portal Boundaries - Neighborhoods dataset (bbvz-uum9) "
+            "via its v3 query API and save the combined GeoJSON to backend/data/.",
+        )
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            partial(geo.simplify_chicago_neighborhoods, tolerance=tolerance, precision=precision),
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Simplification failed: {exc}")
+
+    return {
+        "input_size_mb": round(result.input_size_mb, 1),
+        "output_size_mb": round(result.output_size_mb, 1),
+        "feature_count": result.feature_count,
+        "skipped_count": result.skipped_count,
+    }
+
+
+@router.post("/simplify-la-neighborhoods")
+async def simplify_la_neighborhoods(tolerance: float = 0.0001, precision: int = 5):
+    """
+    Convert and simplify backend/data/la_neighborhoods_raw.geojson →
+    backend/data/la_neighborhoods.geojson. CPU-bound; takes a few seconds.
+    Run this before POST /admin/geo-units/la_neighborhood/reload.
+    """
+    if not geo.RAW_LA_NEIGHBORHOODS_FILE.exists():
+        raise HTTPException(
+            404,
+            f"Source file not found: {geo.RAW_LA_NEIGHBORHOODS_FILE}. "
+            "Copy the LA Times Mapping L.A. neighborhood boundaries GeoJSON export to backend/data/.",
+        )
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            partial(geo.simplify_la_neighborhoods, tolerance=tolerance, precision=precision),
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Simplification failed: {exc}")
+
+    return {
+        "input_size_mb": round(result.input_size_mb, 1),
+        "output_size_mb": round(result.output_size_mb, 1),
+        "feature_count": result.feature_count,
+        "skipped_count": result.skipped_count,
+    }
+
+
 @router.post("/seed")
 async def run_all_seeds(wipe: bool = False, db: AsyncSession = Depends(get_db)):
     """Run all registered seeders with their default params. Pass wipe=true to wipe each seeder's data before re-seeding."""
@@ -214,6 +341,9 @@ async def reload_geo_unit_type(unit_type: GeoUnitType, db: AsyncSession = Depend
         raise HTTPException(400, str(exc))
     except Exception as exc:
         raise HTTPException(500, str(exc))
+
+    reset_adjacency_cache(unit_type.value)
+    reset_tile_cache(unit_type.value)
 
     return {
         "unit_type": unit_type.value,
