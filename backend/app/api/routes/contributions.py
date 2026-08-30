@@ -71,6 +71,7 @@ class ContributionRequest(BaseModel):
     resolve_report_id: UUID | None = None
     claimed_report_id: UUID | None = None
     cleanup_event_id: UUID | None = None
+    team_event_id: UUID | None = None
     route: dict | None = None
     route_geo_unit_id: UUID | None = None
     route_photos: list[dict] | None = None
@@ -203,6 +204,52 @@ async def submit_contribution(
         )
         if not event_result.fetchone():
             raise HTTPException(status_code=404, detail="Cleanup event not found")
+
+    team_event_team_id = None
+    if payload.team_event_id:
+        team_event_result = await db.execute(
+            text("SELECT status, requires_photo FROM team_events WHERE id = :id"),
+            {"id": str(payload.team_event_id)},
+        )
+        team_event_row = team_event_result.fetchone()
+        if not team_event_row:
+            raise HTTPException(status_code=404, detail="Team event not found")
+        if team_event_row.status != "active":
+            raise HTTPException(status_code=403, detail="This event is not currently active")
+
+        participant_result = await db.execute(
+            text("""
+                SELECT tep.team_id, tet.geo_unit_id
+                FROM team_event_participants tep
+                JOIN team_event_teams tet ON tet.id = tep.team_id
+                WHERE tep.team_event_id = :event_id AND tep.user_id = :user_id
+            """),
+            {
+                "event_id": str(payload.team_event_id),
+                "user_id": str(payload.user_id),
+            },
+        )
+        participant_row = participant_result.fetchone()
+        if not participant_row:
+            raise HTTPException(status_code=403, detail="You are not opted into this event")
+        team_event_team_id = str(participant_row.team_id)
+        team_geo_unit_id = participant_row.geo_unit_id
+
+        if team_event_row.requires_photo and not (payload.photo_url or payload.photo_urls):
+            raise HTTPException(status_code=400, detail="This event requires a photo with every submission")
+
+        # Soft-skip when the team has no boundary polygon loaded yet (Phase 3
+        # city-limits geo data) — event still runs on active + membership alone.
+        if team_geo_unit_id and has_location:
+            boundary_check = await db.execute(
+                text("""
+                    SELECT ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
+                    FROM geo_units WHERE id = :geo_unit_id
+                """),
+                {"lon": payload.longitude, "lat": payload.latitude, "geo_unit_id": team_geo_unit_id},
+            )
+            if not boundary_check.scalar():
+                raise HTTPException(status_code=400, detail="Submission location is outside your team's boundary")
 
     if payload.route_photos and not payload.route:
         raise HTTPException(status_code=400, detail="route_photos requires a route")
@@ -416,9 +463,11 @@ async def submit_contribution(
         longitude=payload.longitude,
         notes=payload.notes,
         location_verified=location_verified,
-        apply_multiplier=payload.cleanup_event_id is None,
+        apply_multiplier=payload.cleanup_event_id is None and payload.team_event_id is None,
         challenge_multiplier=settings.get("claim_challenge_multiplier", 1.5) if challenge_bonus_applied else 1.0,
         cleanup_event_id=str(payload.cleanup_event_id) if payload.cleanup_event_id else None,
+        team_event_id=str(payload.team_event_id) if payload.team_event_id else None,
+        team_event_team_id=team_event_team_id,
     )
 
     if recorded.bonus_spot_event_id:

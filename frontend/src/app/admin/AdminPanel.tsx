@@ -20,6 +20,10 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { updateEvent } from "@/lib/events";
 import { deleteGroup } from "@/lib/groups";
 import { reconcileBusinessLocations } from "@/lib/partnerLocations";
+import { listTeamEvents, getTeamEvent, type TeamEventListItem, type TeamEventDetail } from "@/lib/teamEvents";
+import NewTeamEventForm from "./team-events/new/NewTeamEventForm";
+import EditTeamEventView from "./team-events/[id]/edit/EditTeamEventView";
+import AdminRolesTab from "./AdminRolesTab";
 import type { Json, Database } from "@/types/database";
 
 export type Campaign = {
@@ -128,7 +132,7 @@ export type GameSetting = {
   sort_order: number;
 };
 
-const TAB_VALUES = ["campaigns", "triggers", "events", "partners", "groups", "leaderboard", "moderation", "settings"] as const;
+const TAB_VALUES = ["campaigns", "triggers", "events", "partners", "groups", "team_events", "leaderboard", "moderation", "admins", "settings"] as const;
 type Tab = (typeof TAB_VALUES)[number];
 
 const TAB_ICON: Record<Tab, string> = {
@@ -137,12 +141,26 @@ const TAB_ICON: Record<Tab, string> = {
   events: "🎉",
   partners: "🤝",
   groups: "👥",
+  team_events: "⚔️",
   leaderboard: "🏆",
   moderation: "🚩",
+  admins: "🛡️",
   settings: "⚙️",
 };
+const TAB_LABEL: Record<Tab, string> = {
+  campaigns: "campaigns",
+  triggers: "triggers",
+  events: "events",
+  partners: "partners",
+  groups: "groups",
+  team_events: "team events",
+  leaderboard: "leaderboard",
+  moderation: "moderation",
+  admins: "admins",
+  settings: "settings",
+};
 const MOBILE_PRIMARY_TABS: Tab[] = ["campaigns", "events", "groups", "partners"];
-const MOBILE_OVERFLOW_TABS: Tab[] = ["triggers", "leaderboard", "moderation", "settings"];
+const MOBILE_OVERFLOW_TABS: Tab[] = ["triggers", "team_events", "leaderboard", "moderation", "admins", "settings"];
 
 function toSlug(name: string) {
   return name.toLowerCase().trim()
@@ -3740,6 +3758,124 @@ function SettingsTab({ settings, setSettings }: {
   );
 }
 
+function TeamEventsTab({ campaigns, teamEvents, setTeamEvents, currentUserId }: {
+  campaigns: Campaign[];
+  teamEvents: TeamEventListItem[];
+  setTeamEvents: (e: TeamEventListItem[]) => void;
+  currentUserId: string;
+}) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<TeamEventDetail | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const openEvent = async (id: string) => {
+    setLoadError(null);
+    setEditingId(id);
+    setEditingEvent(null);
+    try {
+      const detail = await getTeamEvent(id);
+      setEditingEvent(detail);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load event");
+    }
+  };
+
+  const refreshList = async () => {
+    try {
+      setTeamEvents(await listTeamEvents(currentUserId));
+    } catch {
+      // keep showing stale list on refresh failure
+    }
+  };
+
+  const closeEvent = () => {
+    setEditingId(null);
+    setEditingEvent(null);
+    setLoadError(null);
+    refreshList();
+  };
+
+  if (editingId) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={closeEvent}
+          className="text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors duration-150"
+        >
+          ← Back to team events
+        </button>
+        {loadError && (
+          <p className="text-sm text-red-400 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2">{loadError}</p>
+        )}
+        {editingEvent && (
+          <EditTeamEventView event={editingEvent} requestingUserId={currentUserId} isAdmin={true} />
+        )}
+        {!editingEvent && !loadError && (
+          <p className="text-sm text-zinc-500">Loading…</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-sm text-zinc-500">{teamEvents.length} team event{teamEvents.length !== 1 ? "s" : ""}</span>
+        <button
+          onClick={() => setShowCreate((s) => !s)}
+          className="self-start px-3 py-1.5 min-h-9 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation"
+        >
+          {showCreate ? "Cancel" : "+ New event"}
+        </button>
+      </div>
+
+      {showCreate && (
+        <NewTeamEventForm
+          requestingUserId={currentUserId}
+          campaigns={campaigns}
+          onCreated={(id) => {
+            setShowCreate(false);
+            refreshList();
+            openEvent(id);
+          }}
+        />
+      )}
+
+      <div className="space-y-2">
+        {teamEvents.length === 0 && (
+          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+            No team events yet.
+          </div>
+        )}
+        {teamEvents.map((e) => (
+          <button
+            key={e.id}
+            onClick={() => openEvent(e.id)}
+            className="w-full text-left flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-elevation-1 px-4 py-3 hover:border-zinc-700 transition-colors duration-150"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-zinc-200 truncate">{e.title}</p>
+              <p className="text-xs text-zinc-500">{new Date(e.starts_at).toLocaleDateString()}</p>
+            </div>
+            <span
+              className={cn(
+                "shrink-0 text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full",
+                e.status === "active" && "bg-emerald-900/60 text-emerald-400",
+                e.status === "draft" && "bg-zinc-800 text-zinc-400",
+                e.status === "completed" && "bg-sky-900/60 text-sky-400",
+                e.status === "cancelled" && "bg-red-900/60 text-red-400"
+              )}
+            >
+              {e.status}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel({
   initialCampaigns,
   initialEvents,
@@ -3750,6 +3886,7 @@ export default function AdminPanel({
   initialBusinessCampaignLinks,
   initialBusinessLocations,
   initialGroups,
+  initialTeamEvents,
   currentUserId,
   initialSettings,
 }: {
@@ -3762,6 +3899,7 @@ export default function AdminPanel({
   initialBusinessCampaignLinks: BusinessCampaignLink[];
   initialBusinessLocations: PartnerBusinessLocation[];
   initialGroups: AdminGroup[];
+  initialTeamEvents: TeamEventListItem[];
   currentUserId: string;
   initialSettings: GameSetting[];
 }) {
@@ -3794,6 +3932,7 @@ export default function AdminPanel({
   const [businessCampaignLinks, setBusinessCampaignLinks] = useState(initialBusinessCampaignLinks);
   const [businessLocations, setBusinessLocations] = useState(initialBusinessLocations);
   const [groups, setGroups] = useState(initialGroups);
+  const [teamEvents, setTeamEvents] = useState(initialTeamEvents);
   const [settings, setSettings] = useState(initialSettings);
   const hotspotMultiplier = settings.find(s => s.key === "hotspot_multiplier")?.value ?? 1;
 
@@ -3805,18 +3944,18 @@ export default function AdminPanel({
         <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
       </div>
 
-      <div className="hidden sm:flex gap-1 mb-6 border-b border-zinc-800">
+      <div className="hidden sm:flex items-center gap-1 mb-6 border-b border-zinc-800">
         {TAB_VALUES.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-[color,border-color,transform] duration-150 -mb-px active:scale-[0.97] ${
+            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-[color,border-color,transform] duration-150 -mb-px active:scale-[0.97] whitespace-nowrap ${
               tab === t
                 ? "border-emerald-500 text-emerald-400"
                 : "border-transparent text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
             }`}
           >
-            {t}
+            {TAB_LABEL[t]}
             {t === "events" && events.filter(e => e.status === "active").length > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-red-900/60 text-red-400 text-xs tabular-nums">
                 {events.filter(e => e.status === "active").length}
@@ -3861,7 +4000,7 @@ export default function AdminPanel({
                   {TAB_ICON[t]}
                 </span>
               </span>
-              <span className={cn("transition-colors", tab === t ? "text-emerald-400" : "text-zinc-500")}>{t}</span>
+              <span className={cn("transition-colors", tab === t ? "text-emerald-400" : "text-zinc-500")}>{TAB_LABEL[t]}</span>
               {t === "events" && events.filter(e => e.status === "active").length > 0 && (
                 <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.7)]" />
               )}
@@ -3912,7 +4051,7 @@ export default function AdminPanel({
                       )}
                     >
                       <span>{TAB_ICON[t]}</span>
-                      {t}
+                      {TAB_LABEL[t]}
                     </button>
                   ))}
                 </motion.div>
@@ -3940,8 +4079,12 @@ export default function AdminPanel({
         />
       )}
       {tab === "groups" && <GroupsTab groups={groups} setGroups={setGroups} currentUserId={currentUserId} />}
+      {tab === "team_events" && (
+        <TeamEventsTab campaigns={activeCampaigns} teamEvents={teamEvents} setTeamEvents={setTeamEvents} currentUserId={currentUserId} />
+      )}
       {tab === "leaderboard" && <LeaderboardTab campaigns={activeCampaigns} />}
       {tab === "moderation" && <ModerationTab />}
+      {tab === "admins" && <AdminRolesTab requestingUserId={currentUserId} />}
       {tab === "settings" && <SettingsTab settings={settings} setSettings={setSettings} />}
     </main>
   );

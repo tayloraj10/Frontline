@@ -14,6 +14,7 @@ import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import { listCampaignCleanupRoutes, type CampaignCleanupRoute, type RouteLineString } from "@/lib/cleanupRoutes";
+import { listTeamEvents, getTeamEvent, type TeamEventDetail } from "@/lib/teamEvents";
 import { useGameSettings } from "@/lib/gameSettings";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
@@ -959,6 +960,48 @@ export default function CampaignPageClient({
     return nearbyCleanupEventRaw;
   }, [nearbyCleanupEventRaw, dismissedCleanupEventIds]);
 
+  // Active Team Event for this campaign: listTeamEvents() doesn't return campaign_id, so we
+  // fetch details for the (small set of) active events to find one scoped to this campaign.
+  const [activeTeamEvent, setActiveTeamEvent] = useState<TeamEventDetail | null>(null);
+  const [viewerTeamEventTeamId, setViewerTeamEventTeamId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listTeamEvents()
+      .then((events) => {
+        const active = events.filter((e) => e.status === "active");
+        return Promise.all(active.map((e) => getTeamEvent(e.id).catch(() => null)));
+      })
+      .then((details) => {
+        if (cancelled) return;
+        const match = details.find((d) => d && d.campaign_id === campaign.id) ?? null;
+        setActiveTeamEvent(match ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveTeamEvent(null);
+      });
+    return () => { cancelled = true; };
+  }, [campaign.id]);
+
+  useEffect(() => {
+    if (!activeTeamEvent || !userId) {
+      setViewerTeamEventTeamId(null);
+      return;
+    }
+    let cancelled = false;
+    const supabase = createClient();
+    supabase
+      .from("team_event_participants")
+      .select("team_id")
+      .eq("team_event_id", activeTeamEvent.id)
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setViewerTeamEventTeamId(data?.team_id ?? null);
+      });
+    return () => { cancelled = true; };
+  }, [activeTeamEvent, userId]);
+
   // NYC neighborhoods mosaic overlay: too confusing layered over the zip choropleth for
   // a general audience, so there's no visible toggle for it in the normal UI. Kept
   // reachable for admins via the admin dialog (gear button) instead.
@@ -1475,34 +1518,38 @@ export default function CampaignPageClient({
         </div>
       )}
 
-      {nearbyCleanupEvent && !pinPickerActive && !areaPickerActive && (
-        <motion.div
-          initial={{ opacity: 0, y: -8, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute top-4 left-4 right-16 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm px-4 py-3 rounded-xl bg-sky-950/95 border border-sky-700/50 backdrop-blur-sm shadow-glow-sky flex items-center gap-3"
-        >
-          <div className="w-10 h-10 shrink-0 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-lg">
-            🧹
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sky-300 text-xs font-semibold truncate">{nearbyCleanupEvent.title}</p>
-            <p className="text-sky-500 text-xs">You&apos;re at this cleanup — log your contribution</p>
-          </div>
-          <button
-            onClick={() => setDismissedCleanupEventIds((prev) => new Set(prev).add(nearbyCleanupEvent.id))}
-            className="shrink-0 text-sky-500 hover:text-sky-300 active:scale-90 transition-transform text-sm px-1 touch-manipulation"
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-          <button
-            onClick={() => setPendingCleanupEventId(nearbyCleanupEvent.id)}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 active:scale-[0.97] text-sky-950 text-xs font-semibold shadow-elevation-1 transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            Log here
-          </button>
-        </motion.div>
+      {!pinPickerActive && !areaPickerActive && nearbyCleanupEvent && (
+        <div className="absolute top-4 left-4 right-16 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm flex flex-col gap-2">
+          {nearbyCleanupEvent && (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="px-4 py-3 rounded-xl bg-sky-950/95 border border-sky-700/50 backdrop-blur-sm shadow-glow-sky flex items-center gap-3"
+            >
+              <div className="w-10 h-10 shrink-0 rounded-full bg-sky-900/60 border border-sky-700/50 flex items-center justify-center text-lg">
+                🧹
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sky-300 text-xs font-semibold truncate">{nearbyCleanupEvent.title}</p>
+                <p className="text-sky-500 text-xs">You&apos;re at this cleanup — log your contribution</p>
+              </div>
+              <button
+                onClick={() => setDismissedCleanupEventIds((prev) => new Set(prev).add(nearbyCleanupEvent.id))}
+                className="shrink-0 text-sky-500 hover:text-sky-300 active:scale-90 transition-transform text-sm px-1 touch-manipulation"
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+              <button
+                onClick={() => setPendingCleanupEventId(nearbyCleanupEvent.id)}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 active:scale-[0.97] text-sky-950 text-xs font-semibold shadow-elevation-1 transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                Log here
+              </button>
+            </motion.div>
+          )}
+        </div>
       )}
 
       <ContributionPanel
@@ -1530,6 +1577,17 @@ export default function CampaignPageClient({
         pendingCleanupEventId={pendingCleanupEventId}
         onPendingCleanupEventConsumed={() => setPendingCleanupEventId(null)}
         nearbyCleanupEvent={nearbyCleanupEventRaw}
+        activeTeamEvent={
+          activeTeamEvent
+            ? {
+                id: activeTeamEvent.id,
+                title: activeTeamEvent.title,
+                submission_mode: activeTeamEvent.submission_mode,
+                requires_photo: activeTeamEvent.requires_photo,
+                teamId: viewerTeamEventTeamId,
+              }
+            : null
+        }
         clickedReport={clickedReport}
         onClickedReportConsumed={() => setClickedReport(null)}
         onClaimReportUpdated={handleReportClaimUpdated}

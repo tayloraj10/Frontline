@@ -9,6 +9,7 @@ import RankBadge from "@/components/ui/RankBadge";
 import ShareCard from "@/components/groups/ShareCard";
 import MapSnapshotCard from "@/components/groups/MapSnapshotCard";
 import { downloadImage, shareImage } from "@/lib/share";
+import { paintCardBackground, CARD_BG_STYLES, type CardBgStyle } from "@/lib/cardBackground";
 import IntervalPicker from "./IntervalPicker";
 import { type StatsWindow, detailedIntervalLabel, statsWindowParams } from "./statsWindow";
 
@@ -626,6 +627,7 @@ async function renderShareCardSnapshot(opts: {
   smallBags: number;
   largeBags: number;
   pounds: number;
+  bgStyle: CardBgStyle;
 }): Promise<string> {
   const BASE = 360;
   const SCALE = 3;
@@ -639,12 +641,7 @@ async function renderShareCardSnapshot(opts: {
   roundRect(ctx, 0, 0, BASE, BASE, 16);
   ctx.clip();
 
-  const bgGradient = ctx.createLinearGradient(0, 0, BASE, BASE);
-  bgGradient.addColorStop(0, "#065f46");
-  bgGradient.addColorStop(0.5, "#000000");
-  bgGradient.addColorStop(1, "#065f46");
-  ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, BASE, BASE);
+  paintCardBackground(ctx, BASE, "#065f46", opts.bgStyle);
 
   const pad = 28;
 
@@ -676,7 +673,7 @@ async function renderShareCardSnapshot(opts: {
   ctx.textBaseline = "alphabetic";
 
   const line1Y = pad + 10;
-  ctx.fillStyle = "#34d399";
+  ctx.fillStyle = "#fff";
   ctx.font = "700 11px sans-serif";
   fillTruncatedText(ctx, opts.intervalLabel.toUpperCase(), textX, line1Y, textMaxWidth);
 
@@ -721,7 +718,7 @@ async function renderShareCardSnapshot(opts: {
       const cx = x + colWidth / 2;
       const cy = y + cellH / 2;
 
-      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
       roundRect(ctx, x, y, colWidth, cellH, 8);
       ctx.fill();
 
@@ -745,13 +742,13 @@ async function renderShareCardSnapshot(opts: {
       }
 
       ctx.font = "600 9px sans-serif";
-      ctx.fillStyle = "#71717a";
+      ctx.fillStyle = "#fff";
       ctx.fillText(item.label.toUpperCase(), cx, cy + 16);
     });
     ctx.textAlign = "left";
   }
 
-  ctx.fillStyle = "#34d399";
+  ctx.fillStyle = "#fff";
   ctx.font = "900 10px sans-serif";
   ctx.fillText("FRONTLINE", pad, BASE - pad);
 
@@ -848,6 +845,7 @@ export default function GroupStatsView({
   const [mapImageUrl, setMapImageUrl] = useState<string | null>(null);
   const [mapLoading, setMapLoading] = useState(false);
   const [mapType, setMapType] = useState<MapSnapshotType>("zip");
+  const [bgStyle, setBgStyle] = useState<CardBgStyle>("vertical");
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -969,6 +967,7 @@ export default function GroupStatsView({
         smallBags: shareCamp.aggregate.small_bags,
         largeBags: shareCamp.aggregate.large_bags,
         pounds: shareCamp.aggregate.pounds,
+        bgStyle,
       });
     }
     if (!dataUrl) return null;
@@ -1170,6 +1169,22 @@ export default function GroupStatsView({
               </div>
             )}
 
+            {shareMode === "card" && (
+              <div className="mb-3 flex justify-center">
+                <select
+                  value={bgStyle}
+                  onChange={(e) => setBgStyle(e.target.value as CardBgStyle)}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
+                >
+                  {CARD_BG_STYLES.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex justify-center">
               {shareMode === "map" ? (
                 <MapSnapshotCard
@@ -1192,6 +1207,7 @@ export default function GroupStatsView({
                   smallBags={shareCamp.aggregate.small_bags}
                   largeBags={shareCamp.aggregate.large_bags}
                   pounds={shareCamp.aggregate.pounds}
+                  bgStyle={bgStyle}
                 />
               )}
             </div>

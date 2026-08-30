@@ -1,18 +1,40 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import UserNav from "./UserNav";
 import NotificationBellWrapper from "./NotificationBellWrapper";
 import AchievementModalWrapper from "./AchievementModalWrapper";
 import SupportButton from "./SupportButton";
 import BottomTabBar from "./nav/BottomTabBar";
+import DesktopNavMenu from "./nav/DesktopNavMenu";
 import { buildNavLinks } from "@/lib/navLinks";
 import { version as appVersion } from "../../package.json";
 
+// Shared, RLS-open check rendered on every page via AppHeader — bounded to
+// once per 30s regardless of traffic instead of once per page view.
+const getHasActiveTeamEvent = unstable_cache(
+  async () => {
+    const supabase = createPublicClient();
+    const { count } = await supabase
+      .schema("public")
+      .from("team_events")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active");
+    return (count ?? 0) > 0;
+  },
+  ["has-active-team-event"],
+  { revalidate: 30 }
+);
+
 export default async function AppHeader() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [
+    {
+      data: { user },
+    },
+    hasActiveTeamEvent,
+  ] = await Promise.all([supabase.auth.getUser(), getHasActiveTeamEvent()]);
 
   let isAdmin = false;
   let isBusinessAdmin = false;
@@ -47,12 +69,12 @@ export default async function AppHeader() {
     isBusinessOnly = profile?.is_business_only ?? false;
   }
 
-  const navLinks = buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin });
+  const navLinks = buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasActiveTeamEvent });
 
   return (
     <>
     <header className="pt-safe border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50 shadow-elevation-2">
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
+      <div className="max-w-[100rem] mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
           <Link
             href="/"
@@ -71,21 +93,31 @@ export default async function AppHeader() {
               </span>
             )}
           </Link>
-          <nav className="hidden sm:flex items-center gap-1">
+          {/* Full inline nav only once there's real room for it (laptop-and-under falls back to the hamburger below). */}
+          <nav className="hidden xl:flex items-center gap-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-1.5 text-sm rounded-lg whitespace-nowrap shrink-0 transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg whitespace-nowrap shrink-0 transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
                   link.highlight
                     ? "text-amber-500 hover:text-amber-400 active:text-amber-400"
                     : "text-zinc-400 hover:text-zinc-100 active:text-zinc-100"
                 }`}
               >
                 {link.label}
+                {link.pulse && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(52,211,153,0.6)] animate-pulse shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
               </Link>
             ))}
           </nav>
+          <div className="hidden sm:flex xl:hidden">
+            <DesktopNavMenu links={navLinks} />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <SupportButton />

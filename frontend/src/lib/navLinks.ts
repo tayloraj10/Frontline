@@ -6,16 +6,20 @@ export interface NavLink {
   highlight?: boolean;
   /** Overrides `href` for the mobile bottom tab bar only (e.g. Campaigns jumps straight to the map on mobile). */
   mobileHref?: string;
+  /** Shows a glowing "live" dot next to the link (e.g. an active team event to discover). */
+  pulse?: boolean;
 }
 
 export interface BuildNavLinksArgs {
   isBusinessOnly: boolean;
   isBusinessAdmin: boolean;
   isAdmin: boolean;
+  /** Only show the Team Events nav entry when there's at least one active event to discover. */
+  hasActiveTeamEvent: boolean;
 }
 
 /** Single source of truth for the app's primary nav links, shared by the desktop nav row and the mobile bottom tab bar. */
-export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin }: BuildNavLinksArgs): NavLink[] {
+export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasActiveTeamEvent }: BuildNavLinksArgs): NavLink[] {
   return isBusinessOnly
     ? [
         { href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business" },
@@ -28,6 +32,9 @@ export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin }: Buil
         { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard" },
         { href: "/partners", label: "Partners", shortLabel: "Partners" },
         { href: "/groups", label: "Groups", shortLabel: "Groups" },
+        ...(isAdmin && hasActiveTeamEvent
+          ? [{ href: "/team-events", label: "Team Events", shortLabel: "Events", pulse: true }]
+          : []),
         ...(isBusinessAdmin
           ? [{ href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business" }]
           : []),

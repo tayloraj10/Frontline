@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Flag, Trophy, Handshake, Store, Users, Wrench, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { Flag, Trophy, Handshake, Store, Users, Shield, Wrench, MoreHorizontal, type LucideIcon } from "lucide-react";
 import type { NavLink } from "@/lib/navLinks";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { cn } from "@/lib/cn";
@@ -18,6 +18,7 @@ const ICONS_BY_HREF: Record<string, LucideIcon> = {
   "/partners": Handshake,
   "/partners/dashboard": Store,
   "/groups": Users,
+  "/team-events": Shield,
   "/admin": Wrench,
 };
 
@@ -34,6 +35,7 @@ const COLOR_BY_HREF: Record<string, TabColor> = {
   "/partners": "sky",
   "/partners/dashboard": "orange",
   "/groups": "violet",
+  "/team-events": "orange",
   "/admin": "rose",
 };
 
@@ -124,13 +126,21 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
-              <Icon
-                className={cn(
-                  "relative z-10 w-5 h-5 transition-colors",
-                  active ? ACTIVE_TEXT_CLASSES[color] : "text-zinc-500"
+              <span className="relative">
+                <Icon
+                  className={cn(
+                    "relative z-10 w-5 h-5 transition-colors",
+                    active ? ACTIVE_TEXT_CLASSES[color] : "text-zinc-500"
+                  )}
+                  strokeWidth={2.25}
+                />
+                {link.pulse && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(52,211,153,0.6)] animate-pulse"
+                    aria-hidden="true"
+                  />
                 )}
-                strokeWidth={2.25}
-              />
+              </span>
               <span
                 className={cn(
                   "relative z-10 truncate max-w-full px-1 tracking-tight transition-colors",
@@ -177,7 +187,15 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
                         onClick={() => setMoreOpen(false)}
                         className="flex items-center gap-2.5 px-4 py-2.5 min-h-[44px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100 active:bg-zinc-800 active:text-zinc-100"
                       >
-                        <Icon className={cn("w-4 h-4 shrink-0", ACTIVE_TEXT_CLASSES[color])} strokeWidth={2.25} />
+                        <span className="relative shrink-0">
+                          <Icon className={cn("w-4 h-4", ACTIVE_TEXT_CLASSES[color])} strokeWidth={2.25} />
+                          {link.pulse && (
+                            <span
+                              className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(52,211,153,0.6)] animate-pulse"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </span>
                         {link.label}
                       </Link>
                     );
