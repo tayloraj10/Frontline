@@ -1,0 +1,46 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Supabase: Start",
+      "type": "shell",
+      "command": "npx supabase start",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": ".*"
+        }
+      },
+      "presentation": { "panel": "dedicated", "group": "fullstack" }
+    },
+    {
+      // Plain shell task, not a debug ("node-terminal") launch — dev.mjs's
+      // synchronous cap-sync spawnSync deadlocks if the inspector tries to
+      // attach to that child process. See capacitor-testing-guide.md.
+      "label": "Frontend: Next.js",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": ".*"
+        }
+      },
+      "presentation": { "panel": "dedicated", "group": "fullstack" }
+    },
+    {
+      "label": "Start Frontend + Supabase",
+      "dependsOn": ["Supabase: Start", "Frontend: Next.js"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

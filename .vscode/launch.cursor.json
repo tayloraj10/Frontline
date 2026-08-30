@@ -1,0 +1,49 @@
+{
+  // This file targets Cursor. To use it, copy it over launch.json (Cursor doesn't
+  // need tasks.json). The active launch.json/tasks.json are set up for VS Code.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: FastAPI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--reload-dir", "app", "--port", "8000", "--host", "0.0.0.0"],
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "osx": {
+        "python": "${workspaceFolder}/backend/.venv/bin/python"
+      },
+      "linux": {
+        "python": "${workspaceFolder}/backend/.venv/bin/python"
+      },
+      "jinja": true
+    },
+    {
+      // scripts/dev.mjs auto-detects the host's LAN IP and sets NEXT_PUBLIC_SUPABASE_URL /
+      // NEXT_PUBLIC_FASTAPI_URL / CAP_DEV_SERVER from it, then (re)syncs the Android project
+      // only when that IP changes. Works for browser (localhost:3000) and the Android
+      // emulator/a physical device from the same process — see capacitor-testing-guide.md.
+      "name": "Frontend: Next.js",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "Supabase: Start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npx supabase start",
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack",
+      "configurations": ["Supabase: Start", "Backend: FastAPI", "Frontend: Next.js"],
+      "stopAll": false
+    }
+  ]
+}
