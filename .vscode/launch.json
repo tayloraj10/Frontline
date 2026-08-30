@@ -1,7 +1,13 @@
 {
+  // This file targets VS Code. If switching back to Cursor, use launch.cursor.json
+  // instead (copy it over this file) — Cursor doesn't need tasks.json.
   "version": "0.2.0",
   "configurations": [
     {
+      // Frontend and Supabase start as plain background tasks (see tasks.json) via
+      // preLaunchTask below, not as node-terminal debug launches — a node-terminal
+      // launch injects the inspector into every spawned Node process, which deadlocks
+      // against scripts/dev.mjs's synchronous cap-sync spawnSync call.
       "name": "Backend: FastAPI",
       "type": "debugpy",
       "request": "launch",
@@ -16,31 +22,14 @@
       "linux": {
         "python": "${workspaceFolder}/backend/.venv/bin/python"
       },
+      "preLaunchTask": "Start Frontend + Supabase",
       "jinja": true
-    },
-    {
-      // scripts/dev.mjs auto-detects the host's LAN IP and sets NEXT_PUBLIC_SUPABASE_URL /
-      // NEXT_PUBLIC_FASTAPI_URL / CAP_DEV_SERVER from it, then (re)syncs the Android project
-      // only when that IP changes. Works for browser (localhost:3000) and the Android
-      // emulator/a physical device from the same process — see capacitor-testing-guide.md.
-      "name": "Frontend: Next.js",
-      "type": "node-terminal",
-      "request": "launch",
-      "command": "npm run dev",
-      "cwd": "${workspaceFolder}/frontend"
-    },
-    {
-      "name": "Supabase: Start",
-      "type": "node-terminal",
-      "request": "launch",
-      "command": "npx supabase start",
-      "cwd": "${workspaceFolder}"
     }
   ],
   "compounds": [
     {
       "name": "Full Stack",
-      "configurations": ["Supabase: Start", "Backend: FastAPI", "Frontend: Next.js"],
+      "configurations": ["Backend: FastAPI"],
       "stopAll": false
     }
   ]

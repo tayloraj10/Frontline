@@ -686,6 +686,7 @@ function ContributeModal({
   const [guidedStep, setGuidedStep] = useState(routeTracking.active ? 1 : 0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
+  const [teamEventExcludedReason, setTeamEventExcludedReason] = useState<string | null>(null);
   const [hotspotCleared, setHotspotCleared] = useState(false);
   const [submittedContributionId, setSubmittedContributionId] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
@@ -695,6 +696,7 @@ function ContributeModal({
   const [resolveHotspot, setResolveHotspot] = useState(true);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [activeMultiplier, setActiveMultiplier] = useState<{ multiplier: number; title: string; kind: "bonus_spot" | "event" } | null>(null);
+  const [teamAreaCheck, setTeamAreaCheck] = useState<{ has_boundary: boolean; inside: boolean } | null>(null);
   const [appliedMultiplier, setAppliedMultiplier] = useState<{ multiplier: number; title: string } | null>(null);
   const [valueFlash, setValueFlash] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -814,6 +816,48 @@ function ContributeModal({
     return () => controller.abort();
   }, [isCleanup, isRouteMode, campaignId, submitCoords?.latitude, submitCoords?.longitude]);
 
+  // Warn before submit if the chosen location falls outside the joined team's assigned
+  // geofence — mirrors the server's soft-exclude check in contributions.submit_contribution,
+  // so the user finds out before submitting instead of after (via team_event_excluded_reason).
+  // Point mode checks the single pin/GPS location; route mode requires every point of the
+  // drawn/tracked route to fall inside the geofence for the route to count.
+  useEffect(() => {
+    if (!isCleanup || !joinedTeamEvent?.teamId) {
+      setTeamAreaCheck(null);
+      return;
+    }
+    if (isRouteMode) {
+      if (!route || route.coordinates.length === 0) {
+        setTeamAreaCheck(null);
+        return;
+      }
+      const controller = new AbortController();
+      fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/team-events/${joinedTeamEvent.id}/check-area-route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ team_id: joinedTeamEvent.teamId, points: route.coordinates }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => setTeamAreaCheck(data ?? null))
+        .catch(() => { });
+      return () => controller.abort();
+    }
+    if (!submitCoords) {
+      setTeamAreaCheck(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(
+      `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/team-events/${joinedTeamEvent.id}/check-area?team_id=${joinedTeamEvent.teamId}&lat=${submitCoords.latitude}&lng=${submitCoords.longitude}`,
+      { signal: controller.signal },
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setTeamAreaCheck(data ?? null))
+      .catch(() => { });
+    return () => controller.abort();
+  }, [isCleanup, isRouteMode, route, submitCoords?.latitude, submitCoords?.longitude, joinedTeamEvent?.id, joinedTeamEvent?.teamId]);
+
   useEffect(() => {
     setResolveHotspot(true);
   }, [nearbyReport?.id]);
@@ -916,7 +960,13 @@ function ContributeModal({
         },
       );
       if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as { claimed_territory: boolean; hotspot_cleared?: boolean; cleanup_id?: string; contribution_id?: string };
+      const data = (await res.json()) as {
+        claimed_territory: boolean;
+        hotspot_cleared?: boolean;
+        cleanup_id?: string;
+        contribution_id?: string;
+        team_event_excluded_reason?: string | null;
+      };
 
       onContributionSubmitted?.(
         submitCoords?.latitude ?? null,
@@ -933,6 +983,7 @@ function ContributeModal({
       if (contributeMode === "track") routeTracking.reset();
       setHotspotCleared(Boolean(data.hotspot_cleared));
       setSubmittedContributionId(data.contribution_id ?? null);
+      setTeamEventExcludedReason(data.team_event_excluded_reason ?? null);
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
       // Re-read the authoritative balance (rather than computing the delta client-side,
       // which would need to duplicate the trigger's multiplier/hotspot/event-mode logic)
@@ -984,6 +1035,11 @@ function ContributeModal({
           <p className="text-zinc-100 font-semibold text-center">
             {result === "success" ? config.successClaimed : config.successUnclaimed}
           </p>
+          {teamEventExcludedReason === "outside_team_area" && (
+            <p className="text-sm text-amber-400/90 text-center max-w-xs">
+              This one landed outside your team&apos;s assigned area, so it was logged normally but won&apos;t count toward the event.
+            </p>
+          )}
           {isCleanup && claimedReportId && (
             <p className={`text-sm font-semibold text-center ${challengeMultiplier >= (appliedMultiplier?.multiplier ?? 1) ? "text-violet-300" : "text-violet-500/50 line-through"}`}>
               🎯 Challenge bonus: <SettingValue value={gameSettings.claim_challenge_multiplier} loading={settingsLoading} />× score
@@ -1137,6 +1193,16 @@ function ContributeModal({
               </span>
             </span>
           </label>
+        )}
+
+        {effectiveTeamEventId && teamAreaCheck?.has_boundary && !teamAreaCheck.inside && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
+            <span className="text-base shrink-0">⚠️</span>
+            <span>
+              This location is outside <span className="font-semibold text-amber-200">{joinedTeamEvent?.title}</span>&apos;s assigned area.
+              It&apos;ll still save as a cleanup, but won&apos;t count toward the event or your team.
+            </span>
+          </div>
         )}
 
         {isCleanup && activeMultiplier && (
@@ -1512,7 +1578,7 @@ function ContributeModal({
         {showPhoto && (
           <div>
             <label className={`block text-xs mb-1.5 ${isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? "text-amber-400" : "text-zinc-500"}`}>
-              {isCleanup ? "Photos" : "Photo"} {isPhoto ? "(required)" : "(optional)"}
+              {isCleanup ? "Photos" : "Photo"} {isPhoto || (isTeamEventMode && joinedTeamEvent?.requires_photo) ? "(required)" : "(optional)"}
               {isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? " — helps the event's gallery!" : ""}
             </label>
             <PhotoCaptureInput

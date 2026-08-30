@@ -18,6 +18,14 @@ RAW_NYC_NEIGHBORHOODS_FILE = DATA_DIR / "nyc_neighborhoods_raw.geojson"
 SIMPLIFIED_NYC_NEIGHBORHOODS_FILE = DATA_DIR / "nyc_neighborhoods.geojson"
 RAW_NYC_BOROUGHS_FILE = DATA_DIR / "nyc_boroughs_raw.geojson"
 SIMPLIFIED_NYC_BOROUGHS_FILE = DATA_DIR / "nyc_boroughs.geojson"
+RAW_CITIES_FILE = DATA_DIR / "cities_raw.geojson"
+SIMPLIFIED_CITIES_FILE = DATA_DIR / "cities.geojson"
+RAW_PHILADELPHIA_NEIGHBORHOODS_FILE = DATA_DIR / "philadelphia_neighborhoods_raw.geojson"
+SIMPLIFIED_PHILADELPHIA_NEIGHBORHOODS_FILE = DATA_DIR / "philadelphia_neighborhoods.geojson"
+RAW_CHICAGO_NEIGHBORHOODS_FILE = DATA_DIR / "chicago_neighborhoods_raw.geojson"
+SIMPLIFIED_CHICAGO_NEIGHBORHOODS_FILE = DATA_DIR / "chicago_neighborhoods.geojson"
+RAW_LA_NEIGHBORHOODS_FILE = DATA_DIR / "la_neighborhoods_raw.geojson"
+SIMPLIFIED_LA_NEIGHBORHOODS_FILE = DATA_DIR / "la_neighborhoods.geojson"
 
 _KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
@@ -235,6 +243,274 @@ def simplify_nyc_neighborhoods(
         if not unit_id or not display_name or not geometry:
             skipped += 1
             continue
+
+        try:
+            geom = shape(geometry).simplify(tolerance, preserve_topology=True)
+
+            if geom.is_empty:
+                skipped += 1
+                continue
+
+            if isinstance(geom, Polygon):
+                geom = MultiPolygon([geom])
+            elif not isinstance(geom, MultiPolygon):
+                skipped += 1
+                continue
+
+            features.append({
+                "type": "Feature",
+                "properties": {"unit_id": unit_id, "display_name": display_name},
+                "geometry": _truncate_coords(mapping(geom), precision),
+            })
+
+        except Exception:
+            skipped += 1
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump({"type": "FeatureCollection", "features": features}, f, separators=(",", ":"))
+
+    return SimplifyResult(
+        input_size_mb=input_path.stat().st_size / (1024 * 1024),
+        output_size_mb=output_path.stat().st_size / (1024 * 1024),
+        feature_count=len(features),
+        skipped_count=skipped,
+    )
+
+
+def simplify_philadelphia_neighborhoods(
+    input_path: Path = RAW_PHILADELPHIA_NEIGHBORHOODS_FILE,
+    output_path: Path = SIMPLIFIED_PHILADELPHIA_NEIGHBORHOODS_FILE,
+    tolerance: float = 0.0001,
+    precision: int = 5,
+) -> SimplifyResult:
+    """
+    OpenDataPhilly's Philadelphia Neighborhoods GeoJSON. NAME is the unique upper-case
+    key; LISTNAME is the human-readable display name.
+    """
+    with open(input_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    features = []
+    skipped = 0
+
+    for feat in data.get("features", []):
+        props = feat.get("properties") or {}
+        unit_id = props.get("NAME")
+        display_name = props.get("LISTNAME")
+        geometry = feat.get("geometry")
+        if not unit_id or not display_name or not geometry:
+            skipped += 1
+            continue
+
+        try:
+            geom = shape(geometry).simplify(tolerance, preserve_topology=True)
+
+            if geom.is_empty:
+                skipped += 1
+                continue
+
+            if isinstance(geom, Polygon):
+                geom = MultiPolygon([geom])
+            elif not isinstance(geom, MultiPolygon):
+                skipped += 1
+                continue
+
+            features.append({
+                "type": "Feature",
+                "properties": {"unit_id": unit_id, "display_name": display_name},
+                "geometry": _truncate_coords(mapping(geom), precision),
+            })
+
+        except Exception:
+            skipped += 1
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump({"type": "FeatureCollection", "features": features}, f, separators=(",", ":"))
+
+    return SimplifyResult(
+        input_size_mb=input_path.stat().st_size / (1024 * 1024),
+        output_size_mb=output_path.stat().st_size / (1024 * 1024),
+        feature_count=len(features),
+        skipped_count=skipped,
+    )
+
+
+def simplify_chicago_neighborhoods(
+    input_path: Path = RAW_CHICAGO_NEIGHBORHOODS_FILE,
+    output_path: Path = SIMPLIFIED_CHICAGO_NEIGHBORHOODS_FILE,
+    tolerance: float = 0.0001,
+    precision: int = 5,
+) -> SimplifyResult:
+    """
+    Chicago Data Portal's "Boundaries - Neighborhoods" dataset (bbvz-uum9), fetched via
+    its v3 query API since the SODA/export endpoints for this dataset return empty
+    geometry. pri_neigh is the unique neighborhood name.
+    """
+    with open(input_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    features = []
+    skipped = 0
+
+    for feat in data.get("features", []):
+        props = feat.get("properties") or {}
+        unit_id = props.get("pri_neigh")
+        display_name = props.get("pri_neigh")
+        geometry = feat.get("geometry")
+        if not unit_id or not geometry:
+            skipped += 1
+            continue
+
+        try:
+            geom = shape(geometry).simplify(tolerance, preserve_topology=True)
+
+            if geom.is_empty:
+                skipped += 1
+                continue
+
+            if isinstance(geom, Polygon):
+                geom = MultiPolygon([geom])
+            elif not isinstance(geom, MultiPolygon):
+                skipped += 1
+                continue
+
+            features.append({
+                "type": "Feature",
+                "properties": {"unit_id": unit_id, "display_name": display_name},
+                "geometry": _truncate_coords(mapping(geom), precision),
+            })
+
+        except Exception:
+            skipped += 1
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump({"type": "FeatureCollection", "features": features}, f, separators=(",", ":"))
+
+    return SimplifyResult(
+        input_size_mb=input_path.stat().st_size / (1024 * 1024),
+        output_size_mb=output_path.stat().st_size / (1024 * 1024),
+        feature_count=len(features),
+        skipped_count=skipped,
+    )
+
+
+def simplify_la_neighborhoods(
+    input_path: Path = RAW_LA_NEIGHBORHOODS_FILE,
+    output_path: Path = SIMPLIFIED_LA_NEIGHBORHOODS_FILE,
+    tolerance: float = 0.0001,
+    precision: int = 5,
+) -> SimplifyResult:
+    """
+    LA Times "Mapping L.A." neighborhood boundaries (ArcGIS FeatureServer mirror at
+    services5.arcgis.com/7nsPwEMP38bSkCjy). Unlike Philadelphia/Chicago's official city
+    GIS layers, this is an editorial/crowd-informed dataset, not a government source —
+    but it's the standard reference for what Angelenos call their neighborhoods, and
+    the layer is already scoped to the City of LA proper (no independent cities like
+    Long Beach or Santa Monica mixed in). name is the unique key.
+    """
+    with open(input_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    features = []
+    skipped = 0
+
+    for feat in data.get("features", []):
+        props = feat.get("properties") or {}
+        unit_id = props.get("name")
+        display_name = props.get("name")
+        geometry = feat.get("geometry")
+        if not unit_id or not geometry:
+            skipped += 1
+            continue
+
+        try:
+            geom = shape(geometry).simplify(tolerance, preserve_topology=True)
+
+            if geom.is_empty:
+                skipped += 1
+                continue
+
+            if isinstance(geom, Polygon):
+                geom = MultiPolygon([geom])
+            elif not isinstance(geom, MultiPolygon):
+                skipped += 1
+                continue
+
+            features.append({
+                "type": "Feature",
+                "properties": {"unit_id": unit_id, "display_name": display_name},
+                "geometry": _truncate_coords(mapping(geom), precision),
+            })
+
+        except Exception:
+            skipped += 1
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump({"type": "FeatureCollection", "features": features}, f, separators=(",", ":"))
+
+    return SimplifyResult(
+        input_size_mb=input_path.stat().st_size / (1024 * 1024),
+        output_size_mb=output_path.stat().st_size / (1024 * 1024),
+        feature_count=len(features),
+        skipped_count=skipped,
+    )
+
+
+# Census BASENAME values are the bare place name (e.g. "New York"), which reads
+# ambiguously next to Philadelphia/Chicago/LA on the map. Override per GEOID.
+#
+# LA is fetched from the Urban Areas layer (GEOID 51445, "Los Angeles--Long Beach--
+# Anaheim"), not Incorporated Places, because LA city limits are riddled with
+# carved-out enclave cities (Beverly Hills, West Hollywood, Culver City, Santa
+# Monica) and a narrow non-contiguous-looking "shoestring strip" down to the port at
+# San Pedro — it reads as a broken/wrong shape on the map even though it's accurate.
+# The CBSA (GEOID 31080, all of LA County) was tried first but is coextensive with
+# the county line: it reaches ~35 miles further north into the Antelope Valley
+# desert than the built-up area does, and detaches to include Catalina and San
+# Nicolas islands offshore — neither of which reads as "LA" on a map. The Urban Area
+# boundary is the actual contiguous developed footprint (crossing into Orange/
+# Riverside/San Bernardino counties where the urbanization does, with no desert
+# panhandle or islands) and is what people actually mean by "LA" colloquially. It's
+# still a different kind of boundary than NYC/Philadelphia/Chicago's city limits —
+# the override name below exists so the map is upfront about that instead of just
+# saying "Los Angeles" like it's a city limit.
+_CITY_DISPLAY_NAME_OVERRIDES = {
+    "3651000": "New York City",
+    "51445": "Los Angeles Metro Area",
+}
+
+
+def simplify_cities(
+    input_path: Path = RAW_CITIES_FILE,
+    output_path: Path = SIMPLIFIED_CITIES_FILE,
+    tolerance: float = 0.0002,
+    precision: int = 5,
+) -> SimplifyResult:
+    """
+    City-limits polygons fetched from the Census TIGERweb "Incorporated Places" layer
+    (queried by GEOID, which encodes state + place and avoids name collisions across
+    states). Used for optional team-event geofencing: a team can be assigned to a
+    city's boundary so only contributions logged inside it count.
+    """
+    with open(input_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    features = []
+    skipped = 0
+
+    for feat in data.get("features", []):
+        props = feat.get("properties") or {}
+        unit_id = props.get("GEOID")
+        display_name = props.get("BASENAME")
+        geometry = feat.get("geometry")
+        if not unit_id or not display_name or not geometry:
+            skipped += 1
+            continue
+        display_name = _CITY_DISPLAY_NAME_OVERRIDES.get(unit_id, display_name)
 
         try:
             geom = shape(geometry).simplify(tolerance, preserve_topology=True)

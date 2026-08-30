@@ -111,6 +111,7 @@ class AddTeamRequest(BaseModel):
     name: str
     color: str | None = None
     logo_url: str | None = None
+    geo_unit_ids: list[UUID] | None = None
 
 
 class PatchTeamRequest(BaseModel):
@@ -118,6 +119,7 @@ class PatchTeamRequest(BaseModel):
     name: str | None = None
     color: str | None = None
     logo_url: str | None = None
+    geo_unit_ids: list[UUID] | None = None
 
 
 class JoinEventRequest(BaseModel):
@@ -161,14 +163,6 @@ class PatchSubmissionRequest(BaseModel):
     large_bags: int | None = None
     pounds: float | None = None
     value: float | None = None
-    review_status: str | None = None
-
-    @field_validator("review_status")
-    @classmethod
-    def _valid_review_status(cls, v: str | None) -> str | None:
-        if v is not None and v not in ("pending", "approved", "flagged"):
-            raise ValueError("Invalid review_status")
-        return v
 
 
 @router.post("")
@@ -248,11 +242,29 @@ async def list_team_events(requesting_user_id: UUID | None = None, db: AsyncSess
 async def get_team_event(team_event_id: UUID, db: AsyncSession = Depends(get_db)):
     event = await _get_event_or_404(db, team_event_id)
     teams_result = await db.execute(
-        text("SELECT id, name, color, logo_url, geo_unit_id FROM team_event_teams WHERE team_event_id = :id ORDER BY name"),
+        text("""
+            SELECT t.id, t.name, t.color, t.logo_url, t.geo_unit_ids,
+                   COALESCE(gd.display_names, '{}') AS geo_display_names
+            FROM team_event_teams t
+            LEFT JOIN LATERAL (
+                SELECT ARRAY_AGG(gu.display_name ORDER BY ord.ordinality) AS display_names
+                FROM UNNEST(t.geo_unit_ids) WITH ORDINALITY AS ord(geo_unit_id, ordinality)
+                JOIN geo_units gu ON gu.id = ord.geo_unit_id
+            ) gd ON true
+            WHERE t.team_event_id = :id
+            ORDER BY t.name
+        """),
         {"id": str(team_event_id)},
     )
     teams = [
-        {"id": str(t.id), "name": t.name, "color": t.color, "logo_url": t.logo_url, "has_boundary": t.geo_unit_id is not None}
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "color": t.color,
+            "logo_url": t.logo_url,
+            "geo_unit_ids": [str(g) for g in t.geo_unit_ids],
+            "geo_display_names": list(t.geo_display_names),
+        }
         for t in teams_result.fetchall()
     ]
     organizers_result = await db.execute(
@@ -554,10 +566,10 @@ async def get_team_event_geo(team_event_id: UUID, db: AsyncSession = Depends(get
                    COALESCE(SUM(c.value) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged'), 0) AS total_value,
                    COUNT(c.id) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged') AS submission_count
             FROM team_event_teams t
-            JOIN geo_units gu ON gu.id = t.geo_unit_id
+            JOIN geo_units gu ON gu.id = ANY(t.geo_unit_ids)
             LEFT JOIN contributions c
                 ON c.team_event_team_id = t.id AND c.team_event_id = t.team_event_id
-            WHERE t.team_event_id = :id AND t.geo_unit_id IS NOT NULL
+            WHERE t.team_event_id = :id
             GROUP BY t.id, t.name, t.color, gu.id, gu.display_name, gu.unit_type
             ORDER BY total_value DESC
         """),
@@ -576,6 +588,83 @@ async def get_team_event_geo(team_event_id: UUID, db: AsyncSession = Depends(get
         }
         for r in result.fetchall()
     ]
+
+
+@router.get("/{team_event_id}/check-area")
+async def check_team_event_area(
+    team_event_id: UUID,
+    team_id: UUID = Query(...),
+    lat: float = Query(...),
+    lng: float = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    # Mirrors the soft-exclude check in contributions.submit_contribution, so the
+    # frontend can warn before submit instead of only after.
+    await _get_event_or_404(db, team_event_id)
+    team_row = await db.execute(
+        text("SELECT geo_unit_ids FROM team_event_teams WHERE id = :id AND team_event_id = :event_id"),
+        {"id": str(team_id), "event_id": str(team_event_id)},
+    )
+    row = team_row.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Team not found for this event")
+
+    geo_unit_ids = list(row.geo_unit_ids) if row.geo_unit_ids else []
+    if not geo_unit_ids:
+        return {"has_boundary": False, "inside": True}
+
+    inside_result = await db.execute(
+        text("""
+            SELECT bool_or(ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)))
+            FROM geo_units WHERE id = ANY(CAST(:geo_unit_ids AS uuid[]))
+        """),
+        {"lng": lng, "lat": lat, "geo_unit_ids": geo_unit_ids},
+    )
+    return {"has_boundary": True, "inside": bool(inside_result.scalar())}
+
+
+class CheckAreaRouteRequest(BaseModel):
+    team_id: UUID
+    points: list[tuple[float, float]]  # (lng, lat) pairs, matching RouteLineString.coordinates
+
+
+@router.post("/{team_event_id}/check-area-route")
+async def check_team_event_area_route(
+    team_event_id: UUID,
+    payload: CheckAreaRouteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    # Route variant of check_team_event_area: every point of the route must fall inside
+    # the team's assigned geofence for the route to count toward the event.
+    await _get_event_or_404(db, team_event_id)
+    team_row = await db.execute(
+        text("SELECT geo_unit_ids FROM team_event_teams WHERE id = :id AND team_event_id = :event_id"),
+        {"id": str(payload.team_id), "event_id": str(team_event_id)},
+    )
+    row = team_row.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Team not found for this event")
+
+    geo_unit_ids = list(row.geo_unit_ids) if row.geo_unit_ids else []
+    if not geo_unit_ids or not payload.points:
+        return {"has_boundary": bool(geo_unit_ids), "inside": True}
+
+    result = await db.execute(
+        text("""
+            SELECT bool_and(EXISTS (
+                SELECT 1 FROM geo_units
+                WHERE id = ANY(CAST(:geo_unit_ids AS uuid[]))
+                AND ST_Contains(geometry, ST_SetSRID(ST_MakePoint(pt.lng, pt.lat), 4326))
+            ))
+            FROM unnest(CAST(:lngs AS double precision[]), CAST(:lats AS double precision[])) AS pt(lng, lat)
+        """),
+        {
+            "geo_unit_ids": geo_unit_ids,
+            "lngs": [p[0] for p in payload.points],
+            "lats": [p[1] for p in payload.points],
+        },
+    )
+    return {"has_boundary": True, "inside": bool(result.scalar())}
 
 
 @router.get("/{team_event_id}/participant-detail")
@@ -704,8 +793,12 @@ async def get_team_event_admin_summary(
             SELECT COALESCE(SUM(c.value) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged'), 0) AS total_value,
                    COUNT(c.id) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged') AS submission_count,
                    COUNT(DISTINCT c.user_id) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged') AS active_participants,
-                   COUNT(c.id) FILTER (WHERE c.review_status = 'pending') AS pending_review_count
+                   COUNT(c.id) FILTER (WHERE c.review_status = 'pending') AS pending_review_count,
+                   COALESCE(SUM(cl.metrics_small_bags) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged'), 0) AS total_small_bags,
+                   COALESCE(SUM(cl.metrics_large_bags) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged'), 0) AS total_large_bags,
+                   COALESCE(SUM(cl.metrics_pounds) FILTER (WHERE c.review_status IS DISTINCT FROM 'flagged'), 0) AS total_pounds
             FROM contributions c
+            LEFT JOIN cleanups cl ON cl.id = c.cleanup_id
             WHERE c.team_event_id = :id
               AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
               AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
@@ -823,6 +916,9 @@ async def get_team_event_admin_summary(
         "submission_count": kpi_row.submission_count,
         "active_participants": kpi_row.active_participants,
         "pending_review_count": kpi_row.pending_review_count,
+        "total_small_bags": kpi_row.total_small_bags,
+        "total_large_bags": kpi_row.total_large_bags,
+        "total_pounds": float(kpi_row.total_pounds),
         "total_participants": roster_row.total_participants,
         "total_groups": roster_row.total_groups,
         "total_teams": roster_row.total_teams,
@@ -1099,13 +1195,27 @@ async def add_team(team_event_id: UUID, payload: AddTeamRequest, db: AsyncSessio
     if not await _can_manage_team_event(db, team_event_id, payload.requesting_user_id):
         raise HTTPException(status_code=403, detail="Not authorized to manage this event")
 
+    geo_unit_ids = [str(g) for g in payload.geo_unit_ids] if payload.geo_unit_ids else []
+    if geo_unit_ids:
+        geo_row = await db.execute(
+            text("SELECT COUNT(*) FROM geo_units WHERE id = ANY(CAST(:ids AS uuid[]))"), {"ids": geo_unit_ids}
+        )
+        if geo_row.scalar() != len(set(geo_unit_ids)):
+            raise HTTPException(status_code=404, detail="Geo unit not found")
+
     result = await db.execute(
         text("""
-            INSERT INTO team_event_teams (team_event_id, name, color, logo_url)
-            VALUES (:team_event_id, :name, :color, :logo_url)
+            INSERT INTO team_event_teams (team_event_id, name, color, logo_url, geo_unit_ids)
+            VALUES (:team_event_id, :name, :color, :logo_url, CAST(:geo_unit_ids AS uuid[]))
             RETURNING id
         """),
-        {"team_event_id": str(team_event_id), "name": payload.name, "color": payload.color, "logo_url": payload.logo_url},
+        {
+            "team_event_id": str(team_event_id),
+            "name": payload.name,
+            "color": payload.color,
+            "logo_url": payload.logo_url,
+            "geo_unit_ids": geo_unit_ids,
+        },
     )
     team_id = result.fetchone()[0]
     await db.commit()
@@ -1131,7 +1241,20 @@ async def patch_team(
     if not fields:
         return {"updated": False}
 
-    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+    set_clause_parts = []
+    if "geo_unit_ids" in fields:
+        geo_unit_ids = [str(g) for g in fields["geo_unit_ids"]] if fields["geo_unit_ids"] else []
+        if geo_unit_ids:
+            geo_row = await db.execute(
+                text("SELECT COUNT(*) FROM geo_units WHERE id = ANY(CAST(:ids AS uuid[]))"), {"ids": geo_unit_ids}
+            )
+            if geo_row.scalar() != len(set(geo_unit_ids)):
+                raise HTTPException(status_code=404, detail="Geo unit not found")
+        fields["geo_unit_ids"] = geo_unit_ids
+        set_clause_parts.append("geo_unit_ids = CAST(:geo_unit_ids AS uuid[])")
+
+    set_clause_parts.extend(f"{k} = :{k}" for k in fields if k != "geo_unit_ids")
+    set_clause = ", ".join(set_clause_parts)
     await db.execute(
         text(f"UPDATE team_event_teams SET {set_clause} WHERE id = :id"),
         {**fields, "id": str(team_id)},
@@ -1330,11 +1453,22 @@ async def list_submissions(team_event_id: UUID, requesting_user_id: UUID, db: As
 
     result = await db.execute(
         text("""
-            SELECT c.id, c.user_id, c.team_event_team_id, c.contribution_type, c.value,
+            SELECT c.id, c.user_id, p.username, p.display_name,
+                   c.team_event_team_id, t.name AS team_name, t.color AS team_color,
+                   c.contribution_type, c.value,
                    cl.metrics_small_bags, cl.metrics_large_bags, cl.metrics_pounds,
-                   c.photo_url, c.review_status, c.submitted_at
+                   c.photo_url, cl.image_urls, cl.description,
+                   c.notes, c.submitted_at,
+                   ST_Y(c.location::geometry) AS lat, ST_X(c.location::geometry) AS lng,
+                   ST_AsGeoJSON(cl.route)::json AS route, cl.route_photos,
+                   g.name AS representing_group_name
             FROM contributions c
             LEFT JOIN cleanups cl ON cl.id = c.cleanup_id
+            LEFT JOIN profiles p ON p.id = c.user_id
+            LEFT JOIN team_event_teams t ON t.id = c.team_event_team_id
+            LEFT JOIN team_event_participants tep
+                ON tep.team_event_id = c.team_event_id AND tep.user_id = c.user_id
+            LEFT JOIN groups g ON g.id = tep.representing_group_id
             WHERE c.team_event_id = :id
             ORDER BY c.submitted_at DESC
         """),
@@ -1344,14 +1478,25 @@ async def list_submissions(team_event_id: UUID, requesting_user_id: UUID, db: As
         {
             "id": str(r.id),
             "user_id": str(r.user_id) if r.user_id else None,
+            "username": r.username,
+            "display_name": r.display_name,
             "team_id": str(r.team_event_team_id) if r.team_event_team_id else None,
+            "team_name": r.team_name,
+            "team_color": r.team_color,
             "contribution_type": r.contribution_type,
             "value": float(r.value) if r.value is not None else None,
             "small_bags": r.metrics_small_bags,
             "large_bags": r.metrics_large_bags,
             "pounds": float(r.metrics_pounds) if r.metrics_pounds is not None else None,
             "photo_url": r.photo_url,
-            "review_status": r.review_status,
+            "image_urls": r.image_urls,
+            "description": r.description,
+            "notes": r.notes,
+            "lat": r.lat,
+            "lng": r.lng,
+            "route": r.route,
+            "route_photos": r.route_photos or [],
+            "representing_group_name": r.representing_group_name,
             "created_at": r.submitted_at,
         }
         for r in result.fetchall()
@@ -1369,7 +1514,7 @@ async def patch_submission(
     prior_result = await db.execute(
         text("""
             SELECT c.cleanup_id, cl.metrics_small_bags AS small_bags, cl.metrics_large_bags AS large_bags,
-                   cl.metrics_pounds AS pounds, c.value, c.review_status
+                   cl.metrics_pounds AS pounds, c.value
             FROM contributions c
             LEFT JOIN cleanups cl ON cl.id = c.cleanup_id
             WHERE c.id = :id AND c.team_event_id = :team_event_id
@@ -1384,7 +1529,7 @@ async def patch_submission(
     if not fields:
         return {"updated": False}
 
-    contribution_fields = {k: v for k, v in fields.items() if k in ("value", "review_status")}
+    contribution_fields = {k: v for k, v in fields.items() if k == "value"}
     cleanup_fields = {
         {"small_bags": "metrics_small_bags", "large_bags": "metrics_large_bags", "pounds": "metrics_pounds"}[k]: v
         for k, v in fields.items()
@@ -1409,12 +1554,12 @@ async def patch_submission(
         text("""
             INSERT INTO team_event_submission_edits
                 (contribution_id, edited_by,
-                 previous_small_bags, previous_large_bags, previous_pounds, previous_value, previous_review_status,
-                 new_small_bags, new_large_bags, new_pounds, new_value, new_review_status)
+                 previous_small_bags, previous_large_bags, previous_pounds, previous_value,
+                 new_small_bags, new_large_bags, new_pounds, new_value)
             VALUES
                 (:contribution_id, :edited_by,
-                 :prev_small_bags, :prev_large_bags, :prev_pounds, :prev_value, :prev_review_status,
-                 :new_small_bags, :new_large_bags, :new_pounds, :new_value, :new_review_status)
+                 :prev_small_bags, :prev_large_bags, :prev_pounds, :prev_value,
+                 :new_small_bags, :new_large_bags, :new_pounds, :new_value)
         """),
         {
             "contribution_id": str(contribution_id),
@@ -1423,13 +1568,34 @@ async def patch_submission(
             "prev_large_bags": prior.large_bags,
             "prev_pounds": prior.pounds,
             "prev_value": prior.value,
-            "prev_review_status": prior.review_status,
             "new_small_bags": fields.get("small_bags", prior.small_bags),
             "new_large_bags": fields.get("large_bags", prior.large_bags),
             "new_pounds": fields.get("pounds", prior.pounds),
             "new_value": fields.get("value", prior.value),
-            "new_review_status": fields.get("review_status", prior.review_status),
         },
     )
     await db.commit()
     return {"updated": True}
+
+
+@router.delete("/{team_event_id}/submissions/{contribution_id}")
+async def delete_submission(
+    team_event_id: UUID, contribution_id: UUID, requesting_user_id: UUID, db: AsyncSession = Depends(get_db)
+):
+    await _get_event_or_404(db, team_event_id)
+    if not await _can_manage_team_event(db, team_event_id, requesting_user_id):
+        raise HTTPException(status_code=403, detail="Not authorized to review this event's submissions")
+
+    row = (await db.execute(
+        text("SELECT cleanup_id FROM contributions WHERE id = :id AND team_event_id = :team_event_id"),
+        {"id": str(contribution_id), "team_event_id": str(team_event_id)},
+    )).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Submission not found for this event")
+
+    await db.execute(text("DELETE FROM contributions WHERE id = :id"), {"id": str(contribution_id)})
+    if row.cleanup_id:
+        await db.execute(text("DELETE FROM cleanups WHERE id = :cleanup_id"), {"cleanup_id": str(row.cleanup_id)})
+
+    await db.commit()
+    return {"deleted": True}
