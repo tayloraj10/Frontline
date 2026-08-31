@@ -102,7 +102,7 @@ function TeamEventCard({ event }: { event: TeamEventListItem }) {
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="font-semibold text-zinc-100 truncate">{event.title}</p>
+          <p className="font-semibold text-zinc-100 break-words">{event.title}</p>
           <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${STATUS_BADGE[event.status]}`}>
             {STATUS_LABEL[event.status]}
           </span>
