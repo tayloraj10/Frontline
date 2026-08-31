@@ -44,7 +44,14 @@ export type OfferFormLocation = {
 
 function toDateInputValue(iso: string | null): string {
   if (!iso) return "";
-  return iso.slice(0, 10);
+  // Convert to the browser's local calendar date, not the UTC date -- an ends_at of
+  // 03:59:59.999 UTC on Sep 1 is still Aug 31 for a US-Eastern admin, so slicing the raw
+  // UTC string would show the wrong day back in the date input.
+  const date = new Date(iso);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 // "YYYY-MM-DD" from a date input is local-calendar, not UTC -- push to end of that

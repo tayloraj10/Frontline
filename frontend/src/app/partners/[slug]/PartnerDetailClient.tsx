@@ -83,6 +83,32 @@ export default function PartnerDetailClient({
         <p className="text-sm text-zinc-300 whitespace-pre-wrap">{business.description}</p>
       )}
 
+      {userId && (
+        <div className="text-sm text-zinc-400">
+          Your balance: <span className="font-semibold text-zinc-100">{points ?? 0} pts</span>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {offers.length === 0 ? (
+          <p className="text-sm text-zinc-500">No active offers from {business.name} right now — check back soon.</p>
+        ) : (
+          offers.map((offer) => (
+            <OfferCard
+              key={offer.id}
+              offer={offer}
+              businessName={business.name}
+              businessSlug={business.slug}
+              locations={locations}
+              userId={userId}
+              userPoints={points}
+              userLocation={userLocation}
+              onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}
+            />
+          ))
+        )}
+      </div>
+
       {locations.map((location) => {
         const address = formatAddress(location);
         return (
@@ -144,31 +170,6 @@ export default function PartnerDetailClient({
         ))}
       </div>
 
-      {userId && (
-        <div className="text-sm text-zinc-400">
-          Your balance: <span className="font-semibold text-zinc-100">{points ?? 0} pts</span>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {offers.length === 0 ? (
-          <p className="text-sm text-zinc-500">No active offers from {business.name} right now — check back soon.</p>
-        ) : (
-          offers.map((offer) => (
-            <OfferCard
-              key={offer.id}
-              offer={offer}
-              businessName={business.name}
-              businessSlug={business.slug}
-              locations={locations}
-              userId={userId}
-              userPoints={points}
-              userLocation={userLocation}
-              onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}
-            />
-          ))
-        )}
-      </div>
     </div>
   );
 }
