@@ -47,6 +47,14 @@ function toDateInputValue(iso: string | null): string {
   return iso.slice(0, 10);
 }
 
+// "YYYY-MM-DD" from a date input is local-calendar, not UTC -- push to end of that
+// local day before converting to UTC so the offer stays live through the whole day
+// regardless of the admin's timezone.
+function endOfLocalDayIso(dateInputValue: string): string {
+  const [year, month, day] = dateInputValue.split("-").map(Number);
+  return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
+}
+
 function isPositiveInteger(value: string): boolean {
   return /^\d+$/.test(value.trim()) && Number(value) > 0;
 }
@@ -148,7 +156,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
       max_total_redemptions: maxTotal.trim() ? Number(maxTotal) : null,
       event_redemption_limit: eventRedemptionLimit.trim() ? Number(eventRedemptionLimit) : null,
       code: code.trim() || null,
-      ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+      ends_at: endsAt ? endOfLocalDayIso(endsAt) : null,
       location_id: locationId || null,
       event_eligible: eventEligible,
     });

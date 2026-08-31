@@ -3035,6 +3035,14 @@ function toDateInputValue(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+// "YYYY-MM-DD" from a date input is local-calendar, not UTC -- the leaderboard range
+// query is a half-open [start, end) window, so both boundaries want the start of that
+// local day converted to UTC, not UTC midnight of the date string itself.
+function startOfLocalDayIso(dateInputValue: string): string {
+  const [year, month, day] = dateInputValue.split("-").map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0).toISOString();
+}
+
 function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
   const [campaignId, setCampaignId] = useState(campaigns.find((c) => c.slug === "trash-war")?.id ?? campaigns[0]?.id ?? "");
   const thisMonday = mostRecentMonday(new Date());
@@ -3060,8 +3068,8 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (startDate) params.set("start", new Date(startDate).toISOString());
-      if (endDate) params.set("end", new Date(endDate).toISOString());
+      if (startDate) params.set("start", startOfLocalDayIso(startDate));
+      if (endDate) params.set("end", startOfLocalDayIso(endDate));
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/campaigns/${campaignId}/leaderboard/range?${params.toString()}`,
       );
@@ -3123,7 +3131,7 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-zinc-500 text-xs tabular-nums shrink-0">#{i + 1}</span>
                   <Link
-                    href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
+                    href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(startOfLocalDayIso(startDate))}&end=${encodeURIComponent(startOfLocalDayIso(endDate))}`}
                     className="text-emerald-400 hover:underline active:text-emerald-300 transition-colors duration-150 text-sm truncate"
                   >
                     {entry.display_name || entry.username || entry.user_id}
@@ -3160,7 +3168,7 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
                     <td className="px-3 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
                     <td className="px-3 py-2">
                       <Link
-                        href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(new Date(startDate).toISOString())}&end=${encodeURIComponent(new Date(endDate).toISOString())}`}
+                        href={`/admin/leaderboard/${campaignId}/${entry.user_id}?start=${encodeURIComponent(startOfLocalDayIso(startDate))}&end=${encodeURIComponent(startOfLocalDayIso(endDate))}`}
                         className="text-emerald-400 hover:underline active:underline"
                       >
                         {entry.display_name || entry.username || entry.user_id}
