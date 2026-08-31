@@ -109,6 +109,30 @@ export default function PartnerDetailClient({
         )}
       </div>
 
+      <div className="flex flex-wrap gap-4 text-sm">
+        {business.website_url && (
+          <a
+            href={business.website_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300"
+          >
+            Website
+          </a>
+        )}
+        {socialEntries.map(([platform, url]) => (
+          <a
+            key={platform}
+            href={url as string}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300 capitalize"
+          >
+            {platform}
+          </a>
+        ))}
+      </div>
+
       {locations.map((location) => {
         const address = formatAddress(location);
         return (
@@ -145,31 +169,6 @@ export default function PartnerDetailClient({
           </div>
         );
       })}
-
-      <div className="flex flex-wrap gap-4 text-sm">
-        {business.website_url && (
-          <a
-            href={business.website_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300"
-          >
-            Website
-          </a>
-        )}
-        {socialEntries.map(([platform, url]) => (
-          <a
-            key={platform}
-            href={url as string}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300 capitalize"
-          >
-            {platform}
-          </a>
-        ))}
-      </div>
-
     </div>
   );
 }
