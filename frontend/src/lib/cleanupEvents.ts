@@ -11,6 +11,12 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function getJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api${path}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<T>;
+}
+
 export type FlaggablePhoto = {
   url: string;
   content_type: "cleanup_log_photo" | "cleanup_event_photo";
@@ -334,13 +340,26 @@ export async function checkInToCleanupEvent({
   joinCode?: string;
   latitude?: number;
   longitude?: number;
-}): Promise<{ id: string; checked_in_at: string; points_awarded: number }> {
+}): Promise<{ id: string; checked_in_at: string; points_awarded: number; first_checkin_bonus: boolean }> {
   return postJson(`/cleanup-events/${cleanupId}/check-in`, {
     user_id: userId,
     join_code: joinCode,
     latitude,
     longitude,
   });
+}
+
+// Preview-only: whether this user would still earn the new-user first-check-in bonus
+// (migration 097_first_action_bonus_points.sql), so the UI can advertise it before they
+// check in. The authoritative check happens again server-side in checkInToCleanupEvent.
+export async function getFirstCheckinBonusEligibility(
+  userId: string,
+): Promise<{ eligible: boolean; extraValue: number }> {
+  const data = await getJson<{
+    first_checkin_bonus_eligible: boolean;
+    first_checkin_bonus_extra_value: number;
+  }>(`/contributions/first-action-bonus-eligibility?user_id=${userId}`);
+  return { eligible: data.first_checkin_bonus_eligible, extraValue: data.first_checkin_bonus_extra_value };
 }
 
 export async function organizerCheckInAttendee({
@@ -351,7 +370,7 @@ export async function organizerCheckInAttendee({
   cleanupId: string;
   organizerUserId: string;
   attendeeUserId: string;
-}): Promise<{ id: string; checked_in_at: string; points_awarded: number }> {
+}): Promise<{ id: string; checked_in_at: string; points_awarded: number; first_checkin_bonus: boolean }> {
   return postJson(`/cleanup-events/${cleanupId}/organizer-check-in`, {
     organizer_user_id: organizerUserId,
     attendee_user_id: attendeeUserId,

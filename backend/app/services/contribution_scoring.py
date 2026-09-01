@@ -24,6 +24,57 @@ class RecordedContribution:
     bonus_spot_event_id: str | None = None
 
 
+async def first_action_bonus_eligibility(db: AsyncSession, *, user_id: UUID | str) -> tuple[bool, bool]:
+    """(first_cleanup_eligible, first_checkin_eligible) read from the cached profiles columns.
+
+    Read-only preview; does not claim anything. See migration
+    098_first_action_bonus_claimed_columns.sql.
+    """
+    result = await db.execute(
+        text("""
+            SELECT first_cleanup_bonus_claimed_at IS NULL, first_checkin_bonus_claimed_at IS NULL
+            FROM profiles WHERE id = :user_id
+        """),
+        {"user_id": str(user_id)},
+    )
+    row = result.fetchone()
+    if row is None:
+        return False, False
+    return bool(row[0]), bool(row[1])
+
+
+async def claim_first_cleanup_bonus(db: AsyncSession, *, user_id: UUID | str) -> bool:
+    """Atomically claim the first-cleanup bonus for this user.
+
+    Returns True if this call is the one that claimed it (award the bonus); False if it
+    was already claimed. The atomic UPDATE...WHERE...IS NULL closes a race a plain
+    "SELECT then INSERT" eligibility check would have: two concurrent first submissions
+    could otherwise both read "not claimed yet" before either row exists.
+    """
+    result = await db.execute(
+        text("""
+            UPDATE profiles SET first_cleanup_bonus_claimed_at = NOW()
+            WHERE id = :user_id AND first_cleanup_bonus_claimed_at IS NULL
+            RETURNING id
+        """),
+        {"user_id": str(user_id)},
+    )
+    return result.fetchone() is not None
+
+
+async def claim_first_checkin_bonus(db: AsyncSession, *, user_id: UUID | str) -> bool:
+    """Same as claim_first_cleanup_bonus, for the first-event-checkin bonus."""
+    result = await db.execute(
+        text("""
+            UPDATE profiles SET first_checkin_bonus_claimed_at = NOW()
+            WHERE id = :user_id AND first_checkin_bonus_claimed_at IS NULL
+            RETURNING id
+        """),
+        {"user_id": str(user_id)},
+    )
+    return result.fetchone() is not None
+
+
 async def record_contribution(
     db: AsyncSession,
     *,
