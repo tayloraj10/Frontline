@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.routes.partners import EVENT_CHECKIN_DEFAULT_DURATION, EVENT_OFFER_REDEMPTION_WINDOW
 from app.core.config import settings as app_settings
 from app.db.database import get_db
-from app.services.contribution_scoring import record_contribution
+from app.services.contribution_scoring import claim_first_checkin_bonus, record_contribution
 from app.services.email import send_email, format_event_datetime, render_group_logo, render_cta_button, wrap_email_html
 from app.services.event_permissions import (
     is_group_admin as _is_group_admin,
@@ -1204,8 +1204,13 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
     row = result.fetchone()
 
     points_awarded = 0.0
+    first_checkin_bonus = False
     if row.just_checked_in:
-        points_awarded = settings.get("cleanup_event_checkin_value", 5)
+        # First-ever check-in (any event) earns double, as a new-user hook; see
+        # migrations 097_first_action_bonus_points.sql and
+        # 098_first_action_bonus_claimed_columns.sql.
+        first_checkin_bonus = await claim_first_checkin_bonus(db, user_id=payload.user_id)
+        points_awarded = settings.get("cleanup_event_checkin_value", 5) * (2 if first_checkin_bonus else 1)
         credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, payload.user_id)
         await record_contribution(
             db,
@@ -1222,7 +1227,12 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
 
     await db.commit()
 
-    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat(), "points_awarded": points_awarded}
+    return {
+        "id": str(row.id),
+        "checked_in_at": row.checked_in_at.isoformat(),
+        "points_awarded": points_awarded,
+        "first_checkin_bonus": first_checkin_bonus,
+    }
 
 
 @router.post("/{cleanup_id}/organizer-check-in")
@@ -1253,9 +1263,11 @@ async def organizer_check_in_attendee(cleanup_id: UUID, payload: OrganizerCheckI
     row = result.fetchone()
 
     points_awarded = 0.0
+    first_checkin_bonus = False
     if row.just_checked_in:
         settings = await get_game_settings(db)
-        points_awarded = settings.get("cleanup_event_checkin_value", 5)
+        first_checkin_bonus = await claim_first_checkin_bonus(db, user_id=payload.attendee_user_id)
+        points_awarded = settings.get("cleanup_event_checkin_value", 5) * (2 if first_checkin_bonus else 1)
         credit_group_id = await _group_for_credit(db, event.group_id, cleanup_id, payload.attendee_user_id)
         await record_contribution(
             db,
@@ -1273,7 +1285,12 @@ async def organizer_check_in_attendee(cleanup_id: UUID, payload: OrganizerCheckI
 
     await db.commit()
 
-    return {"id": str(row.id), "checked_in_at": row.checked_in_at.isoformat(), "points_awarded": points_awarded}
+    return {
+        "id": str(row.id),
+        "checked_in_at": row.checked_in_at.isoformat(),
+        "points_awarded": points_awarded,
+        "first_checkin_bonus": first_checkin_bonus,
+    }
 
 
 @router.post("/{cleanup_id}/log-for-attendee")
@@ -1586,6 +1603,7 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
 
         if user_id in not_yet_checked_in:
             newly_checked_in_count += 1
+            first_checkin_bonus = await claim_first_checkin_bonus(db, user_id=user_id)
             await record_contribution(
                 db,
                 user_id=user_id,
@@ -1595,7 +1613,7 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
                 cleanup_id=None,
                 cleanup_event_id=str(cleanup_id),
                 contribution_type="cleanup_event_checkin",
-                value=checkin_value,
+                value=checkin_value * (2 if first_checkin_bonus else 1),
                 apply_multiplier=False,
             )
 

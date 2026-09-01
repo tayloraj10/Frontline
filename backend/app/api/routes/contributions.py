@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.services.contribution_scoring import first_action_bonus_eligibility
 from app.services.game_settings import get_game_settings
 
 router = APIRouter(prefix="/contributions", tags=["contributions"])
@@ -163,6 +164,27 @@ async def get_nearby_hotspot(
     }
 
 
+@router.get("/first-action-bonus-eligibility")
+async def get_first_action_bonus_eligibility(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Preview whether a user still qualifies for the new-user first-action bonuses, so the
+    frontend can advertise them before the user acts (rather than only revealing them after
+    the fact). See migrations 097_first_action_bonus_points.sql and
+    098_first_action_bonus_claimed_columns.sql.
+    """
+    settings = await get_game_settings(db)
+    first_cleanup_eligible, first_checkin_eligible = await first_action_bonus_eligibility(db, user_id=user_id)
+    return {
+        "first_cleanup_bonus_eligible": first_cleanup_eligible,
+        "first_cleanup_bonus_value": settings.get("first_cleanup_bonus_value", 10),
+        "first_checkin_bonus_eligible": first_checkin_eligible,
+        "first_checkin_bonus_extra_value": settings.get("cleanup_event_checkin_value", 5),
+    }
+
+
 @router.post("/submit")
 async def submit_contribution(
     payload: ContributionRequest,
@@ -175,7 +197,7 @@ async def submit_contribution(
     point-in-polygon. Called directly from the frontend.
     """
     from app.api.routes.events import _evaluate_triggers
-    from app.services.contribution_scoring import record_contribution
+    from app.services.contribution_scoring import claim_first_cleanup_bonus, record_contribution
 
     settings = await get_game_settings(db)
     has_location = payload.latitude is not None and payload.longitude is not None
@@ -462,6 +484,12 @@ async def submit_contribution(
             hotspot_cleared = True
             challenge_bonus_applied = True
 
+    # Atomically claims profiles.first_cleanup_bonus_claimed_at, so it's the single source
+    # of truth for whether this call gets the bonus even under concurrent submissions.
+    is_first_cleanup = payload.contribution_type == "cleanup" and await claim_first_cleanup_bonus(
+        db, user_id=payload.user_id
+    )
+
     recorded = await record_contribution(
         db,
         user_id=payload.user_id,
@@ -518,6 +546,24 @@ async def submit_contribution(
             },
         )
 
+    # New-user hook: a one-time fixed bonus on a user's first-ever individually-logged
+    # cleanup (any campaign), awarded as its own side-credit contribution so it shows
+    # separately in activity history without touching the bag/pound points math on the
+    # real 'cleanup' row. See migration 097_first_action_bonus_points.sql.
+    first_cleanup_bonus_points = settings.get("first_cleanup_bonus_value", 10) if is_first_cleanup else 0
+    if is_first_cleanup:
+        await record_contribution(
+            db,
+            user_id=payload.user_id,
+            campaign_id=payload.campaign_id,
+            group_id=payload.group_id,
+            geo_unit_id=None,
+            cleanup_id=None,
+            contribution_type="first_cleanup_bonus",
+            value=first_cleanup_bonus_points,
+            apply_multiplier=False,
+        )
+
     # Only the Solarpunk -> Trash War redirect (`ref=solarpunk`) earns this hex credit, and
     # only for an individually-logged cleanup — not group/team-total logs (a different entry
     # point entirely; see contribution_scoring.record_contribution's docstring) and not the
@@ -571,6 +617,7 @@ async def submit_contribution(
         "cleanup_id": cleanup_id,
         "contribution_id": recorded.contribution_id,
         "team_event_excluded_reason": team_event_excluded_reason,
+        "first_cleanup_bonus_points": first_cleanup_bonus_points or None,
     }
 
 

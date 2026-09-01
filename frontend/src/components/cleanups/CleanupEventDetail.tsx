@@ -6,6 +6,7 @@ import {
   getCleanupEvent,
   rsvpToCleanupEvent,
   checkInToCleanupEvent,
+  getFirstCheckinBonusEligibility,
   organizerCheckInAttendee,
   logForAttendee,
   logTeamTotal,
@@ -141,6 +142,8 @@ export default function CleanupEventDetail({
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [checkInPointsAwarded, setCheckInPointsAwarded] = useState<number | null>(null);
+  const [firstCheckinBonus, setFirstCheckinBonus] = useState(false);
+  const [firstCheckinBonusPreview, setFirstCheckinBonusPreview] = useState<number | null>(null);
   const [recentCheckinPoints, setRecentCheckinPoints] = useState<Record<string, number>>({});
   const [previewAsAttendee, setPreviewAsAttendee] = useState(false);
   const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
@@ -157,6 +160,8 @@ export default function CleanupEventDetail({
   };
   const { values: eventSettingValues } = useGameSettings(["cleanup_event_checkin_value", "email_attendee_reminder_enabled"]);
   const checkinPointValue = eventSettingValues.cleanup_event_checkin_value;
+  const totalCheckinPointValue =
+    checkinPointValue !== undefined ? checkinPointValue + (firstCheckinBonusPreview ?? 0) : undefined;
   const attendeeReminderEnabled = eventSettingValues.email_attendee_reminder_enabled === 1;
 
   const viewerCheckedInInitial = !!initialEvent.viewer_rsvp?.checked_in_at;
@@ -182,6 +187,25 @@ export default function CleanupEventDetail({
       { maximumAge: 60000, timeout: 10000 }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, viewerCheckedInInitial]);
+
+  // Advertise the new-user first-check-in bonus (migration 097) before the user checks in,
+  // rather than only revealing it after. Preview only; the authoritative check happens
+  // again server-side in checkInToCleanupEvent.
+  useEffect(() => {
+    if (!userId || viewerCheckedInInitial) {
+      setFirstCheckinBonusPreview(null);
+      return;
+    }
+    let cancelled = false;
+    getFirstCheckinBonusEligibility(userId)
+      .then(({ eligible, extraValue }) => {
+        if (!cancelled) setFirstCheckinBonusPreview(eligible ? extraValue : null);
+      })
+      .catch(() => { });
+    return () => {
+      cancelled = true;
+    };
   }, [userId, viewerCheckedInInitial]);
 
   const refresh = async () => {
@@ -218,6 +242,7 @@ export default function CleanupEventDetail({
           });
           if (result.points_awarded > 0) {
             setCheckInPointsAwarded(result.points_awarded);
+            setFirstCheckinBonus(result.first_checkin_bonus);
             refreshUserPoints(userId);
           }
           await refresh();
@@ -242,6 +267,7 @@ export default function CleanupEventDetail({
       const result = await checkInToCleanupEvent({ cleanupId: event.id, userId, joinCode: joinCodeInput.trim() });
       if (result.points_awarded > 0) {
         setCheckInPointsAwarded(result.points_awarded);
+        setFirstCheckinBonus(result.first_checkin_bonus);
         refreshUserPoints(userId);
       }
       await refresh();
@@ -642,6 +668,7 @@ export default function CleanupEventDetail({
                   ✓ Checked in
                   {(event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded ?? 0) > 0 &&
                     ` · +${event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded} pts`}
+                  {firstCheckinBonus && " (first check-in bonus!)"}
                 </span>
               )}
             </div>
@@ -674,7 +701,8 @@ export default function CleanupEventDetail({
             {!viewerCheckedIn && (
               <div className="pt-2 border-t border-zinc-800 space-y-2">
                 <p className="text-xs text-emerald-400/80 font-medium">
-                  🏅 Earn <SettingValue value={checkinPointValue} loading={checkinPointValue === undefined} /> points for checking in
+                  🏅 Earn <SettingValue value={totalCheckinPointValue} loading={totalCheckinPointValue === undefined} /> points for checking in
+                  {firstCheckinBonusPreview ? " (first check-in bonus: doubled!)" : ""}
                 </p>
                 <button
                   onClick={handleCheckInWithLocation}

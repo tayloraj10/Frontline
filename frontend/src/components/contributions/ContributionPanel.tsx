@@ -689,6 +689,8 @@ function ContributeModal({
   const [teamEventExcludedReason, setTeamEventExcludedReason] = useState<string | null>(null);
   const [hotspotCleared, setHotspotCleared] = useState(false);
   const [submittedContributionId, setSubmittedContributionId] = useState<string | null>(null);
+  const [firstCleanupBonusPoints, setFirstCleanupBonusPoints] = useState<number | null>(null);
+  const [firstCleanupBonusPreview, setFirstCleanupBonusPreview] = useState<number | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [undone, setUndone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -759,6 +761,7 @@ function ContributeModal({
   const challengeMultiplier = isCleanup && claimedReportId ? gameSettings.claim_challenge_multiplier ?? 1 : 1;
   const combinedMultiplier = Math.max(effectiveMultiplier?.multiplier ?? 1, challengeMultiplier);
   const finalValue = baseValue * combinedMultiplier;
+  const displayValue = finalValue + (firstCleanupBonusPreview ?? 0);
 
   // Flash the territory-value number whenever a hotspot bonus kicks it up, so the
   // extra points are legible as an event, not just a bigger static number.
@@ -792,6 +795,28 @@ function ContributeModal({
       .catch(() => { });
     return () => controller.abort();
   }, [isCleanup, isRouteMode, campaignId, submitCoords?.latitude, submitCoords?.longitude, claimedReportId]);
+
+  // Advertise the new-user first-cleanup bonus (migration 097) up front, so it reads as an
+  // incentive rather than a surprise buried in the success screen. Fetched once per mount;
+  // this is a preview only, the authoritative eligibility check happens again server-side
+  // at submit time.
+  useEffect(() => {
+    if (!isCleanup || !userId) {
+      setFirstCleanupBonusPreview(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(
+      `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/first-action-bonus-eligibility?user_id=${userId}`,
+      { signal: controller.signal },
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) =>
+        setFirstCleanupBonusPreview(data?.first_cleanup_bonus_eligible ? data.first_cleanup_bonus_value : null),
+      )
+      .catch(() => { });
+    return () => controller.abort();
+  }, [isCleanup, userId]);
 
   // Check whether the submit location is inside an active boss-spawn hotspot, so the
   // dialog can show the same score multiplier that /contributions/submit will apply.
@@ -966,6 +991,7 @@ function ContributeModal({
         cleanup_id?: string;
         contribution_id?: string;
         team_event_excluded_reason?: string | null;
+        first_cleanup_bonus_points?: number | null;
       };
 
       onContributionSubmitted?.(
@@ -984,6 +1010,7 @@ function ContributeModal({
       setHotspotCleared(Boolean(data.hotspot_cleared));
       setSubmittedContributionId(data.contribution_id ?? null);
       setTeamEventExcludedReason(data.team_event_excluded_reason ?? null);
+      setFirstCleanupBonusPoints(data.first_cleanup_bonus_points ?? null);
       setResult((isPhoto || data.claimed_territory) ? "success" : "outside");
       // Re-read the authoritative balance (rather than computing the delta client-side,
       // which would need to duplicate the trigger's multiplier/hotspot/event-mode logic)
@@ -1067,6 +1094,11 @@ function ContributeModal({
           {isCleanup && isTeamEventMode && (
             <p className="text-sm text-emerald-400 font-semibold text-center">🏁 Counted toward {joinedTeamEvent?.title}</p>
           )}
+          {isCleanup && firstCleanupBonusPoints ? (
+            <p className="text-sm text-emerald-400 font-semibold text-center">
+              🎉 First cleanup bonus! +{firstCleanupBonusPoints} pts
+            </p>
+          ) : null}
           {isCleanup && fromSolarpunk && (
             <>
               <p className="text-xs text-lime-400 text-center">+<SettingValue value={gameSettings.trash_war_solarpunk_credit} loading={settingsLoading} /> Solarpunk bloom points earned 🌱</p>
@@ -1488,14 +1520,14 @@ function ContributeModal({
                 <SettingValue value={undefined} loading={settingsLoading} />
               ) : (
                 <>
-                  {combinedMultiplier > 1 && (
+                  {(combinedMultiplier > 1 || firstCleanupBonusPreview) && (
                     <span className="line-through text-zinc-600 mr-1.5">{formatPoints(baseValue)}</span>
                   )}
                   <span
                     className={`text-lg font-bold inline-block transition-transform duration-300 ${combinedMultiplier > 1 ? "text-orange-400" : "text-emerald-400"
                       } ${valueFlash ? "scale-125" : "scale-100"}`}
                   >
-                    {formatPoints(finalValue)}
+                    {formatPoints(displayValue)}
                   </span>
                   {combinedMultiplier > 1 ? (
                     <span className="ml-1 text-orange-400/80">
@@ -1507,6 +1539,11 @@ function ContributeModal({
                 </>
               )}
             </p>
+            {firstCleanupBonusPreview ? (
+              <p className="mt-1 text-xs text-emerald-400 font-semibold">
+                🎉 Includes a +{firstCleanupBonusPreview} pt first cleanup bonus
+              </p>
+            ) : null}
             <div className="mt-3">
               <label className={`block text-[11px] mb-1 ${isEventMode && !pounds.trim() ? "text-amber-400" : "text-zinc-600"}`}>
                 Pounds cleaned up (optional){isEventMode && !pounds.trim() ? " — helps the event's total!" : ""}
