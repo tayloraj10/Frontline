@@ -90,6 +90,7 @@ export type CleanupEventDetailData = {
   volume_bonus_applied: boolean;
   reports_cleared_count: number;
   report_clear_bonus_value: number;
+  attendee_route_count: number;
   photos: FlaggablePhoto[];
   external_link: string | null;
   check_in_window_start: string | null;
@@ -586,6 +587,32 @@ export type NearbyReport = {
   longitude: number;
   distance_m: number;
 };
+
+export type EventAttendeeRoute = {
+  id: string;
+  route: RouteLineString;
+  route_photos: { url: string; lat: number; lng: number; taken_at?: string | null }[];
+  route_distance_meters: number | null;
+  metrics_small_bags: number | null;
+  metrics_large_bags: number | null;
+  metrics_pounds: number | null;
+  image_urls: string[];
+  created_at: string | null;
+  submitted_by: {
+    user_id: string | null;
+    username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+  };
+};
+
+export async function getEventAttendeeRoutes(cleanupId: string): Promise<EventAttendeeRoute[]> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/cleanup-events/${cleanupId}/routes`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<EventAttendeeRoute[]>;
+}
 
 export async function getNearbyReports({
   cleanupId,

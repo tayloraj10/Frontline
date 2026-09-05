@@ -756,6 +756,17 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "cleanup_event_report_clear_bonus_points", 3
     )
 
+    # Count only, for the "View routes & photos (N)" link — the routes themselves are
+    # fetched separately by list_event_attendee_routes when that page is opened.
+    attendee_route_count = await db.scalar(
+        text("""
+            SELECT COUNT(*) FROM contributions c
+            JOIN cleanups cl ON cl.id = c.cleanup_id
+            WHERE c.cleanup_event_id = :cleanup_id AND cl.route IS NOT NULL
+        """),
+        {"cleanup_id": str(cleanup_id)},
+    )
+
     # Volume bonus only applies to the team-total path (see log_team_total), so this
     # previews it off the event's own metrics_* columns plus the report-clear bonus, not
     # the full aggregate above which also includes individually self-logged contributions.
@@ -887,6 +898,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "volume_bonus_applied": volume_bonus_applied,
         "reports_cleared_count": reports_cleared_count,
         "report_clear_bonus_value": report_clear_bonus_value,
+        "attendee_route_count": attendee_route_count,
         "photos": all_photos,
         "external_link": row.external_link,
         "logging_mode": row.logging_mode,
@@ -1132,6 +1144,53 @@ async def add_event_photos(cleanup_id: UUID, payload: AddEventPhotosRequest, db:
     await db.commit()
 
     return {"added": len(payload.photo_urls)}
+
+
+@router.get("/{cleanup_id}/routes")
+async def list_event_attendee_routes(cleanup_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Every attendee-submitted (GPS-tracked) route tied to this event, for the
+    "Routes & Photos" aggregation view — distinct from the event's own definition
+    route (returned by get_cleanup_event) and from list_campaign_cleanup_routes'
+    campaign-wide map layer. A person could in principle submit more than one route
+    across an event, so this returns one row per submission, not deduped per user."""
+    await _get_event_or_404(db, cleanup_id)
+
+    result = await db.execute(
+        text("""
+            SELECT
+                cl.id, ST_AsGeoJSON(cl.route)::json AS route, cl.route_photos,
+                ST_Length(cl.route::geography) AS route_distance_meters,
+                cl.metrics_small_bags, cl.metrics_large_bags, cl.metrics_pounds,
+                cl.image_urls, cl.created_at,
+                p.id AS user_id, p.username, p.display_name, p.avatar_url
+            FROM contributions c
+            JOIN cleanups cl ON cl.id = c.cleanup_id
+            LEFT JOIN profiles p ON p.id = c.user_id
+            WHERE c.cleanup_event_id = :cleanup_id AND cl.route IS NOT NULL
+            ORDER BY cl.created_at ASC
+        """),
+        {"cleanup_id": str(cleanup_id)},
+    )
+    return [
+        {
+            "id": str(row.id),
+            "route": row.route,
+            "route_photos": row.route_photos or [],
+            "route_distance_meters": round(row.route_distance_meters, 1) if row.route_distance_meters is not None else None,
+            "metrics_small_bags": row.metrics_small_bags,
+            "metrics_large_bags": row.metrics_large_bags,
+            "metrics_pounds": float(row.metrics_pounds) if row.metrics_pounds is not None else None,
+            "image_urls": row.image_urls or [],
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "submitted_by": {
+                "user_id": str(row.user_id) if row.user_id else None,
+                "username": row.username,
+                "display_name": row.display_name,
+                "avatar_url": row.avatar_url,
+            },
+        }
+        for row in result.fetchall()
+    ]
 
 
 @router.post("/{cleanup_id}/check-in")

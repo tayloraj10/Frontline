@@ -277,6 +277,11 @@ interface ContributionPanelProps {
   onStyleChange?: (id: string) => void;
   pendingCleanupEventId?: string | null;
   onPendingCleanupEventConsumed?: () => void;
+  // Set alongside pendingCleanupEventId when the caller (e.g. a group event's "Track my
+  // route" button) wants the contribute modal to open directly in Track mode instead of
+  // the default Point mode. Only honored when isSiteAdmin is also true.
+  forceTrackMode?: boolean;
+  onForceTrackModeConsumed?: () => void;
   nearbyCleanupEvent?: {
     id: string;
     title: string;
@@ -520,6 +525,8 @@ function ContributeModal({
   prefillPhotoUrls,
   isSiteAdmin,
   routeTracking,
+  forceTrackMode,
+  onForceTrackModeConsumed,
 }: {
   campaignId: string;
   campaignContributionType: string;
@@ -564,6 +571,11 @@ function ContributeModal({
   // survives this modal being closed/reopened (navigating back to the main map, an
   // accidental dismiss, or the resume chip re-entering Track mode mid-session).
   routeTracking: RouteTrackingSession;
+  // Set alongside nearbyEvent when the caller (e.g. a group event's "Track my route"
+  // button) wants this modal to open directly in Track mode rather than defaulting to
+  // Point. Only takes effect when isSiteAdmin is also true.
+  forceTrackMode?: boolean;
+  onForceTrackModeConsumed?: () => void;
 }) {
   const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
@@ -602,7 +614,7 @@ function ContributeModal({
   // chip (ContributeModal remounts fresh each time mode goes back to "contribute", so this
   // needs to read routeTracking.active at that moment rather than always defaulting to "point").
   const [contributeMode, setContributeMode] = useState<"point" | "route" | "track">(
-    routeTracking.active ? "track" : "point",
+    routeTracking.active || (forceTrackMode && isSiteAdmin) ? "track" : "point",
   );
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [intersectingUnits, setIntersectingUnits] = useState<IntersectingGeoUnit[]>([]);
@@ -651,6 +663,16 @@ function ContributeModal({
   const handleTrackRouteConfirmed = (coordinates: [number, number][], photos: CapturedRoutePhoto[]) => {
     hydrateTrackRoute(coordinates, photos);
   };
+
+  // Mirrors the Track tab's own onClick (below) for callers that need the modal to open
+  // straight into Track mode, e.g. a group event's "Track my route" button.
+  useEffect(() => {
+    if (!forceTrackMode || !isSiteAdmin) return;
+    setContributeMode("track");
+    if (routeTracking.phase === "idle") routeTracking.openTracker();
+    onForceTrackModeConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceTrackMode, isSiteAdmin]);
 
   // routeTracking.confirm() deliberately no longer resets itself (see the comment on confirm
   // in useRouteTracking.ts) specifically so this can happen: ContributeModal remounts fresh
@@ -4033,6 +4055,8 @@ export default function ContributionPanel({
   onStyleChange,
   pendingCleanupEventId,
   onPendingCleanupEventConsumed,
+  forceTrackMode,
+  onForceTrackModeConsumed,
   nearbyCleanupEvent,
   activeTeamEvent,
   clickedReport,
@@ -4433,6 +4457,8 @@ export default function ContributionPanel({
               claimedReportId={claimedReportIdForContribute}
               prefillPhotoUrls={claimedPhotoUrlsForContribute}
               routeTracking={routeTracking}
+              forceTrackMode={forceTrackMode}
+              onForceTrackModeConsumed={onForceTrackModeConsumed}
             />
           )}
         </div>

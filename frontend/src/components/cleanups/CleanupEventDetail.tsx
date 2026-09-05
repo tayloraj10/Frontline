@@ -37,6 +37,7 @@ import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
+import { isIOSNative } from "@/lib/capacitor";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -126,9 +127,11 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 export default function CleanupEventDetail({
   initialEvent,
   userId,
+  isSiteAdmin = false,
 }: {
   initialEvent: CleanupEventDetailData;
   userId: string | null;
+  isSiteAdmin?: boolean;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const [rsvpLoading, setRsvpLoading] = useState(false);
@@ -753,6 +756,17 @@ export default function CleanupEventDetail({
                 Log your cleanup on the map
               </Link>
             )}
+            {event.logging_mode !== "organizer_total" &&
+              (isIOSNative() || process.env.NODE_ENV !== "production") &&
+              isSiteAdmin && (
+                <Link
+                  href={`/campaigns/${event.campaign_slug}?track_event=${event.id}`}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-sky-700/60 text-sky-300 hover:bg-sky-950/30 active:bg-sky-950/30 active:scale-[0.97] rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  <span aria-hidden="true">🛰️</span>
+                  Track my route
+                </Link>
+              )}
           </div>
         );
 
@@ -1081,6 +1095,15 @@ export default function CleanupEventDetail({
           </div>
         );
 
+        const routesLinkSection = event.attendee_route_count > 0 && (
+          <Link
+            href={`/cleanup-events/${event.id}/routes`}
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 active:border-zinc-500 active:text-zinc-100 active:scale-[0.97] rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation"
+          >
+            🗺️ View routes &amp; photos ({event.attendee_route_count})
+          </Link>
+        );
+
         if (effectiveIsOrganizer && !isCancelled && viewMode === "guided") {
           const attendeesStepIndex = 2 + (logSection ? 1 : 0);
           const manageAttendeesNote = (
@@ -1097,7 +1120,11 @@ export default function CleanupEventDetail({
             { key: "clean", label: "Do the cleanup", content: doCleanupSection },
             ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
             { key: "attendees", label: "Manage attendee data", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
-            ...(photosSection ? [{ key: "photos", label: "Photos", content: photosSection as React.ReactNode }] : []),
+            ...(photosSection
+              ? [{ key: "photos", label: "Photos", content: <>{photosSection}{routesLinkSection}</> as React.ReactNode }]
+              : routesLinkSection
+                ? [{ key: "photos", label: "Photos", content: routesLinkSection as React.ReactNode }]
+                : []),
           ];
           const activeStepIndex = Math.min(guidedStep, steps.length - 1);
           const prevNextRow = (
@@ -1159,6 +1186,7 @@ export default function CleanupEventDetail({
             {logSection}
             {attendeesSection}
             {photosSection}
+            {routesLinkSection}
           </>
         );
       })()}
