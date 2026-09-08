@@ -5,11 +5,12 @@ import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { isIOSNative } from "@/lib/capacitor";
+import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import { formatPoints } from "@/lib/formatPoints";
+import { uploadToR2 } from "@/lib/uploadToR2";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
 import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString, type RoutePhoto } from "@/lib/cleanupRoutes";
 import { PhotoCaptureInput } from "@/components/contributions/photoCapture";
@@ -257,7 +258,6 @@ interface ContributionPanelProps {
   userId: string | null;
   userGroups?: { id: string; name: string; image_url?: string | null; isAdmin?: boolean }[];
   // Site-wide admin flag (profiles.is_admin) — distinct from the per-group isAdmin above.
-  // Currently only used to gate the still-in-progress "Track" logging mode.
   isSiteAdmin?: boolean;
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
@@ -279,7 +279,7 @@ interface ContributionPanelProps {
   onPendingCleanupEventConsumed?: () => void;
   // Set alongside pendingCleanupEventId when the caller (e.g. a group event's "Track my
   // route" button) wants the contribute modal to open directly in Track mode instead of
-  // the default Point mode. Only honored when isSiteAdmin is also true.
+  // the default Point mode.
   forceTrackMode?: boolean;
   onForceTrackModeConsumed?: () => void;
   nearbyCleanupEvent?: {
@@ -424,28 +424,6 @@ function useGPS(
   return { coords, status, errorCode, capture, reset };
 }
 
-// ─── Presign + upload to R2 ──────────────────────────────────────────────────
-
-async function uploadToR2(file: File): Promise<string> {
-  const params = new URLSearchParams({ filename: file.name, content_type: file.type });
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/upload/presign?${params}`,
-  );
-  if (!res.ok) throw new Error("Failed to get upload URL");
-  const { upload_url, public_url } = (await res.json()) as {
-    upload_url: string;
-    public_url: string;
-  };
-
-  const put = await fetch(upload_url, {
-    method: "PUT",
-    body: file,
-    headers: { "Content-Type": file.type },
-  });
-  if (!put.ok) throw new Error("Photo upload failed");
-
-  return public_url;
-}
 
 // ─── GPS status indicator ─────────────────────────────────────────────────────
 
@@ -564,8 +542,6 @@ function ContributeModal({
   // Before/after photos already captured (and uploaded to R2) during the claim challenge —
   // prefilled here so the user isn't asked to retake/reselect photos they just took.
   prefillPhotoUrls?: string[];
-  // Gates the still-in-progress live route "Track" mode to site admins only, ahead of a
-  // full rollout — see profiles.is_admin.
   isSiteAdmin?: boolean;
   // Owned by the outer, always-mounted ContributionPanel so a live tracking session
   // survives this modal being closed/reopened (navigating back to the main map, an
@@ -573,7 +549,7 @@ function ContributeModal({
   routeTracking: RouteTrackingSession;
   // Set alongside nearbyEvent when the caller (e.g. a group event's "Track my route"
   // button) wants this modal to open directly in Track mode rather than defaulting to
-  // Point. Only takes effect when isSiteAdmin is also true.
+  // Point.
   forceTrackMode?: boolean;
   onForceTrackModeConsumed?: () => void;
 }) {
@@ -614,7 +590,7 @@ function ContributeModal({
   // chip (ContributeModal remounts fresh each time mode goes back to "contribute", so this
   // needs to read routeTracking.active at that moment rather than always defaulting to "point").
   const [contributeMode, setContributeMode] = useState<"point" | "route" | "track">(
-    routeTracking.active || (forceTrackMode && isSiteAdmin) ? "track" : "point",
+    routeTracking.active || forceTrackMode ? "track" : "point",
   );
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [intersectingUnits, setIntersectingUnits] = useState<IntersectingGeoUnit[]>([]);
@@ -667,12 +643,12 @@ function ContributeModal({
   // Mirrors the Track tab's own onClick (below) for callers that need the modal to open
   // straight into Track mode, e.g. a group event's "Track my route" button.
   useEffect(() => {
-    if (!forceTrackMode || !isSiteAdmin) return;
+    if (!forceTrackMode) return;
     setContributeMode("track");
     if (routeTracking.phase === "idle") routeTracking.openTracker();
     onForceTrackModeConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forceTrackMode, isSiteAdmin]);
+  }, [forceTrackMode]);
 
   // routeTracking.confirm() deliberately no longer resets itself (see the comment on confirm
   // in useRouteTracking.ts) specifically so this can happen: ContributeModal remounts fresh
@@ -758,6 +734,12 @@ function ContributeModal({
   }, [isEventMode, nearbyEvent, userGroups]);
 
   const isRouteMode = isCleanup && (contributeMode === "route" || contributeMode === "track");
+
+  // Tracked routes against a team-log (organizer_total) event are purely a fun,
+  // decorative comparison — they never contribute to the team's official total,
+  // so they skip bag/pound metrics entirely rather than being blocked outright.
+  const isDecorativeTeamTrack =
+    isRouteMode && contributeMode === "track" && !!nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total";
 
   // Route mode's multiplier comes from whichever zip the user has chosen to credit, using
   // the per-zip active_multiplier data returned alongside the intersecting-zips lookup —
@@ -921,12 +903,12 @@ function ContributeModal({
     if (isRouteMode) {
       if (!route || !selectedRouteGeoUnitId) return false;
     } else if ((isCleanup || isPhoto) && !submitCoords) return false;
-    if (isCleanup && (smallBagsNum < 0 || largeBagsNum < 0 || Number(pounds || 0) < 0)) return false;
-    if (isCleanup && smallBagsNum + largeBagsNum <= 0) return false;
+    if (isCleanup && !isDecorativeTeamTrack && (smallBagsNum < 0 || largeBagsNum < 0 || Number(pounds || 0) < 0)) return false;
+    if (isCleanup && !isDecorativeTeamTrack && smallBagsNum + largeBagsNum <= 0) return false;
     if (isPhoto && photos.length === 0) return false;
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
-    if (isCleanup && nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total") return false;
+    if (isCleanup && !isDecorativeTeamTrack && nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total") return false;
     if (isTeamEventMode && joinedTeamEvent?.requires_photo && photos.length === 0 && existingPhotoUrls.length === 0) return false;
     return true;
   })();
@@ -961,7 +943,9 @@ function ContributeModal({
       // canSubmit already requires bagValuesReady for cleanups, so these are guaranteed
       // defined by the time handleSubmit can run.
       const value = isCleanup
-        ? cleanupValue(smallBagsNum, largeBagsNum, gameSettings.small_bag_value!, gameSettings.large_bag_value!)
+        ? isDecorativeTeamTrack
+          ? 0
+          : cleanupValue(smallBagsNum, largeBagsNum, gameSettings.small_bag_value!, gameSettings.large_bag_value!)
         : 1;
       const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
 
@@ -976,10 +960,12 @@ function ContributeModal({
       };
 
       if (isCleanup) {
-        body.small_bags = smallBagsNum;
-        body.large_bags = largeBagsNum;
+        if (!isDecorativeTeamTrack) {
+          body.small_bags = smallBagsNum;
+          body.large_bags = largeBagsNum;
+          if (pounds.trim()) body.pounds = Number(pounds);
+        }
         if (photoUrls.length > 1) body.photo_urls = photoUrls;
-        if (pounds.trim()) body.pounds = Number(pounds);
         if (nearbyReport && resolveHotspot) body.resolve_report_id = nearbyReport.id;
         if (claimedReportId) body.claimed_report_id = claimedReportId;
         if (fromSolarpunk) body.from_solarpunk_redirect = true;
@@ -1189,6 +1175,24 @@ function ContributeModal({
   const modeAndLocationSection = (
     <>
       {isCleanup && nearbyEvent && nearbyEvent.logging_mode === "organizer_total" ? (
+          contributeMode === "track" ? (
+            <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-violet-700/60 bg-violet-950/30 text-xs text-violet-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useNearbyEvent}
+                onChange={(e) => setUseNearbyEvent(e.target.checked)}
+                className="mt-0.5 shrink-0"
+              />
+              <span>
+                🛰️ You&apos;re at the event{" "}
+                <span className="font-semibold text-violet-200">{nearbyEvent.title}</span>. Your tracked route is just
+                for fun, it won&apos;t count toward the team&apos;s total or need any bags/pounds.
+                <span className="block text-violet-400/70 mt-0.5">
+                  Uncheck this to log a separate, unrelated route instead.
+                </span>
+              </span>
+            </label>
+          ) : (
           <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-300 cursor-pointer">
             <input
               type="checkbox"
@@ -1205,6 +1209,7 @@ function ContributeModal({
               </span>
             </span>
           </label>
+          )
         ) : isCleanup && nearbyEvent && (
           <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
             <input
@@ -1311,7 +1316,7 @@ function ContributeModal({
               >
                 🛤️ Route
               </button>
-              {(isIOSNative() || process.env.NODE_ENV !== "production") && isSiteAdmin && (
+              {(hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1324,6 +1329,9 @@ function ContributeModal({
                     }`}
                 >
                   🛰️ Track
+                  <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                    BETA
+                  </span>
                 </button>
               )}
             </div>
@@ -1512,8 +1520,14 @@ function ContributeModal({
           </div>
         )}
 
-        {/* Bags count (cleanup only) */}
-        {isCleanup && (
+        {/* Bags count (cleanup only, skipped for decorative team-log route tracking) */}
+        {isCleanup && isDecorativeTeamTrack && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
+            <span aria-hidden="true">🛰️</span>
+            Just the route, no bag/pound metrics needed for this one.
+          </div>
+        )}
+        {isCleanup && !isDecorativeTeamTrack && (
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
             <div className="grid grid-cols-2 gap-x-4 gap-y-0">
@@ -4068,6 +4082,7 @@ export default function ContributionPanel({
 }: ContributionPanelProps) {
   const isSolarpunk = campaignContributionType === "solarpunk_action";
 
+  const router = useRouter();
   const gps = useGPS(requestLocation, userLocation, locationError);
   // Owned here, not inside ContributeModal, so a live Track Route session survives the
   // user backing out of the Log Cleanup flow (ContributeModal unmounts whenever `mode`
@@ -4223,7 +4238,13 @@ export default function ContributionPanel({
     <>
       {routeTracking.active && mode !== "contribute" && (
         <button
-          onClick={() => setMode("contribute")}
+          onClick={() => {
+            if (routeTracking.cleanupEventId) {
+              router.push(`/cleanup-events/${routeTracking.cleanupEventId}`);
+            } else {
+              setMode("contribute");
+            }
+          }}
           className="absolute top-24 sm:top-10 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 pl-2.5 pr-4 py-2 rounded-full border border-sky-500/40 bg-sky-600 shadow-elevation-3 backdrop-blur-md transition-[background-color,transform] duration-150 hover:bg-sky-500 active:scale-[0.96] touch-manipulation"
         >
           <span className="relative flex items-center justify-center w-7 h-7 rounded-full bg-white/15">
@@ -4233,11 +4254,15 @@ export default function ContributionPanel({
             )}
           </span>
           <span className="flex flex-col items-start leading-tight">
-            <span className="text-xs font-semibold text-white">
+            <span className="flex items-center gap-1 text-xs font-semibold text-white">
               {routeTracking.phase === "reviewing" ? "Review your route" : "Tracking your route"}
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                BETA
+              </span>
             </span>
             <span className="text-[11px] text-sky-100 tabular-nums">
-              {formatElapsedShort(routeTracking.elapsedMs)} · {formatDistanceShort(routeTracking.distance)} · tap to review
+              {formatElapsedShort(routeTracking.elapsedMs)} · {formatDistanceShort(routeTracking.distance)} ·{" "}
+              {routeTracking.cleanupEventId ? "tap to finish on event page" : "tap to review"}
             </span>
           </span>
         </button>

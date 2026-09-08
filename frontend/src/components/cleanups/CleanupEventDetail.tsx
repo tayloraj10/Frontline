@@ -26,6 +26,8 @@ import {
   type CleanupEventOfferLocation,
 } from "@/lib/cleanupEvents";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
+import GroupEventTrackRoute from "@/components/cleanups/GroupEventTrackRoute";
+import EventRoutesSection from "@/components/cleanups/EventRoutesSection";
 import { searchUsers, type UserSearchResult } from "@/lib/users";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import NearbyReportsMap from "@/components/map/NearbyReportsMap";
@@ -37,7 +39,7 @@ import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
-import { isIOSNative } from "@/lib/capacitor";
+import { hasRouteTrackingCapability } from "@/lib/capacitor";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -756,15 +758,26 @@ export default function CleanupEventDetail({
                 Log your cleanup on the map
               </Link>
             )}
+            {userId &&
+              event.logging_mode === "organizer_total" &&
+              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
+                <GroupEventTrackRoute
+                  event={event}
+                  userId={userId}
+                  onSubmitted={() => void refresh()}
+                />
+              )}
             {event.logging_mode !== "organizer_total" &&
-              (isIOSNative() || process.env.NODE_ENV !== "production") &&
-              isSiteAdmin && (
+              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
                 <Link
                   href={`/campaigns/${event.campaign_slug}?track_event=${event.id}`}
                   className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-sky-700/60 text-sky-300 hover:bg-sky-950/30 active:bg-sky-950/30 active:scale-[0.97] rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
                 >
                   <span aria-hidden="true">🛰️</span>
                   Track my route
+                  <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                    BETA
+                  </span>
                 </Link>
               )}
           </div>
@@ -1096,12 +1109,7 @@ export default function CleanupEventDetail({
         );
 
         const routesLinkSection = event.attendee_route_count > 0 && (
-          <Link
-            href={`/cleanup-events/${event.id}/routes`}
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 active:border-zinc-500 active:text-zinc-100 active:scale-[0.97] rounded-lg transition-[border-color,color,transform] duration-150 touch-manipulation"
-          >
-            🗺️ View routes &amp; photos ({event.attendee_route_count})
-          </Link>
+          <EventRoutesSection cleanupId={event.id} routeCount={event.attendee_route_count} />
         );
 
         if (effectiveIsOrganizer && !isCancelled && viewMode === "guided") {
@@ -1121,9 +1129,9 @@ export default function CleanupEventDetail({
             ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
             { key: "attendees", label: "Manage attendee data", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
             ...(photosSection
-              ? [{ key: "photos", label: "Photos", content: <>{photosSection}{routesLinkSection}</> as React.ReactNode }]
+              ? [{ key: "photos", label: "Photos and Routes", content: <>{photosSection}{routesLinkSection}</> as React.ReactNode }]
               : routesLinkSection
-                ? [{ key: "photos", label: "Photos", content: routesLinkSection as React.ReactNode }]
+                ? [{ key: "photos", label: "Photos and Routes", content: routesLinkSection as React.ReactNode }]
                 : []),
           ];
           const activeStepIndex = Math.min(guidedStep, steps.length - 1);
