@@ -49,6 +49,11 @@ type PersistedSession = {
   coords: [number, number][];
   photos: PersistedPhoto[];
   savedAt: number;
+  // Set when this session was started from a group (organizer_total) event's own page via
+  // GroupEventTrackRoute, rather than the individual "Track my route" flow. Lets a resumer
+  // elsewhere (e.g. ContributionPanel on the main campaign map) know this is a decorative
+  // team-log route, not one that belongs in the individual cleanup-log modal.
+  cleanupEventId?: string | null;
 };
 
 function storageKey(campaignId: string) {
@@ -93,6 +98,7 @@ export function useRouteTracking(campaignId: string | null | undefined) {
   const [routePhotos, setRoutePhotos] = useState<CapturedRoutePhoto[]>([]);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [showShortRouteConfirm, setShowShortRouteConfirm] = useState(false);
+  const [cleanupEventId, setCleanupEventId] = useState<string | null>(null);
 
   const coordsRef = useRef<[number, number][]>([]);
   const stopRef = useRef<(() => Promise<void>) | null>(null);
@@ -129,7 +135,8 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     }
   }, [handlePoint]);
 
-  const openTracker = useCallback(() => {
+  const openTracker = useCallback((forCleanupEventId?: string) => {
+    setCleanupEventId(forCleanupEventId ?? null);
     setPhase("permission");
     setPermissionError(null);
   }, []);
@@ -216,6 +223,7 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     setRoutePhotos([]);
     setCaptureError(null);
     setShowShortRouteConfirm(false);
+    setCleanupEventId(null);
     if (campaignIdRef.current) {
       try {
         localStorage.removeItem(storageKey(campaignIdRef.current));
@@ -271,7 +279,14 @@ export function useRouteTracking(campaignId: string | null | undefined) {
         ),
       );
       if (cancelled) return;
-      const payload: PersistedSession = { phase, startedAt, coords: activeCoords, photos, savedAt: Date.now() };
+      const payload: PersistedSession = {
+        phase,
+        startedAt,
+        coords: activeCoords,
+        photos,
+        savedAt: Date.now(),
+        cleanupEventId,
+      };
       try {
         localStorage.setItem(storageKey(campaignId), JSON.stringify(payload));
       } catch {
@@ -281,7 +296,7 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [campaignId, phase, startedAt, coords, reviewCoords, routePhotos]);
+  }, [campaignId, phase, startedAt, coords, reviewCoords, routePhotos, cleanupEventId]);
 
   // On mount, resume a session left in progress when the app was fully closed.
   useEffect(() => {
@@ -322,6 +337,7 @@ export function useRouteTracking(campaignId: string | null | undefined) {
       setStartedAt(saved.startedAt);
       setElapsedMs(Date.now() - saved.startedAt);
       setPhase(saved.phase);
+      setCleanupEventId(saved.cleanupEventId ?? null);
       if (saved.phase === "tracking") {
         const handle = await startRouteTracking(handlePoint, (message) => setTrackingError(message));
         stopRef.current = handle.stop;
@@ -343,6 +359,7 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     routePhotos,
     captureError,
     showShortRouteConfirm,
+    cleanupEventId,
     distance,
     hasEnoughPoints,
     active: phase === "tracking" || phase === "reviewing" || phase === "confirmed",

@@ -938,6 +938,25 @@ export default function CampaignPageClient({
   const [dismissedCleanupEventIds, setDismissedCleanupEventIds] = useState<Set<string>>(new Set());
   const [pendingCleanupEventId, setPendingCleanupEventId] = useState<string | null>(null);
 
+  // Deep link from a group event's "Track my route" button (?track_event=<id>) — jumps
+  // straight into the contribute modal's Track tab, pre-bound to that event instead of
+  // relying on proximity detection. Read once on mount, same pattern as the ?ref=solarpunk
+  // check in ContributionPanel.tsx.
+  const [trackEventId, setTrackEventId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("track_event");
+  });
+  const [forceTrackMode, setForceTrackMode] = useState(false);
+  useEffect(() => {
+    if (!trackEventId) return;
+    setPendingCleanupEventId(trackEventId);
+    setForceTrackMode(true);
+  }, [trackEventId]);
+  const forcedTrackCleanupEvent = useMemo(
+    () => cleanupEvents?.find((event) => event.id === trackEventId) ?? null,
+    [cleanupEvents, trackEventId],
+  );
+
   // Raw proximity check, independent of banner dismissal — this is what actually feeds the
   // "count this toward the event?" checkbox inside the log dialog, so dismissing the banner
   // must not suppress it (the banner and the log-dialog checkbox are separate concerns).
@@ -1576,7 +1595,17 @@ export default function CampaignPageClient({
         onStyleChange={setActiveMapStyle}
         pendingCleanupEventId={pendingCleanupEventId}
         onPendingCleanupEventConsumed={() => setPendingCleanupEventId(null)}
-        nearbyCleanupEvent={nearbyCleanupEventRaw}
+        nearbyCleanupEvent={forcedTrackCleanupEvent ?? nearbyCleanupEventRaw}
+        forceTrackMode={forceTrackMode}
+        onForceTrackModeConsumed={() => {
+          setForceTrackMode(false);
+          setTrackEventId(null);
+          if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("track_event");
+            window.history.replaceState(null, "", url.toString());
+          }
+        }}
         activeTeamEvent={
           activeTeamEvent
             ? {
