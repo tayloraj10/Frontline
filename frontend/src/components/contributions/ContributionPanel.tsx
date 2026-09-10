@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { hasRouteTrackingCapability } from "@/lib/capacitor";
+import { hasRouteTrackingCapability, isNativePlatform } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
@@ -32,6 +32,20 @@ const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap")
   ssr: false,
   loading: () => <div className="w-full h-[140px] rounded-lg bg-zinc-800 animate-pulse" />,
 });
+
+// Google's universal directions link opens the native Maps app when one is installed
+// (iOS and Android both), falling back to Google Maps in a browser otherwise. In the
+// Capacitor wrapper, route it through the system browser instead of the in-app WebView
+// so the OS gets a chance to hand it off to a real navigation app.
+async function openDirections(lat: number, lng: number) {
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  if (isNativePlatform()) {
+    const { Browser } = await import("@capacitor/browser");
+    await Browser.open({ url });
+    return;
+  }
+  window.open(url, "_blank");
+}
 
 const TrackRouteScreen = dynamic(() => import("@/components/contributions/TrackRouteScreen"), {
   ssr: false,
@@ -2182,7 +2196,7 @@ function ClaimReportModal({
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [flagState, setFlagState] = useState<"idle" | "submitting" | "done">("idle");
+  const [flagState, setFlagState] = useState<"idle" | "confirming" | "submitting" | "done">("idle");
   const [flagError, setFlagError] = useState<string | null>(null);
   const [beforePhotoUrl, setBeforePhotoUrl] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -2197,6 +2211,20 @@ function ClaimReportModal({
     setPhotoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [photo]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/flag-status?user_id=${userId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { flagged: boolean } | null) => {
+        if (!cancelled && data?.flagged) setFlagState("done");
+      })
+      .catch(() => { });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, localReport.id]);
 
   const isMine = !!userId && localReport.claimed_by_user_id === userId;
   const beforeCountdown = useCountdownLabel(isMine ? localReport.claim_before_deadline_at : null);
@@ -2415,6 +2443,27 @@ function ClaimReportModal({
     }
   };
 
+  const handleUnflag = async () => {
+    if (!userId) return;
+    setFlagState("submitting");
+    setFlagError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/flag?user_id=${userId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error("Failed to undo the flag.");
+      const data = (await res.json()) as { flag_count: number };
+      const patch: Partial<ClickedReport> = { flag_count: data.flag_count };
+      setLocalReport((r) => ({ ...r, ...patch }));
+      onClaimUpdated(localReport.id, patch);
+      setFlagState("idle");
+    } catch (e) {
+      setFlagError(e instanceof Error ? e.message : "Failed to undo the flag.");
+      setFlagState("done");
+    }
+  };
+
   const severity = severityMeta(localReport.severity);
   const severityBadge = (
     <div className={`self-start flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold capitalize ${severity.classes}`}>
@@ -2454,13 +2503,39 @@ function ClaimReportModal({
     />
   );
 
-  const flagControl = (
+  const flagControl = !userId ? null : (
     <div className="pt-1 text-center">
-      {flagState === "done" ? (
-        <p className="text-xs text-zinc-500">Thanks — this report has been flagged for review.</p>
+      {flagState === "confirming" ? (
+        <div className="flex flex-col items-center gap-1.5">
+          <p className="text-xs text-zinc-400">Flag this report as inaccurate or inappropriate?</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleFlag}
+              className="text-xs text-red-400 hover:text-red-300 active:text-red-300 transition-colors duration-150 underline"
+            >
+              Yes, flag it
+            </button>
+            <button
+              onClick={() => setFlagState("idle")}
+              className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : flagState === "done" ? (
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-xs text-zinc-500">Thanks, this report has been flagged for review.</p>
+          <button
+            onClick={handleUnflag}
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+          >
+            Undo
+          </button>
+        </div>
       ) : (
         <button
-          onClick={handleFlag}
+          onClick={() => setFlagState("confirming")}
           disabled={flagState === "submitting"}
           className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40"
           title={
@@ -2511,7 +2586,7 @@ function ClaimReportModal({
   // permanently show as claimed to everyone but the original claimant.
   if (localReport.claimed_by_user_id && !isMine && (localReport.status === "scheduled" || localReport.status === "in_progress")) {
     return (
-      <ModalShell title="Report Claimed" badge="Beta" onClose={onClose}>
+      <ModalShell title="Report Claimed" badge="Beta" onClose={onClose} footerId={localReport.id}>
         <div className="flex flex-col items-center gap-3 py-4">
           <div className="flex flex-col items-center gap-2">
             {severityBadge}
@@ -2575,10 +2650,14 @@ function ClaimReportModal({
   if (localReport.status === "open") {
     const afterWindow = claimAfterWindowMinutes(localReport.severity, afterWindowMinutesBySeverity);
     return (
-      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose} compact>
-        <div className="flex flex-col gap-4">
-          {reportHeader}
-          <p className="-mt-2 text-xs text-zinc-500">{severityDescription(localReport.severity, afterWindow)}</p>
+      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose} compact footerId={localReport.id}>
+        <div className="flex flex-col gap-3">
+          {severityBadge}
+          <p className="-mt-1 text-xs text-zinc-500">{severityDescription(localReport.severity, afterWindow)}</p>
+          <p className="text-[11px] text-zinc-600">
+            Reported {new Date(localReport.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {localReport.reported_by_name ? ` by ${localReport.reported_by_name}` : ""}
+          </p>
           {reportPhotoBlock}
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
             <span className="text-base shrink-0">🎯</span>
@@ -2601,9 +2680,17 @@ function ClaimReportModal({
               </span>
             </div>
           </div>
-          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+          <div className="flex flex-col gap-2">
+            <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+            <button
+              onClick={() => openDirections(localReport.latitude, localReport.longitude)}
+              className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs font-medium text-violet-300 hover:border-violet-600 hover:text-violet-200 active:border-violet-600 active:text-violet-200 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation"
+            >
+              🗺️ Get Directions
+            </button>
+          </div>
           {error && <p className="text-red-400 text-xs">{error}</p>}
-          <div className="flex gap-2 pt-1">
+          <div className="flex gap-2">
             <button
               onClick={onClose}
               className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
@@ -2628,8 +2715,8 @@ function ClaimReportModal({
   // Claimed by me, awaiting before-photo.
   if (localReport.status === "scheduled") {
     return (
-      <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose} compact>
-        <div className="flex flex-col gap-4">
+      <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose} compact footerId={localReport.id}>
+        <div className="flex flex-col gap-3">
           {reportHeader}
           {reportPhotoBlock}
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${beforeCountdown.expired
@@ -2639,11 +2726,19 @@ function ClaimReportModal({
             <span className="text-base shrink-0">⏱️</span>
             <span>
               {beforeCountdown.expired
-                ? "Time's up — this claim has expired. Close and reclaim if it's still available."
+                ? "Time's up, this claim has expired. Close and reclaim if it's still available."
                 : <>Time left to arrive: <span className="font-bold">{beforeCountdown.label}</span></>}
             </span>
           </div>
-          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+          <div className="flex flex-col gap-2">
+            <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+            <button
+              onClick={() => openDirections(localReport.latitude, localReport.longitude)}
+              className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs font-medium text-violet-300 hover:border-violet-600 hover:text-violet-200 active:border-violet-600 active:text-violet-200 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation"
+            >
+              🗺️ Get Directions
+            </button>
+          </div>
           {!withinClaimRadius && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
               <span className="text-base shrink-0">📍</span>
@@ -2726,7 +2821,7 @@ function ClaimReportModal({
 
   // Claimed by me, before-photo submitted, awaiting after-photo.
   return (
-    <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose} compact>
+    <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose} compact footerId={localReport.id}>
       <div className="flex flex-col gap-4">
         {reportHeader}
         {reportPhotoBlock}
@@ -4010,6 +4105,7 @@ function ModalShell({
   children,
   glow,
   compact,
+  footerId,
 }: {
   title?: string;
   badge?: string;
@@ -4017,6 +4113,7 @@ function ModalShell({
   children: React.ReactNode;
   glow?: "orange" | "blue" | false;
   compact?: boolean;
+  footerId?: string;
 }) {
   return (
     <div
@@ -4034,8 +4131,13 @@ function ModalShell({
           className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[95vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
             }`}
         >
+          {footerId && (
+            <span className="absolute bottom-1.5 left-2.5 text-[9px] text-zinc-700 select-text z-10">
+              {footerId}
+            </span>
+          )}
           {title && (
-            <div className={`flex items-center justify-between px-5 pt-5 shrink-0 ${compact ? "pb-2" : "pb-4"}`}>
+            <div className={`flex items-center justify-between px-5 pt-5 shrink-0 ${compact ? "pb-3" : "pb-4"}`}>
               <div className="flex items-center gap-2">
                 <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
                 {badge && (
@@ -4052,7 +4154,7 @@ function ModalShell({
               </IconButton>
             </div>
           )}
-          <div className={`overflow-y-auto ${title ? "px-5 pb-5" : "p-5"}`}>
+          <div className={`overflow-y-auto ${title ? (footerId ? "px-5 pb-7" : "px-5 pb-5") : footerId ? "p-5 pb-7" : "p-5"}`}>
             {children}
           </div>
         </div>

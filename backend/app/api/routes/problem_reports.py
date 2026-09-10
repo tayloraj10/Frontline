@@ -532,6 +532,34 @@ async def release_problem_report_claim(
     return {"status": "open"}
 
 
+@router.get("/{report_id}/flag-status")
+async def get_flag_status(report_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Whether this user has already flagged this report, so the client can keep the
+    flag control in its flagged state across modal re-opens instead of allowing a
+    second flag from the same person."""
+    result = await db.execute(
+        text("SELECT 1 FROM problem_report_flags WHERE report_id = :report_id AND flagged_by_user_id = :user_id"),
+        {"report_id": str(report_id), "user_id": str(user_id)},
+    )
+    return {"flagged": result.fetchone() is not None}
+
+
+@router.delete("/{report_id}/flag")
+async def unflag_problem_report(report_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Undo a flag the same user just placed, so an accidental tap on 'Report this'
+    isn't permanent."""
+    await db.execute(
+        text("DELETE FROM problem_report_flags WHERE report_id = :report_id AND flagged_by_user_id = :user_id"),
+        {"report_id": str(report_id), "user_id": str(user_id)},
+    )
+    count_result = await db.execute(
+        text("SELECT COUNT(*) FROM problem_report_flags WHERE report_id = :report_id"),
+        {"report_id": str(report_id)},
+    )
+    await db.commit()
+    return {"flag_count": count_result.scalar() or 0}
+
+
 @router.post("/{report_id}/flag")
 async def flag_problem_report(report_id: UUID, payload: FlagReportRequest, db: AsyncSession = Depends(get_db)):
     """Report a trash report as inaccurate (wrong location, no actual trash, etc). Once
