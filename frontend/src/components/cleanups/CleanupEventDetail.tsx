@@ -1604,12 +1604,25 @@ function OrganizerLogButton({
     : 0;
   const poundPoints = poundValueReady ? (Number(pounds) || 0) * pointValues.pound_value! : 0;
   const hasNegative = (Number(smallBags) || 0) < 0 || (Number(largeBags) || 0) < 0 || (Number(pounds) || 0) < 0;
+  const bagsEntered = (Number(smallBags) || 0) + (Number(largeBags) || 0) > 0;
+  const poundsEntered = (Number(pounds) || 0) > 0;
+  // A value sitting in the field for the *unselected* method scores 0 — this catches the
+  // organizer who typed pounds without noticing "By bags" was still highlighted.
+  const scoringMismatch =
+    (scoringMethod === "bags" && !bagsEntered && poundsEntered) ||
+    (scoringMethod === "pounds" && !poundsEntered && bagsEntered);
 
   const submit = async () => {
     const small = Number(smallBags) || 0;
     const large = Number(largeBags) || 0;
     const lbs = Number(pounds) || 0;
     if (hasNegative || small + large + lbs <= 0) return;
+    if (scoringMismatch) {
+      setError(
+        `You entered ${poundsEntered ? "pounds" : "bags"} but "By ${scoringMethod}" is selected — switch it or this haul will score 0 points.`
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -1660,24 +1673,42 @@ function OrganizerLogButton({
             type="number"
             min={0}
             value={smallBags}
-            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setSmallBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
           <input
             type="number"
             min={0}
             value={largeBags}
-            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setLargeBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
           <input
             type="number"
             min={0}
             value={pounds}
-            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setPounds(v);
+              if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
+            }}
+            className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
           />
         </div>
+        {scoringMismatch && (
+          <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2 mb-3">
+            ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is
+            selected below — this will score 0 points unless you switch it.
+          </p>
+        )}
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 mb-3 shadow-elevation-1">
           <p className="text-[11px] text-zinc-600">
             Bags and pounds are two ways of estimating the same haul — pick which one determines points.
@@ -1722,7 +1753,7 @@ function OrganizerLogButton({
         <div className="flex items-center gap-2">
           <button
             onClick={submit}
-            disabled={loading || hasNegative}
+            disabled={loading || hasNegative || scoringMismatch}
             className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
           >
             {loading ? "Logging…" : "Log contribution"}
@@ -2069,6 +2100,13 @@ function LogTeamTotalForm({
     (Number(largeBags) || 0) < 0 ||
     (Number(pounds) || 0) < 0 ||
     Object.values(overrides).some((v) => v.trim() !== "" && (Number(v) || 0) < 0);
+  const bagsEntered = (Number(smallBags) || 0) + (Number(largeBags) || 0) > 0;
+  const poundsEntered = (Number(pounds) || 0) > 0;
+  // A value sitting in the field for the *unselected* method scores 0 — this catches the
+  // organizer who typed pounds without noticing "By bags" was still highlighted.
+  const scoringMismatch =
+    (scoringMethod === "bags" && !bagsEntered && poundsEntered) ||
+    (scoringMethod === "pounds" && !poundsEntered && bagsEntered);
 
   const applyToAll = () => {
     if (applyAllValue.trim() === "") return;
@@ -2085,6 +2123,12 @@ function LogTeamTotalForm({
     const large = Number(largeBags) || 0;
     const lbs = Number(pounds) || 0;
     if (hasNegative || small + large + lbs <= 0) return;
+    if (scoringMismatch) {
+      setError(
+        `You entered ${poundsEntered ? "pounds" : "bags"} but "By ${scoringMethod}" is selected — switch it or this haul will score 0 points.`
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     setResult(null);
@@ -2176,8 +2220,12 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={smallBags}
-            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setSmallBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
         </div>
         <div>
@@ -2186,8 +2234,12 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={largeBags}
-            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setLargeBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
         </div>
         <div>
@@ -2196,11 +2248,21 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={pounds}
-            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setPounds(v);
+              if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
+            }}
+            className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
           />
         </div>
       </div>
+      {scoringMismatch && (
+        <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+          ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is selected
+          below — this will score 0 points unless you switch it.
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-zinc-600">Split among</span>
         {(["checked_in", "going"] as const).map((p) => (
@@ -2526,10 +2588,16 @@ function LogTeamTotalForm({
 
       <button
         onClick={submit}
-        disabled={loading || hasNegative || candidates.length === 0}
+        disabled={loading || hasNegative || candidates.length === 0 || scoringMismatch}
         className="w-full mt-3 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
       >
-        {loading ? "Logging…" : candidates.length === 0 ? "No eligible attendees" : "Log team total"}
+        {loading
+          ? "Logging…"
+          : candidates.length === 0
+          ? "No eligible attendees"
+          : scoringMismatch
+          ? "Fix scoring method above"
+          : "Log team total"}
       </button>
     </div>
   );
