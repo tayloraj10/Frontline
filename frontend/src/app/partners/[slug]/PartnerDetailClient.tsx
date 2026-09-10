@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import ShareButton from "@/components/ShareButton";
 import { OfferCard, type BrowseBusiness, type BrowseOffer } from "../PartnersBrowseClient";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), { ssr: false });
 
@@ -67,7 +68,10 @@ export default function PartnerDetailClient({
             <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-xl object-cover shrink-0 shadow-elevation-1" />
           )}
           <div className="min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100">{business.name}</h1>
+            <h1 className="text-2xl font-black text-zinc-100 flex items-center gap-2 flex-wrap">
+              {business.name}
+              {business.adults_only && <AdultsOnlyBadge />}
+            </h1>
             {locations.length === 1 && formatAddress(locations[0]) && (
               <p className="text-sm text-zinc-500 mt-1">{formatAddress(locations[0])}</p>
             )}
@@ -78,6 +82,12 @@ export default function PartnerDetailClient({
           content={{ title: business.name, text: business.description ?? undefined }}
         />
       </div>
+
+      {business.adults_only && (
+        <p className="text-xs text-red-400 -mt-2">
+          🔞 This business can only serve customers who are 21 or older. Please bring valid ID.
+        </p>
+      )}
 
       {business.description && (
         <p className="text-sm text-zinc-300 whitespace-pre-wrap">{business.description}</p>

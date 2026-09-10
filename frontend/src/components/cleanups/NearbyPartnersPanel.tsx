@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { formatDistance, type NearbyPartner } from "@/lib/nearbyPartners";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 
 const SOCIAL_LABELS: { key: string; label: string }[] = [
   { key: "instagram", label: "Instagram" },
@@ -34,6 +35,7 @@ function PartnerCard({
             <Link href={`/partners/${partner.slug}`} className="text-sm font-medium text-zinc-100 hover:underline">
               {partner.name}
             </Link>
+            {partner.adults_only && <AdultsOnlyBadge />}
             {hasEventOffers && (
               <span
                 title="Event offers are free for anyone who checks in to this cleanup once you attach them below, no points required."
