@@ -216,16 +216,19 @@ async def submit_contribution(
         raise HTTPException(status_code=403, detail="Campaign is not accepting contributions")
     campaign_geo_unit = camp_row[0]
 
+    event_logging_mode = None
     if payload.cleanup_event_id:
         event_result = await db.execute(
             text("""
-                SELECT 1 FROM cleanups
+                SELECT logging_mode FROM cleanups
                 WHERE id = :id AND campaign_id = :campaign_id AND is_group_event = true
             """),
             {"id": str(payload.cleanup_event_id), "campaign_id": str(payload.campaign_id)},
         )
-        if not event_result.fetchone():
+        event_row = event_result.fetchone()
+        if not event_row:
             raise HTTPException(status_code=404, detail="Cleanup event not found")
+        event_logging_mode = event_row.logging_mode
 
     team_event_team_id = None
     effective_team_event_id = payload.team_event_id
@@ -530,19 +533,32 @@ async def submit_contribution(
     if payload.cleanup_event_id:
         # Self-log attendance: an RSVP row is "attended" once it has a linked
         # contribution, regardless of whether the user RSVP'd or checked in first.
+        #
+        # For an organizer_total (team-log) event, attendees aren't expected to log their
+        # own bags/pounds — the only individual submission they'd make here is a tracked
+        # route (optionally with photos), carrying no metrics. That shouldn't claim
+        # contribution_id: log_team_total's eligible-pool query treats a non-NULL
+        # contribution_id as "already credited by team total, skip on next split," and its
+        # wipe step only clears rows it created itself (cleanup_id IS NULL). A metrics-free
+        # route submission would set a non-NULL contribution_id the wipe never reaches,
+        # permanently excluding that attendee from every future team-total split.
+        has_metrics = bool(payload.small_bags or payload.large_bags or payload.pounds)
+        claims_contribution_id = event_logging_mode != "organizer_total" or has_metrics
         await db.execute(
             text("""
                 INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at, contribution_id)
                 VALUES (:cleanup_id, :user_id, 'going', NOW(), :contribution_id)
                 ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
                     checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, EXCLUDED.checked_in_at),
-                    contribution_id = EXCLUDED.contribution_id,
+                    contribution_id = CASE WHEN :claims_contribution_id
+                        THEN EXCLUDED.contribution_id ELSE cleanup_rsvps.contribution_id END,
                     updated_at = NOW()
             """),
             {
                 "cleanup_id": str(payload.cleanup_event_id),
                 "user_id": str(payload.user_id),
-                "contribution_id": recorded.contribution_id,
+                "contribution_id": recorded.contribution_id if claims_contribution_id else None,
+                "claims_contribution_id": claims_contribution_id,
             },
         )
 
