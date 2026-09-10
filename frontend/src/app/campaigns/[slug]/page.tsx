@@ -58,6 +58,7 @@ type ProblemReportMapData = {
   claim_before_deadline_at: string | null;
   claim_after_deadline_at: string | null;
   flag_count: number;
+  reported_by_name: string | null;
 };
 type ProblemReports = { reports: ProblemReportMapData[]; counts_by_geo_unit: Record<string, number>; threshold: number | null; flag_auto_hide_threshold: number };
 type EventCentroid = { geo_unit_id: string; lat: number; lng: number };

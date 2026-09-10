@@ -225,6 +225,7 @@ export interface ProblemReportMapData {
   claim_before_deadline_at: string | null;
   claim_after_deadline_at: string | null;
   flag_count: number;
+  reported_by_name: string | null;
 }
 
 export interface ProblemReports {

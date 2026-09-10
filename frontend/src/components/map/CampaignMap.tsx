@@ -2489,6 +2489,7 @@ export default function CampaignMap({
             claim_after_deadline_at: report.claim_after_deadline_at,
             flag_count: report.flag_count,
             unit_type: report.unit_type,
+            reported_by_name: report.reported_by_name,
           },
         })),
       });
@@ -4560,6 +4561,7 @@ export default function CampaignMap({
           claim_after_deadline_at?: string | null;
           flag_count?: number;
           unit_type?: string | null;
+          reported_by_name?: string | null;
         };
         if (!props.id) return;
         const geometry = e.features[0].geometry;
@@ -4579,6 +4581,7 @@ export default function CampaignMap({
           flag_count: props.flag_count ?? 0,
           claim_before_deadline_at: props.claim_before_deadline_at ?? null,
           claim_after_deadline_at: props.claim_after_deadline_at ?? null,
+          reported_by_name: props.reported_by_name ?? null,
         });
       });
 
@@ -5317,6 +5320,7 @@ export default function CampaignMap({
       claim_before_deadline_at: null,
       claim_after_deadline_at: null,
       flag_count: 0,
+      reported_by_name: null,
     };
 
     const nextReports = [...(problemReportsRef.current?.reports ?? []), report];

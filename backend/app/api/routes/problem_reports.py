@@ -245,9 +245,11 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
                    ST_X(pr.location::geometry) AS longitude,
                    gu.unit_type, pr.status, pr.claimed_by_user_id,
                    pr.claim_before_deadline_at, pr.claim_after_deadline_at,
-                   COALESCE(flag_counts.flag_count, 0) AS flag_count
+                   COALESCE(flag_counts.flag_count, 0) AS flag_count,
+                   p.username AS reported_by_username, p.display_name AS reported_by_display_name
             FROM problem_reports pr
             LEFT JOIN geo_units gu ON gu.id = pr.geo_unit_id
+            LEFT JOIN profiles p ON p.id = pr.submitted_by_user_id
             LEFT JOIN (
                 SELECT report_id, COUNT(*) AS flag_count
                 FROM problem_report_flags
@@ -298,6 +300,7 @@ async def get_campaign_reports(campaign_id: UUID, db: AsyncSession = Depends(get
                 if row.claim_after_deadline_at
                 else None,
                 "flag_count": row.flag_count,
+                "reported_by_name": row.reported_by_display_name or row.reported_by_username,
             }
             for row in rows
         ],

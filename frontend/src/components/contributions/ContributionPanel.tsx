@@ -322,6 +322,7 @@ interface ClickedReport {
   claim_after_deadline_at: string | null;
   flag_count: number;
   unit_type: string | null;
+  reported_by_name: string | null;
 }
 
 const METERS_TO_FEET = 3.28084;
@@ -2421,6 +2422,18 @@ function ClaimReportModal({
       <span>{severity.label}</span>
     </div>
   );
+  const reportMetaLine = (
+    <p className="text-xs text-zinc-500">
+      Reported {new Date(localReport.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+      {localReport.reported_by_name ? ` by ${localReport.reported_by_name}` : ""}
+    </p>
+  );
+  const reportHeader = (
+    <div className="flex flex-col gap-2">
+      {severityBadge}
+      {reportMetaLine}
+    </div>
+  );
   const reportPhotoBlock = localReport.photo_url ? (
     <div
       className="relative w-full h-40 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group cursor-zoom-in"
@@ -2500,7 +2513,10 @@ function ClaimReportModal({
     return (
       <ModalShell title="Report Claimed" badge="Beta" onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
-          {severityBadge}
+          <div className="flex flex-col items-center gap-2">
+            {severityBadge}
+            {reportMetaLine}
+          </div>
           {reportPhotoBlock}
           <span className="text-4xl">🔒</span>
           <p className="text-zinc-100 text-sm text-center">
@@ -2559,10 +2575,10 @@ function ClaimReportModal({
   if (localReport.status === "open") {
     const afterWindow = claimAfterWindowMinutes(localReport.severity, afterWindowMinutesBySeverity);
     return (
-      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
+      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose} compact>
         <div className="flex flex-col gap-4">
-          {severityBadge}
-          <p className="-mt-3 text-xs text-zinc-500">{severityDescription(localReport.severity, afterWindow)}</p>
+          {reportHeader}
+          <p className="-mt-2 text-xs text-zinc-500">{severityDescription(localReport.severity, afterWindow)}</p>
           {reportPhotoBlock}
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
             <span className="text-base shrink-0">🎯</span>
@@ -2612,9 +2628,9 @@ function ClaimReportModal({
   // Claimed by me, awaiting before-photo.
   if (localReport.status === "scheduled") {
     return (
-      <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose}>
+      <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose} compact>
         <div className="flex flex-col gap-4">
-          {severityBadge}
+          {reportHeader}
           {reportPhotoBlock}
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${beforeCountdown.expired
             ? "border-red-800/60 bg-red-950/30 text-red-300"
@@ -2710,9 +2726,9 @@ function ClaimReportModal({
 
   // Claimed by me, before-photo submitted, awaiting after-photo.
   return (
-    <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose}>
+    <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose} compact>
       <div className="flex flex-col gap-4">
-        {severityBadge}
+        {reportHeader}
         {reportPhotoBlock}
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${afterCountdown.expired
           ? "border-red-800/60 bg-red-950/30 text-red-300"
@@ -3993,12 +4009,14 @@ function ModalShell({
   onClose,
   children,
   glow,
+  compact,
 }: {
   title?: string;
   badge?: string;
   onClose: () => void;
   children: React.ReactNode;
   glow?: "orange" | "blue" | false;
+  compact?: boolean;
 }) {
   return (
     <div
@@ -4017,7 +4035,7 @@ function ModalShell({
             }`}
         >
           {title && (
-            <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
+            <div className={`flex items-center justify-between px-5 pt-5 shrink-0 ${compact ? "pb-2" : "pb-4"}`}>
               <div className="flex items-center gap-2">
                 <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
                 {badge && (
