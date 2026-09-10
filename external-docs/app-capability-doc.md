@@ -51,7 +51,7 @@ Last updated: 2026-08-03.
 ### Partners (Businesses)
 - Browse partner businesses (`/partners`) and view detail pages (`/partners/[slug]`) — linked campaign, map location(s), active offers. A business can have any number of physical locations (`partner_business_locations`), each shown as its own map marker.
 - Redeem offers: "spend" mode deducts `points_cost` from `spendable_points`; "threshold" mode just requires reaching cumulative `points_threshold` without spending; `max_redemptions_per_user` enforced. Offers can optionally be restricted to one location; if not, and the business has multiple locations, the redeemer picks which one they're at. Redemption yields a unique code with tap-to-copy; used redemptions show a crossed-out state once a merchant marks them used.
-- Apply to become a partner business (`/partners/apply`) — public form, goes to admin review.
+- Apply to become a partner business (`/partners/apply`) — fill out the form as a guest, but sign-in is required to actually submit; an unauthenticated submitter is redirected to `/login?next=/partners/apply` with their filled-out form preserved and restored on return. The application is attributed to the signer's account (`partner_businesses.created_by`) so that, on admin approval, that account is automatically granted business-admin access to the listing (inserted into `partner_business_admins`), with no manual admin lookup required.
 
 ### Legal
 - View Terms of Service and Privacy Policy (`/legal/terms`, `/legal/privacy`).
@@ -94,7 +94,7 @@ Last updated: 2026-08-03.
 - **Users** — management/search.
 - **Campaigns** — CRUD, plus the "Spendable points" per-campaign toggle (`counts_toward_spendable_points`) with a dry-run impact preview before committing, and "Recompute all balances" (re-sums `points`/`spendable_points` for every user from current contribution/report/redemption data, previewed before committing, flags any resulting negative balance in red, sends `points_adjusted` notifications to affected users).
 - **Campaign Events/Triggers** — documented implemented-vs-stub split (see below).
-- **Partner Businesses & Offers** — approve/reject applications (kept as records, not deleted), manage offers via the same `OfferRow` businesses use.
+- **Partner Businesses & Offers** — approve/reject applications (kept as records, not deleted; approve also grants the submitter a `partner_business_admins` row), manage offers via the same `OfferRow` businesses use.
 - **Groups** — approval queue (approve grants `group_members` admin row + flips status; reject keeps the record), plus the same delete capability as a group admin (site admin alone can delete pending/rejected applications, which have no `group_members` row yet).
 - **Leaderboard / verification** — per-campaign, per-user prize-verification detail view (`admin/leaderboard/[campaignId]/[userId]`).
 
