@@ -11,12 +11,15 @@ export default function PartnerApplyPage() {
   const handleSubmit = async (payload: BusinessFormPayload): Promise<string | null> => {
     const { campaignIds: _campaignIds, locations, ...rest } = payload;
     const supabase = createClient();
-    const { data: business, error } = await supabase
+    // A pending business isn't visible under partner_businesses_select to an
+    // unauthenticated applicant, so RETURNING a row via .select() after the insert
+    // trips RLS even though the insert itself is allowed. Generate the id client-side
+    // and skip .select() so we never need read-back permission on the new row.
+    const businessId = crypto.randomUUID();
+    const { error } = await supabase
       .schema("public")
       .from("partner_businesses")
-      .insert({ ...rest, status: "pending" })
-      .select("id")
-      .single();
+      .insert({ ...rest, id: businessId, status: "pending" });
 
     if (error) return error.message;
 
@@ -25,7 +28,7 @@ export default function PartnerApplyPage() {
         .schema("public")
         .from("partner_business_locations")
         .insert(
-          locations.map(({ id: _id, ...loc }) => ({ ...loc, business_id: business.id }))
+          locations.map(({ id: _id, ...loc }) => ({ ...loc, business_id: businessId }))
         );
       if (locationsError) return locationsError.message;
     }
