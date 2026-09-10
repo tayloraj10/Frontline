@@ -73,7 +73,7 @@ type RawLbEntry = {
 };
 type PartnerBusinessRow = {
   id: string; name: string; slug: string; description: string | null; logo_url: string | null;
-  website_url: string | null; status: string;
+  website_url: string | null; adults_only: boolean; status: string;
   partner_business_locations: { id: string; label: string | null; lat: number; lng: number; google_maps_url: string | null; status: string }[];
 };
 type OfferRequirement = { title: string; mode: "spend" | "threshold" | "event_only"; requirement: number; location_id: string | null };
@@ -143,7 +143,7 @@ const getCampaignPageData = unstable_cache(
     const { data: businessLinkRows } = await supabase
       .from("campaign_partner_businesses")
       .select(
-        "partner_businesses(id, name, slug, description, logo_url, website_url, status, partner_business_locations(id, label, lat, lng, google_maps_url, status))"
+        "partner_businesses(id, name, slug, description, logo_url, website_url, adults_only, status, partner_business_locations(id, label, lat, lng, google_maps_url, status))"
       )
       .eq("campaign_id", campaign.id);
     const linkedBusinesses = (businessLinkRows ?? [])
@@ -191,6 +191,7 @@ const getCampaignPageData = unstable_cache(
         description: b.description,
         logo_url: b.logo_url,
         website_url: b.website_url,
+        adults_only: b.adults_only,
         locations: b.partner_business_locations
           .filter((l) => l.status === "active")
           .map((l): MapBusinessLocation => {

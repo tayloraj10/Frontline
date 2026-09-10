@@ -22,7 +22,7 @@ export default async function PartnerDashboardPage() {
     .schema("public")
     .from("partner_business_admins")
     .select(
-      "business_id, partner_businesses(id, name, slug, description, logo_url, website_url, social_links, status, created_at)"
+      "business_id, partner_businesses(id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at)"
     )
     .eq("user_id", user.id);
 
@@ -38,7 +38,7 @@ export default async function PartnerDashboardPage() {
   const { data: ownPending } = await supabase
     .schema("public")
     .from("partner_businesses")
-    .select("id, name, slug, description, logo_url, website_url, social_links, status, created_at")
+    .select("id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at")
     .eq("created_by", user.id)
     .eq("status", "pending");
 

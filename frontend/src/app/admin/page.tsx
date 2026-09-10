@@ -50,7 +50,7 @@ export default async function AdminPage() {
       .schema("public")
       .from("partner_businesses")
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at, created_by"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at, created_by"
       )
       .order("created_at", { ascending: false }),
     supabase

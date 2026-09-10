@@ -18,6 +18,7 @@ import { formatPoints } from "@/lib/formatPoints";
 import { saveMapPosition } from "@/lib/mapPosition";
 import IconButton from "@/components/ui/IconButton";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -391,6 +392,7 @@ export type MapBusiness = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
+  adults_only: boolean;
   locations: MapBusinessLocation[];
 };
 
@@ -2342,12 +2344,13 @@ export default function CampaignMap({
         businessMarkerScaleElsRef.current.push(scaleWrapper);
 
         const innerEl = document.createElement("div");
+        const adultsRing = business.adults_only ? ",0 0 0 2px #ef4444" : "";
         innerEl.style.cssText = hasOffer
           ? `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-          `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6);` +
+          `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6)${adultsRing};` +
           "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9);transform-origin:center"
           : `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-          "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+          `border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6)${adultsRing};` +
           "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
         scaleWrapper.appendChild(innerEl);
         if (affordable) {
@@ -2365,11 +2368,12 @@ export default function CampaignMap({
           innerEl.style.fontSize = hasOffer ? "15px" : "13px";
         }
         const locationSuffix = location.label ? ` (${location.label})` : "";
+        const adultsSuffix = business.adults_only ? " (21+ only)" : "";
         el.title = affordable
-          ? `${business.name}${locationSuffix} — you have enough points for ${location.affordableOfferTitle}!`
+          ? `${business.name}${locationSuffix} — you have enough points for ${location.affordableOfferTitle}!${adultsSuffix}`
           : hasOffer
-            ? `${business.name}${locationSuffix} — ${location.activeOfferTitle}`
-            : `${business.name}${locationSuffix}`;
+            ? `${business.name}${locationSuffix} — ${location.activeOfferTitle}${adultsSuffix}`
+            : `${business.name}${locationSuffix}${adultsSuffix}`;
 
         if (!layerToggleRef.current.showPartners) {
           el.style.display = "none";
@@ -6119,12 +6123,20 @@ export default function CampaignMap({
                 </div>
               )}
               <div>
-                <h3 className="text-lg font-semibold text-white">{selectedBusiness.business.name}</h3>
+                <h3 className="text-lg font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                  {selectedBusiness.business.name}
+                  {selectedBusiness.business.adults_only && <AdultsOnlyBadge />}
+                </h3>
                 {selectedBusiness.location.label && (
                   <p className="text-xs text-zinc-500">{selectedBusiness.location.label}</p>
                 )}
               </div>
             </div>
+            {selectedBusiness.business.adults_only && (
+              <p className="text-xs text-red-400 mb-3">
+                🔞 This business can only serve customers who are 21 or older. Please bring valid ID.
+              </p>
+            )}
             {selectedBusiness.business.description && (
               <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.business.description}</p>
             )}

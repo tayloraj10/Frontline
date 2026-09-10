@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 
@@ -38,6 +38,18 @@ function emptyLocation(): LocationEntry {
     lat: null,
     lng: null,
     google_maps_url: null,
+  };
+}
+
+function locationSnapshot(l: {
+  id: string | null; label: string | null; address_line1: string | null; address_line2: string | null;
+  city: string | null; state: string | null; postal_code: string | null; country: string | null;
+  lat: number | null; lng: number | null; google_maps_url: string | null;
+}) {
+  return {
+    id: l.id, label: l.label, address_line1: l.address_line1, address_line2: l.address_line2,
+    city: l.city, state: l.state, postal_code: l.postal_code, country: l.country,
+    lat: l.lat, lng: l.lng, google_maps_url: l.google_maps_url,
   };
 }
 
@@ -92,6 +104,7 @@ export type BusinessFormInitial = {
   logo_url: string | null;
   website_url: string | null;
   social_links: BusinessSocialLinks | null;
+  adults_only?: boolean;
   locations?: LocationFormInitial[];
 };
 
@@ -102,6 +115,7 @@ export type BusinessFormPayload = {
   logo_url: string | null;
   website_url: string | null;
   social_links: BusinessSocialLinks | null;
+  adults_only: boolean;
   locations: LocationPayload[];
   campaignIds: string[];
 };
@@ -144,6 +158,7 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
   const [slugEdited, setSlugEdited] = useState(!!initial);
   const [description, setDescription] = useState(initial?.description ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initial?.website_url ?? "");
+  const [adultsOnly, setAdultsOnly] = useState(initial?.adults_only ?? false);
   const [locations, setLocations] = useState<LocationEntry[]>(() =>
     (initial?.locations ?? []).map((l) => ({
       key: l.id,
@@ -170,6 +185,35 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
   const [campaignIds, setCampaignIds] = useState<Set<string>>(new Set(initialCampaignIds ?? []));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locationsCollapsed, setLocationsCollapsed] = useState(() => (initial?.locations?.length ?? 0) > 0);
+
+  // Snapshot of the initial values, captured once, so we can tell the user they have
+  // unsaved changes (glow the card, offer a top save button) rather than making them
+  // scroll all the way down on a long edit form to find out whether anything changed.
+  const initialSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        name: initial?.name ?? "",
+        slug: initial?.slug ?? "",
+        description: initial?.description ?? "",
+        website_url: initial?.website_url ?? "",
+        adults_only: initial?.adults_only ?? false,
+        locations: (initial?.locations ?? []).map(locationSnapshot),
+        handles: Object.fromEntries(SOCIAL_PLATFORMS.map((p) => [p.key, extractHandle(initial?.social_links?.[p.key], p.baseUrl)])),
+        campaignIds: [...(initialCampaignIds ?? [])].sort(),
+        logo_url: initial?.logo_url ?? null,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  const currentSnapshot = JSON.stringify({
+    name, slug, description, website_url: websiteUrl, adults_only: adultsOnly,
+    locations: locations.map(locationSnapshot),
+    handles,
+    campaignIds: Array.from(campaignIds).sort(),
+    logo_url: currentLogo,
+  });
+  const isDirty = !!initial && (currentSnapshot !== initialSnapshot || !!logoFile);
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -240,6 +284,7 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
         logo_url: logoUrl,
         website_url: websiteUrl.trim() || null,
         social_links: hasSocial ? socialLinks : null,
+        adults_only: adultsOnly,
         locations: filledLocations.map((l) => ({
           id: l.id,
           label: l.label?.trim() || null,
@@ -267,7 +312,26 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
   const displayLogo = logoPreview ?? currentLogo;
 
   return (
-    <form onSubmit={handleSubmit} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 shadow-elevation-2 space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className={`border rounded-xl p-5 bg-zinc-900/40 space-y-4 transition-[border-color,box-shadow] duration-200 ${
+        isDirty
+          ? "border-orange-500/70 shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_0_16px_rgba(249,115,22,0.25)]"
+          : "border-zinc-700 shadow-elevation-2"
+      }`}
+    >
+      {isDirty && (
+        <div className="sticky top-14 z-10 -mx-5 -mt-5 mb-1 px-5 py-2 flex items-center justify-between gap-3 bg-orange-950/90 backdrop-blur-sm border-b border-orange-800/60 rounded-t-xl">
+          <p className="text-xs font-medium text-orange-300">Unsaved changes</p>
+          <button
+            type="submit"
+            disabled={loading || !name.trim() || !slug.trim()}
+            className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-xs rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.96] disabled:active:scale-100 touch-manipulation"
+          >
+            {loading ? "Saving…" : submitLabel}
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2 space-y-1">
           <label className="text-xs text-zinc-500">Logo</label>
@@ -315,14 +379,51 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
           <label className="text-xs text-zinc-500">Website URL</label>
           <input className={inputCls} value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder="Optional" />
         </div>
+        <div className="col-span-2">
+          <label
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm cursor-pointer shadow-elevation-1 transition-[background-color,border-color] duration-150 ${
+              adultsOnly
+                ? "bg-red-950/40 border-red-800/60 text-red-300"
+                : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={adultsOnly}
+              onChange={(e) => setAdultsOnly(e.target.checked)}
+              className="accent-red-600"
+            />
+            21+ only (adults-only business)
+          </label>
+          <p className="text-xs text-zinc-600 mt-1">
+            Turn this on if the business can only serve people 21 or older (e.g. a dispensary). This shows a warning badge everywhere the business appears.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-3 border-t border-zinc-800 pt-4">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Locations</p>
           <button
             type="button"
-            onClick={addLocation}
+            onClick={() => setLocationsCollapsed((c) => !c)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider hover:text-zinc-200 transition-colors"
+          >
+            <svg
+              className={`w-3 h-3 transition-transform duration-150 ${locationsCollapsed ? "-rotate-90" : ""}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+            </svg>
+            Locations
+            {locations.length > 0 && (
+              <span className="normal-case font-normal text-zinc-600">
+                ({locations.length} set)
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setLocationsCollapsed(false); addLocation(); }}
             className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
           >
             + Add location
@@ -334,7 +435,26 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
             location is added with an address (or coordinates set on the map).
           </p>
         )}
-        {locations.map((loc, idx) => (
+        {locationsCollapsed && locations.length > 0 && (
+          <div className="space-y-1">
+            {locations.map((loc, idx) => (
+              <button
+                key={loc.key}
+                type="button"
+                onClick={() => setLocationsCollapsed(false)}
+                className="w-full flex items-center justify-between text-left text-xs text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2 hover:border-zinc-600 transition-colors"
+              >
+                <span className="truncate">
+                  {loc.label || [loc.address_line1, loc.city, loc.state].filter(Boolean).join(", ") || `Location ${idx + 1}`}
+                </span>
+                {(loc.lat == null || loc.lng == null) && (
+                  <span className="shrink-0 text-amber-400 ml-2">needs map position</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        {!locationsCollapsed && locations.map((loc, idx) => (
           <div key={loc.key} className="space-y-3 border border-zinc-800 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <p className="text-xs text-zinc-500">Location {idx + 1}</p>

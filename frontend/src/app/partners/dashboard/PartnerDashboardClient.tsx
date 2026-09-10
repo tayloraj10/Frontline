@@ -7,6 +7,7 @@ import { reconcileBusinessLocations } from "@/lib/partnerLocations";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import { OfferRow } from "@/app/admin/AdminPanel";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BusinessRadiusView, { MIN_TIER_ACTIVITY } from "@/components/partners/BusinessRadiusView";
 import RedemptionHistoryTable from "@/components/partners/RedemptionHistoryTable";
 
@@ -18,6 +19,7 @@ export type DashboardBusiness = {
   logo_url: string | null;
   website_url: string | null;
   social_links: BusinessSocialLinks | null;
+  adults_only: boolean;
   status: string;
   created_at: string;
 };
@@ -152,7 +154,7 @@ function BusinessPanel({
       .update(rest)
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at"
       )
       .single();
 
@@ -235,7 +237,10 @@ function BusinessPanel({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-200 truncate">{business.name}</p>
+            <p className="text-sm font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+              {business.name}
+              {business.adults_only && <AdultsOnlyBadge />}
+            </p>
             <p className="text-xs text-zinc-600">
               {businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""} · {businessLocations.length} location{businessLocations.length !== 1 ? "s" : ""}
             </p>

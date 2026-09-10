@@ -11,6 +11,7 @@ export type PartnerMapPoint = {
   businessSlug: string;
   businessName: string;
   hasEventOffer: boolean;
+  adultsOnly: boolean;
   lat: number;
   lng: number;
 };
@@ -78,9 +79,9 @@ export default function PartnersMap({
       el.style.borderRadius = "50%";
       el.style.cursor = "pointer";
       el.style.background = point.hasEventOffer ? "#f59e0b" : "#10b981";
-      el.style.border = "2px solid #fff";
-      el.style.boxShadow = "0 0 0 1px rgba(0,0,0,0.25)";
-      el.title = point.businessName;
+      el.style.border = point.adultsOnly ? "2px solid #ef4444" : "2px solid #fff";
+      el.style.boxShadow = point.adultsOnly ? "0 0 0 1px #ef4444" : "0 0 0 1px rgba(0,0,0,0.25)";
+      el.title = point.adultsOnly ? `${point.businessName} (21+ only)` : point.businessName;
       el.addEventListener("click", () => {
         document.getElementById(`business-${point.businessSlug}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
@@ -111,6 +112,10 @@ export default function PartnersMap({
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
           Partner
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-red-500" />
+          21+ only
         </span>
         {userLocation && (
           <span className="flex items-center gap-1.5">
