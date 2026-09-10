@@ -17,6 +17,37 @@ html, body {
   color: #f4f4f5;
 }
 
+/* Shared modal height cap (ModalShell, ContributionPanel.tsx): keeps every
+   modal fit-to-screen and scrollable internally instead of overflowing the
+   page or pushing its own buttons off-screen. Plain `vh` is sized against the
+   layout viewport, which on mobile Safari/Chrome stays the same whether the
+   address bar is showing or not — so a modal sized at 90vh can end up taller
+   than what's actually visible once the browser chrome is on-screen, making
+   Cancel/Claim-style buttons unreachable. `dvh` recalculates against the real
+   visible viewport as browser chrome shows/hides, so larger phones still get
+   to use their extra height before scrolling kicks in. @supports guards the
+   handful of older browsers without dvh support, where vh remains correct.
+   The mobile phase can't hotfix a broken modal instantly (see
+   feedback_mobile_first_and_prod_safety), so this needs to hold up on-device. */
+.modal-max-h {
+  max-height: 90vh;
+}
+@media (min-width: 640px) {
+  .modal-max-h {
+    max-height: 95vh;
+  }
+}
+@supports (height: 100dvh) {
+  .modal-max-h {
+    max-height: 90dvh;
+  }
+  @media (min-width: 640px) {
+    .modal-max-h {
+      max-height: 95dvh;
+    }
+  }
+}
+
 /* Safe-area insets for notch/home-indicator spacing once wrapped in Capacitor.
    Falls back to 0 in a plain browser (no notch), so these are safe to use everywhere. */
 @utility pt-safe {
