@@ -61,6 +61,7 @@ export type DashboardOffer = {
 
 function BusinessPanel({
   business,
+  isPending,
   offers,
   setOffers,
   businesses,
@@ -76,6 +77,7 @@ function BusinessPanel({
   viewerUserId,
 }: {
   business: DashboardBusiness;
+  isPending: boolean;
   offers: DashboardOffer[];
   setOffers: (o: DashboardOffer[]) => void;
   businesses: DashboardBusiness[];
@@ -217,7 +219,12 @@ function BusinessPanel({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
+    <div className={`border rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 ${isPending ? "border-amber-800/60" : "border-zinc-800"}`}>
+      {isPending && (
+        <div className="px-5 py-2.5 bg-amber-950/40 border-b border-amber-800/60 text-xs text-amber-400">
+          Awaiting admin review. This business isn't visible to the public yet, but you can get everything set up in the meantime.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
           {business.logo_url ? (
@@ -357,6 +364,7 @@ function BusinessPanel({
 
 export default function PartnerDashboardClient({
   initialBusinesses,
+  pendingBusinessIds,
   initialOffers,
   initialLocations,
   redemptionCounts,
@@ -367,6 +375,7 @@ export default function PartnerDashboardClient({
   viewerUserId,
 }: {
   initialBusinesses: DashboardBusiness[];
+  pendingBusinessIds: string[];
   initialOffers: DashboardOffer[];
   initialLocations: DashboardLocation[];
   redemptionCounts: Record<string, number>;
@@ -380,6 +389,7 @@ export default function PartnerDashboardClient({
   const [offers, setOffers] = useState(initialOffers);
   const [locations, setLocations] = useState(initialLocations);
   const [campaignIdsByBusiness, setCampaignIdsByBusiness] = useState(initialCampaignIdsByBusiness);
+  const pendingBusinessIdSet = new Set(pendingBusinessIds);
 
   if (businesses.length === 0) {
     return (
@@ -396,6 +406,7 @@ export default function PartnerDashboardClient({
         <BusinessPanel
           key={b.id}
           business={b}
+          isPending={pendingBusinessIdSet.has(b.id)}
           offers={offers}
           setOffers={setOffers}
           businesses={businesses}
