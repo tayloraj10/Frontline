@@ -1575,12 +1575,31 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
                 {"campaign_id": str(event.campaign_id), "geo_unit_id": event.geo_unit_id, "v": prior_value_sum},
             )
 
+    # An attendee is "already credited" (and so sits out this round's split) when their
+    # cleanup_rsvps.contribution_id points at a real individual haul (nonzero value, or
+    # bags/pounds metrics on the linked cleanups row). A metrics-free, zero-value link —
+    # e.g. just a tracked route or photos, with no bags/pounds attached — doesn't count:
+    # it never represented scoring credit, so it shouldn't permanently exclude that
+    # attendee from every future team-total split just because it happened to claim the
+    # contribution_id slot first.
     pool_query = """
-        SELECT user_id, checked_in_at FROM cleanup_rsvps
-        WHERE cleanup_id = :cleanup_id AND status = 'going' AND contribution_id IS NULL
+        SELECT cr.user_id, cr.checked_in_at
+        FROM cleanup_rsvps cr
+        LEFT JOIN contributions co ON co.id = cr.contribution_id
+        LEFT JOIN cleanups cl ON cl.id = co.cleanup_id
+        WHERE cr.cleanup_id = :cleanup_id AND cr.status = 'going'
+          AND (
+            cr.contribution_id IS NULL
+            OR (
+                COALESCE(co.value, 0) = 0
+                AND COALESCE(cl.metrics_small_bags, 0) = 0
+                AND COALESCE(cl.metrics_large_bags, 0) = 0
+                AND COALESCE(cl.metrics_pounds, 0) = 0
+            )
+          )
     """
     if payload.attendee_pool == "checked_in":
-        pool_query += " AND checked_in_at IS NOT NULL"
+        pool_query += " AND cr.checked_in_at IS NOT NULL"
     pool_result = await db.execute(text(pool_query), {"cleanup_id": str(cleanup_id)})
     pool_rows = pool_result.fetchall()
     pool = [str(r.user_id) for r in pool_rows]
