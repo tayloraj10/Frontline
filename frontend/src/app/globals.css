@@ -61,45 +61,47 @@ html, body {
    with a smaller header/nav (calc() computes a larger available height than
    90vh), which stopped the modal short and left the correctly-reserved space
    at the bottom unused instead of letting the modal grow into it.
-   max-height alone still isn't enough to close that gap, though: it only
-   caps growth, it doesn't make the card USE that space when its own content
-   is shorter than the cap. A short modal just centers as a small box in the
-   middle of the reserved area, leaving equal dead space above and below no
-   matter how generous the cap is. Below 640px (phones, where this whole
-   header/nav-collision problem lives) this sets `height` too, forcing the
-   card to occupy the full reserved area regardless of content length; the
-   content div inside is already overflow-y-auto/flex-1, so short content
-   just leaves blank room at the bottom of that scroll area instead of
-   dead space outside the card, and long content still scrolls normally.
-   Desktop (>=640px) keeps the old content-sized-with-a-cap behavior, since
-   forcing a one-paragraph confirmation dialog to full-height only matters
-   on the phone chrome this fix targets.
-   Neither of those fixes closed the real remaining gap at the bottom,
-   though: the bottom padding/calc used to add env(safe-area-inset-bottom)
-   on top of --bottom-nav-h, but BottomTabBar.tsx's own nav element already
-   has that same safe-area inset baked into its bottom padding, so its
-   measured, published --bottom-nav-h already includes it (same as
-   --top-header-h already including safe-area-inset-top, see
-   HeaderHeightObserver.tsx). Adding it again here double-reserved a whole
-   extra safe-area-inset-bottom's worth of space (the iPhone home-indicator
-   gap, non-zero even though the property defaults to 0 elsewhere), which
-   is exactly the dead space no height/max-height change could ever recover
-   since it was baked into the ceiling itself, not into whether the card
-   filled that ceiling. */
+   Most modals (forms, confirmations, instructions) should still shrink to
+   their own content and sit centered in the reserved box rather than always
+   stretching to fill it, so this stays a max-height, not a height. Only the
+   handful of screens meant to occupy the full reserved area regardless of
+   content length (the trash-report claim flow's report-detail screens, see
+   .modal-fill-h below) opt into forcing height on top of this cap.
+   The bottom padding/calc used to add env(safe-area-inset-bottom) on top of
+   --bottom-nav-h too, but BottomTabBar.tsx's own nav element already has
+   that same safe-area inset baked into its bottom padding, so its measured,
+   published --bottom-nav-h already includes it (same as --top-header-h
+   already including safe-area-inset-top, see HeaderHeightObserver.tsx).
+   Adding it again here double-reserved a whole extra safe-area-inset-
+   bottom's worth of space (the iPhone home-indicator gap), permanently
+   shrinking the available box no matter how the modal used it. */
 .modal-max-h {
   max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
-}
-@media (max-width: 639px) {
-  .modal-max-h {
-    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
-  }
 }
 @supports (height: 100dvh) {
   .modal-max-h {
     max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
   }
-  @media (max-width: 639px) {
-    .modal-max-h {
+}
+
+/* Opt-in modifier for the handful of ModalShell screens (the trash-report
+   claim flow's report-detail states, keyed off footerId in ContributionPanel.tsx)
+   that should occupy the full reserved area on phones instead of shrinking to
+   content: a report card with a photo can vary a lot in height run to run, and
+   this flow in particular reads better filling the space consistently, with the
+   footer report-id scrolling into any leftover room, than it does re-centering
+   itself every time a photo loads or a countdown row appears. Combined with
+   .modal-max-h above (that max-height still applies, this only adds a floor
+   under 640px) rather than a class of its own, so it can't drift out of sync
+   with .modal-max-h's calc(). Desktop keeps the shrink-to-fit behavior, since
+   forcing a short dialog to full-height only matters on the phone chrome this
+   targets. */
+@media (max-width: 639px) {
+  .modal-fill-h {
+    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
+  }
+  @supports (height: 100dvh) {
+    .modal-fill-h {
       height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
     }
   }
@@ -107,23 +109,16 @@ html, body {
 
 /* Same height cap as .modal-max-h (CampaignInstructionsModal.tsx, a separate
    implementation not using ModalShell). Named "-85" from when this used a
-   flat 85vh percentage cap; kept for the callers already using this class. */
+   flat 85vh percentage cap; kept for the callers already using this class.
+   Always shrink-to-fit, never forced to fill height: these are short
+   instructional/description dialogs, not the claim-flow screens .modal-fill-h
+   targets. */
 .modal-max-h-85 {
   max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
-}
-@media (max-width: 639px) {
-  .modal-max-h-85 {
-    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
-  }
 }
 @supports (height: 100dvh) {
   .modal-max-h-85 {
     max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
-  }
-  @media (max-width: 639px) {
-    .modal-max-h-85 {
-      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
-    }
   }
 }
 
