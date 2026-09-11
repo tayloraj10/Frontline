@@ -6,6 +6,10 @@
   /* Real height of the fixed mobile bottom tab bar (BottomTabBar.tsx measures and
      sets this via JS; 0px here is just the pre-hydration/no-JS/desktop fallback). */
   --bottom-nav-h: 0px;
+  /* Real height of the sticky top app header, safe-area-inset-top included
+     (HeaderHeightObserver.tsx measures and sets this via JS; 0px here is just
+     the pre-hydration/no-JS fallback). */
+  --top-header-h: 0px;
 }
 
 @theme inline {
@@ -32,39 +36,41 @@ html, body {
    handful of older browsers without dvh support, where vh remains correct.
    The mobile phase can't hotfix a broken modal instantly (see
    feedback_mobile_first_and_prod_safety), so this needs to hold up on-device.
-   Only env(safe-area-inset-top) is subtracted here — safe-area-inset-bottom and
-   --bottom-nav-h are NOT, because the overlay wrapper's own padding-bottom
-   (pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)))]) already
-   carves that space out of the flex container the modal centers in. Subtracting
-   it again here as well double-reserves the same gutter, shrinking the modal
-   below the space actually available and leaving a dead gap above the nav bar. */
+   No subtraction happens here at all anymore — safe-area-inset-top/bottom,
+   --top-header-h and --bottom-nav-h are all reserved by the overlay wrapper's
+   own padding (pt-[max(1rem,var(--top-header-h))] and
+   pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)))]), which
+   already carves that space out of the flex container the modal centers in.
+   Subtracting the same gutters again here double-reserves them, shrinking the
+   modal below the space actually available and leaving a dead gap at the top
+   or bottom instead of the modal using it. */
 .modal-max-h {
-  max-height: calc(90vh - env(safe-area-inset-top, 0px));
+  max-height: 90vh;
 }
 @media (min-width: 640px) {
   .modal-max-h {
-    max-height: calc(95vh - env(safe-area-inset-top, 0px));
+    max-height: 95vh;
   }
 }
 @supports (height: 100dvh) {
   .modal-max-h {
-    max-height: calc(90dvh - env(safe-area-inset-top, 0px));
+    max-height: 90dvh;
   }
   @media (min-width: 640px) {
     .modal-max-h {
-      max-height: calc(95dvh - env(safe-area-inset-top, 0px));
+      max-height: 95dvh;
     }
   }
 }
 
-/* Same safe-area-aware height cap as .modal-max-h, at 85% instead of 90/95%
+/* Same height cap as .modal-max-h, at 85% instead of 90/95%
    (CampaignInstructionsModal.tsx, a separate implementation not using ModalShell). */
 .modal-max-h-85 {
-  max-height: calc(85vh - env(safe-area-inset-top, 0px));
+  max-height: 85vh;
 }
 @supports (height: 100dvh) {
   .modal-max-h-85 {
-    max-height: calc(85dvh - env(safe-area-inset-top, 0px));
+    max-height: 85dvh;
   }
 }
 
