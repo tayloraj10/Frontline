@@ -146,7 +146,7 @@ export default function CampaignInstructionsModal({
           i
         </button>
         {open && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setOpen(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setOpen(false)}>
             <div
               className="relative w-full max-w-md modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto"
               onClick={(e) => e.stopPropagation()}
@@ -224,7 +224,7 @@ export default function CampaignInstructionsModal({
       )}
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-black/70 backdrop-blur-sm overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)))] bg-black/70 backdrop-blur-sm overflow-y-auto">
           <div className="relative w-full max-w-md sm:max-w-2xl modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto">
             <div className="px-6 pt-5 pb-3 shrink-0 border-b border-zinc-800/60">
               <div className="text-3xl mb-2 text-center">{instructions.icon}</div>

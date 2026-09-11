@@ -3,6 +3,9 @@
 :root {
   --background: #09090b;
   --foreground: #f4f4f5;
+  /* Real height of the fixed mobile bottom tab bar (BottomTabBar.tsx measures and
+     sets this via JS; 0px here is just the pre-hydration/no-JS/desktop fallback). */
+  --bottom-nav-h: 0px;
 }
 
 @theme inline {
@@ -30,20 +33,20 @@ html, body {
    The mobile phase can't hotfix a broken modal instantly (see
    feedback_mobile_first_and_prod_safety), so this needs to hold up on-device. */
 .modal-max-h {
-  max-height: calc(90vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(90vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--bottom-nav-h));
 }
 @media (min-width: 640px) {
   .modal-max-h {
-    max-height: calc(95vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(95vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--bottom-nav-h));
   }
 }
 @supports (height: 100dvh) {
   .modal-max-h {
-    max-height: calc(90dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(90dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--bottom-nav-h));
   }
   @media (min-width: 640px) {
     .modal-max-h {
-      max-height: calc(95dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      max-height: calc(95dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--bottom-nav-h));
     }
   }
 }
@@ -51,11 +54,11 @@ html, body {
 /* Same safe-area-aware height cap as .modal-max-h, at 85% instead of 90/95%
    (CampaignInstructionsModal.tsx, a separate implementation not using ModalShell). */
 .modal-max-h-85 {
-  max-height: calc(85vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(85vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--bottom-nav-h));
 }
 @supports (height: 100dvh) {
   .modal-max-h-85 {
-    max-height: calc(85dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(85dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--bottom-nav-h));
   }
 }
 
