@@ -706,19 +706,21 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
     result = await db.execute(
         text("""
             SELECT
-                id::text,
-                user_id::text,
-                value,
-                photo_url,
-                submitted_at,
-                cleanup_event_id::text,
-                cleanup_event_id IS NOT NULL AS is_group_event,
-                ST_Y(location::geometry) AS latitude,
-                ST_X(location::geometry) AS longitude
-            FROM contributions
-            WHERE campaign_id = :campaign_id
-              AND location IS NOT NULL
-            ORDER BY submitted_at DESC
+                c.id::text,
+                c.user_id::text,
+                c.value,
+                c.photo_url,
+                c.submitted_at,
+                c.cleanup_event_id::text,
+                c.cleanup_event_id IS NOT NULL AS is_group_event,
+                ST_Y(c.location::geometry) AS latitude,
+                ST_X(c.location::geometry) AS longitude,
+                COALESCE(p.display_name, p.username) AS contributor_name
+            FROM contributions c
+            LEFT JOIN profiles p ON p.id = c.user_id
+            WHERE c.campaign_id = :campaign_id
+              AND c.location IS NOT NULL
+            ORDER BY c.submitted_at DESC
             LIMIT 1000
         """),
         {"campaign_id": str(campaign_id)},
@@ -735,6 +737,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
             "cleanup_event_id": row.cleanup_event_id,
             "latitude": float(row.latitude),
             "longitude": float(row.longitude),
+            "contributor_name": row.contributor_name,
         }
         for row in rows
         if row.latitude is not None and row.longitude is not None

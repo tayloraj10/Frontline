@@ -11,6 +11,17 @@ import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BusinessRadiusView, { MIN_TIER_ACTIVITY } from "@/components/partners/BusinessRadiusView";
 import RedemptionHistoryTable from "@/components/partners/RedemptionHistoryTable";
 
+// Browsers report a fetch that failed before getting an HTTP response (dropped
+// connection, app backgrounded mid-request, etc.) with cryptic wording like
+// "TypeError: Load Failed" (Safari/WKWebView) or "Failed to fetch" (Chrome) --
+// not something a user can act on, so swap in something they can.
+function friendlyErrorMessage(message: string): string {
+  if (/load failed|failed to fetch|network\s*error/i.test(message)) {
+    return "Couldn't connect. Check your internet connection and try again.";
+  }
+  return message;
+}
+
 export type DashboardBusiness = {
   id: string;
   name: string;
@@ -158,7 +169,7 @@ function BusinessPanel({
       )
       .single();
 
-    if (updateErr) return updateErr.code === "23505" ? "Slug already taken." : updateErr.message;
+    if (updateErr) return updateErr.code === "23505" ? "Slug already taken." : friendlyErrorMessage(updateErr.message);
 
     const locationsResult = await reconcileBusinessLocations<DashboardLocation>(
       supabase,
@@ -213,7 +224,7 @@ function BusinessPanel({
       .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
       .single();
 
-    if (insertErr) return insertErr.message;
+    if (insertErr) return friendlyErrorMessage(insertErr.message);
 
     setOffers([...offers, data as DashboardOffer]);
     setShowCreateOffer(false);

@@ -274,6 +274,7 @@ interface ContributionPoint {
   submitted_at: string | null;
   is_group_event?: boolean;
   cleanup_event_id?: string | null;
+  contributor_name?: string | null;
   latitude: number;
   longitude: number;
 }
@@ -3783,6 +3784,7 @@ export default function CampaignMap({
               submitted_at: loc.submitted_at ?? "",
               is_group_event: loc.is_group_event ?? false,
               cleanup_event_id: loc.cleanup_event_id ?? "",
+              contributor_name: loc.contributor_name ?? "",
             },
           }));
           contributionFeaturesRef.current = features;
@@ -4478,11 +4480,20 @@ export default function CampaignMap({
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
       map.current.on("mousemove", "contribution-dots", (e) => {
-        if (pinPickerActiveRef.current || !e.features?.[0]) return;
-        const props = e.features[0].properties as { value?: number; submitted_at?: string; cleanup_event_id?: string };
+        // Touch taps synthesize a mousemove without a matching mouseleave, so this tooltip
+        // would stick open on top of whatever the tap's click handler opens (see the
+        // territory-fill hover handler below for the same issue).
+        if (isTouchViewport() || pinPickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as {
+          value?: number;
+          submitted_at?: string;
+          cleanup_event_id?: string;
+          contributor_name?: string;
+        };
         const date = props.submitted_at
           ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
           : "";
+        const name = props.contributor_name || "Anonymous";
         // A group event's total gets split into one contribution row per participant, each
         // logged at the same event, so a single dot's own value is just that person's share.
         // Sum every dot sharing this cleanup_event_id (already loaded, no extra lookup) to
@@ -4497,9 +4508,12 @@ export default function CampaignMap({
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
+          `<div>` +
           `<span style="font-size:13px">🗑️</span>` +
           `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}${props.cleanup_event_id ? " total" : ""}</span>` +
-          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
+          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
+          `</div>` +
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>`;
       });
       map.current.on("mouseleave", "contribution-dots", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
@@ -4507,19 +4521,47 @@ export default function CampaignMap({
       });
       // A dot for a contribution logged against a group event (halo ring) links back
       // to that event's page — plain ad-hoc/individual cleanups have nowhere to link to.
+      // On touch, mousemove never fires (see the guard above), so tapping any dot needs
+      // to fall back to a real tap-to-open popup instead of relying on hover at all.
       map.current.on("click", "contribution-dots", (e) => {
         if (pinPickerActiveRef.current || !e.features?.[0]) return;
-        const props = e.features[0].properties as { cleanup_event_id?: string };
-        if (!props.cleanup_event_id) return;
+        const props = e.features[0].properties as {
+          value?: number;
+          submitted_at?: string;
+          cleanup_event_id?: string;
+          contributor_name?: string;
+        };
         if (!map.current) return;
         contributionPopupRef.current?.remove();
         const coords = (e.features[0].geometry as GeoJSON.Point).coordinates.slice() as [number, number];
-        contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
+        if (props.cleanup_event_id) {
+          contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
+            .setLngLat(coords)
+            .setHTML(
+              `<div style="font-family:inherit;font-size:12px;">` +
+                `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
+                `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>` +
+                `</div>`,
+            )
+            .addTo(map.current);
+          return;
+        }
+        if (!isTouchViewport()) return;
+        const date = props.submitted_at
+          ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
+        const name = props.contributor_name || "Anonymous";
+        const displayValue = props.value ?? 1;
+        contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "200px" })
           .setLngLat(coords)
           .setHTML(
             `<div style="font-family:inherit;font-size:12px;">` +
-              `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
-              `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>` +
+              `<div>` +
+              `<span style="font-size:13px">🗑️</span>` +
+              `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}</span>` +
+              (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
+              `</div>` +
+              `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>` +
               `</div>`,
           )
           .addTo(map.current);
@@ -4529,7 +4571,9 @@ export default function CampaignMap({
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
       map.current.on("mousemove", "report-dots", (e) => {
-        if (pinPickerActiveRef.current || !e.features?.[0]) return;
+        // Same touch-tap issue as contribution-dots above: without this guard the tooltip
+        // sticks open over the Claim This Report modal the tap's click handler opens.
+        if (isTouchViewport() || pinPickerActiveRef.current || !e.features?.[0]) return;
         const props = e.features[0].properties as { severity?: string; reported_at?: string };
         const date = props.reported_at
           ? new Date(props.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
