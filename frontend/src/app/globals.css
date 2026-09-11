@@ -37,10 +37,11 @@ html, body {
    The mobile phase can't hotfix a broken modal instantly (see
    feedback_mobile_first_and_prod_safety), so this needs to hold up on-device.
    safe-area-inset-top/bottom, --top-header-h and --bottom-nav-h are reserved
-   by the overlay wrapper's own padding (pt-[max(1rem,calc(var(--top-header-h)+0.75rem))]
+   by the overlay wrapper's own padding (pt-[max(1rem,calc(var(--top-header-h)+1.25rem))]
    and pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)+0.75rem))]),
    which carves that space out of the flex container the modal centers in.
-   The extra 0.75rem on each side is a deliberate breathing-room buffer so
+   The extra breathing-room buffer on each side (larger on top since the top
+   buffer needed more room than the bottom one on-device) makes sure
    the modal never sits flush against the header/nav bar even when it's tall
    enough to reach both edges.
    That padding alone isn't enough, though: a flat vh/dvh percentage cap here
@@ -58,14 +59,14 @@ html, body {
 .modal-max-h {
   max-height: min(
     90vh,
-    calc(100vh - max(1rem, calc(var(--top-header-h) + 0.75rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
+    calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
   );
 }
 @media (min-width: 640px) {
   .modal-max-h {
     max-height: min(
       95vh,
-      calc(100vh - max(1rem, calc(var(--top-header-h) + 0.75rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
+      calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
     );
   }
 }
@@ -73,14 +74,14 @@ html, body {
   .modal-max-h {
     max-height: min(
       90dvh,
-      calc(100dvh - max(1rem, calc(var(--top-header-h) + 0.75rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
+      calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
     );
   }
   @media (min-width: 640px) {
     .modal-max-h {
       max-height: min(
         95dvh,
-        calc(100dvh - max(1rem, calc(var(--top-header-h) + 0.75rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
+        calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
       );
     }
   }
@@ -91,14 +92,14 @@ html, body {
 .modal-max-h-85 {
   max-height: min(
     85vh,
-    calc(100vh - max(1rem, calc(var(--top-header-h) + 0.75rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
+    calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
   );
 }
 @supports (height: 100dvh) {
   .modal-max-h-85 {
     max-height: min(
       85dvh,
-      calc(100dvh - max(1rem, calc(var(--top-header-h) + 0.75rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
+      calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
     );
   }
 }

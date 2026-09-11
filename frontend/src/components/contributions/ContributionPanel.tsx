@@ -4117,7 +4117,7 @@ function ModalShell({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 pt-[max(1rem,calc(var(--top-header-h)+0.75rem))] pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)+0.75rem))]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)+0.75rem))]"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="relative w-full max-w-sm">
@@ -4131,11 +4131,6 @@ function ModalShell({
           className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col modal-max-h ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
             }`}
         >
-          {footerId && (
-            <span className="absolute bottom-1.5 left-2.5 text-[9px] text-zinc-700 select-text z-10">
-              {footerId}
-            </span>
-          )}
           {title && (
             <div className={`flex items-center justify-between px-5 pt-5 shrink-0 ${compact ? "pb-3" : "pb-4"}`}>
               <div className="flex items-center gap-2">
@@ -4154,9 +4149,14 @@ function ModalShell({
               </IconButton>
             </div>
           )}
-          <div className={`overflow-y-auto min-h-0 flex-1 ${title ? (footerId ? "px-5 pb-7" : "px-5 pb-5") : footerId ? "p-5 pb-7" : "p-5"}`}>
+          <div className={`overflow-y-auto min-h-0 flex-1 ${title ? "px-5 pb-5" : "p-5"}`}>
             {children}
           </div>
+          {footerId && (
+            <div className="shrink-0 px-5 pb-2">
+              <span className="text-[9px] text-zinc-700 select-text">{footerId}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
