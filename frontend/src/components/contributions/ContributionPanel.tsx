@@ -3282,7 +3282,7 @@ function HostEventModal({
 
   const scheduleSection = (
     <>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs text-zinc-500 mb-1.5">Starts</label>
           <input
             type="datetime-local"
@@ -3292,7 +3292,7 @@ function HostEventModal({
           />
           <p className="mt-1 text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs text-zinc-500 mb-1.5">Ends (optional)</label>
           <input
             type="datetime-local"
