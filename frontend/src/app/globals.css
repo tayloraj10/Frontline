@@ -60,13 +60,36 @@ html, body {
    either: a flat 90vh cap can bind before the calc() bound does on devices
    with a smaller header/nav (calc() computes a larger available height than
    90vh), which stopped the modal short and left the correctly-reserved space
-   at the bottom unused instead of letting the modal grow into it. */
+   at the bottom unused instead of letting the modal grow into it.
+   max-height alone still isn't enough to close that gap, though: it only
+   caps growth, it doesn't make the card USE that space when its own content
+   is shorter than the cap. A short modal just centers as a small box in the
+   middle of the reserved area, leaving equal dead space above and below no
+   matter how generous the cap is. Below 640px (phones, where this whole
+   header/nav-collision problem lives) this sets `height` too, forcing the
+   card to occupy the full reserved area regardless of content length; the
+   content div inside is already overflow-y-auto/flex-1, so short content
+   just leaves blank room at the bottom of that scroll area instead of
+   dead space outside the card, and long content still scrolls normally.
+   Desktop (>=640px) keeps the old content-sized-with-a-cap behavior, since
+   forcing a one-paragraph confirmation dialog to full-height only matters
+   on the phone chrome this fix targets. */
 .modal-max-h {
   max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+}
+@media (max-width: 639px) {
+  .modal-max-h {
+    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+  }
 }
 @supports (height: 100dvh) {
   .modal-max-h {
     max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+  }
+  @media (max-width: 639px) {
+    .modal-max-h {
+      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+    }
   }
 }
 
@@ -76,9 +99,19 @@ html, body {
 .modal-max-h-85 {
   max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
 }
+@media (max-width: 639px) {
+  .modal-max-h-85 {
+    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+  }
+}
 @supports (height: 100dvh) {
   .modal-max-h-85 {
     max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+  }
+  @media (max-width: 639px) {
+    .modal-max-h-85 {
+      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+    }
   }
 }
 

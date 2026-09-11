@@ -4151,12 +4151,12 @@ function ModalShell({
           )}
           <div className={`overflow-y-auto min-h-0 flex-1 ${title ? "px-5 pb-5" : "p-5"}`}>
             {children}
+            {footerId && (
+              <div className="mt-3">
+                <span className="text-[9px] text-zinc-700 select-text">{footerId}</span>
+              </div>
+            )}
           </div>
-          {footerId && (
-            <div className="shrink-0 px-5 pb-2">
-              <span className="text-[9px] text-zinc-700 select-text">{footerId}</span>
-            </div>
-          )}
         </div>
       </div>
     </div>
