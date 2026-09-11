@@ -727,8 +727,10 @@ function applyLayerVisibility(m: maplibregl.Map, t: LayerToggleState): void {
     if (m.getLayer(layerId)) m.setLayoutProperty(layerId, "visibility", vis(show));
   };
   setVis("contribution-dots", t.showCleanupDots);
+  setVis("contribution-dots-hit", t.showCleanupDots);
   setVis("contribution-dots-halo", t.showGroupEventDots);
   setVis("report-dots", t.showReports);
+  setVis("report-dots-hit", t.showReports);
   setVis("report-radius-fill", t.showReports);
   setVis("report-radius-line", t.showReports);
   setVis("cleanup-event-radius-fill", t.showEventRadius && t.showGroupEvents);
@@ -3761,6 +3763,19 @@ export default function CampaignMap({
           "circle-stroke-opacity": 0.7,
         },
       });
+      // Invisible, larger-radius layer stacked on top purely for hit testing — MapLibre's
+      // circle hit test is exact against circle-radius, and the 6px visual dot above is far
+      // below a usable mobile tap target. Event listeners bind to this layer, not the visual
+      // one, so taps near a dot (not just dead-on) still register.
+      m.addLayer({
+        id: "contribution-dots-hit",
+        type: "circle",
+        source: "contribution-pts",
+        paint: {
+          "circle-radius": 16,
+          "circle-opacity": 0,
+        },
+      });
     };
 
     if (contributionFeaturesRef.current.length > 0) {
@@ -3924,6 +3939,16 @@ export default function CampaignMap({
         "circle-opacity": 0.9,
         "circle-stroke-width": 1.5,
         "circle-stroke-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#9333ea", "#ea580c"],
+      },
+    });
+    // See contribution-dots-hit above — same enlarged invisible hit target for mobile tapping.
+    m.addLayer({
+      id: "report-dots-hit",
+      type: "circle",
+      source: "report-points",
+      paint: {
+        "circle-radius": 16,
+        "circle-opacity": 0,
       },
     });
 
@@ -4476,10 +4501,10 @@ export default function CampaignMap({
       await setupCustomLayers();
 
       // Event listeners are registered once here and persist through style swaps.
-      map.current.on("mouseenter", "contribution-dots", () => {
+      map.current.on("mouseenter", "contribution-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
-      map.current.on("mousemove", "contribution-dots", (e) => {
+      map.current.on("mousemove", "contribution-dots-hit", (e) => {
         // Touch taps synthesize a mousemove without a matching mouseleave, so this tooltip
         // would stick open on top of whatever the tap's click handler opens (see the
         // territory-fill hover handler below for the same issue).
@@ -4515,7 +4540,7 @@ export default function CampaignMap({
           `</div>` +
           `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>`;
       });
-      map.current.on("mouseleave", "contribution-dots", () => {
+      map.current.on("mouseleave", "contribution-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
@@ -4523,7 +4548,7 @@ export default function CampaignMap({
       // to that event's page — plain ad-hoc/individual cleanups have nowhere to link to.
       // On touch, mousemove never fires (see the guard above), so tapping any dot needs
       // to fall back to a real tap-to-open popup instead of relying on hover at all.
-      map.current.on("click", "contribution-dots", (e) => {
+      map.current.on("click", "contribution-dots-hit", (e) => {
         if (pinPickerActiveRef.current || !e.features?.[0]) return;
         const props = e.features[0].properties as {
           value?: number;
@@ -4567,10 +4592,10 @@ export default function CampaignMap({
           .addTo(map.current);
       });
 
-      map.current.on("mouseenter", "report-dots", () => {
+      map.current.on("mouseenter", "report-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
-      map.current.on("mousemove", "report-dots", (e) => {
+      map.current.on("mousemove", "report-dots-hit", (e) => {
         // Same touch-tap issue as contribution-dots above: without this guard the tooltip
         // sticks open over the Claim This Report modal the tap's click handler opens.
         if (isTouchViewport() || pinPickerActiveRef.current || !e.features?.[0]) return;
@@ -4588,11 +4613,11 @@ export default function CampaignMap({
           (date ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">Reported ${date}</div>` : "") +
           `<div style="color:#71717a;font-size:10px;margin-top:4px">Clean up within the shaded radius to resolve it</div>`;
       });
-      map.current.on("mouseleave", "report-dots", () => {
+      map.current.on("mouseleave", "report-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
-      map.current.on("click", "report-dots", (e) => {
+      map.current.on("click", "report-dots-hit", (e) => {
         if (pinPickerActiveRef.current || routePickerActiveRef.current || !e.features?.[0]) return;
         const props = e.features[0].properties as {
           id?: string;
@@ -4636,7 +4661,7 @@ export default function CampaignMap({
         // territory-fill covers the whole map (see the opacity-vs-interactivity note above), so
         // its mousemove fires under report/contribution dots too and would otherwise clobber the
         // pointer cursor those layers' own handlers just set — defer to them when a dot is present.
-        if (map.current.queryRenderedFeatures(e.point, { layers: ["report-dots", "contribution-dots"] }).length > 0) {
+        if (map.current.queryRenderedFeatures(e.point, { layers: ["report-dots-hit", "contribution-dots-hit"] }).length > 0) {
           return;
         }
         const hoverState = e.features[0].state as { claim_owned?: boolean; claim_is_group?: boolean };

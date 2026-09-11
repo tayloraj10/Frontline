@@ -4154,7 +4154,7 @@ function ModalShell({
               </IconButton>
             </div>
           )}
-          <div className={`overflow-y-auto ${title ? (footerId ? "px-5 pb-7" : "px-5 pb-5") : footerId ? "p-5 pb-7" : "p-5"}`}>
+          <div className={`overflow-y-auto min-h-0 flex-1 ${title ? (footerId ? "px-5 pb-7" : "px-5 pb-5") : footerId ? "p-5 pb-7" : "p-5"}`}>
             {children}
           </div>
         </div>
