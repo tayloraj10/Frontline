@@ -30,21 +30,32 @@ html, body {
    The mobile phase can't hotfix a broken modal instantly (see
    feedback_mobile_first_and_prod_safety), so this needs to hold up on-device. */
 .modal-max-h {
-  max-height: 90vh;
+  max-height: calc(90vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 @media (min-width: 640px) {
   .modal-max-h {
-    max-height: 95vh;
+    max-height: calc(95vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   }
 }
 @supports (height: 100dvh) {
   .modal-max-h {
-    max-height: 90dvh;
+    max-height: calc(90dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   }
   @media (min-width: 640px) {
     .modal-max-h {
-      max-height: 95dvh;
+      max-height: calc(95dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     }
+  }
+}
+
+/* Same safe-area-aware height cap as .modal-max-h, at 85% instead of 90/95%
+   (CampaignInstructionsModal.tsx, a separate implementation not using ModalShell). */
+.modal-max-h-85 {
+  max-height: calc(85vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+@supports (height: 100dvh) {
+  .modal-max-h-85 {
+    max-height: calc(85dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   }
 }
 

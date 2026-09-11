@@ -1172,7 +1172,7 @@ function TerritoryPanel({
                 {isContested ? "Contested" : "Claimed"}
               </span>
             )}
-            <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+            <IconButton onClick={onClose} className="-mr-2.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
         </div>
 
@@ -1423,7 +1423,7 @@ function TerritoryPanel({
         >
           <div className="flex items-start justify-between mb-2">
             <p className="text-sm font-semibold text-zinc-100">What are points?</p>
-            <IconButton onClick={() => setShowPointsInfo(false)} size="sm" className="-mr-1.5 -mt-1 text-lg leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+            <IconButton onClick={() => setShowPointsInfo(false)} className="-mr-2.5 -mt-1.5 text-lg leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
             The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
@@ -1469,7 +1469,7 @@ function StatePanel({
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
             <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1566,7 +1566,7 @@ function HexPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
             <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -6147,7 +6147,7 @@ export default function CampaignMap({
           onClick={() => setSelectedBusiness(null)}
         >
           <div
-            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 pr-14 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <IconButton
@@ -6170,7 +6170,7 @@ export default function CampaignMap({
                   🏪
                 </div>
               )}
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-white flex items-center gap-1.5 flex-wrap">
                   {selectedBusiness.business.name}
                   {selectedBusiness.business.adults_only && <AdultsOnlyBadge />}

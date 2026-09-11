@@ -4149,7 +4149,7 @@ function ModalShell({
                   </span>
                 )}
               </div>
-              <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 text-lg leading-none" aria-label="Close">
+              <IconButton onClick={onClose} className="-mr-2.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 text-lg leading-none" aria-label="Close">
                 ×
               </IconButton>
             </div>
