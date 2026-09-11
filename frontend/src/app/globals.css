@@ -38,7 +38,7 @@ html, body {
    feedback_mobile_first_and_prod_safety), so this needs to hold up on-device.
    safe-area-inset-top/bottom, --top-header-h and --bottom-nav-h are reserved
    by the overlay wrapper's own padding (pt-[max(1rem,calc(var(--top-header-h)+1.25rem))]
-   and pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)+1.25rem))]),
+   and pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))]),
    which carves that space out of the flex container the modal centers in.
    Both buffers use the same 1.25rem value on purpose: since the modal fills
    that reserved box almost edge-to-edge (see below), the gap from header to
@@ -73,22 +73,34 @@ html, body {
    dead space outside the card, and long content still scrolls normally.
    Desktop (>=640px) keeps the old content-sized-with-a-cap behavior, since
    forcing a one-paragraph confirmation dialog to full-height only matters
-   on the phone chrome this fix targets. */
+   on the phone chrome this fix targets.
+   Neither of those fixes closed the real remaining gap at the bottom,
+   though: the bottom padding/calc used to add env(safe-area-inset-bottom)
+   on top of --bottom-nav-h, but BottomTabBar.tsx's own nav element already
+   has that same safe-area inset baked into its bottom padding, so its
+   measured, published --bottom-nav-h already includes it (same as
+   --top-header-h already including safe-area-inset-top, see
+   HeaderHeightObserver.tsx). Adding it again here double-reserved a whole
+   extra safe-area-inset-bottom's worth of space (the iPhone home-indicator
+   gap, non-zero even though the property defaults to 0 elsewhere), which
+   is exactly the dead space no height/max-height change could ever recover
+   since it was baked into the ceiling itself, not into whether the card
+   filled that ceiling. */
 .modal-max-h {
-  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
 }
 @media (max-width: 639px) {
   .modal-max-h {
-    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
   }
 }
 @supports (height: 100dvh) {
   .modal-max-h {
-    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
   }
   @media (max-width: 639px) {
     .modal-max-h {
-      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
     }
   }
 }
@@ -97,20 +109,20 @@ html, body {
    implementation not using ModalShell). Named "-85" from when this used a
    flat 85vh percentage cap; kept for the callers already using this class. */
 .modal-max-h-85 {
-  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
 }
 @media (max-width: 639px) {
   .modal-max-h-85 {
-    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
   }
 }
 @supports (height: 100dvh) {
   .modal-max-h-85 {
-    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
   }
   @media (max-width: 639px) {
     .modal-max-h-85 {
-      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
+      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
     }
   }
 }
