@@ -3288,7 +3288,7 @@ function HostEventModal({
             type="datetime-local"
             value={scheduledStart}
             onChange={(e) => setScheduledStart(e.target.value)}
-            className="block w-full min-w-0 max-w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm overflow-hidden"
+            className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
           />
           <p className="mt-1 text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
         </div>
@@ -3300,7 +3300,7 @@ function HostEventModal({
             min={scheduledStart || undefined}
             onChange={(e) => setScheduledEnd(e.target.value)}
             aria-invalid={endBeforeStart}
-            className="block w-full min-w-0 max-w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm overflow-hidden"
+            className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
           />
           {!scheduledEnd && (
             <p className="mt-1 text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
@@ -4149,7 +4149,7 @@ function ModalShell({
               </IconButton>
             </div>
           )}
-          <div className={`overflow-y-auto overflow-x-hidden min-h-0 flex-1 ${title ? "px-5 pb-5" : "p-5"}`}>
+          <div className={`overflow-y-auto min-h-0 flex-1 ${title ? "px-5 pb-5" : "p-5"}`}>
             {children}
             {footerId && (
               <div className="mt-3">
