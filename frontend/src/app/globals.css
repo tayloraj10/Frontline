@@ -38,9 +38,12 @@ html, body {
    feedback_mobile_first_and_prod_safety), so this needs to hold up on-device.
    No subtraction happens here at all anymore — safe-area-inset-top/bottom,
    --top-header-h and --bottom-nav-h are all reserved by the overlay wrapper's
-   own padding (pt-[max(1rem,var(--top-header-h))] and
-   pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)))]), which
-   already carves that space out of the flex container the modal centers in.
+   own padding (pt-[max(1rem,calc(var(--top-header-h)+0.75rem))] and
+   pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)+0.75rem))]),
+   which already carves that space out of the flex container the modal centers
+   in. The extra 0.75rem on each side is a deliberate breathing-room buffer so
+   the modal never sits flush against the header/nav bar even when it's tall
+   enough to reach both edges.
    Subtracting the same gutters again here double-reserves them, shrinking the
    modal below the space actually available and leaving a dead gap at the top
    or bottom instead of the modal using it. */
