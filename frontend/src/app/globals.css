@@ -38,12 +38,12 @@ html, body {
    feedback_mobile_first_and_prod_safety), so this needs to hold up on-device.
    safe-area-inset-top/bottom, --top-header-h and --bottom-nav-h are reserved
    by the overlay wrapper's own padding (pt-[max(1rem,calc(var(--top-header-h)+1.25rem))]
-   and pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)+0.75rem))]),
+   and pb-[max(1rem,calc(env(safe-area-inset-bottom)+var(--bottom-nav-h)+1.25rem))]),
    which carves that space out of the flex container the modal centers in.
-   The extra breathing-room buffer on each side (larger on top since the top
-   buffer needed more room than the bottom one on-device) makes sure
-   the modal never sits flush against the header/nav bar even when it's tall
-   enough to reach both edges.
+   Both buffers use the same 1.25rem value on purpose: since the modal fills
+   that reserved box almost edge-to-edge (see below), the gap from header to
+   modal top and modal bottom to nav bar end up visually equal only if the
+   buffer feeding each side's padding is the same number.
    That padding alone isn't enough, though: a flat vh/dvh percentage cap here
    doesn't know how much of the viewport that padding is eating. On a device
    where header + nav + buffers add up to more than the ~10% margin a flat
@@ -55,52 +55,30 @@ html, body {
    iOS header even after the padding fix above was confirmed live in
    production. Mirroring the exact same max()/calc() expressions used in the
    padding here, and subtracting them from the viewport, guarantees the
-   modal's own max-height can never exceed the space the padding reserved. */
+   modal's own max-height can never exceed the space the padding reserved.
+   There's no flat vh/dvh percentage floor alongside that calc() anymore
+   either: a flat 90vh cap can bind before the calc() bound does on devices
+   with a smaller header/nav (calc() computes a larger available height than
+   90vh), which stopped the modal short and left the correctly-reserved space
+   at the bottom unused instead of letting the modal grow into it. */
 .modal-max-h {
-  max-height: min(
-    90vh,
-    calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
-  );
-}
-@media (min-width: 640px) {
-  .modal-max-h {
-    max-height: min(
-      95vh,
-      calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
-    );
-  }
+  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
 }
 @supports (height: 100dvh) {
   .modal-max-h {
-    max-height: min(
-      90dvh,
-      calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
-    );
-  }
-  @media (min-width: 640px) {
-    .modal-max-h {
-      max-height: min(
-        95dvh,
-        calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
-      );
-    }
+    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
   }
 }
 
-/* Same height cap as .modal-max-h, at 85% instead of 90/95%
-   (CampaignInstructionsModal.tsx, a separate implementation not using ModalShell). */
+/* Same height cap as .modal-max-h (CampaignInstructionsModal.tsx, a separate
+   implementation not using ModalShell). Named "-85" from when this used a
+   flat 85vh percentage cap; kept for the callers already using this class. */
 .modal-max-h-85 {
-  max-height: min(
-    85vh,
-    calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
-  );
+  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
 }
 @supports (height: 100dvh) {
   .modal-max-h-85 {
-    max-height: min(
-      85dvh,
-      calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 0.75rem)))
-    );
+    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(env(safe-area-inset-bottom) + var(--bottom-nav-h) + 1.25rem)));
   }
 }
 
