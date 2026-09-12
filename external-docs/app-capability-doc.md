@@ -74,6 +74,7 @@ Last updated: 2026-08-03.
 - Promote/demote attendees to co-organizer.
 - "Log for them" — log an individual attendee's contribution on their behalf (by bag count or weight).
 - "Log team total" (organizer-total events only) — enter the whole event's haul once; auto-splits points equally across an eligible pool (checked-in-only or everyone-going), excluding anyone already credited individually. **Re-submitting wipes and re-splits from scratch** (cumulative total each time, not a delta) — explicit warning banner. Supports an advanced per-attendee override table and shows log history (current vs. superseded).
+- Organizer Dashboard (`/groups/[slug]/organizer`, admin-only, soft-locked for non-admins) — action-focused nudges: schedule a new event once the group has gone 7+ days without one, and log metrics for any event whose check-in window has closed with nothing ever recorded. Surfaced via a pulsing dot on the `/groups` nav link and a bell notification once the daily follow-up cron runs.
 
 ---
 

@@ -15,6 +15,7 @@ const TYPE_ICON: Record<string, string> = {
   points_adjusted: "🪙",
   claim_expired: "↺",
   offer_eligible: "🎁",
+  organizer_action_needed: "📋",
 };
 
 function timeAgo(dateStr: string) {
@@ -149,7 +150,11 @@ export default function NotificationBell({ userId }: { userId: string }) {
 
                 return (
                   <li key={n.id} className="hover:bg-zinc-800/40 active:bg-zinc-800/40 transition-colors duration-150">
-                    {n.campaign_slug ? (
+                    {n.link_url ? (
+                      <Link href={n.link_url} onClick={() => setOpen(false)}>
+                        {inner}
+                      </Link>
+                    ) : n.campaign_slug ? (
                       <Link href={`/campaigns/${n.campaign_slug}`} onClick={() => setOpen(false)}>
                         {inner}
                       </Link>

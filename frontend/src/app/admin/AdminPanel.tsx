@@ -3529,6 +3529,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
   "email_partner_coordination_enabled",
   "email_attendee_reminder_enabled",
   "email_organizer_stats_reminder_enabled",
+  "email_organizer_followup_enabled",
 ]);
 
 const METERS_TO_FEET = 3.28084;

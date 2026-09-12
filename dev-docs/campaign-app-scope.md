@@ -970,6 +970,9 @@ Direct creation replaced with an admin-approved application flow: `/groups/apply
 - Admin role badge display
 - Edit group info, logo upload, member management (admin only)
 
+#### Group Organizer Dashboard (`/groups/[slug]/organizer`)
+Admin-only, action-focused (not stats) view for group organizers: nudges to schedule a new event once a group has gone 7+ days without one scheduled or has never had one, and per-event "log your metrics" nudges once an event's check-in window has closed with no metrics ever recorded (checked against the event row, `contributions`, and `cleanup_rsvps.contribution_id`). Soft-locks with a "🔒 Admins only" message for non-admin viewers instead of redirecting. Surfaced via a pulsing dot on the `/groups` nav link (`GET /api/users/me/has-pending-organizer-items`) and via a daily Railway cron (`organizer-followups-cron`, `POST /api/cleanup-events/organizer-followups/run`, gated by the `email_organizer_followup_enabled` game setting, off by default) that emails each event's organizer(s) a stats summary or a log-metrics nudge once the check-in window closes, and drops a `user_notifications` row (type `organizer_action_needed`, linking to the organizer dashboard via the new generic `link_url` column) for every group admin when metrics are still missing.
+
 ---
 
 ### Post-MVP: Mobile & Monetization

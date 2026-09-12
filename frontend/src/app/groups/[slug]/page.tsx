@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { BarChart3, CalendarPlus, Pencil } from "lucide-react";
+import { BarChart3, CalendarPlus, ClipboardList, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
@@ -97,7 +97,9 @@ export default async function GroupProfilePage({ params }: Props) {
     .eq("group_id", group.id)
     .order("joined_at", { ascending: true });
 
-  const members = (membersData ?? []) as Pick<GroupMember, "user_id" | "role" | "joined_at">[];
+  const members = ((membersData ?? []) as Pick<GroupMember, "user_id" | "role" | "joined_at">[]).sort((a, b) =>
+    a.role === b.role ? 0 : a.role === "admin" ? -1 : 1
+  );
   const userIds = members.map((m) => m.user_id);
 
   const { data: profilesData } = userIds.length > 0
@@ -214,6 +216,15 @@ export default async function GroupProfilePage({ params }: Props) {
             >
               <CalendarPlus className="w-3.5 h-3.5" />
               New event
+            </Link>
+          )}
+          {isAdmin && (
+            <Link
+              href={`/groups/${slug}/organizer`}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-zinc-700 bg-zinc-800/60 text-zinc-300 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-zinc-800 hover:border-zinc-600 hover:text-zinc-100 active:scale-[0.95] touch-manipulation"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              Organizer dashboard
             </Link>
           )}
           {isAdmin && (
