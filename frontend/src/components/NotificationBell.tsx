@@ -98,6 +98,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
   return (
     <div className="relative" ref={panelRef}>
       <IconButton
+        size="sm"
         onClick={handleOpen}
         className="relative text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 active:text-zinc-100 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
         aria-label="Notifications"

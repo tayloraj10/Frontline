@@ -156,11 +156,20 @@ export default async function AppHeader() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <SupportButton />
-          {isAdmin && <ActivitySnapshotModalWrapper hasPendingReviewItems={hasPendingAdminReviewItems} />}
-          {user && <NotificationBellWrapper userId={user.id} />}
-          {user && <AchievementModalWrapper userId={user.id} />}
-          <UserNav user={user} points={points} spendablePoints={spendablePoints} avatarUrl={avatarUrl} displayName={displayName} username={username} />
+          <div className="flex items-center gap-0">
+            <SupportButton />
+            {isAdmin && <ActivitySnapshotModalWrapper hasPendingReviewItems={hasPendingAdminReviewItems} />}
+            {user && <NotificationBellWrapper userId={user.id} />}
+            {user && <AchievementModalWrapper userId={user.id} />}
+          </div>
+          <UserNav
+            user={user}
+            points={points}
+            spendablePoints={spendablePoints}
+            avatarUrl={avatarUrl}
+            displayName={displayName}
+            username={username}
+          />
         </div>
       </div>
     </header>

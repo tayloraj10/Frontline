@@ -73,6 +73,7 @@ export default function ActivitySnapshotModal({ hasPendingReviewItems }: { hasPe
     <>
       <div className="relative">
         <IconButton
+          size="sm"
           onClick={handleOpen}
           className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 active:text-zinc-100 active:bg-zinc-800 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
           aria-label="Site activity snapshot"
@@ -89,7 +90,7 @@ export default function ActivitySnapshotModal({ hasPendingReviewItems }: { hasPe
         </IconButton>
         {hasPendingReviewItems && (
           <span
-            className="absolute top-[10px] right-[10px] w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_2px_rgba(251,191,36,0.6)] animate-pulse pointer-events-none"
+            className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_2px_rgba(251,191,36,0.6)] animate-pulse pointer-events-none"
             aria-hidden="true"
           />
         )}
