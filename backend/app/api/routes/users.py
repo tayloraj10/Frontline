@@ -1,10 +1,23 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.services.organizer_dashboard import user_has_pending_organizer_items
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("/me/has-pending-organizer-items")
+async def get_has_pending_organizer_items(
+    viewer_user_id: UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Feeds the /groups nav pulse -- true if the viewer admins any group with an
+    overdue event nudge or an event missing logged metrics."""
+    return {"has_pending_items": await user_has_pending_organizer_items(db, viewer_user_id)}
 
 
 @router.get("/search")

@@ -85,6 +85,14 @@ class ContributionRequest(BaseModel):
             raise ValueError("must be non-negative")
         return v
 
+    @field_validator("pounds")
+    @classmethod
+    def _round_pounds(cls, v: float | None) -> float | None:
+        # Rounding to a whole number before binding avoids asyncpg encoding a
+        # non-terminating binary float into the NUMERIC metrics_pounds column
+        # (e.g. 123.8 becomes 123.79999999999999715782905695999926515502929688).
+        return round(v) if v is not None else None
+
     @field_validator("route")
     @classmethod
     def _valid_linestring(cls, v: dict | None) -> dict | None:

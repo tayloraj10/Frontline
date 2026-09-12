@@ -1592,6 +1592,251 @@ async def _resolve_problem_report_flag_group(
     return {"resolved_count": resolved_count, "hidden": hidden}
 
 
+@router.get("/activity-snapshot")
+async def get_activity_snapshot(days: int = 7, db: AsyncSession = Depends(get_db)):
+    """
+    Also mounted in production via admin_prod.py, which is a secret-protected mirror of
+    this route since this router is dev-only.
+    """
+    return await get_recent_activity_snapshot(db, days)
+
+
+async def get_recent_activity_snapshot(db: AsyncSession, days: int = 7) -> dict:
+    window = {"days": days}
+
+    signup_rows = (
+        await db.execute(
+            text("""
+                SELECT p.username, p.display_name, u.email
+                FROM profiles p
+                JOIN auth.users u ON u.id = p.id
+                WHERE p.created_at > NOW() - (:days * INTERVAL '1 day')
+                ORDER BY p.created_at DESC
+            """),
+            window,
+        )
+    ).fetchall()
+
+    group_rows = (
+        await db.execute(
+            text("""
+                SELECT g.name, g.slug, g.status, p.username AS created_by_username
+                FROM groups g
+                LEFT JOIN profiles p ON p.id = g.created_by
+                WHERE g.created_at > NOW() - (:days * INTERVAL '1 day')
+                ORDER BY g.created_at DESC
+            """),
+            window,
+        )
+    ).fetchall()
+
+    pending_group_rows = (
+        await db.execute(
+            text("""
+                SELECT g.name, g.slug, g.status, p.username AS created_by_username
+                FROM groups g
+                LEFT JOIN profiles p ON p.id = g.created_by
+                WHERE g.status = 'pending'
+                ORDER BY g.created_at ASC
+            """)
+        )
+    ).fetchall()
+
+    event_rows = (
+        await db.execute(
+            text("""
+                SELECT
+                    c.id, c.title, c.status, c.created_at,
+                    g.name AS group_name, g.slug AS group_slug,
+                    (
+                        SELECT array_agg(p.username)
+                        FROM profiles p
+                        WHERE p.id = ANY(c.organizer_user_ids)
+                    ) AS organizer_usernames
+                FROM cleanups c
+                LEFT JOIN groups g ON g.id = c.group_id
+                WHERE c.is_group_event = true AND c.created_at > NOW() - (:days * INTERVAL '1 day')
+                ORDER BY c.created_at DESC
+            """),
+            window,
+        )
+    ).fetchall()
+
+    events_completed_row = (
+        await db.execute(
+            text("""
+                SELECT COUNT(*) AS count
+                FROM cleanups
+                WHERE is_group_event = true AND status = 'completed'
+                    AND updated_at > NOW() - (:days * INTERVAL '1 day')
+            """),
+            window,
+        )
+    ).one()
+
+    contribution_rows = (
+        await db.execute(
+            text("""
+                SELECT c.value, p.username, g.name AS group_name
+                FROM contributions c
+                LEFT JOIN profiles p ON p.id = c.user_id
+                LEFT JOIN groups g ON g.id = c.group_id
+                WHERE c.submitted_at > NOW() - (:days * INTERVAL '1 day')
+                ORDER BY c.submitted_at DESC
+            """),
+            window,
+        )
+    ).fetchall()
+
+    metrics_row = (
+        await db.execute(
+            text("""
+                SELECT
+                    COALESCE(SUM(metrics_small_bags), 0) AS small_bags,
+                    COALESCE(SUM(metrics_large_bags), 0) AS large_bags,
+                    COALESCE(SUM(metrics_pounds), 0) AS pounds
+                FROM cleanups
+                WHERE is_group_event = true AND status = 'completed'
+                    AND updated_at > NOW() - (:days * INTERVAL '1 day')
+            """),
+            window,
+        )
+    ).one()
+
+    partner_business_rows = (
+        await db.execute(
+            text("""
+                SELECT b.name, b.slug, b.status, p.username AS created_by_username
+                FROM partner_businesses b
+                LEFT JOIN profiles p ON p.id = b.created_by
+                WHERE b.created_at > NOW() - (:days * INTERVAL '1 day')
+                ORDER BY b.created_at DESC
+            """),
+            window,
+        )
+    ).fetchall()
+
+    pending_partner_business_rows = (
+        await db.execute(
+            text("""
+                SELECT b.name, b.slug, b.status, p.username AS created_by_username
+                FROM partner_businesses b
+                LEFT JOIN profiles p ON p.id = b.created_by
+                WHERE b.status = 'pending'
+                ORDER BY b.created_at ASC
+            """)
+        )
+    ).fetchall()
+
+    offer_rows = (
+        await db.execute(
+            text("""
+                SELECT o.title, o.status, b.name AS business_name, b.slug AS business_slug
+                FROM partner_offers o
+                JOIN partner_businesses b ON b.id = o.business_id
+                WHERE o.created_at > NOW() - (:days * INTERVAL '1 day')
+                ORDER BY o.created_at DESC
+            """),
+            window,
+        )
+    ).fetchall()
+
+    redemption_rows = (
+        await db.execute(
+            text("""
+                SELECT r.points_spent, p.username, o.title AS offer_title, b.name AS business_name
+                FROM partner_redemptions r
+                LEFT JOIN profiles p ON p.id = r.user_id
+                JOIN partner_offers o ON o.id = r.offer_id
+                JOIN partner_businesses b ON b.id = r.business_id
+                WHERE r.redeemed_at > NOW() - (:days * INTERVAL '1 day')
+                ORDER BY r.redeemed_at DESC
+            """),
+            window,
+        )
+    ).fetchall()
+
+    return {
+        "days": days,
+        "has_pending_review_items": len(pending_group_rows) > 0 or len(pending_partner_business_rows) > 0,
+        "signups": {
+            "count": len(signup_rows),
+            "items": [
+                {"username": r.username, "display_name": r.display_name, "email": r.email} for r in signup_rows
+            ],
+        },
+        "groups": {
+            "count": len(group_rows),
+            "items": [
+                {"name": r.name, "slug": r.slug, "status": r.status, "created_by": r.created_by_username}
+                for r in group_rows
+            ],
+            "pending_count": len(pending_group_rows),
+            "pending_items": [
+                {"name": r.name, "slug": r.slug, "status": r.status, "created_by": r.created_by_username}
+                for r in pending_group_rows
+            ],
+        },
+        "events": {
+            "created_count": len(event_rows),
+            "completed_count": events_completed_row.count,
+            "small_bags": metrics_row.small_bags,
+            "large_bags": metrics_row.large_bags,
+            "pounds": float(metrics_row.pounds),
+            "items": [
+                {
+                    "title": r.title,
+                    "status": r.status,
+                    "group_name": r.group_name,
+                    "group_slug": r.group_slug,
+                    "organizers": r.organizer_usernames or [],
+                }
+                for r in event_rows
+            ],
+        },
+        "contributions": {
+            "count": len(contribution_rows),
+            "total_points": float(sum(r.value or 0 for r in contribution_rows)),
+            "items": [
+                {"username": r.username, "group_name": r.group_name, "value": float(r.value or 0)}
+                for r in contribution_rows
+            ],
+        },
+        "partners": {
+            "count": len(partner_business_rows),
+            "items": [
+                {"name": r.name, "slug": r.slug, "status": r.status, "created_by": r.created_by_username}
+                for r in partner_business_rows
+            ],
+            "pending_count": len(pending_partner_business_rows),
+            "pending_items": [
+                {"name": r.name, "slug": r.slug, "status": r.status, "created_by": r.created_by_username}
+                for r in pending_partner_business_rows
+            ],
+        },
+        "offers": {
+            "count": len(offer_rows),
+            "items": [
+                {"title": r.title, "status": r.status, "business_name": r.business_name, "business_slug": r.business_slug}
+                for r in offer_rows
+            ],
+        },
+        "redemptions": {
+            "count": len(redemption_rows),
+            "total_points": float(sum(r.points_spent or 0 for r in redemption_rows)),
+            "items": [
+                {
+                    "username": r.username,
+                    "offer_title": r.offer_title,
+                    "business_name": r.business_name,
+                    "points_spent": float(r.points_spent or 0),
+                }
+                for r in redemption_rows
+            ],
+        },
+    }
+
+
 async def resolve_content_flag_group(
     db: AsyncSession, content_type: str, content_id: UUID, photo_url: str, resolution: str, admin_id: UUID
 ) -> dict:
