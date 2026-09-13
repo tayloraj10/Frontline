@@ -1080,7 +1080,8 @@ async def get_group_member_activity(
                 SELECT c.id::text, c.submitted_at, c.value, c.photo_url, c.notes,
                        COALESCE(cl.metrics_small_bags, 0)::int AS small_bags,
                        COALESCE(cl.metrics_large_bags, 0)::int AS large_bags,
-                       COALESCE(cl.metrics_pounds, 0)::float   AS pounds
+                       COALESCE(cl.metrics_pounds, 0)::float   AS pounds,
+                       cl.metrics_detail
                 FROM contributions c
                 LEFT JOIN cleanups cl ON cl.id = COALESCE(c.cleanup_id, c.cleanup_event_id)
                 WHERE c.group_id = :gid AND c.campaign_id = :cid AND c.user_id = :uid
@@ -1103,6 +1104,7 @@ async def get_group_member_activity(
             "small_bags": r.small_bags,
             "large_bags": r.large_bags,
             "pounds": r.pounds,
+            "metrics_detail": r.metrics_detail,
         }
         for r in rows
     ]

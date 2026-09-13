@@ -144,7 +144,7 @@ async def get_geo_unit_stats(
             text("""
                 SELECT c.value, c.submitted_at, c.group_id, c.user_id,
                        g.name AS group_name, p.display_name, p.username,
-                       cl.metrics_small_bags, cl.metrics_large_bags
+                       cl.metrics_small_bags, cl.metrics_large_bags, cl.metrics_detail
                 FROM contributions c
                 LEFT JOIN groups g ON g.id = c.group_id
                 LEFT JOIN profiles p ON p.id = c.user_id
@@ -204,6 +204,7 @@ async def get_geo_unit_stats(
                 "contributor_name": r.display_name or r.username or "Anonymous",
                 "small_bags": r.metrics_small_bags or 0,
                 "large_bags": r.metrics_large_bags or 0,
+                "metrics_detail": r.metrics_detail,
             }
             for r in recent
         ],
