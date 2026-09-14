@@ -98,7 +98,7 @@ export default async function UserProfilePage({ params }: Props) {
     supabase
       .from("contributions")
       .select(
-        "id, campaign_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)",
+        "id, campaign_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags, metrics_detail)",
         { count: "exact" },
       )
       .eq("user_id", profile.id)
@@ -177,7 +177,11 @@ export default async function UserProfilePage({ params }: Props) {
   const campaignsById = new Map((campaignsData ?? []).map((c) => [c.id, c]));
 
   const contribs = (contribsData ?? []).map((c) => {
-    const cleanup = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+    const cleanup = c.cleanups as unknown as {
+      metrics_small_bags: number | null;
+      metrics_large_bags: number | null;
+      metrics_detail: { basis?: string; bag_types?: Record<string, number>; countable_items?: Record<string, number> } | null;
+    } | null;
     return {
       id: c.id,
       campaign_id: c.campaign_id,
@@ -187,6 +191,7 @@ export default async function UserProfilePage({ params }: Props) {
       submitted_at: c.submitted_at,
       small_bags: cleanup?.metrics_small_bags ?? null,
       large_bags: cleanup?.metrics_large_bags ?? null,
+      metrics_detail: cleanup?.metrics_detail ?? null,
     };
   });
   const totalTractsCount = tractsData?.length ?? 0;

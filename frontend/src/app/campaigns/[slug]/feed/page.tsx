@@ -39,7 +39,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
   let feedQuery = supabase
     .from("contributions")
     .select(
-      "id, user_id, group_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)",
+      "id, user_id, group_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags, metrics_detail)",
       { count: "exact" },
     )
     .eq("campaign_id", campaignData.id)
@@ -52,7 +52,11 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
   const contribs = (contribsData ?? []) as unknown as (Contribution & {
     cleanup_id: string | null;
-    cleanups: { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+    cleanups: {
+      metrics_small_bags: number | null;
+      metrics_large_bags: number | null;
+      metrics_detail: { basis?: string; bag_types?: Record<string, number>; countable_items?: Record<string, number> } | null;
+    } | null;
   })[];
   const total = count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -108,6 +112,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
                 submitted_at: c.submitted_at,
                 small_bags: c.cleanups?.metrics_small_bags ?? null,
                 large_bags: c.cleanups?.metrics_large_bags ?? null,
+                metrics_detail: c.cleanups?.metrics_detail ?? null,
               }))}
               profiles={profilesData ?? []}
               groups={groupsData ?? []}

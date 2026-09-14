@@ -307,6 +307,7 @@ async def get_user_contributions_range(
                     cl.metrics_small_bags,
                     cl.metrics_large_bags,
                     cl.metrics_pounds,
+                    cl.metrics_detail,
                     cl.status
                 FROM contributions c
                 LEFT JOIN cleanups cl ON cl.id = c.cleanup_id
@@ -331,6 +332,7 @@ async def get_user_contributions_range(
             "metrics_small_bags": r.metrics_small_bags,
             "metrics_large_bags": r.metrics_large_bags,
             "metrics_pounds": r.metrics_pounds,
+            "metrics_detail": r.metrics_detail,
             "status": r.status,
         }
         for r in rows

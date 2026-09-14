@@ -14,6 +14,15 @@ interface FeedContrib {
   submitted_at: string;
   small_bags?: number | null;
   large_bags?: number | null;
+  metrics_detail?: {
+    basis?: string;
+    bag_types?: Record<string, number>;
+    countable_items?: Record<string, number>;
+  } | null;
+}
+
+function humanizeMetricKey(key: string): string {
+  return key.replace(/_/g, " ");
 }
 
 interface FeedProfile {
@@ -141,6 +150,17 @@ export default function FeedActivityList({
                   </span>
                 )}
               </div>
+              {(c.metrics_detail?.bag_types || c.metrics_detail?.countable_items) && (
+                <p className="mt-0.5 text-[11px] text-zinc-600">
+                  {[
+                    ...Object.entries(c.metrics_detail.bag_types ?? {}),
+                    ...Object.entries(c.metrics_detail.countable_items ?? {}),
+                  ]
+                    .filter(([, count]) => (count ?? 0) > 0)
+                    .map(([key, count]) => `${count} ${humanizeMetricKey(key)}`)
+                    .join(", ")}
+                </p>
+              )}
               {c.notes && (
                 <p className="mt-0.5 text-xs text-zinc-500 line-clamp-2">{c.notes}</p>
               )}

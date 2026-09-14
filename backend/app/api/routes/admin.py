@@ -698,7 +698,7 @@ async def wipe_cleanup_event(db: AsyncSession, cleanup_id: UUID) -> dict:
     await db.execute(
         text("""
             UPDATE cleanups
-            SET metrics_small_bags = 0, metrics_large_bags = 0, metrics_pounds = 0
+            SET metrics_small_bags = 0, metrics_large_bags = 0, metrics_pounds = 0, metrics_detail = NULL
             WHERE id = :id
         """),
         {"id": str(cleanup_id)},
@@ -1162,6 +1162,7 @@ def _content_flag_context(r) -> dict:
             "user_id": None,
             "username": None,
             "map_link": _map_link(r.cleanup_log_campaign_slug, r.cleanup_log_lat, r.cleanup_log_lng),
+            "metrics_detail": r.cleanup_log_metrics_detail,
         }
     if r.content_type == "cleanup_event_photo":
         who = r.cleanup_event_display_name or (f"@{r.cleanup_event_username}" if r.cleanup_event_username else "Unknown user")
@@ -1338,6 +1339,7 @@ async def list_content_flags_queue(db: AsyncSession) -> list[dict]:
                     cl_direct_camp.slug AS cleanup_log_campaign_slug,
                     ST_Y(cl_direct.location::geometry) AS cleanup_log_lat,
                     ST_X(cl_direct.location::geometry) AS cleanup_log_lng,
+                    cl_direct.metrics_detail AS cleanup_log_metrics_detail,
                     cep_p.id AS cleanup_event_user_id,
                     cep_p.username AS cleanup_event_username,
                     cep_p.display_name AS cleanup_event_display_name,
@@ -1429,6 +1431,7 @@ async def list_resolved_content_flags(db: AsyncSession, limit: int = 50) -> list
                     cl_direct_camp.slug AS cleanup_log_campaign_slug,
                     ST_Y(cl_direct.location::geometry) AS cleanup_log_lat,
                     ST_X(cl_direct.location::geometry) AS cleanup_log_lng,
+                    cl_direct.metrics_detail AS cleanup_log_metrics_detail,
                     cep_p.id AS cleanup_event_user_id,
                     cep_p.username AS cleanup_event_username,
                     cep_p.display_name AS cleanup_event_display_name,

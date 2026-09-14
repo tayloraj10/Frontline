@@ -583,6 +583,7 @@ function ContributeModal({
     "large_bag_value",
     "claim_challenge_multiplier",
     "trash_war_solarpunk_credit",
+    "pound_value",
   ] as const);
   const bagValuesReady = gameSettings.small_bag_value !== undefined && gameSettings.large_bag_value !== undefined;
 
@@ -596,6 +597,14 @@ function ContributeModal({
   const smallBagsNum = Number(smallBags) || 0;
   const largeBagsNum = Number(largeBags) || 0;
   const [pounds, setPounds] = useState("");
+  const [pointsBasis, setPointsBasis] = useState<"bags" | "granular_bags" | "pounds" | "countable_item">("bags");
+  const [bagTypeCounts, setBagTypeCounts] = useState<Record<string, number>>({});
+  const [countableItemKey, setCountableItemKey] = useState<string | null>(null);
+  const [countableItemCount, setCountableItemCount] = useState("");
+  const [pointsBasisOptions, setPointsBasisOptions] = useState<{
+    bag_types: { key: string; label: string; size_class: "small" | "large"; point_value: number }[];
+    countable_item_types: { key: string; label: string; unit_count: number; points_per_unit: number }[];
+  } | null>(null);
   const [notes, setNotes] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
@@ -726,14 +735,14 @@ function ContributeModal({
   const isEventMode = isCleanup && Boolean(effectiveEventId);
 
   // Team Event: only relevant once the viewer has actually joined a team for it (teamId set).
-  // "automatic" mode attaches every cleanup logged while active, same as organizer_total events
-  // for regular Cleanup Events — no opt-out checkbox. "manual_opt_in" mirrors the nearby-event
-  // checkbox: pre-checked, but the user can uncheck to log an unrelated cleanup instead.
+  // Both "automatic" and "manual_opt_in" mode mirror the nearby-event checkbox: pre-checked
+  // (opt-in by default) so a joined participant's cleanups count toward their team without
+  // extra effort, but always uncheckable to log an unrelated cleanup instead — users should
+  // never be locked into an event they happen to be a member of.
   const joinedTeamEvent = isCleanup && activeTeamEvent?.teamId ? activeTeamEvent : null;
   const [useTeamEvent, setUseTeamEvent] = useState(true);
   useEffect(() => setUseTeamEvent(true), [joinedTeamEvent?.id]);
-  const effectiveTeamEventId =
-    joinedTeamEvent && (joinedTeamEvent.submission_mode === "automatic" || useTeamEvent) ? joinedTeamEvent.id : null;
+  const effectiveTeamEventId = joinedTeamEvent && useTeamEvent ? joinedTeamEvent.id : null;
   const isTeamEventMode = Boolean(effectiveTeamEventId);
 
   // When logging toward a co-hosted event, default the credit-group pill to whichever
@@ -772,8 +781,23 @@ function ContributeModal({
     effectiveEventId || effectiveTeamEventId ? null : isRouteMode ? selectedRouteMultiplier : activeMultiplier;
 
   const submitCoords = overrideCoords ?? gps.coords;
+  const granularBagsValue = pointsBasisOptions
+    ? pointsBasisOptions.bag_types.reduce((sum, bt) => sum + (bagTypeCounts[bt.key] ?? 0) * bt.point_value, 0)
+    : 0;
+  const countableItemNum = Number(countableItemCount) || 0;
+  const selectedCountableItem = pointsBasisOptions?.countable_item_types.find((i) => i.key === countableItemKey) ?? null;
+  const countableItemValue = selectedCountableItem
+    ? Math.floor(countableItemNum / selectedCountableItem.unit_count) * selectedCountableItem.points_per_unit
+    : 0;
+  const poundsValue = (Number(pounds) || 0) * (gameSettings.pound_value ?? 0.5);
   const baseValue = isCleanup && bagValuesReady
-    ? cleanupValue(smallBagsNum, largeBagsNum, gameSettings.small_bag_value!, gameSettings.large_bag_value!)
+    ? pointsBasis === "granular_bags"
+      ? granularBagsValue
+      : pointsBasis === "countable_item"
+        ? countableItemValue
+        : pointsBasis === "pounds"
+          ? poundsValue
+          : cleanupValue(smallBagsNum, largeBagsNum, gameSettings.small_bag_value!, gameSettings.large_bag_value!)
     : 0;
   // Mirrors record_contribution: the claim-challenge bonus and an active hotspot
   // multiplier don't stack — take whichever is larger, not their product.
@@ -912,6 +936,20 @@ function ContributeModal({
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [photos]);
 
+  // Fetched once for the basis picker below — active bag types + countable item types.
+  useEffect(() => {
+    if (!isCleanup) return;
+    fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/contributions/points-basis-options`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setPointsBasisOptions(data))
+      .catch(() => { });
+  }, [isCleanup]);
+
+  useEffect(() => {
+    if (countableItemKey || !pointsBasisOptions?.countable_item_types.length) return;
+    setCountableItemKey(pointsBasisOptions.countable_item_types[0].key);
+  }, [pointsBasisOptions, countableItemKey]);
+
   const canSubmit = (() => {
     if (submitting) return false;
     if (isCleanup && !bagValuesReady) return false;
@@ -919,7 +957,12 @@ function ContributeModal({
       if (!route || !selectedRouteGeoUnitId) return false;
     } else if ((isCleanup || isPhoto) && !submitCoords) return false;
     if (isCleanup && !isDecorativeTeamTrack && (smallBagsNum < 0 || largeBagsNum < 0 || Number(pounds || 0) < 0)) return false;
-    if (isCleanup && !isDecorativeTeamTrack && smallBagsNum + largeBagsNum <= 0) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "bags" && smallBagsNum + largeBagsNum <= 0) return false;
+    const hasPhoto = photos.length > 0 || existingPhotoUrls.length > 0;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis !== "bags" && !hasPhoto) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "granular_bags" && granularBagsValue <= 0) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "pounds" && !(Number(pounds || 0) > 0)) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "countable_item" && (!countableItemKey || countableItemNum <= 0)) return false;
     if (isPhoto && photos.length === 0) return false;
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
@@ -947,21 +990,18 @@ function ContributeModal({
       const uploadedRoutePhotos =
         pendingRoutePhotos.length > 0
           ? await Promise.all(
-              pendingRoutePhotos.map(async (p) =>
-                p.kind === "uploaded"
-                  ? { url: p.url, lat: p.lat, lng: p.lng }
-                  : { url: await uploadToR2(p.file), lat: p.lat, lng: p.lng },
-              ),
-            )
+            pendingRoutePhotos.map(async (p) =>
+              p.kind === "uploaded"
+                ? { url: p.url, lat: p.lat, lng: p.lng }
+                : { url: await uploadToR2(p.file), lat: p.lat, lng: p.lng },
+            ),
+          )
           : [];
 
       // canSubmit already requires bagValuesReady for cleanups, so these are guaranteed
-      // defined by the time handleSubmit can run.
-      const value = isCleanup
-        ? isDecorativeTeamTrack
-          ? 0
-          : cleanupValue(smallBagsNum, largeBagsNum, gameSettings.small_bag_value!, gameSettings.large_bag_value!)
-        : 1;
+      // defined by the time handleSubmit can run. The server recomputes the authoritative
+      // value from points_basis regardless of what's sent here.
+      const value = isCleanup ? (isDecorativeTeamTrack ? 0 : baseValue) : 1;
       const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
 
       const body: Record<string, unknown> = {
@@ -976,8 +1016,16 @@ function ContributeModal({
 
       if (isCleanup) {
         if (!isDecorativeTeamTrack) {
-          body.small_bags = smallBagsNum;
-          body.large_bags = largeBagsNum;
+          body.points_basis = pointsBasis;
+          if (pointsBasis === "granular_bags") {
+            body.bag_type_counts = bagTypeCounts;
+          } else if (pointsBasis === "countable_item") {
+            body.countable_item_key = countableItemKey;
+            body.countable_item_count = countableItemNum;
+          } else {
+            body.small_bags = smallBagsNum;
+            body.large_bags = largeBagsNum;
+          }
           if (pounds.trim()) body.pounds = Number(pounds);
         }
         if (photoUrls.length > 1) body.photo_urls = photoUrls;
@@ -1241,310 +1289,329 @@ function ContributeModal({
           </label>
         )}
 
-        {joinedTeamEvent && joinedTeamEvent.submission_mode === "automatic" ? (
-          <div className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300">
+      {joinedTeamEvent && (
+        <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={useTeamEvent}
+            onChange={(e) => setUseTeamEvent(e.target.checked)}
+            className="mt-0.5 shrink-0"
+          />
+          <span>
+            🏁 Count this toward <span className="font-semibold text-emerald-200">{joinedTeamEvent.title}</span>?
+            <span className="block text-emerald-400/70 mt-0.5">
+              {joinedTeamEvent.submission_mode === "automatic"
+                ? "Counts toward your team automatically while this event is active. Uncheck to log separately."
+                : "No bonus multiplier applies to team-event cleanups."}
+              {joinedTeamEvent.requires_photo && " A photo is required for this event."}
+            </span>
+          </span>
+        </label>
+      )}
+
+      {effectiveTeamEventId && teamAreaCheck?.has_boundary && !teamAreaCheck.inside && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
+          <span className="text-base shrink-0">⚠️</span>
+          <span>
+            This location is outside <span className="font-semibold text-amber-200">{joinedTeamEvent?.title}</span>&apos;s assigned area.
+            It&apos;ll still save as a cleanup, but won&apos;t count toward the event or your team.
+          </span>
+        </div>
+      )}
+
+      {isCleanup && activeMultiplier && (
+        effectiveEventId || effectiveTeamEventId ? (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
+            <span className="text-base shrink-0">🔥</span>
             <span>
-              🏁 Logging toward <span className="font-semibold text-emerald-200">{joinedTeamEvent.title}</span>.
-              Cleanups you log while this event is active count toward your team automatically.
-              {joinedTeamEvent.requires_photo && (
-                <span className="block text-emerald-400/70 mt-0.5">A photo is required for this event.</span>
-              )}
+              A <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> hotspot is also active here, but event cleanups don&apos;t earn a bonus multiplier.
             </span>
           </div>
-        ) : joinedTeamEvent && (
-          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useTeamEvent}
-              onChange={(e) => setUseTeamEvent(e.target.checked)}
-              className="mt-0.5 shrink-0"
+        ) : activeMultiplier.kind === "bonus_spot" ? (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/60 bg-amber-950/30 text-xs text-amber-200">
+            <span className="text-base shrink-0">💎</span>
+            <span>
+              BONUS SPOT: cleanups here earn a{" "}
+              <span className="font-bold text-amber-100">{activeMultiplier.multiplier}×</span> score multiplier.
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
+            <span className="text-base shrink-0">🔥</span>
+            <span>
+              Hotspot active. Cleanups here earn a{" "}
+              <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> score multiplier.
+            </span>
+          </div>
+        )
+      )}
+
+      {/* Point / Route toggle — cleanup only */}
+      {isCleanup && (
+        <div>
+          <p className="text-xs text-zinc-500 mb-1.5">How are you logging this?</p>
+          <div className="flex items-center gap-1 p-1 bg-zinc-800/60 border border-zinc-700 rounded-lg w-fit">
+            <button
+              type="button"
+              onClick={() => setContributeMode("point")}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "point"
+                ? "bg-zinc-600 text-zinc-100"
+                : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
+                }`}
+            >
+              📍 Point
+            </button>
+            <button
+              type="button"
+              onClick={() => setContributeMode("route")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "route"
+                ? "bg-zinc-600 text-zinc-100"
+                : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
+                }`}
+            >
+              🛤️ Route
+            </button>
+            {(hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setContributeMode("track");
+                  if (routeTracking.phase === "idle") routeTracking.openTracker();
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "track"
+                  ? "bg-zinc-600 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
+                  }`}
+              >
+                🛰️ Track
+                <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                  BETA
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Location section */}
+      {needsLocation && !isRouteMode && (
+        <div>
+          <p className="text-xs text-zinc-500 mb-1.5">
+            {isUnfollow ? "Your location (optional — helps build the global heatmap)" : "Your location"}
+          </p>
+          <GpsIndicator
+            status={gps.status}
+            coords={gps.coords}
+            errorCode={gps.errorCode}
+            onRetry={gps.capture}
+          />
+          {overrideCoords && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Adjusted: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+            </div>
+          )}
+          {gps.status === "success" && gps.coords && (
+            <button
+              onClick={() => onEnterPinPicker(photos.length > 0 || existingPhotoUrls.length > 0)}
+              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+            >
+              {overrideCoords ? "Reposition on map" : "Place pin on map"}
+            </button>
+          )}
+          {isCleanup && gps.status === "success" && gps.coords && (
+            <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-lg border border-amber-800/60 bg-amber-950/30 text-[10px] text-amber-300">
+              {photos.length > 0 || existingPhotoUrls.length > 0
+                ? "Photo attached — the pin can go anywhere on the map."
+                : "Pin must stay in your ZIP code unless a photo is added. Turn on ZIP codes in the trash map's Layers panel to see the boundary."}
+            </div>
+          )}
+          {submitCoords && (
+            <div className="mt-2">
+              <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {isRouteMode && (
+        <div className={!route && contributeMode === "track" ? "-mt-2" : undefined}>
+          {!route && contributeMode === "track" ? (
+            <TrackRouteScreen
+              session={routeTracking}
+              currentCoords={gps.coords ? [gps.coords.longitude, gps.coords.latitude] : null}
+              onConfirm={handleTrackRouteConfirmed}
+              onCancel={() => setContributeMode("point")}
             />
-            <span>
-              🏁 Count this toward <span className="font-semibold text-emerald-200">{joinedTeamEvent.title}</span>?
-              <span className="block text-emerald-400/70 mt-0.5">
-                No bonus multiplier applies to team-event cleanups.
-                {joinedTeamEvent.requires_photo && " A photo is required for this event."}
-              </span>
-            </span>
-          </label>
-        )}
-
-        {effectiveTeamEventId && teamAreaCheck?.has_boundary && !teamAreaCheck.inside && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
-            <span className="text-base shrink-0">⚠️</span>
-            <span>
-              This location is outside <span className="font-semibold text-amber-200">{joinedTeamEvent?.title}</span>&apos;s assigned area.
-              It&apos;ll still save as a cleanup, but won&apos;t count toward the event or your team.
-            </span>
-          </div>
-        )}
-
-        {isCleanup && activeMultiplier && (
-          effectiveEventId || effectiveTeamEventId ? (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
-              <span className="text-base shrink-0">🔥</span>
-              <span>
-                A <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> hotspot is also active here, but event cleanups don&apos;t earn a bonus multiplier.
-              </span>
-            </div>
-          ) : activeMultiplier.kind === "bonus_spot" ? (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/60 bg-amber-950/30 text-xs text-amber-200">
-              <span className="text-base shrink-0">💎</span>
-              <span>
-                BONUS SPOT: cleanups here earn a{" "}
-                <span className="font-bold text-amber-100">{activeMultiplier.multiplier}×</span> score multiplier.
-              </span>
-            </div>
+          ) : !route ? (
+            <button
+              type="button"
+              onClick={onEnterRoutePicker}
+              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
+            >
+              🛤️ Draw route on map
+            </button>
           ) : (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
-              <span className="text-base shrink-0">🔥</span>
-              <span>
-                Hotspot active. Cleanups here earn a{" "}
-                <span className="font-bold text-orange-200">{activeMultiplier.multiplier}×</span> score multiplier.
-              </span>
-            </div>
-          )
-        )}
-
-        {/* Point / Route toggle — cleanup only */}
-        {isCleanup && (
-          <div>
-            <p className="text-xs text-zinc-500 mb-1.5">How are you logging this?</p>
-            <div className="flex items-center gap-1 p-1 bg-zinc-800/60 border border-zinc-700 rounded-lg w-fit">
-              <button
-                type="button"
-                onClick={() => setContributeMode("point")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "point"
-                  ? "bg-zinc-600 text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
-                  }`}
-              >
-                📍 Point
-              </button>
-              <button
-                type="button"
-                onClick={() => setContributeMode("route")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "route"
-                  ? "bg-zinc-600 text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
-                  }`}
-              >
-                🛤️ Route
-              </button>
-              {(hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
+                </span>
                 <button
                   type="button"
                   onClick={() => {
-                    setContributeMode("track");
-                    if (routeTracking.phase === "idle") routeTracking.openTracker();
+                    setRoute(null);
+                    if (contributeMode !== "track") onEnterRoutePicker();
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${contributeMode === "track"
-                    ? "bg-zinc-600 text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-200 active:text-zinc-200"
-                    }`}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
                 >
-                  🛰️ Track
-                  <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
-                    BETA
-                  </span>
+                  Redraw
                 </button>
+              </div>
+              <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" interactive />
+              {loadingIntersecting ? (
+                <p className="text-xs text-zinc-500">Finding zips along your route…</p>
+              ) : intersectingUnits.length === 0 ? (
+                <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within the campaign area.</p>
+              ) : (
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1.5">Credit which zip?</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {intersectingUnits.map((u) => (
+                      <button
+                        key={u.geo_unit_id}
+                        type="button"
+                        onClick={() => setSelectedRouteGeoUnitId(u.geo_unit_id)}
+                        title={u.active_multiplier ? `${u.active_multiplier.title} · ${u.active_multiplier.multiplier}x` : undefined}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 ${selectedRouteGeoUnitId === u.geo_unit_id
+                          ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                          : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
+                          }`}
+                      >
+                        {u.display_name}
+                        {u.active_multiplier && (
+                          <span className="text-amber-400">🔥{u.active_multiplier.multiplier}x</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {/* Location section */}
-        {needsLocation && !isRouteMode && (
-          <div>
-            <p className="text-xs text-zinc-500 mb-1.5">
-              {isUnfollow ? "Your location (optional — helps build the global heatmap)" : "Your location"}
-            </p>
-            <GpsIndicator
-              status={gps.status}
-              coords={gps.coords}
-              errorCode={gps.errorCode}
-              onRetry={gps.capture}
-            />
-            {overrideCoords && (
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                Adjusted: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
-              </div>
-            )}
-            {gps.status === "success" && gps.coords && (
-              <button
-                onClick={() => onEnterPinPicker(photos.length > 0 || existingPhotoUrls.length > 0)}
-                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-              >
-                {overrideCoords ? "Reposition on map" : "Place pin on map"}
-              </button>
-            )}
-            {isCleanup && gps.status === "success" && gps.coords && (
-              <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-lg border border-amber-800/60 bg-amber-950/30 text-[10px] text-amber-300">
-                {photos.length > 0 || existingPhotoUrls.length > 0
-                  ? "Photo attached — the pin can go anywhere on the map."
-                  : "Pin must stay in your ZIP code unless a photo is added. Turn on ZIP codes in the trash map's Layers panel to see the boundary."}
-              </div>
-            )}
-            {submitCoords && (
-              <div className="mt-2">
-                <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
-              </div>
-            )}
-          </div>
-        )}
+      {isCleanup && nearbyReport && (
+        <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={resolveHotspot}
+            onChange={(e) => setResolveHotspot(e.target.checked)}
+            className="mt-0.5 shrink-0"
+          />
+          <span>
+            🔥 There&apos;s a trash report ~{formatHotspotDistance(nearbyReport.distance_m, nearbyReport.unit_type)} away. Mark it as cleaned up?
+            <span className="block text-orange-400/70 mt-0.5">Uncheck if this is a separate cleanup.</span>
+          </span>
+        </label>
+      )}
 
-        {isRouteMode && (
-          <div className={!route && contributeMode === "track" ? "-mt-2" : undefined}>
-            {!route && contributeMode === "track" ? (
-              <TrackRouteScreen
-                session={routeTracking}
-                currentCoords={gps.coords ? [gps.coords.longitude, gps.coords.latitude] : null}
-                onConfirm={handleTrackRouteConfirmed}
-                onCancel={() => setContributeMode("point")}
-              />
-            ) : !route ? (
-              <button
-                type="button"
-                onClick={onEnterRoutePicker}
-                className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
-              >
-                🛤️ Draw route on map
-              </button>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRoute(null);
-                      if (contributeMode !== "track") onEnterRoutePicker();
-                    }}
-                    className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-                  >
-                    Redraw
-                  </button>
-                </div>
-                <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" interactive />
-                {loadingIntersecting ? (
-                  <p className="text-xs text-zinc-500">Finding zips along your route…</p>
-                ) : intersectingUnits.length === 0 ? (
-                  <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within the campaign area.</p>
-                ) : (
-                  <div>
-                    <p className="text-xs text-zinc-500 mb-1.5">Credit which zip?</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {intersectingUnits.map((u) => (
-                        <button
-                          key={u.geo_unit_id}
-                          type="button"
-                          onClick={() => setSelectedRouteGeoUnitId(u.geo_unit_id)}
-                          title={u.active_multiplier ? `${u.active_multiplier.title} · ${u.active_multiplier.multiplier}x` : undefined}
-                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 ${selectedRouteGeoUnitId === u.geo_unit_id
-                            ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
-                            : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
-                            }`}
-                        >
-                          {u.display_name}
-                          {u.active_multiplier && (
-                            <span className="text-amber-400">🔥{u.active_multiplier.multiplier}x</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {isCleanup && nearbyReport && (
-          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={resolveHotspot}
-              onChange={(e) => setResolveHotspot(e.target.checked)}
-              className="mt-0.5 shrink-0"
-            />
-            <span>
-              🔥 There&apos;s a trash report ~{formatHotspotDistance(nearbyReport.distance_m, nearbyReport.unit_type)} away. Mark it as cleaned up?
-              <span className="block text-orange-400/70 mt-0.5">Uncheck if this is a separate cleanup.</span>
-            </span>
-          </label>
-        )}
-
-        {/* Cross-credit notice — only shown when arriving via the Solarpunk campaign's link */}
-        {isCleanup && fromSolarpunk && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-lime-800/60 bg-lime-950/30 text-xs text-lime-300">
-            <span className="text-base shrink-0">🌱</span>
-            <span>
-              This also earns your{" "}
-              <Link href="/campaigns/solarpunk" className="underline font-semibold hover:text-lime-200 active:text-lime-200 transition-colors duration-150">
-                Solarpunk
-              </Link>{" "}
-              hex +8 bloom points.
-            </span>
-          </div>
-        )}
+      {/* Cross-credit notice — only shown when arriving via the Solarpunk campaign's link */}
+      {isCleanup && fromSolarpunk && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-lime-800/60 bg-lime-950/30 text-xs text-lime-300">
+          <span className="text-base shrink-0">🌱</span>
+          <span>
+            This also earns your{" "}
+            <Link href="/campaigns/solarpunk" className="underline font-semibold hover:text-lime-200 active:text-lime-200 transition-colors duration-150">
+              Solarpunk
+            </Link>{" "}
+            hex +8 bloom points.
+          </span>
+        </div>
+      )}
     </>
   );
 
   const groupAndBagsSection = (
     <>
-        {/* Group selection */}
-        {userGroups.length > 0 && (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
-            <div className="flex flex-wrap gap-1.5">
+      {/* Group selection */}
+      {userGroups.length > 0 && (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Contributing as</label>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null
+                ? "bg-zinc-700 border-zinc-500 text-zinc-100"
+                : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
+                }`}
+            >
+              Individual
+            </button>
+            {userGroups.map((g) => (
               <button
+                key={g.id}
                 type="button"
-                onClick={() => { setSelectedGroupId(null); localStorage.setItem("frontline:contrib:group", "__individual__"); }}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === null
-                  ? "bg-zinc-700 border-zinc-500 text-zinc-100"
+                onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id
+                  ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
                   : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
                   }`}
               >
-                Individual
+                {g.image_url ? (
+                  <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
+                    {g.name[0].toUpperCase()}
+                  </span>
+                )}
+                {g.name}
               </button>
-              {userGroups.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => { setSelectedGroupId(g.id); localStorage.setItem("frontline:contrib:group", g.id); }}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedGroupId === g.id
-                    ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
-                    : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
-                    }`}
-                >
-                  {g.image_url ? (
-                    <img src={g.image_url} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[7px] flex items-center justify-center font-bold shrink-0">
-                      {g.name[0].toUpperCase()}
-                    </span>
-                  )}
-                  {g.name}
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Bags count (cleanup only, skipped for decorative team-log route tracking) */}
-        {isCleanup && isDecorativeTeamTrack && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
-            <span aria-hidden="true">🛰️</span>
-            Just the route, no bag/pound metrics needed for this one.
+      {/* Bags count (cleanup only, skipped for decorative team-log route tracking) */}
+      {isCleanup && isDecorativeTeamTrack && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
+          <span aria-hidden="true">🛰️</span>
+          Just the route, no bag/pound metrics needed for this one.
+        </div>
+      )}
+      {isCleanup && !isDecorativeTeamTrack && (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">How do you want to log this?</label>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {(
+              [
+                { key: "bags", label: "Small/Large bags" },
+                { key: "granular_bags", label: "Bag type breakdown" },
+                { key: "pounds", label: "Pounds" },
+                { key: "countable_item", label: pointsBasisOptions?.countable_item_types[0]?.label ?? "Countable item" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setPointsBasis(opt.key)}
+                className={`px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${pointsBasis === opt.key
+                  ? "bg-blue-900/60 border-blue-500 text-blue-200"
+                  : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 active:border-zinc-500 active:text-zinc-300 active:scale-[0.97]"
+                  }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
-        )}
-        {isCleanup && !isDecorativeTeamTrack && (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Bags collected</label>
+          {pointsBasis !== "bags" && (
+            <p className="mb-2 text-[11px] text-amber-400">A photo is required for this log type.</p>
+          )}
+
+          {pointsBasis === "bags" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-0">
               <label className="text-[11px] text-zinc-600">Small bags</label>
               <label className="text-[11px] text-zinc-600">Large bags</label>
@@ -1565,196 +1632,298 @@ function ContributeModal({
                 className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
               />
             </div>
-            <p className="mt-2 text-xs text-zinc-500">
-              Total points:{" "}
-              {!bagValuesReady ? (
-                <SettingValue value={undefined} loading={settingsLoading} />
-              ) : (
-                <>
-                  {(combinedMultiplier > 1 || firstCleanupBonusPreview) && (
-                    <span className="line-through text-zinc-600 mr-1.5">{formatPoints(baseValue)}</span>
-                  )}
-                  <span
-                    className={`text-lg font-bold inline-block transition-transform duration-300 ${combinedMultiplier > 1 ? "text-orange-400" : "text-emerald-400"
-                      } ${valueFlash ? "scale-125" : "scale-100"}`}
+          )}
+
+          {pointsBasis === "granular_bags" && (
+            <div className="space-y-2">
+              {pointsBasisOptions?.bag_types.map((bt) => {
+                const isContractor = bt.key === "contractor_40_80gal";
+                const rowClasses = isContractor
+                  ? "border-violet-600/70 bg-violet-900/30"
+                  : bt.size_class === "large"
+                    ? "border-sky-500/70 bg-sky-900/30"
+                    : "border-emerald-500/70 bg-emerald-900/30";
+                const dotClasses = isContractor ? "bg-violet-300" : bt.size_class === "large" ? "bg-sky-400" : "bg-emerald-400";
+                const pointClasses = isContractor ? "text-violet-300" : bt.size_class === "large" ? "text-sky-300" : "text-emerald-300";
+                return (
+                  <div
+                    key={bt.key}
+                    className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 ${rowClasses}`}
                   >
-                    {formatPoints(displayValue)}
-                  </span>
-                  {combinedMultiplier > 1 ? (
-                    <span className="ml-1 text-orange-400/80">
-                      ({combinedMultiplier}× {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "challenge" : effectiveMultiplier && "kind" in effectiveMultiplier && effectiveMultiplier.kind === "bonus_spot" ? "bonus spot" : "hotspot"} multiplier applied)
+                    <span className="flex items-center gap-2 text-xs text-zinc-400">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${dotClasses}`} aria-hidden="true" />
+                      {bt.label}{" "}
+                      <span className="text-zinc-600">
+                        ({isContractor ? "contractor" : bt.size_class},{" "}
+                        <span className={`font-semibold ${pointClasses}`}>{formatPoints(bt.point_value)}pt</span>)
+                      </span>
                     </span>
-                  ) : (
-                    <span className="ml-1 text-zinc-600">(large bags count {gameSettings.large_bag_value!}x)</span>
-                  )}
-                </>
+                    <input
+                      type="number"
+                      min={0}
+                      value={bagTypeCounts[bt.key] ?? ""}
+                      onChange={(e) =>
+                        setBagTypeCounts((prev) => ({ ...prev, [bt.key]: Number(e.target.value.replace(/^0+(?=\d)/, "")) || 0 }))
+                      }
+                      placeholder="0"
+                      className="w-16 min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm text-right focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {pointsBasis === "countable_item" && (
+            <div>
+              {pointsBasisOptions && pointsBasisOptions.countable_item_types.length > 1 && (
+                <select
+                  value={countableItemKey ?? ""}
+                  onChange={(e) => setCountableItemKey(e.target.value)}
+                  className="w-full min-h-11 mb-2 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+                >
+                  {pointsBasisOptions.countable_item_types.map((item) => (
+                    <option key={item.key} value={item.key}>{item.label}</option>
+                  ))}
+                </select>
               )}
-            </p>
-            {firstCleanupBonusPreview ? (
-              <p className="mt-1 text-xs text-emerald-400 font-semibold">
-                🎉 Includes a +{firstCleanupBonusPreview} pt first cleanup bonus
-              </p>
-            ) : null}
-            <div className="mt-3">
-              <label className={`block text-[11px] mb-1 ${isEventMode && !pounds.trim() ? "text-amber-400" : "text-zinc-600"}`}>
-                Pounds cleaned up (optional){isEventMode && !pounds.trim() ? " — helps the event's total!" : ""}
+              <label className="block text-[11px] text-zinc-600 mb-1">
+                {selectedCountableItem?.label ?? "Count"}
               </label>
               <input
                 type="number"
                 min={0}
-                step="0.1"
-                value={pounds}
-                onChange={(e) => setPounds(e.target.value)}
-                placeholder="e.g. 25"
-                className={`w-full min-h-11 bg-zinc-800 border rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 ${isEventMode && !pounds.trim() ? "border-amber-600/60" : "border-zinc-700"
-                  }`}
+                value={countableItemCount}
+                onChange={(e) => setCountableItemCount(e.target.value.replace(/^0+(?=\d)/, ""))}
+                placeholder="e.g. 40"
+                className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
               />
+              {selectedCountableItem && (
+                <p className="mt-1 text-[11px] text-zinc-600">
+                  {selectedCountableItem.points_per_unit}pt per {selectedCountableItem.unit_count}
+                </p>
+              )}
             </div>
-          </div>
-        )}
+          )}
+
+          {(() => {
+            const poundsInput = pointsBasis !== "countable_item" && (
+              <div className="mt-3" key="pounds-input">
+                <label className={`block text-[11px] mb-1 ${(isEventMode && !pounds.trim()) || pointsBasis === "pounds" ? "text-amber-400" : "text-zinc-600"}`}>
+                  Pounds cleaned up {pointsBasis === "pounds" ? "(required)" : "(optional)"}
+                  {isEventMode && !pounds.trim() && pointsBasis !== "pounds" ? " — helps the event's total!" : ""}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={pounds}
+                  onChange={(e) => setPounds(e.target.value)}
+                  placeholder="e.g. 25"
+                  className={`w-full min-h-11 bg-zinc-800 border rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 ${(isEventMode && !pounds.trim()) || pointsBasis === "pounds" ? "border-amber-600/60" : "border-zinc-700"
+                    }`}
+                />
+              </div>
+            );
+            const pointsPreview = pointsBasis === "bags" ? (
+              <p className="mt-2 text-xs text-zinc-500" key="points-preview">
+                Total points:{" "}
+                {!bagValuesReady ? (
+                  <SettingValue value={undefined} loading={settingsLoading} />
+                ) : (
+                  <>
+                    {(combinedMultiplier > 1 || firstCleanupBonusPreview) && (
+                      <span className="line-through text-zinc-600 mr-1.5">{formatPoints(baseValue)}</span>
+                    )}
+                    <span
+                      className={`text-lg font-bold inline-block transition-transform duration-300 ${combinedMultiplier > 1 ? "text-orange-400" : "text-emerald-400"
+                        } ${valueFlash ? "scale-125" : "scale-100"}`}
+                    >
+                      {formatPoints(displayValue)}
+                    </span>
+                    {combinedMultiplier > 1 ? (
+                      <span className="ml-1 text-orange-400/80">
+                        ({combinedMultiplier}× {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "challenge" : effectiveMultiplier && "kind" in effectiveMultiplier && effectiveMultiplier.kind === "bonus_spot" ? "bonus spot" : "hotspot"} multiplier applied)
+                      </span>
+                    ) : (
+                      <span className="ml-1 text-zinc-600">(large bags count {gameSettings.large_bag_value!}x)</span>
+                    )}
+                  </>
+                )}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-500" key="points-preview">
+                Total points:{" "}
+                <span className="text-lg font-bold text-emerald-400">{formatPoints(displayValue)}</span>
+              </p>
+            );
+            const bonusNote = firstCleanupBonusPreview ? (
+              <p className="mt-1 text-xs text-emerald-400 font-semibold" key="bonus-note">
+                🎉 Includes a +{firstCleanupBonusPreview} pt first cleanup bonus
+              </p>
+            ) : null;
+            // Pounds is the scoring input itself for the pounds basis, so it belongs above
+            // its own preview; for every other basis the preview reflects an input shown
+            // earlier (bag grid / breakdown), with pounds only a supplementary field below it.
+            return pointsBasis === "pounds" ? (
+              <>
+                {poundsInput}
+                {pointsPreview}
+                {bonusNote}
+              </>
+            ) : (
+              <>
+                {pointsPreview}
+                {bonusNote}
+                {poundsInput}
+              </>
+            );
+          })()}
+        </div>
+      )}
     </>
   );
 
   const civicActionSelector = (
     <>
-        {/* Civic action selector */}
-        {isCivicAction && (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-2">Select your action (required)</label>
-            <div className="grid grid-cols-2 gap-2">
-              {CIVIC_ACTIONS.map((a) => (
-                <button
-                  key={a.key}
-                  type="button"
-                  onClick={() => setSelectedAction(a.key)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${selectedAction === a.key
-                    ? "bg-blue-900/60 border-blue-500 text-blue-200"
-                    : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 active:border-zinc-500 active:text-zinc-300 active:scale-[0.97]"
-                    }`}
-                >
-                  <span className="text-base shrink-0">{a.icon}</span>
-                  <span className="leading-tight">{a.label}</span>
-                </button>
-              ))}
-            </div>
+      {/* Civic action selector */}
+      {isCivicAction && (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-2">Select your action (required)</label>
+          <div className="grid grid-cols-2 gap-2">
+            {CIVIC_ACTIONS.map((a) => (
+              <button
+                key={a.key}
+                type="button"
+                onClick={() => setSelectedAction(a.key)}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${selectedAction === a.key
+                  ? "bg-blue-900/60 border-blue-500 text-blue-200"
+                  : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 active:border-zinc-500 active:text-zinc-300 active:scale-[0.97]"
+                  }`}
+              >
+                <span className="text-base shrink-0">{a.icon}</span>
+                <span className="leading-tight">{a.label}</span>
+              </button>
+            ))}
           </div>
-        )}
+        </div>
+      )}
     </>
   );
 
   const unfollowField = (
     <>
-        {/* Account handle — unfollow only (required) */}
-        {isUnfollow && (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Account you unfollowed (required)</label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="@handle or account name"
-              className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
-            />
-          </div>
-        )}
+      {/* Account handle — unfollow only (required) */}
+      {isUnfollow && (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Account you unfollowed (required)</label>
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="@handle or account name"
+            className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+          />
+        </div>
+      )}
     </>
   );
 
   const photoAndNotesSection = (
     <>
-        {/* Photo */}
-        {showPhoto && (
-          <div>
-            <label className={`block text-xs mb-1.5 ${isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? "text-amber-400" : "text-zinc-500"}`}>
-              {isCleanup ? "Photos" : "Photo"} {isPhoto || (isTeamEventMode && joinedTeamEvent?.requires_photo) ? "(required)" : "(optional)"}
-              {isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? " — helps the event's gallery!" : ""}
-            </label>
-            <PhotoCaptureInput
-              multiple={isCleanup}
-              onFilesSelected={(files) =>
-                setPhotos((prev) => (isCleanup ? [...prev, ...files] : files))
-              }
+      {/* Photo */}
+      {showPhoto && (
+        <div>
+          <label className={`block text-xs mb-1.5 ${isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? "text-amber-400" : "text-zinc-500"}`}>
+            {isCleanup ? "Photos" : "Photo"} {isPhoto || (isTeamEventMode && joinedTeamEvent?.requires_photo) ? "(required)" : "(optional)"}
+            {isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? " — helps the event's gallery!" : ""}
+          </label>
+          <PhotoCaptureInput
+            multiple={isCleanup}
+            onFilesSelected={(files) =>
+              setPhotos((prev) => (isCleanup ? [...prev, ...files] : files))
+            }
+          />
+          {(existingPhotoUrls.length > 0 || photoPreviews.length > 0) && (
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {existingPhotoUrls.map((url, i) => (
+                <div key={url} className="relative w-28 h-28 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-full h-full object-cover cursor-zoom-in"
+                    onClick={() => setLightboxIndex(i)}
+                  />
+                  <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    🔍
+                  </span>
+                  <IconButton
+                    onClick={() => setExistingPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                    size="sm"
+                    className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
+                    aria-label="Remove photo"
+                  >
+                    ×
+                  </IconButton>
+                </div>
+              ))}
+              {photoPreviews.map((url, i) => (
+                <div key={url} className="relative w-28 h-28 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-full h-full object-cover cursor-zoom-in"
+                    onClick={() => setLightboxIndex(existingPhotoUrls.length + i)}
+                  />
+                  <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    🔍
+                  </span>
+                  <IconButton
+                    onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                    size="sm"
+                    className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
+                    aria-label="Remove photo"
+                  >
+                    ×
+                  </IconButton>
+                </div>
+              ))}
+            </div>
+          )}
+          {lightboxIndex !== null && (
+            <Lightbox
+              images={[...existingPhotoUrls, ...photoPreviews]}
+              index={lightboxIndex}
+              onClose={() => setLightboxIndex(null)}
+              onNavigate={setLightboxIndex}
             />
-            {(existingPhotoUrls.length > 0 || photoPreviews.length > 0) && (
-              <div className="mt-2 flex flex-wrap justify-center gap-2">
-                {existingPhotoUrls.map((url, i) => (
-                  <div key={url} className="relative w-28 h-28 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
-                    <img
-                      src={url}
-                      alt=""
-                      className="w-full h-full object-cover cursor-zoom-in"
-                      onClick={() => setLightboxIndex(i)}
-                    />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      🔍
-                    </span>
-                    <IconButton
-                      onClick={() => setExistingPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
-                      size="sm"
-                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
-                      aria-label="Remove photo"
-                    >
-                      ×
-                    </IconButton>
-                  </div>
-                ))}
-                {photoPreviews.map((url, i) => (
-                  <div key={url} className="relative w-28 h-28 rounded-lg overflow-hidden border border-zinc-700 shrink-0 group">
-                    <img
-                      src={url}
-                      alt=""
-                      className="w-full h-full object-cover cursor-zoom-in"
-                      onClick={() => setLightboxIndex(existingPhotoUrls.length + i)}
-                    />
-                    <span className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-white/80 bg-black/60 rounded px-1.5 py-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      🔍
-                    </span>
-                    <IconButton
-                      onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
-                      size="sm"
-                      className="absolute top-1 right-1 bg-black/70 text-white text-xs leading-none rounded-lg! w-6! h-6!"
-                      aria-label="Remove photo"
-                    >
-                      ×
-                    </IconButton>
-                  </div>
-                ))}
-              </div>
-            )}
-            {lightboxIndex !== null && (
-              <Lightbox
-                images={[...existingPhotoUrls, ...photoPreviews]}
-                index={lightboxIndex}
-                onClose={() => setLightboxIndex(null)}
-                onNavigate={setLightboxIndex}
-              />
-            )}
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {/* Notes / Caption — not shown for civic_action or unfollow (notes field used internally) */}
-        {!isCivicAction && !isUnfollow && (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">
-              {isPhoto ? "Caption" : "Notes"} (optional)
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              placeholder={
-                isCleanup
-                  ? "e.g. Found a mattress near the park entrance"
-                  : isPhoto
-                    ? "Add a caption…"
-                    : campaignContributionType === "registration"
-                      ? "e.g. Registered at county clerk office"
-                      : "e.g. Attended city council meeting"
-              }
-              className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
-            />
-          </div>
-        )}
+      {/* Notes / Caption — not shown for civic_action or unfollow (notes field used internally) */}
+      {!isCivicAction && !isUnfollow && (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">
+            {isPhoto ? "Caption" : "Notes"} (optional)
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder={
+              isCleanup
+                ? "e.g. Found a mattress near the park entrance"
+                : isPhoto
+                  ? "Add a caption…"
+                  : campaignContributionType === "registration"
+                    ? "e.g. Registered at county clerk office"
+                    : "e.g. Attended city council meeting"
+            }
+            className="w-full min-h-11 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm resize-none focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+          />
+        </div>
+      )}
     </>
   );
 
@@ -1808,30 +1977,30 @@ function ContributeModal({
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
         {(!isCleanup || viewMode === "full" || guidedStep === cleanupSteps.length - 1) && (
-        <div className={`flex gap-2 ${isCleanup && viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
-          <button
-            onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            Cancel
-          </button>
-          {userId ? (
+          <div className={`flex gap-2 ${isCleanup && viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
             <button
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
+              onClick={onClose}
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
-              {submitting ? "Submitting…" : "Submit"}
+              Cancel
             </button>
-          ) : (
-            <Link
-              href={`/login?next=${pathname}`}
-              className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              Sign in to submit
-            </Link>
-          )}
-        </div>
+            {userId ? (
+              <button
+                onClick={handleSubmit}
+                disabled={!canSubmit}
+                className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                {submitting ? "Submitting…" : "Submit"}
+              </button>
+            ) : (
+              <Link
+                href={`/login?next=${pathname}`}
+                className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                Sign in to submit
+              </Link>
+            )}
+          </div>
         )}
       </div>
     </ModalShell>
@@ -3142,7 +3311,7 @@ function HostEventModal({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ organizer_user_id: userId }),
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
       setCreated(result);
@@ -3214,276 +3383,276 @@ function HostEventModal({
 
   const basicsSection = (
     <>
-        {adminGroups.length > 1 ? (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Hosting group</label>
-            <select
-              value={groupId}
-              onChange={(e) => {
-                setGroupId(e.target.value);
-                setCohostGroupIds((prev) => prev.filter((id) => id !== e.target.value));
-              }}
-              className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-            >
-              {adminGroups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          adminGroups[0] && (
-            <div className="flex items-center gap-2.5 px-1">
-              <div className="w-8 h-8 shrink-0 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden flex items-center justify-center">
-                {adminGroups[0].image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={adminGroups[0].image_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-xs font-bold text-zinc-400">{(adminGroups[0].name || "?")[0].toUpperCase()}</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] text-zinc-500 leading-tight">Hosting as</p>
-                <p className="text-sm text-zinc-200 font-medium truncate leading-tight">{adminGroups[0].name}</p>
-              </div>
+      {adminGroups.length > 1 ? (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Hosting group</label>
+          <select
+            value={groupId}
+            onChange={(e) => {
+              setGroupId(e.target.value);
+              setCohostGroupIds((prev) => prev.filter((id) => id !== e.target.value));
+            }}
+            className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+          >
+            {adminGroups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        adminGroups[0] && (
+          <div className="flex items-center gap-2.5 px-1">
+            <div className="w-8 h-8 shrink-0 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden flex items-center justify-center">
+              {adminGroups[0].image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={adminGroups[0].image_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-zinc-400">{(adminGroups[0].name || "?")[0].toUpperCase()}</span>
+              )}
             </div>
-          )
-        )}
+            <div className="min-w-0">
+              <p className="text-[11px] text-zinc-500 leading-tight">Hosting as</p>
+              <p className="text-sm text-zinc-200 font-medium truncate leading-tight">{adminGroups[0].name}</p>
+            </div>
+          </div>
+        )
+      )}
 
-        {groupId && (
-          <CohostGroupPicker
-            primaryGroupId={groupId}
-            value={cohostGroupIds}
-            onChange={setCohostGroupIds}
-          />
-        )}
+      {groupId && (
+        <CohostGroupPicker
+          primaryGroupId={groupId}
+          value={cohostGroupIds}
+          onChange={setCohostGroupIds}
+        />
+      )}
 
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Title</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Saturday shoreline cleanup"
-            className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
-          />
-        </div>
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">Title</label>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Saturday shoreline cleanup"
+          className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+        />
+      </div>
 
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
-          />
-        </div>
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">Description</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
+        />
+      </div>
     </>
   );
 
   const scheduleSection = (
     <>
-        <div className="min-w-0">
-          <label className="block text-xs text-zinc-500 mb-1.5">Starts</label>
-          <input
-            type="datetime-local"
-            value={scheduledStart}
-            onChange={(e) => setScheduledStart(e.target.value)}
-            className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-          />
-          <p className="mt-1 text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
-        </div>
-        <div className="min-w-0">
-          <label className="block text-xs text-zinc-500 mb-1.5">Ends (optional)</label>
-          <input
-            type="datetime-local"
-            value={scheduledEnd}
-            min={scheduledStart || undefined}
-            onChange={(e) => setScheduledEnd(e.target.value)}
-            aria-invalid={endBeforeStart}
-            className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-          />
-          {!scheduledEnd && (
-            <p className="mt-1 text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
-          )}
-          {endBeforeStart && (
-            <p className="mt-1 text-[11px] text-red-400">
-              That end time is before the start time ({new Date(scheduledStart).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}). Pick an end time after the start.
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">How should cleanups get logged?</label>
-          <select
-            value={loggingMode}
-            onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
-            className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-          >
-            <option value="organizer_total">Organizer logs team total (recommended)</option>
-            <option value="individual">Attendees self-log individually</option>
-          </select>
-          <p className="mt-1 text-xs text-zinc-400">
-            {loggingMode === "organizer_total"
-              ? "You enter the combined haul once everyone's done; points get split across attendees."
-              : "Attendees self-log from the map near the event; no team total needed."}
+      <div className="min-w-0">
+        <label className="block text-xs text-zinc-500 mb-1.5">Starts</label>
+        <input
+          type="datetime-local"
+          value={scheduledStart}
+          onChange={(e) => setScheduledStart(e.target.value)}
+          className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+        />
+        <p className="mt-1 text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
+      </div>
+      <div className="min-w-0">
+        <label className="block text-xs text-zinc-500 mb-1.5">Ends (optional)</label>
+        <input
+          type="datetime-local"
+          value={scheduledEnd}
+          min={scheduledStart || undefined}
+          onChange={(e) => setScheduledEnd(e.target.value)}
+          aria-invalid={endBeforeStart}
+          className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+        />
+        {!scheduledEnd && (
+          <p className="mt-1 text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
+        )}
+        {endBeforeStart && (
+          <p className="mt-1 text-[11px] text-red-400">
+            That end time is before the start time ({new Date(scheduledStart).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}). Pick an end time after the start.
           </p>
-        </div>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">How should cleanups get logged?</label>
+        <select
+          value={loggingMode}
+          onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
+          className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+        >
+          <option value="organizer_total">Organizer logs team total (recommended)</option>
+          <option value="individual">Attendees self-log individually</option>
+        </select>
+        <p className="mt-1 text-xs text-zinc-400">
+          {loggingMode === "organizer_total"
+            ? "You enter the combined haul once everyone's done; points get split across attendees."
+            : "Attendees self-log from the map near the event; no team total needed."}
+        </p>
+      </div>
     </>
   );
 
   const logisticsSection = (
     <>
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">RSVP limit (optional)</label>
-          <input
-            type="number"
-            min={1}
-            value={maxAttendees}
-            onChange={(e) => setMaxAttendees(e.target.value.replace(/^0+(?=\d)/, ""))}
-            placeholder="No limit"
-            className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
-          />
-        </div>
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">RSVP limit (optional)</label>
+        <input
+          type="number"
+          min={1}
+          value={maxAttendees}
+          onChange={(e) => setMaxAttendees(e.target.value.replace(/^0+(?=\d)/, ""))}
+          placeholder="No limit"
+          className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+        />
+      </div>
 
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Event link (optional)</label>
-          <input
-            type="url"
-            value={externalLink}
-            onChange={(e) => setExternalLink(e.target.value)}
-            placeholder="https://... (site, waiver form, sign-up sheet)"
-            className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
-          />
-        </div>
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">Event link (optional)</label>
+        <input
+          type="url"
+          value={externalLink}
+          onChange={(e) => setExternalLink(e.target.value)}
+          placeholder="https://... (site, waiver form, sign-up sheet)"
+          className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600"
+        />
+      </div>
     </>
   );
 
   const locationSection = (
     <>
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
-            Pre-planned route (optional)
-          </label>
-          {!route ? (
-            <button
-              type="button"
-              onClick={onEnterRoutePicker}
-              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
-            >
-              🛤️ Draw route on map
-            </button>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                  Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
-                </span>
-                <button
-                  type="button"
-                  onClick={onEnterRoutePicker}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-                >
-                  Redraw
-                </button>
-              </div>
-              <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" interactive />
-            </div>
-          )}
-        </div>
-
-        {route && (
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
+          Pre-planned route (optional)
+        </label>
+        {!route ? (
           <button
             type="button"
-            onClick={() => setRoute(null)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+            onClick={onEnterRoutePicker}
+            className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
           >
-            Use a single pin instead
+            🛤️ Draw route on map
           </button>
-        )}
-
-        {!route && (
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Street address</label>
-            <AddressAutocomplete
-              value={addressValue}
-              onChange={setAddressValue}
-              onSelect={(s) => {
-                setAddressValue(s.addressLine1);
-                setAddressCity(s.city);
-                setAddressState(s.state);
-                setAddressPostalCode(s.postalCode);
-                setAddressCountry(s.country);
-                setAddressCoords({ latitude: s.lat, longitude: s.lng });
-              }}
-              placeholder="Search for an address..."
-            />
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">City</label>
-                <input
-                  value={addressCity}
-                  onChange={(e) => setAddressCity(e.target.value)}
-                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">State</label>
-                <input
-                  value={addressState}
-                  onChange={(e) => setAddressState(e.target.value)}
-                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Postal code</label>
-                <input
-                  value={addressPostalCode}
-                  onChange={(e) => setAddressPostalCode(e.target.value)}
-                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Country</label>
-                <input
-                  value={addressCountry}
-                  onChange={(e) => setAddressCountry(e.target.value)}
-                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-                />
-              </div>
-            </div>
-            {!overrideCoords && !addressCoords && (
-              <GpsIndicator
-                status={gps.status}
-                coords={gps.coords}
-                errorCode={gps.errorCode}
-                onRetry={gps.capture}
-              />
-            )}
-            {overrideCoords ? (
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-emerald-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
-              </div>
-            ) : addressCoords ? (
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                Address set: {addressCoords.latitude.toFixed(5)}, {addressCoords.longitude.toFixed(5)}
-              </div>
-            ) : null}
-            {submitCoords && (
+                Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
+              </span>
               <button
-                onClick={() => onEnterPinPicker(submitCoords)}
-                className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+                type="button"
+                onClick={onEnterRoutePicker}
+                className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
               >
-                {overrideCoords ? "Reposition pin on map" : "Fine-tune pin on map"}
+                Redraw
               </button>
-            )}
-            {submitCoords && (
-              <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} interactive />
-            )}
+            </div>
+            <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" interactive />
           </div>
         )}
+      </div>
+
+      {route && (
+        <button
+          type="button"
+          onClick={() => setRoute(null)}
+          className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+        >
+          Use a single pin instead
+        </button>
+      )}
+
+      {!route && (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1.5">Street address</label>
+          <AddressAutocomplete
+            value={addressValue}
+            onChange={setAddressValue}
+            onSelect={(s) => {
+              setAddressValue(s.addressLine1);
+              setAddressCity(s.city);
+              setAddressState(s.state);
+              setAddressPostalCode(s.postalCode);
+              setAddressCountry(s.country);
+              setAddressCoords({ latitude: s.lat, longitude: s.lng });
+            }}
+            placeholder="Search for an address..."
+          />
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">City</label>
+              <input
+                value={addressCity}
+                onChange={(e) => setAddressCity(e.target.value)}
+                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">State</label>
+              <input
+                value={addressState}
+                onChange={(e) => setAddressState(e.target.value)}
+                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">Postal code</label>
+              <input
+                value={addressPostalCode}
+                onChange={(e) => setAddressPostalCode(e.target.value)}
+                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">Country</label>
+              <input
+                value={addressCountry}
+                onChange={(e) => setAddressCountry(e.target.value)}
+                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+              />
+            </div>
+          </div>
+          {!overrideCoords && !addressCoords && (
+            <GpsIndicator
+              status={gps.status}
+              coords={gps.coords}
+              errorCode={gps.errorCode}
+              onRetry={gps.capture}
+            />
+          )}
+          {overrideCoords ? (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+            </div>
+          ) : addressCoords ? (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              Address set: {addressCoords.latitude.toFixed(5)}, {addressCoords.longitude.toFixed(5)}
+            </div>
+          ) : null}
+          {submitCoords && (
+            <button
+              onClick={() => onEnterPinPicker(submitCoords)}
+              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+            >
+              {overrideCoords ? "Reposition pin on map" : "Fine-tune pin on map"}
+            </button>
+          )}
+          {submitCoords && (
+            <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} interactive />
+          )}
+        </div>
+      )}
     </>
   );
 
@@ -3499,31 +3668,31 @@ function HostEventModal({
 
   const photoSection = (
     <>
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Cover photo (optional)</label>
-          <p className="text-[11px] text-zinc-600 mb-1.5">Shown at the top of the event page. This is not a photo from the cleanup itself.</p>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600 active:file:bg-zinc-600 transition-colors duration-150"
-          />
-          {imagePreview && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
-                <img src={imagePreview} alt="" className="w-full h-full object-cover" />
-                <IconButton
-                  onClick={() => setImageFile(null)}
-                  size="sm"
-                  className="absolute top-1 right-1 bg-black/70 text-white text-[10px] leading-none rounded-lg! w-6! h-6!"
-                  aria-label="Remove photo"
-                >
-                  ×
-                </IconButton>
-              </div>
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">Cover photo (optional)</label>
+        <p className="text-[11px] text-zinc-600 mb-1.5">Shown at the top of the event page. This is not a photo from the cleanup itself.</p>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+          className="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-700 file:text-zinc-200 file:text-xs hover:file:bg-zinc-600 active:file:bg-zinc-600 transition-colors duration-150"
+        />
+        {imagePreview && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+              <img src={imagePreview} alt="" className="w-full h-full object-cover" />
+              <IconButton
+                onClick={() => setImageFile(null)}
+                size="sm"
+                className="absolute top-1 right-1 bg-black/70 text-white text-[10px] leading-none rounded-lg! w-6! h-6!"
+                aria-label="Remove photo"
+              >
+                ×
+              </IconButton>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
     </>
   );
 
@@ -3566,21 +3735,21 @@ function HostEventModal({
         {error && <p className="text-red-400 text-xs">{error}</p>}
 
         {(viewMode === "full" || activeGuidedStep === hostEventSteps.length - 1) && (
-        <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
-          <button
-            onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
-            className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-sky-950 text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            {submitting ? "Creating…" : "Create Event"}
-          </button>
-        </div>
+          <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit || submitting}
+              className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-sky-950 text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              {submitting ? "Creating…" : "Create Event"}
+            </button>
+          </div>
         )}
       </div>
     </ModalShell>
