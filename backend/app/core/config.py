@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     admin_api_secret: str = ""
     resend_api_key: str = ""
+    stripe_secret_key: str = ""
     frontend_url: str = "http://localhost:3000"
 
     cors_origins: str = (
