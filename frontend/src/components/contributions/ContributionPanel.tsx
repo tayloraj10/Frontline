@@ -722,14 +722,14 @@ function ContributeModal({
   const isEventMode = isCleanup && Boolean(effectiveEventId);
 
   // Team Event: only relevant once the viewer has actually joined a team for it (teamId set).
-  // "automatic" mode attaches every cleanup logged while active, same as organizer_total events
-  // for regular Cleanup Events — no opt-out checkbox. "manual_opt_in" mirrors the nearby-event
-  // checkbox: pre-checked, but the user can uncheck to log an unrelated cleanup instead.
+  // Both "automatic" and "manual_opt_in" mode mirror the nearby-event checkbox: pre-checked
+  // (opt-in by default) so a joined participant's cleanups count toward their team without
+  // extra effort, but always uncheckable to log an unrelated cleanup instead — users should
+  // never be locked into an event they happen to be a member of.
   const joinedTeamEvent = isCleanup && activeTeamEvent?.teamId ? activeTeamEvent : null;
   const [useTeamEvent, setUseTeamEvent] = useState(true);
   useEffect(() => setUseTeamEvent(true), [joinedTeamEvent?.id]);
-  const effectiveTeamEventId =
-    joinedTeamEvent && (joinedTeamEvent.submission_mode === "automatic" || useTeamEvent) ? joinedTeamEvent.id : null;
+  const effectiveTeamEventId = joinedTeamEvent && useTeamEvent ? joinedTeamEvent.id : null;
   const isTeamEventMode = Boolean(effectiveTeamEventId);
 
   // When logging toward a co-hosted event, default the credit-group pill to whichever
@@ -1249,17 +1249,7 @@ function ContributeModal({
         </label>
       )}
 
-      {joinedTeamEvent && joinedTeamEvent.submission_mode === "automatic" ? (
-        <div className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300">
-          <span>
-            🏁 Logging toward <span className="font-semibold text-emerald-200">{joinedTeamEvent.title}</span>.
-            Cleanups you log while this event is active count toward your team automatically.
-            {joinedTeamEvent.requires_photo && (
-              <span className="block text-emerald-400/70 mt-0.5">A photo is required for this event.</span>
-            )}
-          </span>
-        </div>
-      ) : joinedTeamEvent && (
+      {joinedTeamEvent && (
         <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300 cursor-pointer">
           <input
             type="checkbox"
@@ -1270,7 +1260,9 @@ function ContributeModal({
           <span>
             🏁 Count this toward <span className="font-semibold text-emerald-200">{joinedTeamEvent.title}</span>?
             <span className="block text-emerald-400/70 mt-0.5">
-              No bonus multiplier applies to team-event cleanups.
+              {joinedTeamEvent.submission_mode === "automatic"
+                ? "Counts toward your team automatically while this event is active. Uncheck to log separately."
+                : "No bonus multiplier applies to team-event cleanups."}
               {joinedTeamEvent.requires_photo && " A photo is required for this event."}
             </span>
           </span>
