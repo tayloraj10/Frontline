@@ -6,7 +6,7 @@ Companion: a human-facing version of this doc (for onboarding/stakeholders, not 
 
 Status legend: no tag = fully working · **(Beta)** = shipped but flagged as still being tested in prod · *(stub)* = record/UI exists but the effect isn't implemented yet.
 
-Last updated: 2026-08-03.
+Last updated: 2026-09-13.
 
 ---
 
@@ -25,6 +25,7 @@ Last updated: 2026-08-03.
 ### Campaigns & Territory Gameplay
 - Browse the campaign map (`/campaigns/[slug]`): territory claims, active campaign events ("hotspots"), stats bar, individual + group leaderboard tabs, live activity feed, personal "Mine" tab.
 - Log a contribution: pin placement (GPS or manual), bag counts (small/large) and/or pounds and/or route-based cleanup, optional photo. Campaign type (territory / choropleth / heatmap / collage / hex_bloom) determines the specific stat units and form shown.
+  - Self-log cleanups (individual only, not organizer team-total/attendee logging) can instead pick one of 4 points-bases: default small/large bag count (no photo required), a granular bag-type breakdown across 7 admin-editable bag types (rolled up to legacy small/large for existing dashboards, with a bonus point folded into the contractor-bag tier's value), pounds (same `pound_value` conversion organizer paths use), or a countable-item count (cigarette butts seeded live at 1pt/20; five more candidate item types seeded inactive, admin-editable). Bases 2-4 all require at least one photo as an anti-abuse check; the default bag-count basis keeps today's optional-photo behavior. Selected detail (`metrics_detail`) surfaces on feed/profile activity rows and in the admin content-flags moderation view.
 - Claim territory for self or for a group they belong to (group selector in the contribution flow). **Territory claiming's map layer (claimed/contested/unclaimed outlines) is opt-in and off by default** — a separate, single-select "Geographic Stats" toggle group (Zip/Postcode, and on `trash-war` also Neighborhood/Borough) shows the same underlying activity metrics (points, bag counts, recent activity, photos) with no ownership/claimed-by/group-battle info, via `GET /api/geo-units/{geo_unit_id}/stats`. Claiming itself still works unchanged when the territory layer is manually toggled on.
 - **Route mode (Beta)** — trace an actual walked route on the map as a contribution; distinct from a hosted event's purely decorative planned route.
 - Report a trash "problem": pin, severity, optional photo.
