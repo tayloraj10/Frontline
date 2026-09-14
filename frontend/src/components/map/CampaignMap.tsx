@@ -141,7 +141,12 @@ function createHostLogoStack(
   isPast: boolean,
 ): HTMLDivElement {
   const wrapper = document.createElement("div");
-  wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;";
+  // Explicit z-index (and the `position` it requires to take effect) so this marker
+  // stays clickable when a partner/business marker lands at the same coordinates --
+  // without it, `position` falls back to the maplibregl-marker class's default and the
+  // z-index is ignored, letting business markers (which do set one) paint on top and
+  // swallow clicks meant for this marker.
+  wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;position:relative;z-index:9;";
 
   // Only groups with an actual logo get a circle here — a group without one is skipped
   // rather than shown as a generic placeholder. If nothing has a logo, fall back to a

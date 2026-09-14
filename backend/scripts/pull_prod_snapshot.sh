@@ -56,7 +56,14 @@ LOCAL_SERVICE_ROLE_KEY="${LOCAL_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6Ik
 # it permanently empty after every sync (silently — no FK error, just zero rows) and made
 # every partner business look location-less locally (e.g. dropped off the campaign map,
 # which requires an active location row per business).
-TABLES=(profiles groups group_members geo_units campaigns cleanups contributions territory_claims problem_reports partner_businesses partner_business_locations partner_offers partner_redemptions partner_offer_codes cleanup_rsvps cleanup_team_total_logs event_triggers campaign_events campaign_event_geo_units leaderboard_entries user_notifications campaign_partner_businesses partner_business_admins problem_report_flags cleanup_event_cohosts cleanup_event_photos geo_unit_adjacency game_settings)
+# team_events/team_event_participants/team_event_organizers/team_event_teams/
+# team_event_group_participants/team_event_submission_edits are cascade-wiped via campaigns'
+# TRUNCATE ... CASCADE and were missing from this dump list for a while (same silent-empty
+# failure as above). admin_roles, device_tokens, content_flags, blocked_users, and
+# cleanup_event_offers are also cascade-wiped but intentionally NOT dumped here — they're
+# either local-admin-only or not needed for local testing; re-add per the rule above if that
+# changes.
+TABLES=(profiles groups group_members geo_units campaigns cleanups contributions territory_claims problem_reports partner_businesses partner_business_locations partner_offers partner_redemptions partner_offer_codes cleanup_rsvps cleanup_team_total_logs event_triggers campaign_events campaign_event_geo_units leaderboard_entries user_notifications campaign_partner_businesses partner_business_admins problem_report_flags cleanup_event_cohosts cleanup_event_photos geo_unit_adjacency game_settings team_events team_event_participants team_event_organizers team_event_teams team_event_group_participants team_event_submission_edits)
 
 TABLE_ARGS=()
 for t in "${TABLES[@]}"; do

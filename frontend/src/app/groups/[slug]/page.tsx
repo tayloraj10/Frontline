@@ -7,6 +7,7 @@ import { createPublicClient } from "@/lib/supabase/public";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
 import Avatar from "@/components/ui/Avatar";
+import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
 import PastEventsList from "@/components/groups/PastEventsList";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
 import BackButton from "@/components/ui/BackButton";
@@ -151,7 +152,7 @@ export default async function GroupProfilePage({ params }: Props) {
         <div className="flex items-start gap-4 min-w-0">
           <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
             {group.image_url ? (
-              <img src={group.image_url} alt={group.name} className="w-full h-full object-cover" />
+              <GroupAvatarLightbox imageUrl={group.image_url} name={group.name} />
             ) : (
               <span className="text-2xl font-black text-zinc-300">{group.name[0].toUpperCase()}</span>
             )}

@@ -146,6 +146,7 @@ export default function CleanupEventDetail({
   const [cancelLoading, setCancelLoading] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [headerLightboxOpen, setHeaderLightboxOpen] = useState(false);
   const [checkInPointsAwarded, setCheckInPointsAwarded] = useState<number | null>(null);
   const [firstCheckinBonus, setFirstCheckinBonus] = useState(false);
   const [firstCheckinBonusPreview, setFirstCheckinBonusPreview] = useState<number | null>(null);
@@ -170,6 +171,15 @@ export default function CleanupEventDetail({
   const attendeeReminderEnabled = eventSettingValues.email_attendee_reminder_enabled === 1;
 
   const viewerCheckedInInitial = !!initialEvent.viewer_rsvp?.checked_in_at;
+
+  // Ticks every 15s so the check-in window gate (below) re-evaluates as the window
+  // opens/closes, without requiring the user to interact with anything.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!userId || viewerCheckedInInitial) return;
+    const id = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, [userId, viewerCheckedInInitial]);
 
   // Passively check proximity so attendees can see at a glance whether they're in
   // range, without requiring the "Check in with my location" button click first.
@@ -301,6 +311,30 @@ export default function CleanupEventDetail({
 
   const viewerStatus = event.viewer_rsvp?.status ?? null;
   const viewerCheckedIn = !!event.viewer_rsvp?.checked_in_at;
+
+  // Mirrors the server's check-in gate (window + proximity, see check_in_to_cleanup_event
+  // in backend/app/api/routes/cleanup_events.py) so the button only shows green when a
+  // click would actually succeed, and explains why when it wouldn't.
+  const checkInWindowStart = event.check_in_window_start ? new Date(event.check_in_window_start).getTime() : null;
+  const checkInWindowEnd = event.check_in_window_end ? new Date(event.check_in_window_end).getTime() : null;
+  const beforeCheckInWindow = checkInWindowStart !== null && now < checkInWindowStart;
+  const afterCheckInWindow = checkInWindowEnd !== null && now > checkInWindowEnd;
+  const withinCheckInWindow = !beforeCheckInWindow && !afterCheckInWindow;
+  const withinCheckInRange =
+    locationStatus === "resolved" && distanceMeters !== null && distanceMeters <= event.check_in_radius_meters;
+  const canCheckInWithLocation = withinCheckInWindow && withinCheckInRange;
+  const checkInBlockedReason = beforeCheckInWindow
+    ? `Check-in opens at ${formatCheckInWindow(event.check_in_window_start, event.check_in_window_end)?.split("–")[0].trim() ?? "the event start"}`
+    : afterCheckInWindow
+    ? "The check-in window has closed"
+    : locationStatus === "checking"
+    ? "Checking your location…"
+    : locationStatus === "unavailable"
+    ? "Enable location to check in"
+    : !withinCheckInRange
+    ? "Move closer to the event to check in"
+    : null;
+
   const goingCount = event.going_count;
   const spotsLeft = event.max_attendees !== null ? event.max_attendees - goingCount : null;
   const blockGoing = event.is_full && viewerStatus !== "going";
@@ -310,10 +344,23 @@ export default function CleanupEventDetail({
   return (
     <div className="space-y-6">
       {event.image_url && (
-        <div className="w-full aspect-video rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700">
+        <button
+          type="button"
+          onClick={() => setHeaderLightboxOpen(true)}
+          className="block w-full aspect-video rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700 cursor-zoom-in"
+          aria-label={`View ${event.title} photo`}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={event.image_url} alt={event.title} className="w-full h-full object-contain" />
-        </div>
+        </button>
+      )}
+      {headerLightboxOpen && event.image_url && (
+        <Lightbox
+          images={[event.image_url]}
+          index={0}
+          onClose={() => setHeaderLightboxOpen(false)}
+          onNavigate={() => {}}
+        />
       )}
 
       {event.route ? (
@@ -711,11 +758,15 @@ export default function CleanupEventDetail({
                 </p>
                 <button
                   onClick={handleCheckInWithLocation}
-                  disabled={checkInLoading}
+                  disabled={checkInLoading || !canCheckInWithLocation}
+                  title={checkInBlockedReason ?? undefined}
                   className="w-full px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
                 >
                   {checkInLoading ? "Checking in…" : "Check in with my location"}
                 </button>
+                {!checkInLoading && checkInBlockedReason && (
+                  <p className="text-xs text-zinc-500">{checkInBlockedReason}</p>
+                )}
                 {showJoinCodeField ? (
                   <div className="flex items-center gap-2">
                     <input
@@ -765,10 +816,13 @@ export default function CleanupEventDetail({
                   event={event}
                   userId={userId}
                   onSubmitted={() => void refresh()}
+                  disabled={!viewerCheckedIn}
+                  disabledReason={!viewerCheckedIn ? "Check in to this event to track your route" : undefined}
                 />
               )}
             {event.logging_mode !== "organizer_total" &&
-              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
+              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") &&
+              (viewerCheckedIn ? (
                 <Link
                   href={`/campaigns/${event.campaign_slug}?track_event=${event.id}`}
                   className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-sky-700/60 text-sky-300 hover:bg-sky-950/30 active:bg-sky-950/30 active:scale-[0.97] rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
@@ -779,7 +833,23 @@ export default function CleanupEventDetail({
                     BETA
                   </span>
                 </Link>
-              )}
+              ) : (
+                <div>
+                  <div
+                    title="Check in to this event to track your route"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-dashed border-zinc-700 text-zinc-500 bg-zinc-900/40 rounded-lg grayscale cursor-not-allowed touch-manipulation"
+                  >
+                    <span aria-hidden="true">🔒</span>
+                    Track my route
+                    <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/40 border border-violet-800/40 text-violet-500">
+                      BETA
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-zinc-500 text-center">
+                    Check in to this event to track your route
+                  </p>
+                </div>
+              ))}
           </div>
         );
 

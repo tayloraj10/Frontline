@@ -108,14 +108,6 @@ export default function GroupsListClient({
                           Member
                         </span>
                       )}
-                      <span className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-                        {eventCount > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-sky-700/50 bg-sky-950/30 px-2 py-0.5 text-sky-400">
-                            🗓️ {eventCount} upcoming
-                          </span>
-                        )}
-                        {count} member{count !== 1 ? "s" : ""}
-                      </span>
                     </div>
 
                     <h2 className="text-lg font-bold leading-snug text-zinc-100 group-hover:text-white">
@@ -126,6 +118,16 @@ export default function GroupsListClient({
                         {group.description}
                       </p>
                     )}
+                    {/* Own row (not squeezed into the avatar/badge row above with ml-auto) so
+                        it can't wrap onto an orphan line and end up floating oddly to the right. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      {eventCount > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-700/50 bg-sky-950/30 px-2 py-0.5 text-sky-400">
+                          🗓️ {eventCount} upcoming
+                        </span>
+                      )}
+                      <span>{count} member{count !== 1 ? "s" : ""}</span>
+                    </div>
                   </div>
 
                   <div className="relative flex flex-shrink-0 flex-col items-end gap-2">
