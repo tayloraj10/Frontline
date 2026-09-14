@@ -18,6 +18,7 @@ import { formatPoints } from "@/lib/formatPoints";
 import { saveMapPosition } from "@/lib/mapPosition";
 import IconButton from "@/components/ui/IconButton";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -273,6 +274,7 @@ interface ContributionPoint {
   submitted_at: string | null;
   is_group_event?: boolean;
   cleanup_event_id?: string | null;
+  contributor_name?: string | null;
   latitude: number;
   longitude: number;
 }
@@ -391,6 +393,7 @@ export type MapBusiness = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
+  adults_only: boolean;
   locations: MapBusinessLocation[];
 };
 
@@ -724,8 +727,10 @@ function applyLayerVisibility(m: maplibregl.Map, t: LayerToggleState): void {
     if (m.getLayer(layerId)) m.setLayoutProperty(layerId, "visibility", vis(show));
   };
   setVis("contribution-dots", t.showCleanupDots);
+  setVis("contribution-dots-hit", t.showCleanupDots);
   setVis("contribution-dots-halo", t.showGroupEventDots);
   setVis("report-dots", t.showReports);
+  setVis("report-dots-hit", t.showReports);
   setVis("report-radius-fill", t.showReports);
   setVis("report-radius-line", t.showReports);
   setVis("cleanup-event-radius-fill", t.showEventRadius && t.showGroupEvents);
@@ -1169,7 +1174,7 @@ function TerritoryPanel({
                 {isContested ? "Contested" : "Claimed"}
               </span>
             )}
-            <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+            <IconButton onClick={onClose} className="-mr-2.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
         </div>
 
@@ -1420,7 +1425,7 @@ function TerritoryPanel({
         >
           <div className="flex items-start justify-between mb-2">
             <p className="text-sm font-semibold text-zinc-100">What are points?</p>
-            <IconButton onClick={() => setShowPointsInfo(false)} size="sm" className="-mr-1.5 -mt-1 text-lg leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+            <IconButton onClick={() => setShowPointsInfo(false)} className="-mr-2.5 -mt-1.5 text-lg leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
             The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
@@ -1466,7 +1471,7 @@ function StatePanel({
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
             <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1563,7 +1568,7 @@ function HexPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
             <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -2342,12 +2347,13 @@ export default function CampaignMap({
         businessMarkerScaleElsRef.current.push(scaleWrapper);
 
         const innerEl = document.createElement("div");
+        const adultsRing = business.adults_only ? ",0 0 0 2px #ef4444" : "";
         innerEl.style.cssText = hasOffer
           ? `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-          `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6);` +
+          `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6)${adultsRing};` +
           "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9);transform-origin:center"
           : `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-          "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+          `border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6)${adultsRing};` +
           "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
         scaleWrapper.appendChild(innerEl);
         if (affordable) {
@@ -2365,11 +2371,12 @@ export default function CampaignMap({
           innerEl.style.fontSize = hasOffer ? "15px" : "13px";
         }
         const locationSuffix = location.label ? ` (${location.label})` : "";
+        const adultsSuffix = business.adults_only ? " (21+ only)" : "";
         el.title = affordable
-          ? `${business.name}${locationSuffix} — you have enough points for ${location.affordableOfferTitle}!`
+          ? `${business.name}${locationSuffix} — you have enough points for ${location.affordableOfferTitle}!${adultsSuffix}`
           : hasOffer
-            ? `${business.name}${locationSuffix} — ${location.activeOfferTitle}`
-            : `${business.name}${locationSuffix}`;
+            ? `${business.name}${locationSuffix} — ${location.activeOfferTitle}${adultsSuffix}`
+            : `${business.name}${locationSuffix}${adultsSuffix}`;
 
         if (!layerToggleRef.current.showPartners) {
           el.style.display = "none";
@@ -2485,6 +2492,7 @@ export default function CampaignMap({
             claim_after_deadline_at: report.claim_after_deadline_at,
             flag_count: report.flag_count,
             unit_type: report.unit_type,
+            reported_by_name: report.reported_by_name,
           },
         })),
       });
@@ -3755,6 +3763,19 @@ export default function CampaignMap({
           "circle-stroke-opacity": 0.7,
         },
       });
+      // Invisible, larger-radius layer stacked on top purely for hit testing — MapLibre's
+      // circle hit test is exact against circle-radius, and the 6px visual dot above is far
+      // below a usable mobile tap target. Event listeners bind to this layer, not the visual
+      // one, so taps near a dot (not just dead-on) still register.
+      m.addLayer({
+        id: "contribution-dots-hit",
+        type: "circle",
+        source: "contribution-pts",
+        paint: {
+          "circle-radius": 16,
+          "circle-opacity": 0,
+        },
+      });
     };
 
     if (contributionFeaturesRef.current.length > 0) {
@@ -3778,6 +3799,7 @@ export default function CampaignMap({
               submitted_at: loc.submitted_at ?? "",
               is_group_event: loc.is_group_event ?? false,
               cleanup_event_id: loc.cleanup_event_id ?? "",
+              contributor_name: loc.contributor_name ?? "",
             },
           }));
           contributionFeaturesRef.current = features;
@@ -3917,6 +3939,16 @@ export default function CampaignMap({
         "circle-opacity": 0.9,
         "circle-stroke-width": 1.5,
         "circle-stroke-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#9333ea", "#ea580c"],
+      },
+    });
+    // See contribution-dots-hit above — same enlarged invisible hit target for mobile tapping.
+    m.addLayer({
+      id: "report-dots-hit",
+      type: "circle",
+      source: "report-points",
+      paint: {
+        "circle-radius": 16,
+        "circle-opacity": 0,
       },
     });
 
@@ -4469,15 +4501,24 @@ export default function CampaignMap({
       await setupCustomLayers();
 
       // Event listeners are registered once here and persist through style swaps.
-      map.current.on("mouseenter", "contribution-dots", () => {
+      map.current.on("mouseenter", "contribution-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
-      map.current.on("mousemove", "contribution-dots", (e) => {
-        if (pinPickerActiveRef.current || !e.features?.[0]) return;
-        const props = e.features[0].properties as { value?: number; submitted_at?: string; cleanup_event_id?: string };
+      map.current.on("mousemove", "contribution-dots-hit", (e) => {
+        // Touch taps synthesize a mousemove without a matching mouseleave, so this tooltip
+        // would stick open on top of whatever the tap's click handler opens (see the
+        // territory-fill hover handler below for the same issue).
+        if (isTouchViewport() || pinPickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as {
+          value?: number;
+          submitted_at?: string;
+          cleanup_event_id?: string;
+          contributor_name?: string;
+        };
         const date = props.submitted_at
           ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
           : "";
+        const name = props.contributor_name || "Anonymous";
         // A group event's total gets split into one contribution row per participant, each
         // logged at the same event, so a single dot's own value is just that person's share.
         // Sum every dot sharing this cleanup_event_id (already loaded, no extra lookup) to
@@ -4492,39 +4533,72 @@ export default function CampaignMap({
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
+          `<div>` +
           `<span style="font-size:13px">🗑️</span>` +
           `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}${props.cleanup_event_id ? " total" : ""}</span>` +
-          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
+          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
+          `</div>` +
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>`;
       });
-      map.current.on("mouseleave", "contribution-dots", () => {
+      map.current.on("mouseleave", "contribution-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
       // A dot for a contribution logged against a group event (halo ring) links back
       // to that event's page — plain ad-hoc/individual cleanups have nowhere to link to.
-      map.current.on("click", "contribution-dots", (e) => {
+      // On touch, mousemove never fires (see the guard above), so tapping any dot needs
+      // to fall back to a real tap-to-open popup instead of relying on hover at all.
+      map.current.on("click", "contribution-dots-hit", (e) => {
         if (pinPickerActiveRef.current || !e.features?.[0]) return;
-        const props = e.features[0].properties as { cleanup_event_id?: string };
-        if (!props.cleanup_event_id) return;
+        const props = e.features[0].properties as {
+          value?: number;
+          submitted_at?: string;
+          cleanup_event_id?: string;
+          contributor_name?: string;
+        };
         if (!map.current) return;
         contributionPopupRef.current?.remove();
         const coords = (e.features[0].geometry as GeoJSON.Point).coordinates.slice() as [number, number];
-        contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
+        if (props.cleanup_event_id) {
+          contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
+            .setLngLat(coords)
+            .setHTML(
+              `<div style="font-family:inherit;font-size:12px;">` +
+                `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
+                `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>` +
+                `</div>`,
+            )
+            .addTo(map.current);
+          return;
+        }
+        if (!isTouchViewport()) return;
+        const date = props.submitted_at
+          ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
+        const name = props.contributor_name || "Anonymous";
+        const displayValue = props.value ?? 1;
+        contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "200px" })
           .setLngLat(coords)
           .setHTML(
             `<div style="font-family:inherit;font-size:12px;">` +
-              `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
-              `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>` +
+              `<div>` +
+              `<span style="font-size:13px">🗑️</span>` +
+              `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}</span>` +
+              (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
+              `</div>` +
+              `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>` +
               `</div>`,
           )
           .addTo(map.current);
       });
 
-      map.current.on("mouseenter", "report-dots", () => {
+      map.current.on("mouseenter", "report-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
-      map.current.on("mousemove", "report-dots", (e) => {
-        if (pinPickerActiveRef.current || !e.features?.[0]) return;
+      map.current.on("mousemove", "report-dots-hit", (e) => {
+        // Same touch-tap issue as contribution-dots above: without this guard the tooltip
+        // sticks open over the Claim This Report modal the tap's click handler opens.
+        if (isTouchViewport() || pinPickerActiveRef.current || !e.features?.[0]) return;
         const props = e.features[0].properties as { severity?: string; reported_at?: string };
         const date = props.reported_at
           ? new Date(props.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -4539,11 +4613,11 @@ export default function CampaignMap({
           (date ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">Reported ${date}</div>` : "") +
           `<div style="color:#71717a;font-size:10px;margin-top:4px">Clean up within the shaded radius to resolve it</div>`;
       });
-      map.current.on("mouseleave", "report-dots", () => {
+      map.current.on("mouseleave", "report-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
-      map.current.on("click", "report-dots", (e) => {
+      map.current.on("click", "report-dots-hit", (e) => {
         if (pinPickerActiveRef.current || routePickerActiveRef.current || !e.features?.[0]) return;
         const props = e.features[0].properties as {
           id?: string;
@@ -4556,6 +4630,7 @@ export default function CampaignMap({
           claim_after_deadline_at?: string | null;
           flag_count?: number;
           unit_type?: string | null;
+          reported_by_name?: string | null;
         };
         if (!props.id) return;
         const geometry = e.features[0].geometry;
@@ -4575,6 +4650,7 @@ export default function CampaignMap({
           flag_count: props.flag_count ?? 0,
           claim_before_deadline_at: props.claim_before_deadline_at ?? null,
           claim_after_deadline_at: props.claim_after_deadline_at ?? null,
+          reported_by_name: props.reported_by_name ?? null,
         });
       });
 
@@ -4585,7 +4661,7 @@ export default function CampaignMap({
         // territory-fill covers the whole map (see the opacity-vs-interactivity note above), so
         // its mousemove fires under report/contribution dots too and would otherwise clobber the
         // pointer cursor those layers' own handlers just set — defer to them when a dot is present.
-        if (map.current.queryRenderedFeatures(e.point, { layers: ["report-dots", "contribution-dots"] }).length > 0) {
+        if (map.current.queryRenderedFeatures(e.point, { layers: ["report-dots-hit", "contribution-dots-hit"] }).length > 0) {
           return;
         }
         const hoverState = e.features[0].state as { claim_owned?: boolean; claim_is_group?: boolean };
@@ -5313,6 +5389,7 @@ export default function CampaignMap({
       claim_before_deadline_at: null,
       claim_after_deadline_at: null,
       flag_count: 0,
+      reported_by_name: null,
     };
 
     const nextReports = [...(problemReportsRef.current?.reports ?? []), report];
@@ -6095,7 +6172,7 @@ export default function CampaignMap({
           onClick={() => setSelectedBusiness(null)}
         >
           <div
-            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 pr-14 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <IconButton
@@ -6118,13 +6195,21 @@ export default function CampaignMap({
                   🏪
                 </div>
               )}
-              <div>
-                <h3 className="text-lg font-semibold text-white">{selectedBusiness.business.name}</h3>
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                  {selectedBusiness.business.name}
+                  {selectedBusiness.business.adults_only && <AdultsOnlyBadge />}
+                </h3>
                 {selectedBusiness.location.label && (
                   <p className="text-xs text-zinc-500">{selectedBusiness.location.label}</p>
                 )}
               </div>
             </div>
+            {selectedBusiness.business.adults_only && (
+              <p className="text-xs text-red-400 mb-3">
+                🔞 This business can only serve customers who are 21 or older. Please bring valid ID.
+              </p>
+            )}
             {selectedBusiness.business.description && (
               <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.business.description}</p>
             )}

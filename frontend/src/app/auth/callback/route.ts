@@ -30,6 +30,23 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      if (rawNext === "/partners/apply") {
+        // Only true signups should become business-only, not an existing user
+        // logging back in through an apply link. A brand-new account's
+        // created_at and last_sign_in_at land within milliseconds of each
+        // other (separate statements in the same signup request), never
+        // exactly equal, so compare with a tolerance instead of ===.
+        const isNewSignup =
+          !!data.user.last_sign_in_at &&
+          Math.abs(new Date(data.user.last_sign_in_at).getTime() - new Date(data.user.created_at).getTime()) < 10000;
+        if (isNewSignup) {
+          await supabase
+            .schema("public")
+            .from("profiles")
+            .update({ is_business_only: true })
+            .eq("id", data.user.id);
+        }
+      }
       if (!hasExplicitNext) {
         const { data: profile } = await supabase
           .schema("public")

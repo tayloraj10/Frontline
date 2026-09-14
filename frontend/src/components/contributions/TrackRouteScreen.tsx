@@ -215,7 +215,12 @@ export default function TrackRouteScreen({
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-8 px-4 text-center">
         <span className="text-4xl">🛰️</span>
-        <h3 className="text-base font-semibold text-zinc-100">Track your route live</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold text-zinc-100">
+          Track your route live
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+            BETA
+          </span>
+        </h3>
         <p className="text-sm text-zinc-400 max-w-xs">
           Frontline will record your GPS path as you clean, even if your phone locks or the app is in the
           background. This needs &quot;Always&quot; location access.
@@ -284,6 +289,9 @@ export default function TrackRouteScreen({
             <div className="px-4 py-2 bg-zinc-900/95 border border-red-800/60 rounded-lg text-xs text-zinc-100 shadow-elevation-3 backdrop-blur-sm whitespace-nowrap flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
               Recording route, {formatElapsed(elapsedMs)} · {formatDistance(distance)}
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                BETA
+              </span>
             </div>
           </div>
 
@@ -413,6 +421,12 @@ export default function TrackRouteScreen({
   // phase === "reviewing"
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-1.5 text-sm font-semibold text-zinc-200">
+        Review your route
+        <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+          BETA
+        </span>
+      </div>
       {routePhotos.length === 0 && (
         <div className="text-center text-xs font-medium text-amber-300 leading-tight px-3 py-2 rounded-md bg-amber-950/40 border border-amber-800/50">
           No photos were taken during tracking. Don&apos;t forget to add photos before you submit.

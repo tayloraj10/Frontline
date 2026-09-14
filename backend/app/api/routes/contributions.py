@@ -89,6 +89,14 @@ class ContributionRequest(BaseModel):
             raise ValueError("must be non-negative")
         return v
 
+    @field_validator("pounds")
+    @classmethod
+    def _round_pounds(cls, v: float | None) -> float | None:
+        # Rounding to a whole number before binding avoids asyncpg encoding a
+        # non-terminating binary float into the NUMERIC metrics_pounds column
+        # (e.g. 123.8 becomes 123.79999999999999715782905695999926515502929688).
+        return round(v) if v is not None else None
+
     @field_validator("points_basis")
     @classmethod
     def _valid_basis(cls, v: str | None) -> str | None:
@@ -279,16 +287,19 @@ async def submit_contribution(
         raise HTTPException(status_code=403, detail="Campaign is not accepting contributions")
     campaign_geo_unit = camp_row[0]
 
+    event_logging_mode = None
     if payload.cleanup_event_id:
         event_result = await db.execute(
             text("""
-                SELECT 1 FROM cleanups
+                SELECT logging_mode FROM cleanups
                 WHERE id = :id AND campaign_id = :campaign_id AND is_group_event = true
             """),
             {"id": str(payload.cleanup_event_id), "campaign_id": str(payload.campaign_id)},
         )
-        if not event_result.fetchone():
+        event_row = event_result.fetchone()
+        if not event_row:
             raise HTTPException(status_code=404, detail="Cleanup event not found")
+        event_logging_mode = event_row.logging_mode
 
     team_event_team_id = None
     effective_team_event_id = payload.team_event_id
@@ -632,19 +643,32 @@ async def submit_contribution(
     if payload.cleanup_event_id:
         # Self-log attendance: an RSVP row is "attended" once it has a linked
         # contribution, regardless of whether the user RSVP'd or checked in first.
+        #
+        # For an organizer_total (team-log) event, attendees aren't expected to log their
+        # own bags/pounds — the only individual submission they'd make here is a tracked
+        # route (optionally with photos), carrying no metrics. That shouldn't claim
+        # contribution_id: log_team_total's eligible-pool query treats a non-NULL
+        # contribution_id as "already credited by team total, skip on next split," and its
+        # wipe step only clears rows it created itself (cleanup_id IS NULL). A metrics-free
+        # route submission would set a non-NULL contribution_id the wipe never reaches,
+        # permanently excluding that attendee from every future team-total split.
+        has_metrics = bool(payload.small_bags or payload.large_bags or payload.pounds)
+        claims_contribution_id = event_logging_mode != "organizer_total" or has_metrics
         await db.execute(
             text("""
                 INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at, contribution_id)
                 VALUES (:cleanup_id, :user_id, 'going', NOW(), :contribution_id)
                 ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
                     checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, EXCLUDED.checked_in_at),
-                    contribution_id = EXCLUDED.contribution_id,
+                    contribution_id = CASE WHEN :claims_contribution_id
+                        THEN EXCLUDED.contribution_id ELSE cleanup_rsvps.contribution_id END,
                     updated_at = NOW()
             """),
             {
                 "cleanup_id": str(payload.cleanup_event_id),
                 "user_id": str(payload.user_id),
-                "contribution_id": recorded.contribution_id,
+                "contribution_id": recorded.contribution_id if claims_contribution_id else None,
+                "claims_contribution_id": claims_contribution_id,
             },
         )
 
@@ -792,19 +816,21 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
     result = await db.execute(
         text("""
             SELECT
-                id::text,
-                user_id::text,
-                value,
-                photo_url,
-                submitted_at,
-                cleanup_event_id::text,
-                cleanup_event_id IS NOT NULL AS is_group_event,
-                ST_Y(location::geometry) AS latitude,
-                ST_X(location::geometry) AS longitude
-            FROM contributions
-            WHERE campaign_id = :campaign_id
-              AND location IS NOT NULL
-            ORDER BY submitted_at DESC
+                c.id::text,
+                c.user_id::text,
+                c.value,
+                c.photo_url,
+                c.submitted_at,
+                c.cleanup_event_id::text,
+                c.cleanup_event_id IS NOT NULL AS is_group_event,
+                ST_Y(c.location::geometry) AS latitude,
+                ST_X(c.location::geometry) AS longitude,
+                COALESCE(p.display_name, p.username) AS contributor_name
+            FROM contributions c
+            LEFT JOIN profiles p ON p.id = c.user_id
+            WHERE c.campaign_id = :campaign_id
+              AND c.location IS NOT NULL
+            ORDER BY c.submitted_at DESC
             LIMIT 1000
         """),
         {"campaign_id": str(campaign_id)},
@@ -821,6 +847,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
             "cleanup_event_id": row.cleanup_event_id,
             "latitude": float(row.latitude),
             "longitude": float(row.longitude),
+            "contributor_name": row.contributor_name,
         }
         for row in rows
         if row.latitude is not None and row.longitude is not None

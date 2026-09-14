@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isNativePlatform, isAndroidNative } from "@/lib/capacitor";
 import { acceptLegal } from "@/app/legal/actions";
 import { applyAppleProfileName } from "@/lib/applyAppleProfileName";
 import { Card } from "@/components/ui/Card";
 
-export default function SignupPage() {
-  const router = useRouter();
+function SignupForm() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -40,7 +41,13 @@ export default function SignupPage() {
     } else if (data.session) {
       // Email confirmation disabled — user is immediately logged in
       await acceptLegal({ terms: true, privacy: true });
-      window.location.href = "/campaigns";
+      const isNewSignup =
+        !!data.session.user.last_sign_in_at &&
+        Math.abs(new Date(data.session.user.last_sign_in_at).getTime() - new Date(data.session.user.created_at).getTime()) < 10000;
+      if (next === "/partners/apply" && isNewSignup) {
+        await supabase.schema("public").from("profiles").update({ is_business_only: true }).eq("id", data.session.user.id);
+      }
+      window.location.href = next && next.startsWith("/") ? next : "/campaigns";
     } else {
       // Email confirmation required — show check-your-email state
       setEmailSent(true);
@@ -51,9 +58,11 @@ export default function SignupPage() {
   async function handleGoogleSignup() {
     setGoogleLoading(true);
     const supabase = createClient();
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (next) callbackUrl.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: callbackUrl.toString() },
     });
   }
 
@@ -106,6 +115,16 @@ export default function SignupPage() {
         if (signInData.user && profile) {
           await applyAppleProfileName(supabase, signInData.user.id, profile);
         }
+        // signInWithIdToken doesn't distinguish signup from login — an existing
+        // user tapping "Continue with Apple" here just logs in. Only flag brand
+        // new accounts as business-only, matching the OAuth callback's check.
+        const signedUpUser = signInData.user;
+        const isNewSignup =
+          !!signedUpUser?.last_sign_in_at &&
+          Math.abs(new Date(signedUpUser.last_sign_in_at).getTime() - new Date(signedUpUser.created_at).getTime()) < 10000;
+        if (next === "/partners/apply" && signedUpUser && isNewSignup) {
+          await supabase.schema("public").from("profiles").update({ is_business_only: true }).eq("id", signedUpUser.id);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Apple sign-in failed.");
         return;
@@ -114,13 +133,15 @@ export default function SignupPage() {
         setAppleLoading(false);
       }
 
-      window.location.href = "/campaigns";
+      window.location.href = next && next.startsWith("/") ? next : "/campaigns";
       return;
     }
 
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (next) callbackUrl.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "apple",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: callbackUrl.toString() },
     });
   }
 
@@ -135,7 +156,7 @@ export default function SignupPage() {
           </p>
           <p className="text-zinc-500 text-xs">
             Already confirmed?{" "}
-            <Link href="/login" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+            <Link href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
               Sign in
             </Link>
           </p>
@@ -260,11 +281,19 @@ export default function SignupPage() {
 
         <p className="text-center text-zinc-400 text-sm">
           Already have an account?{" "}
-          <Link href="/login" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+          <Link href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             Sign in
           </Link>
         </p>
       </Card>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
   );
 }

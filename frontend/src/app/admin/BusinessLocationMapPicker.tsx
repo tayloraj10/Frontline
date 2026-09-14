@@ -22,7 +22,7 @@ export default function BusinessLocationMapPicker({
   locationNoun = "business",
   interactive = true,
   initialCenter,
-  initialZoom = 12,
+  initialZoom = 15,
   square = false,
 }: {
   lat: number | null;

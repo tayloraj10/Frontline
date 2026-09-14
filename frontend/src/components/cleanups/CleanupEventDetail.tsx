@@ -26,6 +26,8 @@ import {
   type CleanupEventOfferLocation,
 } from "@/lib/cleanupEvents";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
+import GroupEventTrackRoute from "@/components/cleanups/GroupEventTrackRoute";
+import EventRoutesSection from "@/components/cleanups/EventRoutesSection";
 import { searchUsers, type UserSearchResult } from "@/lib/users";
 import RoutePreviewMap from "@/components/map/RoutePreviewMap";
 import NearbyReportsMap from "@/components/map/NearbyReportsMap";
@@ -37,6 +39,7 @@ import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
+import { hasRouteTrackingCapability } from "@/lib/capacitor";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -126,9 +129,11 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 export default function CleanupEventDetail({
   initialEvent,
   userId,
+  isSiteAdmin = false,
 }: {
   initialEvent: CleanupEventDetailData;
   userId: string | null;
+  isSiteAdmin?: boolean;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const [rsvpLoading, setRsvpLoading] = useState(false);
@@ -753,6 +758,28 @@ export default function CleanupEventDetail({
                 Log your cleanup on the map
               </Link>
             )}
+            {userId &&
+              event.logging_mode === "organizer_total" &&
+              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
+                <GroupEventTrackRoute
+                  event={event}
+                  userId={userId}
+                  onSubmitted={() => void refresh()}
+                />
+              )}
+            {event.logging_mode !== "organizer_total" &&
+              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
+                <Link
+                  href={`/campaigns/${event.campaign_slug}?track_event=${event.id}`}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-sky-700/60 text-sky-300 hover:bg-sky-950/30 active:bg-sky-950/30 active:scale-[0.97] rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  <span aria-hidden="true">🛰️</span>
+                  Track my route
+                  <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                    BETA
+                  </span>
+                </Link>
+              )}
           </div>
         );
 
@@ -1081,6 +1108,10 @@ export default function CleanupEventDetail({
           </div>
         );
 
+        const routesLinkSection = event.attendee_route_count > 0 && (
+          <EventRoutesSection cleanupId={event.id} routeCount={event.attendee_route_count} />
+        );
+
         if (effectiveIsOrganizer && !isCancelled && viewMode === "guided") {
           const attendeesStepIndex = 2 + (logSection ? 1 : 0);
           const manageAttendeesNote = (
@@ -1097,7 +1128,11 @@ export default function CleanupEventDetail({
             { key: "clean", label: "Do the cleanup", content: doCleanupSection },
             ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
             { key: "attendees", label: "Manage attendee data", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
-            ...(photosSection ? [{ key: "photos", label: "Photos", content: photosSection as React.ReactNode }] : []),
+            ...(photosSection
+              ? [{ key: "photos", label: "Photos and Routes", content: <>{photosSection}{routesLinkSection}</> as React.ReactNode }]
+              : routesLinkSection
+                ? [{ key: "photos", label: "Photos and Routes", content: routesLinkSection as React.ReactNode }]
+                : []),
           ];
           const activeStepIndex = Math.min(guidedStep, steps.length - 1);
           const prevNextRow = (
@@ -1159,6 +1194,7 @@ export default function CleanupEventDetail({
             {logSection}
             {attendeesSection}
             {photosSection}
+            {routesLinkSection}
           </>
         );
       })()}
@@ -1568,12 +1604,25 @@ function OrganizerLogButton({
     : 0;
   const poundPoints = poundValueReady ? (Number(pounds) || 0) * pointValues.pound_value! : 0;
   const hasNegative = (Number(smallBags) || 0) < 0 || (Number(largeBags) || 0) < 0 || (Number(pounds) || 0) < 0;
+  const bagsEntered = (Number(smallBags) || 0) + (Number(largeBags) || 0) > 0;
+  const poundsEntered = (Number(pounds) || 0) > 0;
+  // A value sitting in the field for the *unselected* method scores 0 — this catches the
+  // organizer who typed pounds without noticing "By bags" was still highlighted.
+  const scoringMismatch =
+    (scoringMethod === "bags" && !bagsEntered && poundsEntered) ||
+    (scoringMethod === "pounds" && !poundsEntered && bagsEntered);
 
   const submit = async () => {
     const small = Number(smallBags) || 0;
     const large = Number(largeBags) || 0;
     const lbs = Number(pounds) || 0;
     if (hasNegative || small + large + lbs <= 0) return;
+    if (scoringMismatch) {
+      setError(
+        `You entered ${poundsEntered ? "pounds" : "bags"} but "By ${scoringMethod}" is selected — switch it or this haul will score 0 points.`
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -1624,24 +1673,42 @@ function OrganizerLogButton({
             type="number"
             min={0}
             value={smallBags}
-            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setSmallBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
           <input
             type="number"
             min={0}
             value={largeBags}
-            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setLargeBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
           <input
             type="number"
             min={0}
             value={pounds}
-            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setPounds(v);
+              if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
+            }}
+            className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
           />
         </div>
+        {scoringMismatch && (
+          <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2 mb-3">
+            ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is
+            selected below — this will score 0 points unless you switch it.
+          </p>
+        )}
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 mb-3 shadow-elevation-1">
           <p className="text-[11px] text-zinc-600">
             Bags and pounds are two ways of estimating the same haul — pick which one determines points.
@@ -1686,7 +1753,7 @@ function OrganizerLogButton({
         <div className="flex items-center gap-2">
           <button
             onClick={submit}
-            disabled={loading || hasNegative}
+            disabled={loading || hasNegative || scoringMismatch}
             className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
           >
             {loading ? "Logging…" : "Log contribution"}
@@ -2033,6 +2100,13 @@ function LogTeamTotalForm({
     (Number(largeBags) || 0) < 0 ||
     (Number(pounds) || 0) < 0 ||
     Object.values(overrides).some((v) => v.trim() !== "" && (Number(v) || 0) < 0);
+  const bagsEntered = (Number(smallBags) || 0) + (Number(largeBags) || 0) > 0;
+  const poundsEntered = (Number(pounds) || 0) > 0;
+  // A value sitting in the field for the *unselected* method scores 0 — this catches the
+  // organizer who typed pounds without noticing "By bags" was still highlighted.
+  const scoringMismatch =
+    (scoringMethod === "bags" && !bagsEntered && poundsEntered) ||
+    (scoringMethod === "pounds" && !poundsEntered && bagsEntered);
 
   const applyToAll = () => {
     if (applyAllValue.trim() === "") return;
@@ -2049,6 +2123,12 @@ function LogTeamTotalForm({
     const large = Number(largeBags) || 0;
     const lbs = Number(pounds) || 0;
     if (hasNegative || small + large + lbs <= 0) return;
+    if (scoringMismatch) {
+      setError(
+        `You entered ${poundsEntered ? "pounds" : "bags"} but "By ${scoringMethod}" is selected — switch it or this haul will score 0 points.`
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     setResult(null);
@@ -2140,8 +2220,12 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={smallBags}
-            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setSmallBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
         </div>
         <div>
@@ -2150,8 +2234,12 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={largeBags}
-            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setLargeBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
         </div>
         <div>
@@ -2160,11 +2248,21 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={pounds}
-            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setPounds(v);
+              if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
+            }}
+            className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
           />
         </div>
       </div>
+      {scoringMismatch && (
+        <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+          ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is selected
+          below — this will score 0 points unless you switch it.
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-zinc-600">Split among</span>
         {(["checked_in", "going"] as const).map((p) => (
@@ -2490,10 +2588,16 @@ function LogTeamTotalForm({
 
       <button
         onClick={submit}
-        disabled={loading || hasNegative || candidates.length === 0}
+        disabled={loading || hasNegative || candidates.length === 0 || scoringMismatch}
         className="w-full mt-3 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
       >
-        {loading ? "Logging…" : candidates.length === 0 ? "No eligible attendees" : "Log team total"}
+        {loading
+          ? "Logging…"
+          : candidates.length === 0
+          ? "No eligible attendees"
+          : scoringMismatch
+          ? "Fix scoring method above"
+          : "Log team total"}
       </button>
     </div>
   );

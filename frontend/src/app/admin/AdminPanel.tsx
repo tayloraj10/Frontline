@@ -13,6 +13,7 @@ import AddressAutocomplete from "./AddressAutocomplete";
 import TimedEventForm from "@/components/events/TimedEventForm";
 import BonusSpotForm from "@/components/events/BonusSpotForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
@@ -73,8 +74,10 @@ export type PartnerBusiness = {
   logo_url: string | null;
   website_url: string | null;
   social_links: BusinessSocialLinks | null;
+  adults_only: boolean;
   status: string;
   created_at: string;
+  created_by: string | null;
 };
 
 export type PartnerBusinessLocation = {
@@ -2115,27 +2118,10 @@ function BusinessCard({
   const isRejected = business.status === "rejected";
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [confirmingReject, setConfirmingReject] = useState(false);
 
   const businessOffers = offers.filter(o => o.business_id === business.id);
-
-  const handleCreateOffer = async (payload: OfferFormPayload): Promise<string | null> => {
-    const supabase = createClient();
-    const { data, error: insertErr } = await supabase
-      .schema("public")
-      .from("partner_offers")
-      .insert({ ...payload, business_id: business.id, status: "active" })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
-      .single();
-
-    if (insertErr) return insertErr.message;
-
-    setOffers([...offers, data as PartnerOffer]);
-    setShowCreateOffer(false);
-    return null;
-  };
 
   const businessCampaignIds = businessCampaignLinks.filter(l => l.business_id === business.id).map(l => l.campaign_id);
   const businessLocationRows = businessLocations.filter(l => l.business_id === business.id);
@@ -2149,7 +2135,7 @@ function BusinessCard({
       .update({ ...rest, status: isPending ? "active" : business.status })
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at, created_by"
       )
       .single();
 
@@ -2157,6 +2143,16 @@ function BusinessCard({
 
     const updated = data as PartnerBusiness;
     setBusinesses(businesses.map(b => (b.id === updated.id ? updated : b)));
+
+    if (isPending && updated.created_by) {
+      const { error: adminErr } = await supabase
+        .schema("public")
+        .from("partner_business_admins")
+        .insert({ business_id: business.id, user_id: updated.created_by });
+      if (adminErr && adminErr.code !== "23505") {
+        return `Business approved, but failed to assign its submitter as business admin: ${adminErr.message}`;
+      }
+    }
 
     const locationsResult = await reconcileBusinessLocations<PartnerBusinessLocation>(
       supabase,
@@ -2212,7 +2208,7 @@ function BusinessCard({
       .update({ status: "rejected" })
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at, created_by"
       )
       .single();
     setRejecting(false);
@@ -2240,7 +2236,10 @@ function BusinessCard({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-200 truncate">{business.name}</p>
+            <p className="text-sm font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+              {business.name}
+              {business.adults_only && <AdultsOnlyBadge />}
+            </p>
             <p className="text-xs text-zinc-600">{businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
@@ -2255,14 +2254,16 @@ function BusinessCard({
               {rejecting ? "Rejecting…" : "Reject"}
             </span>
           )}
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors duration-150 px-2 py-1"
-          >
-            {editing ? "Cancel edit" : "Edit"}
-          </span>
+          {!isPending && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
+              className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors duration-150 px-2 py-1"
+            >
+              {editing ? "Cancel edit" : "Edit"}
+            </span>
+          )}
           <StatusBadge status={business.status} />
         </div>
       </button>
@@ -2276,7 +2277,7 @@ function BusinessCard({
           {isRejected && (
             <p className="text-xs text-red-400">This application was rejected and kept as a record.</p>
           )}
-          {editing && (
+          {(editing || isPending) && (
             <BusinessForm
               initial={{
                 ...business,
@@ -2294,7 +2295,11 @@ function BusinessCard({
                   google_maps_url: l.google_maps_url,
                 })),
               }}
-              initialCampaignIds={businessCampaignIds}
+              initialCampaignIds={
+                businessCampaignIds.length > 0
+                  ? businessCampaignIds
+                  : [campaigns.find(c => c.slug === "trash-war")?.id ?? campaigns[0]?.id].filter((id): id is string => !!id)
+              }
               campaigns={campaigns}
               onSubmit={handleEditSubmit}
               onCancel={() => setEditing(false)}
@@ -2311,18 +2316,12 @@ function BusinessCard({
               onCancelled={(id) => setOffers(offers.map(existing => existing.id === id ? { ...existing, status: "cancelled" } : existing))}
             />
           ))}
-          {businessOffers.length === 0 && !showCreateOffer && (
+          {businessOffers.length === 0 && (
             <p className="text-xs text-zinc-600">No offers yet.</p>
           )}
-          <button
-            onClick={() => setShowCreateOffer(!showCreateOffer)}
-            className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
-          >
-            {showCreateOffer ? "Cancel" : "+ New Offer"}
-          </button>
-          {showCreateOffer && (
-            <OfferForm onSubmit={handleCreateOffer} locations={businessLocationRows} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
-          )}
+          <p className="text-xs text-zinc-600">
+            Offers are managed from the business&apos;s own Partner Dashboard.
+          </p>
           {!isPending && <BusinessAdminsManager businessId={business.id} />}
         </div>
       )}
@@ -2375,7 +2374,7 @@ function PartnersTab({
       .from("partner_businesses")
       .insert({ ...rest, status: "active" })
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at, created_by"
       )
       .single();
 
@@ -3530,6 +3529,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
   "email_partner_coordination_enabled",
   "email_attendee_reminder_enabled",
   "email_organizer_stats_reminder_enabled",
+  "email_organizer_followup_enabled",
 ]);
 
 const METERS_TO_FEET = 3.28084;

@@ -5,11 +5,12 @@ import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { isIOSNative } from "@/lib/capacitor";
+import { hasRouteTrackingCapability, isNativePlatform } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import { formatPoints } from "@/lib/formatPoints";
+import { uploadToR2 } from "@/lib/uploadToR2";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
 import { getIntersectingGeoUnits, type IntersectingGeoUnit, type RouteLineString, type RoutePhoto } from "@/lib/cleanupRoutes";
 import { PhotoCaptureInput } from "@/components/contributions/photoCapture";
@@ -31,6 +32,20 @@ const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap")
   ssr: false,
   loading: () => <div className="w-full h-[140px] rounded-lg bg-zinc-800 animate-pulse" />,
 });
+
+// Google's universal directions link opens the native Maps app when one is installed
+// (iOS and Android both), falling back to Google Maps in a browser otherwise. In the
+// Capacitor wrapper, route it through the system browser instead of the in-app WebView
+// so the OS gets a chance to hand it off to a real navigation app.
+async function openDirections(lat: number, lng: number) {
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  if (isNativePlatform()) {
+    const { Browser } = await import("@capacitor/browser");
+    await Browser.open({ url });
+    return;
+  }
+  window.open(url, "_blank");
+}
 
 const TrackRouteScreen = dynamic(() => import("@/components/contributions/TrackRouteScreen"), {
   ssr: false,
@@ -257,7 +272,6 @@ interface ContributionPanelProps {
   userId: string | null;
   userGroups?: { id: string; name: string; image_url?: string | null; isAdmin?: boolean }[];
   // Site-wide admin flag (profiles.is_admin) — distinct from the per-group isAdmin above.
-  // Currently only used to gate the still-in-progress "Track" logging mode.
   isSiteAdmin?: boolean;
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
@@ -277,6 +291,11 @@ interface ContributionPanelProps {
   onStyleChange?: (id: string) => void;
   pendingCleanupEventId?: string | null;
   onPendingCleanupEventConsumed?: () => void;
+  // Set alongside pendingCleanupEventId when the caller (e.g. a group event's "Track my
+  // route" button) wants the contribute modal to open directly in Track mode instead of
+  // the default Point mode.
+  forceTrackMode?: boolean;
+  onForceTrackModeConsumed?: () => void;
   nearbyCleanupEvent?: {
     id: string;
     title: string;
@@ -317,6 +336,7 @@ interface ClickedReport {
   claim_after_deadline_at: string | null;
   flag_count: number;
   unit_type: string | null;
+  reported_by_name: string | null;
 }
 
 const METERS_TO_FEET = 3.28084;
@@ -419,28 +439,6 @@ function useGPS(
   return { coords, status, errorCode, capture, reset };
 }
 
-// ─── Presign + upload to R2 ──────────────────────────────────────────────────
-
-async function uploadToR2(file: File): Promise<string> {
-  const params = new URLSearchParams({ filename: file.name, content_type: file.type });
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/upload/presign?${params}`,
-  );
-  if (!res.ok) throw new Error("Failed to get upload URL");
-  const { upload_url, public_url } = (await res.json()) as {
-    upload_url: string;
-    public_url: string;
-  };
-
-  const put = await fetch(upload_url, {
-    method: "PUT",
-    body: file,
-    headers: { "Content-Type": file.type },
-  });
-  if (!put.ok) throw new Error("Photo upload failed");
-
-  return public_url;
-}
 
 // ─── GPS status indicator ─────────────────────────────────────────────────────
 
@@ -520,6 +518,8 @@ function ContributeModal({
   prefillPhotoUrls,
   isSiteAdmin,
   routeTracking,
+  forceTrackMode,
+  onForceTrackModeConsumed,
 }: {
   campaignId: string;
   campaignContributionType: string;
@@ -557,13 +557,16 @@ function ContributeModal({
   // Before/after photos already captured (and uploaded to R2) during the claim challenge —
   // prefilled here so the user isn't asked to retake/reselect photos they just took.
   prefillPhotoUrls?: string[];
-  // Gates the still-in-progress live route "Track" mode to site admins only, ahead of a
-  // full rollout — see profiles.is_admin.
   isSiteAdmin?: boolean;
   // Owned by the outer, always-mounted ContributionPanel so a live tracking session
   // survives this modal being closed/reopened (navigating back to the main map, an
   // accidental dismiss, or the resume chip re-entering Track mode mid-session).
   routeTracking: RouteTrackingSession;
+  // Set alongside nearbyEvent when the caller (e.g. a group event's "Track my route"
+  // button) wants this modal to open directly in Track mode rather than defaulting to
+  // Point.
+  forceTrackMode?: boolean;
+  onForceTrackModeConsumed?: () => void;
 }) {
   const pathname = usePathname();
   const isCleanup = campaignContributionType === "cleanup";
@@ -611,7 +614,7 @@ function ContributeModal({
   // chip (ContributeModal remounts fresh each time mode goes back to "contribute", so this
   // needs to read routeTracking.active at that moment rather than always defaulting to "point").
   const [contributeMode, setContributeMode] = useState<"point" | "route" | "track">(
-    routeTracking.active ? "track" : "point",
+    routeTracking.active || forceTrackMode ? "track" : "point",
   );
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [intersectingUnits, setIntersectingUnits] = useState<IntersectingGeoUnit[]>([]);
@@ -660,6 +663,16 @@ function ContributeModal({
   const handleTrackRouteConfirmed = (coordinates: [number, number][], photos: CapturedRoutePhoto[]) => {
     hydrateTrackRoute(coordinates, photos);
   };
+
+  // Mirrors the Track tab's own onClick (below) for callers that need the modal to open
+  // straight into Track mode, e.g. a group event's "Track my route" button.
+  useEffect(() => {
+    if (!forceTrackMode) return;
+    setContributeMode("track");
+    if (routeTracking.phase === "idle") routeTracking.openTracker();
+    onForceTrackModeConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceTrackMode]);
 
   // routeTracking.confirm() deliberately no longer resets itself (see the comment on confirm
   // in useRouteTracking.ts) specifically so this can happen: ContributeModal remounts fresh
@@ -745,6 +758,12 @@ function ContributeModal({
   }, [isEventMode, nearbyEvent, userGroups]);
 
   const isRouteMode = isCleanup && (contributeMode === "route" || contributeMode === "track");
+
+  // Tracked routes against a team-log (organizer_total) event are purely a fun,
+  // decorative comparison — they never contribute to the team's official total,
+  // so they skip bag/pound metrics entirely rather than being blocked outright.
+  const isDecorativeTeamTrack =
+    isRouteMode && contributeMode === "track" && !!nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total";
 
   // Route mode's multiplier comes from whichever zip the user has chosen to credit, using
   // the per-zip active_multiplier data returned alongside the intersecting-zips lookup —
@@ -937,17 +956,17 @@ function ContributeModal({
     if (isRouteMode) {
       if (!route || !selectedRouteGeoUnitId) return false;
     } else if ((isCleanup || isPhoto) && !submitCoords) return false;
-    if (isCleanup && (smallBagsNum < 0 || largeBagsNum < 0 || Number(pounds || 0) < 0)) return false;
-    if (isCleanup && pointsBasis === "bags" && smallBagsNum + largeBagsNum <= 0) return false;
+    if (isCleanup && !isDecorativeTeamTrack && (smallBagsNum < 0 || largeBagsNum < 0 || Number(pounds || 0) < 0)) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "bags" && smallBagsNum + largeBagsNum <= 0) return false;
     const hasPhoto = photos.length > 0 || existingPhotoUrls.length > 0;
-    if (isCleanup && pointsBasis !== "bags" && !hasPhoto) return false;
-    if (isCleanup && pointsBasis === "granular_bags" && granularBagsValue <= 0) return false;
-    if (isCleanup && pointsBasis === "pounds" && !(Number(pounds || 0) > 0)) return false;
-    if (isCleanup && pointsBasis === "countable_item" && (!countableItemKey || countableItemNum <= 0)) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis !== "bags" && !hasPhoto) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "granular_bags" && granularBagsValue <= 0) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "pounds" && !(Number(pounds || 0) > 0)) return false;
+    if (isCleanup && !isDecorativeTeamTrack && pointsBasis === "countable_item" && (!countableItemKey || countableItemNum <= 0)) return false;
     if (isPhoto && photos.length === 0) return false;
     if (isCivicAction && !selectedAction) return false;
     if (isUnfollow && !notes.trim()) return false;
-    if (isCleanup && nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total") return false;
+    if (isCleanup && !isDecorativeTeamTrack && nearbyEvent && useNearbyEvent && nearbyEvent.logging_mode === "organizer_total") return false;
     if (isTeamEventMode && joinedTeamEvent?.requires_photo && photos.length === 0 && existingPhotoUrls.length === 0) return false;
     return true;
   })();
@@ -982,7 +1001,7 @@ function ContributeModal({
       // canSubmit already requires bagValuesReady for cleanups, so these are guaranteed
       // defined by the time handleSubmit can run. The server recomputes the authoritative
       // value from points_basis regardless of what's sent here.
-      const value = isCleanup ? baseValue : 1;
+      const value = isCleanup ? (isDecorativeTeamTrack ? 0 : baseValue) : 1;
       const computedNotes = isCivicAction ? selectedAction : (notes.trim() || null);
 
       const body: Record<string, unknown> = {
@@ -996,18 +1015,20 @@ function ContributeModal({
       };
 
       if (isCleanup) {
-        body.points_basis = pointsBasis;
-        if (pointsBasis === "granular_bags") {
-          body.bag_type_counts = bagTypeCounts;
-        } else if (pointsBasis === "countable_item") {
-          body.countable_item_key = countableItemKey;
-          body.countable_item_count = countableItemNum;
-        } else {
-          body.small_bags = smallBagsNum;
-          body.large_bags = largeBagsNum;
+        if (!isDecorativeTeamTrack) {
+          body.points_basis = pointsBasis;
+          if (pointsBasis === "granular_bags") {
+            body.bag_type_counts = bagTypeCounts;
+          } else if (pointsBasis === "countable_item") {
+            body.countable_item_key = countableItemKey;
+            body.countable_item_count = countableItemNum;
+          } else {
+            body.small_bags = smallBagsNum;
+            body.large_bags = largeBagsNum;
+          }
+          if (pounds.trim()) body.pounds = Number(pounds);
         }
         if (photoUrls.length > 1) body.photo_urls = photoUrls;
-        if (pounds.trim()) body.pounds = Number(pounds);
         if (nearbyReport && resolveHotspot) body.resolve_report_id = nearbyReport.id;
         if (claimedReportId) body.claimed_report_id = claimedReportId;
         if (fromSolarpunk) body.from_solarpunk_redirect = true;
@@ -1217,37 +1238,56 @@ function ContributeModal({
   const modeAndLocationSection = (
     <>
       {isCleanup && nearbyEvent && nearbyEvent.logging_mode === "organizer_total" ? (
-        <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-300 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={useNearbyEvent}
-            onChange={(e) => setUseNearbyEvent(e.target.checked)}
-            className="mt-0.5 shrink-0"
-          />
-          <span>
-            ⚠️ You&apos;re at the event{" "}
-            <span className="font-semibold text-amber-200">{nearbyEvent.title}</span>. The organizer logs one team
-            total for everyone at the end. Self-logging here won&apos;t count toward it.
-            <span className="block text-amber-400/70 mt-0.5">
-              Uncheck this to log a separate, unrelated cleanup instead. Submitting is disabled while this stays checked.
+          contributeMode === "track" ? (
+            <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-violet-700/60 bg-violet-950/30 text-xs text-violet-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useNearbyEvent}
+                onChange={(e) => setUseNearbyEvent(e.target.checked)}
+                className="mt-0.5 shrink-0"
+              />
+              <span>
+                🛰️ You&apos;re at the event{" "}
+                <span className="font-semibold text-violet-200">{nearbyEvent.title}</span>. Your tracked route is just
+                for fun, it won&apos;t count toward the team&apos;s total or need any bags/pounds.
+                <span className="block text-violet-400/70 mt-0.5">
+                  Uncheck this to log a separate, unrelated route instead.
+                </span>
+              </span>
+            </label>
+          ) : (
+          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useNearbyEvent}
+              onChange={(e) => setUseNearbyEvent(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              ⚠️ You&apos;re at the event{" "}
+              <span className="font-semibold text-amber-200">{nearbyEvent.title}</span>. The organizer logs one team
+              total for everyone at the end. Self-logging here won&apos;t count toward it.
+              <span className="block text-amber-400/70 mt-0.5">
+                Uncheck this to log a separate, unrelated cleanup instead. Submitting is disabled while this stays checked.
+              </span>
             </span>
-          </span>
-        </label>
-      ) : isCleanup && nearbyEvent && (
-        <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={useNearbyEvent}
-            onChange={(e) => setUseNearbyEvent(e.target.checked)}
-            className="mt-0.5 shrink-0"
-          />
-          <span>
-            📍 You&apos;re in range of the event{" "}
-            <span className="font-semibold text-sky-200">{nearbyEvent.title}</span>. Count this toward it?
-            <span className="block text-sky-400/70 mt-0.5">No bonus multiplier applies to event cleanups. Uncheck to log separately.</span>
-          </span>
-        </label>
-      )}
+          </label>
+          )
+        ) : isCleanup && nearbyEvent && (
+          <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-sky-800/60 bg-sky-950/30 text-xs text-sky-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useNearbyEvent}
+              onChange={(e) => setUseNearbyEvent(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              📍 You&apos;re in range of the event{" "}
+              <span className="font-semibold text-sky-200">{nearbyEvent.title}</span>. Count this toward it?
+              <span className="block text-sky-400/70 mt-0.5">No bonus multiplier applies to event cleanups. Uncheck to log separately.</span>
+            </span>
+          </label>
+        )}
 
       {joinedTeamEvent && (
         <label className="flex items-start gap-2 min-h-11 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-xs text-emerald-300 cursor-pointer">
@@ -1331,7 +1371,7 @@ function ContributeModal({
             >
               🛤️ Route
             </button>
-            {(isIOSNative() || process.env.NODE_ENV !== "production") && isSiteAdmin && (
+            {(hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
               <button
                 type="button"
                 onClick={() => {
@@ -1344,6 +1384,9 @@ function ContributeModal({
                   }`}
               >
                 🛰️ Track
+                <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                  BETA
+                </span>
               </button>
             )}
           </div>
@@ -1532,8 +1575,14 @@ function ContributeModal({
         </div>
       )}
 
-      {/* Bags count (cleanup only) */}
-      {isCleanup && (
+      {/* Bags count (cleanup only, skipped for decorative team-log route tracking) */}
+      {isCleanup && isDecorativeTeamTrack && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
+          <span aria-hidden="true">🛰️</span>
+          Just the route, no bag/pound metrics needed for this one.
+        </div>
+      )}
+      {isCleanup && !isDecorativeTeamTrack && (
         <div>
           <label className="block text-xs text-zinc-500 mb-1.5">How do you want to log this?</label>
           <div className="grid grid-cols-2 gap-2 mb-3">
@@ -2316,7 +2365,7 @@ function ClaimReportModal({
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [flagState, setFlagState] = useState<"idle" | "submitting" | "done">("idle");
+  const [flagState, setFlagState] = useState<"idle" | "confirming" | "submitting" | "done">("idle");
   const [flagError, setFlagError] = useState<string | null>(null);
   const [beforePhotoUrl, setBeforePhotoUrl] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -2331,6 +2380,20 @@ function ClaimReportModal({
     setPhotoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [photo]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/flag-status?user_id=${userId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { flagged: boolean } | null) => {
+        if (!cancelled && data?.flagged) setFlagState("done");
+      })
+      .catch(() => { });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, localReport.id]);
 
   const isMine = !!userId && localReport.claimed_by_user_id === userId;
   const beforeCountdown = useCountdownLabel(isMine ? localReport.claim_before_deadline_at : null);
@@ -2549,11 +2612,44 @@ function ClaimReportModal({
     }
   };
 
+  const handleUnflag = async () => {
+    if (!userId) return;
+    setFlagState("submitting");
+    setFlagError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/problem-reports/${localReport.id}/flag?user_id=${userId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error("Failed to undo the flag.");
+      const data = (await res.json()) as { flag_count: number };
+      const patch: Partial<ClickedReport> = { flag_count: data.flag_count };
+      setLocalReport((r) => ({ ...r, ...patch }));
+      onClaimUpdated(localReport.id, patch);
+      setFlagState("idle");
+    } catch (e) {
+      setFlagError(e instanceof Error ? e.message : "Failed to undo the flag.");
+      setFlagState("done");
+    }
+  };
+
   const severity = severityMeta(localReport.severity);
   const severityBadge = (
     <div className={`self-start flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold capitalize ${severity.classes}`}>
       <span>{severity.icon}</span>
       <span>{severity.label}</span>
+    </div>
+  );
+  const reportMetaLine = (
+    <p className="text-xs text-zinc-500">
+      Reported {new Date(localReport.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+      {localReport.reported_by_name ? ` by ${localReport.reported_by_name}` : ""}
+    </p>
+  );
+  const reportHeader = (
+    <div className="flex flex-col gap-2">
+      {severityBadge}
+      {reportMetaLine}
     </div>
   );
   const reportPhotoBlock = localReport.photo_url ? (
@@ -2576,13 +2672,39 @@ function ClaimReportModal({
     />
   );
 
-  const flagControl = (
+  const flagControl = !userId ? null : (
     <div className="pt-1 text-center">
-      {flagState === "done" ? (
-        <p className="text-xs text-zinc-500">Thanks — this report has been flagged for review.</p>
+      {flagState === "confirming" ? (
+        <div className="flex flex-col items-center gap-1.5">
+          <p className="text-xs text-zinc-400">Flag this report as inaccurate or inappropriate?</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleFlag}
+              className="text-xs text-red-400 hover:text-red-300 active:text-red-300 transition-colors duration-150 underline"
+            >
+              Yes, flag it
+            </button>
+            <button
+              onClick={() => setFlagState("idle")}
+              className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : flagState === "done" ? (
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-xs text-zinc-500">Thanks, this report has been flagged for review.</p>
+          <button
+            onClick={handleUnflag}
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+          >
+            Undo
+          </button>
+        </div>
       ) : (
         <button
-          onClick={handleFlag}
+          onClick={() => setFlagState("confirming")}
           disabled={flagState === "submitting"}
           className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40"
           title={
@@ -2633,9 +2755,12 @@ function ClaimReportModal({
   // permanently show as claimed to everyone but the original claimant.
   if (localReport.claimed_by_user_id && !isMine && (localReport.status === "scheduled" || localReport.status === "in_progress")) {
     return (
-      <ModalShell title="Report Claimed" badge="Beta" onClose={onClose}>
+      <ModalShell title="Report Claimed" badge="Beta" onClose={onClose} footerId={localReport.id}>
         <div className="flex flex-col items-center gap-3 py-4">
-          {severityBadge}
+          <div className="flex flex-col items-center gap-2">
+            {severityBadge}
+            {reportMetaLine}
+          </div>
           {reportPhotoBlock}
           <span className="text-4xl">🔒</span>
           <p className="text-zinc-100 text-sm text-center">
@@ -2694,10 +2819,14 @@ function ClaimReportModal({
   if (localReport.status === "open") {
     const afterWindow = claimAfterWindowMinutes(localReport.severity, afterWindowMinutesBySeverity);
     return (
-      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose}>
-        <div className="flex flex-col gap-4">
+      <ModalShell title="Claim This Report" badge="Beta" onClose={onClose} compact footerId={localReport.id}>
+        <div className="flex flex-col gap-3">
           {severityBadge}
-          <p className="-mt-3 text-xs text-zinc-500">{severityDescription(localReport.severity, afterWindow)}</p>
+          <p className="-mt-1 text-xs text-zinc-500">{severityDescription(localReport.severity, afterWindow)}</p>
+          <p className="text-[11px] text-zinc-600">
+            Reported {new Date(localReport.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {localReport.reported_by_name ? ` by ${localReport.reported_by_name}` : ""}
+          </p>
           {reportPhotoBlock}
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
             <span className="text-base shrink-0">🎯</span>
@@ -2720,9 +2849,17 @@ function ClaimReportModal({
               </span>
             </div>
           </div>
-          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+          <div className="flex flex-col gap-2">
+            <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+            <button
+              onClick={() => openDirections(localReport.latitude, localReport.longitude)}
+              className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs font-medium text-violet-300 hover:border-violet-600 hover:text-violet-200 active:border-violet-600 active:text-violet-200 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation"
+            >
+              🗺️ Get Directions
+            </button>
+          </div>
           {error && <p className="text-red-400 text-xs">{error}</p>}
-          <div className="flex gap-2 pt-1">
+          <div className="flex gap-2">
             <button
               onClick={onClose}
               className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
@@ -2747,9 +2884,9 @@ function ClaimReportModal({
   // Claimed by me, awaiting before-photo.
   if (localReport.status === "scheduled") {
     return (
-      <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose}>
-        <div className="flex flex-col gap-4">
-          {severityBadge}
+      <ModalShell title="Get There & Snap a Before Photo" badge="Beta" onClose={onClose} compact footerId={localReport.id}>
+        <div className="flex flex-col gap-3">
+          {reportHeader}
           {reportPhotoBlock}
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${beforeCountdown.expired
             ? "border-red-800/60 bg-red-950/30 text-red-300"
@@ -2758,11 +2895,19 @@ function ClaimReportModal({
             <span className="text-base shrink-0">⏱️</span>
             <span>
               {beforeCountdown.expired
-                ? "Time's up — this claim has expired. Close and reclaim if it's still available."
+                ? "Time's up, this claim has expired. Close and reclaim if it's still available."
                 : <>Time left to arrive: <span className="font-bold">{beforeCountdown.label}</span></>}
             </span>
           </div>
-          <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+          <div className="flex flex-col gap-2">
+            <MiniMapPreview lat={localReport.latitude} lng={localReport.longitude} styleId={activeMapStyle} interactive />
+            <button
+              onClick={() => openDirections(localReport.latitude, localReport.longitude)}
+              className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs font-medium text-violet-300 hover:border-violet-600 hover:text-violet-200 active:border-violet-600 active:text-violet-200 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation"
+            >
+              🗺️ Get Directions
+            </button>
+          </div>
           {!withinClaimRadius && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-800/60 bg-amber-950/30 text-xs text-amber-300">
               <span className="text-base shrink-0">📍</span>
@@ -2845,9 +2990,9 @@ function ClaimReportModal({
 
   // Claimed by me, before-photo submitted, awaiting after-photo.
   return (
-    <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose}>
+    <ModalShell title="Clean It Up & Snap an After Photo" badge="Beta" onClose={onClose} compact footerId={localReport.id}>
       <div className="flex flex-col gap-4">
-        {severityBadge}
+        {reportHeader}
         {reportPhotoBlock}
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${afterCountdown.expired
           ? "border-red-800/60 bg-red-950/30 text-red-300"
@@ -3306,17 +3451,17 @@ function HostEventModal({
 
   const scheduleSection = (
     <>
-      <div>
+      <div className="min-w-0">
         <label className="block text-xs text-zinc-500 mb-1.5">Starts</label>
         <input
           type="datetime-local"
           value={scheduledStart}
           onChange={(e) => setScheduledStart(e.target.value)}
-          className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+          className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
         />
         <p className="mt-1 text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
       </div>
-      <div>
+      <div className="min-w-0">
         <label className="block text-xs text-zinc-500 mb-1.5">Ends (optional)</label>
         <input
           type="datetime-local"
@@ -3324,7 +3469,7 @@ function HostEventModal({
           min={scheduledStart || undefined}
           onChange={(e) => setScheduledEnd(e.target.value)}
           aria-invalid={endBeforeStart}
-          className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+          className="block w-full min-w-0 max-w-[75%] min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
         />
         {!scheduledEnd && (
           <p className="mt-1 text-[11px] text-zinc-600">If left blank, check-in stays open until 2 hours after the start time.</p>
@@ -4128,16 +4273,20 @@ function ModalShell({
   onClose,
   children,
   glow,
+  compact,
+  footerId,
 }: {
   title?: string;
   badge?: string;
   onClose: () => void;
   children: React.ReactNode;
   glow?: "orange" | "blue" | false;
+  compact?: boolean;
+  footerId?: string;
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))]"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="relative w-full max-w-sm">
@@ -4148,11 +4297,11 @@ function ModalShell({
           />
         )}
         <div
-          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[95vh] ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
+          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col modal-max-h ${footerId ? "modal-fill-h" : ""} ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
             }`}
         >
           {title && (
-            <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
+            <div className={`flex items-center justify-between px-5 pt-5 shrink-0 ${compact ? "pb-3" : "pb-4"}`}>
               <div className="flex items-center gap-2">
                 <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
                 {badge && (
@@ -4164,13 +4313,18 @@ function ModalShell({
                   </span>
                 )}
               </div>
-              <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 text-lg leading-none" aria-label="Close">
+              <IconButton onClick={onClose} className="-mr-2.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 text-lg leading-none" aria-label="Close">
                 ×
               </IconButton>
             </div>
           )}
-          <div className={`overflow-y-auto ${title ? "px-5 pb-5" : "p-5"}`}>
+          <div className={`overflow-y-auto min-h-0 flex-1 ${title ? "px-5 pb-5" : "p-5"}`}>
             {children}
+            {footerId && (
+              <div className="mt-3">
+                <span className="text-[9px] text-zinc-700 select-text">{footerId}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -4204,6 +4358,8 @@ export default function ContributionPanel({
   onStyleChange,
   pendingCleanupEventId,
   onPendingCleanupEventConsumed,
+  forceTrackMode,
+  onForceTrackModeConsumed,
   nearbyCleanupEvent,
   activeTeamEvent,
   clickedReport,
@@ -4215,6 +4371,7 @@ export default function ContributionPanel({
 }: ContributionPanelProps) {
   const isSolarpunk = campaignContributionType === "solarpunk_action";
 
+  const router = useRouter();
   const gps = useGPS(requestLocation, userLocation, locationError);
   // Owned here, not inside ContributeModal, so a live Track Route session survives the
   // user backing out of the Log Cleanup flow (ContributeModal unmounts whenever `mode`
@@ -4370,7 +4527,13 @@ export default function ContributionPanel({
     <>
       {routeTracking.active && mode !== "contribute" && (
         <button
-          onClick={() => setMode("contribute")}
+          onClick={() => {
+            if (routeTracking.cleanupEventId) {
+              router.push(`/cleanup-events/${routeTracking.cleanupEventId}`);
+            } else {
+              setMode("contribute");
+            }
+          }}
           className="absolute top-24 sm:top-10 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 pl-2.5 pr-4 py-2 rounded-full border border-sky-500/40 bg-sky-600 shadow-elevation-3 backdrop-blur-md transition-[background-color,transform] duration-150 hover:bg-sky-500 active:scale-[0.96] touch-manipulation"
         >
           <span className="relative flex items-center justify-center w-7 h-7 rounded-full bg-white/15">
@@ -4380,11 +4543,15 @@ export default function ContributionPanel({
             )}
           </span>
           <span className="flex flex-col items-start leading-tight">
-            <span className="text-xs font-semibold text-white">
+            <span className="flex items-center gap-1 text-xs font-semibold text-white">
               {routeTracking.phase === "reviewing" ? "Review your route" : "Tracking your route"}
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
+                BETA
+              </span>
             </span>
             <span className="text-[11px] text-sky-100 tabular-nums">
-              {formatElapsedShort(routeTracking.elapsedMs)} · {formatDistanceShort(routeTracking.distance)} · tap to review
+              {formatElapsedShort(routeTracking.elapsedMs)} · {formatDistanceShort(routeTracking.distance)} ·{" "}
+              {routeTracking.cleanupEventId ? "tap to finish on event page" : "tap to review"}
             </span>
           </span>
         </button>
@@ -4604,6 +4771,8 @@ export default function ContributionPanel({
               claimedReportId={claimedReportIdForContribute}
               prefillPhotoUrls={claimedPhotoUrlsForContribute}
               routeTracking={routeTracking}
+              forceTrackMode={forceTrackMode}
+              onForceTrackModeConsumed={onForceTrackModeConsumed}
             />
           )}
         </div>

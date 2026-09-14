@@ -3,6 +3,13 @@
 :root {
   --background: #09090b;
   --foreground: #f4f4f5;
+  /* Real height of the fixed mobile bottom tab bar (BottomTabBar.tsx measures and
+     sets this via JS; 0px here is just the pre-hydration/no-JS/desktop fallback). */
+  --bottom-nav-h: 0px;
+  /* Real height of the sticky top app header, safe-area-inset-top included
+     (HeaderHeightObserver.tsx measures and sets this via JS; 0px here is just
+     the pre-hydration/no-JS fallback). */
+  --top-header-h: 0px;
 }
 
 @theme inline {
@@ -15,6 +22,104 @@
 html, body {
   background-color: #09090b;
   color: #f4f4f5;
+}
+
+/* Shared modal height cap (ModalShell, ContributionPanel.tsx): keeps every
+   modal fit-to-screen and scrollable internally instead of overflowing the
+   page or pushing its own buttons off-screen. Plain `vh` is sized against the
+   layout viewport, which on mobile Safari/Chrome stays the same whether the
+   address bar is showing or not — so a modal sized at 90vh can end up taller
+   than what's actually visible once the browser chrome is on-screen, making
+   Cancel/Claim-style buttons unreachable. `dvh` recalculates against the real
+   visible viewport as browser chrome shows/hides, so larger phones still get
+   to use their extra height before scrolling kicks in. @supports guards the
+   handful of older browsers without dvh support, where vh remains correct.
+   The mobile phase can't hotfix a broken modal instantly (see
+   feedback_mobile_first_and_prod_safety), so this needs to hold up on-device.
+   safe-area-inset-top/bottom, --top-header-h and --bottom-nav-h are reserved
+   by the overlay wrapper's own padding (pt-[max(1rem,calc(var(--top-header-h)+1.25rem))]
+   and pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))]),
+   which carves that space out of the flex container the modal centers in.
+   Both buffers use the same 1.25rem value on purpose: since the modal fills
+   that reserved box almost edge-to-edge (see below), the gap from header to
+   modal top and modal bottom to nav bar end up visually equal only if the
+   buffer feeding each side's padding is the same number.
+   That padding alone isn't enough, though: a flat vh/dvh percentage cap here
+   doesn't know how much of the viewport that padding is eating. On a device
+   where header + nav + buffers add up to more than the ~10% margin a flat
+   90vh cap assumes, the modal is taller than the actual space between the
+   padding edges, and because the overlay centers with items-center, an
+   oversized modal overflows symmetrically past BOTH edges instead of just
+   scrolling in place, pushing its top edge under the header and its bottom
+   edge under the nav bar. That's what caused the modal to render under the
+   iOS header even after the padding fix above was confirmed live in
+   production. Mirroring the exact same max()/calc() expressions used in the
+   padding here, and subtracting them from the viewport, guarantees the
+   modal's own max-height can never exceed the space the padding reserved.
+   There's no flat vh/dvh percentage floor alongside that calc() anymore
+   either: a flat 90vh cap can bind before the calc() bound does on devices
+   with a smaller header/nav (calc() computes a larger available height than
+   90vh), which stopped the modal short and left the correctly-reserved space
+   at the bottom unused instead of letting the modal grow into it.
+   Most modals (forms, confirmations, instructions) should still shrink to
+   their own content and sit centered in the reserved box rather than always
+   stretching to fill it, so this stays a max-height, not a height. Only the
+   handful of screens meant to occupy the full reserved area regardless of
+   content length (the trash-report claim flow's report-detail screens, see
+   .modal-fill-h below) opt into forcing height on top of this cap.
+   The bottom padding/calc used to add env(safe-area-inset-bottom) on top of
+   --bottom-nav-h too, but BottomTabBar.tsx's own nav element already has
+   that same safe-area inset baked into its bottom padding, so its measured,
+   published --bottom-nav-h already includes it (same as --top-header-h
+   already including safe-area-inset-top, see HeaderHeightObserver.tsx).
+   Adding it again here double-reserved a whole extra safe-area-inset-
+   bottom's worth of space (the iPhone home-indicator gap), permanently
+   shrinking the available box no matter how the modal used it. */
+.modal-max-h {
+  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
+}
+@supports (height: 100dvh) {
+  .modal-max-h {
+    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
+  }
+}
+
+/* Opt-in modifier for the handful of ModalShell screens (the trash-report
+   claim flow's report-detail states, keyed off footerId in ContributionPanel.tsx)
+   that should occupy the full reserved area on phones instead of shrinking to
+   content: a report card with a photo can vary a lot in height run to run, and
+   this flow in particular reads better filling the space consistently, with the
+   footer report-id scrolling into any leftover room, than it does re-centering
+   itself every time a photo loads or a countdown row appears. Combined with
+   .modal-max-h above (that max-height still applies, this only adds a floor
+   under 640px) rather than a class of its own, so it can't drift out of sync
+   with .modal-max-h's calc(). Desktop keeps the shrink-to-fit behavior, since
+   forcing a short dialog to full-height only matters on the phone chrome this
+   targets. */
+@media (max-width: 639px) {
+  .modal-fill-h {
+    height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
+  }
+  @supports (height: 100dvh) {
+    .modal-fill-h {
+      height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
+    }
+  }
+}
+
+/* Same height cap as .modal-max-h (CampaignInstructionsModal.tsx, a separate
+   implementation not using ModalShell). Named "-85" from when this used a
+   flat 85vh percentage cap; kept for the callers already using this class.
+   Always shrink-to-fit, never forced to fill height: these are short
+   instructional/description dialogs, not the claim-flow screens .modal-fill-h
+   targets. */
+.modal-max-h-85 {
+  max-height: calc(100vh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
+}
+@supports (height: 100dvh) {
+  .modal-max-h-85 {
+    max-height: calc(100dvh - max(1rem, calc(var(--top-header-h) + 1.25rem)) - max(1rem, calc(var(--bottom-nav-h) + 1.25rem)));
+  }
 }
 
 /* Safe-area insets for notch/home-indicator spacing once wrapped in Capacitor.

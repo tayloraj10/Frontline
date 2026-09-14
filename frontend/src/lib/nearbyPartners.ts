@@ -15,6 +15,7 @@ export type NearbyPartner = {
   logo_url: string | null;
   website_url: string | null;
   social_links: Record<string, string> | null;
+  adults_only: boolean;
   locationLabel: string | null;
   distanceMeters: number;
   eventOffers: NearbyPartnerOffer[];
@@ -48,6 +49,7 @@ type BusinessRow = {
   logo_url: string | null;
   website_url: string | null;
   social_links: Record<string, string> | null;
+  adults_only: boolean;
   partner_business_locations: LocationRow[];
 };
 
@@ -70,7 +72,7 @@ export async function getNearbyPartners(
     .schema("public")
     .from("partner_businesses")
     .select(
-      "id, name, slug, logo_url, website_url, social_links, partner_business_locations(lat, lng, label, city, state, status)"
+      "id, name, slug, logo_url, website_url, social_links, adults_only, partner_business_locations(lat, lng, label, city, state, status)"
     )
     .eq("status", "active");
 
@@ -96,6 +98,7 @@ export async function getNearbyPartners(
       logo_url: business.logo_url,
       website_url: business.website_url,
       social_links: business.social_links,
+      adults_only: business.adults_only,
       locationLabel: closest.location.label ?? ([closest.location.city, closest.location.state].filter(Boolean).join(", ") || null),
       distanceMeters: closest.distance,
       eventOffers: [],

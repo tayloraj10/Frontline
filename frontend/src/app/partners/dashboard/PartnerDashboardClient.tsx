@@ -7,8 +7,20 @@ import { reconcileBusinessLocations } from "@/lib/partnerLocations";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import { OfferRow } from "@/app/admin/AdminPanel";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BusinessRadiusView, { MIN_TIER_ACTIVITY } from "@/components/partners/BusinessRadiusView";
 import RedemptionHistoryTable from "@/components/partners/RedemptionHistoryTable";
+
+// Browsers report a fetch that failed before getting an HTTP response (dropped
+// connection, app backgrounded mid-request, etc.) with cryptic wording like
+// "TypeError: Load Failed" (Safari/WKWebView) or "Failed to fetch" (Chrome) --
+// not something a user can act on, so swap in something they can.
+function friendlyErrorMessage(message: string): string {
+  if (/load failed|failed to fetch|network\s*error/i.test(message)) {
+    return "Couldn't connect. Check your internet connection and try again.";
+  }
+  return message;
+}
 
 export type DashboardBusiness = {
   id: string;
@@ -18,6 +30,7 @@ export type DashboardBusiness = {
   logo_url: string | null;
   website_url: string | null;
   social_links: BusinessSocialLinks | null;
+  adults_only: boolean;
   status: string;
   created_at: string;
 };
@@ -61,6 +74,7 @@ export type DashboardOffer = {
 
 function BusinessPanel({
   business,
+  isPending,
   offers,
   setOffers,
   businesses,
@@ -76,6 +90,7 @@ function BusinessPanel({
   viewerUserId,
 }: {
   business: DashboardBusiness;
+  isPending: boolean;
   offers: DashboardOffer[];
   setOffers: (o: DashboardOffer[]) => void;
   businesses: DashboardBusiness[];
@@ -150,11 +165,11 @@ function BusinessPanel({
       .update(rest)
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at"
       )
       .single();
 
-    if (updateErr) return updateErr.code === "23505" ? "Slug already taken." : updateErr.message;
+    if (updateErr) return updateErr.code === "23505" ? "Slug already taken." : friendlyErrorMessage(updateErr.message);
 
     const locationsResult = await reconcileBusinessLocations<DashboardLocation>(
       supabase,
@@ -209,7 +224,7 @@ function BusinessPanel({
       .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
       .single();
 
-    if (insertErr) return insertErr.message;
+    if (insertErr) return friendlyErrorMessage(insertErr.message);
 
     setOffers([...offers, data as DashboardOffer]);
     setShowCreateOffer(false);
@@ -217,7 +232,12 @@ function BusinessPanel({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
+    <div className={`border rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 ${isPending ? "border-amber-800/60" : "border-zinc-800"}`}>
+      {isPending && (
+        <div className="px-5 py-2.5 bg-amber-950/40 border-b border-amber-800/60 text-xs text-amber-400">
+          Awaiting admin review. This business isn't visible to the public yet, but you can get everything set up in the meantime.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
           {business.logo_url ? (
@@ -228,7 +248,10 @@ function BusinessPanel({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-200 truncate">{business.name}</p>
+            <p className="text-sm font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+              {business.name}
+              {business.adults_only && <AdultsOnlyBadge />}
+            </p>
             <p className="text-xs text-zinc-600">
               {businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""} · {businessLocations.length} location{businessLocations.length !== 1 ? "s" : ""}
             </p>
@@ -357,6 +380,7 @@ function BusinessPanel({
 
 export default function PartnerDashboardClient({
   initialBusinesses,
+  pendingBusinessIds,
   initialOffers,
   initialLocations,
   redemptionCounts,
@@ -367,6 +391,7 @@ export default function PartnerDashboardClient({
   viewerUserId,
 }: {
   initialBusinesses: DashboardBusiness[];
+  pendingBusinessIds: string[];
   initialOffers: DashboardOffer[];
   initialLocations: DashboardLocation[];
   redemptionCounts: Record<string, number>;
@@ -380,6 +405,7 @@ export default function PartnerDashboardClient({
   const [offers, setOffers] = useState(initialOffers);
   const [locations, setLocations] = useState(initialLocations);
   const [campaignIdsByBusiness, setCampaignIdsByBusiness] = useState(initialCampaignIdsByBusiness);
+  const pendingBusinessIdSet = new Set(pendingBusinessIds);
 
   if (businesses.length === 0) {
     return (
@@ -396,6 +422,7 @@ export default function PartnerDashboardClient({
         <BusinessPanel
           key={b.id}
           business={b}
+          isPending={pendingBusinessIdSet.has(b.id)}
           offers={offers}
           setOffers={setOffers}
           businesses={businesses}

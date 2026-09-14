@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -71,6 +71,33 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLElement>(null);
+
+  // Fixed modals (ModalShell, CampaignInstructionsModal) need to keep their bottom
+  // edge clear of this bar, which sits at z-40 but is a real opaque UI element the
+  // modal can't just render above and dim like it does the page content — a taller
+  // stacking-context ancestor elsewhere can also make z-index alone unreliable here.
+  // Measuring the actual rendered height (rather than hardcoding it) keeps this correct
+  // if the tab bar's own height ever changes, and collapses to 0 on desktop/admin
+  // routes where this bar doesn't render at all.
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = barRef.current;
+    if (!el) {
+      root.style.setProperty("--bottom-nav-h", "0px");
+      return;
+    }
+    const update = () => root.style.setProperty("--bottom-nav-h", `${el.getBoundingClientRect().height}px`);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+      root.style.setProperty("--bottom-nav-h", "0px");
+    };
+  });
 
   const resolvedLinks = links.map((link) => ({ ...link, href: link.mobileHref ?? link.href }));
   const primary = resolvedLinks.slice(0, MAX_PRIMARY_TABS);
@@ -104,7 +131,10 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   const overflowActive = overflow.some((link) => isActive(link.href));
 
   return (
-    <nav className="sm:hidden fixed inset-x-0 bottom-0 z-40 px-3 pt-1 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+    <nav
+      ref={barRef}
+      className="sm:hidden fixed inset-x-0 bottom-0 z-40 px-3 pt-1 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+    >
       <div className="flex items-stretch gap-1.5 p-1.5 rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900/95 backdrop-blur-md shadow-elevation-3">
         {primary.map((link) => {
           const active = isActive(link.href);

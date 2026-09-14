@@ -5,9 +5,11 @@ import { createPublicClient } from "@/lib/supabase/public";
 import UserNav from "./UserNav";
 import NotificationBellWrapper from "./NotificationBellWrapper";
 import AchievementModalWrapper from "./AchievementModalWrapper";
+import ActivitySnapshotModalWrapper from "./ActivitySnapshotModalWrapper";
 import SupportButton from "./SupportButton";
 import BottomTabBar from "./nav/BottomTabBar";
 import DesktopNavMenu from "./nav/DesktopNavMenu";
+import HeaderHeightObserver from "./nav/HeaderHeightObserver";
 import { buildNavLinks } from "@/lib/navLinks";
 import { version as appVersion } from "../../package.json";
 
@@ -44,6 +46,8 @@ export default async function AppHeader() {
   let avatarUrl: string | null = null;
   let displayName: string | null = null;
   let username: string | null = null;
+  let hasPendingOrganizerItems = false;
+  let hasPendingAdminReviewItems = false;
   if (user) {
     const [{ data: profile }, { data: businessAdminRows }] = await Promise.all([
       supabase
@@ -67,12 +71,44 @@ export default async function AppHeader() {
     username = profile?.username ?? null;
     isBusinessAdmin = (businessAdminRows?.length ?? 0) > 0;
     isBusinessOnly = profile?.is_business_only ?? false;
+
+    const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
+    try {
+      const params = new URLSearchParams({ viewer_user_id: user.id });
+      const res = await fetch(`${fastapiUrl}/api/users/me/has-pending-organizer-items?${params}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(2000),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        hasPendingOrganizerItems = json.has_pending_items ?? false;
+      }
+    } catch {
+      hasPendingOrganizerItems = false;
+    }
+
+    if (isAdmin) {
+      const [{ count: pendingGroupsCount }, { count: pendingPartnersCount }] = await Promise.all([
+        supabase
+          .schema("public")
+          .from("groups")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+        supabase
+          .schema("public")
+          .from("partner_businesses")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+      ]);
+      hasPendingAdminReviewItems = (pendingGroupsCount ?? 0) > 0 || (pendingPartnersCount ?? 0) > 0;
+    }
   }
 
-  const navLinks = buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasActiveTeamEvent });
+  const navLinks = buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasActiveTeamEvent, hasPendingOrganizerItems });
 
   return (
     <>
+    <HeaderHeightObserver />
     <header className="pt-safe border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50 shadow-elevation-2">
       <div className="max-w-[100rem] mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
@@ -120,10 +156,20 @@ export default async function AppHeader() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <SupportButton />
-          {user && <NotificationBellWrapper userId={user.id} />}
-          {user && <AchievementModalWrapper userId={user.id} />}
-          <UserNav user={user} points={points} spendablePoints={spendablePoints} avatarUrl={avatarUrl} displayName={displayName} username={username} />
+          <div className="flex items-center gap-0">
+            <SupportButton />
+            {isAdmin && <ActivitySnapshotModalWrapper hasPendingReviewItems={hasPendingAdminReviewItems} />}
+            {user && <NotificationBellWrapper userId={user.id} />}
+            {user && <AchievementModalWrapper userId={user.id} />}
+          </div>
+          <UserNav
+            user={user}
+            points={points}
+            spendablePoints={spendablePoints}
+            avatarUrl={avatarUrl}
+            displayName={displayName}
+            username={username}
+          />
         </div>
       </div>
     </header>

@@ -306,7 +306,7 @@ function LoginForm() {
 
         <p className="text-center text-zinc-400 text-sm">
           No account?{" "}
-          <Link href="/signup" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+          <Link href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             Sign up
           </Link>
         </p>

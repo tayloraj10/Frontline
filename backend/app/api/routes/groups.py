@@ -15,6 +15,7 @@ from app.api.routes.leaderboard import _GEO_STATS_LEVEL_UNIT_TYPES, _GEO_STATS_L
 from app.api.routes.upload import delete_r2_object
 from app.db.database import get_db
 from app.services.game_settings import get_game_settings
+from app.services.organizer_dashboard import get_pending_organizer_items
 from app.services.stats_window import resolve_stats_window, trend_bucket_unit
 
 logger = logging.getLogger(__name__)
@@ -904,6 +905,20 @@ async def get_group_stats_events(
     if not await _is_group_admin(db, group_id, viewer_user_id):
         raise HTTPException(403, "Only a group admin can view this group's event stats.")
     return await _group_stats_events_rows(db, group_id, interval, campaign_id, start_date, end_date)
+
+
+@router.get("/{group_id}/organizer-dashboard")
+async def get_group_organizer_dashboard(
+    group_id: UUID,
+    viewer_user_id: UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Powers the organizer-focused dashboard at /groups/{slug}/organizer -- nudges for
+    scheduling a new event and for events whose check-in window closed with no metrics
+    ever logged. Admin-only, same gate as the other admin-only group stats endpoints."""
+    if not await _is_group_admin(db, group_id, viewer_user_id):
+        raise HTTPException(403, "Only a group admin can view this group's organizer dashboard.")
+    return await get_pending_organizer_items(db, group_id)
 
 
 @router.get("/{group_id}/stats/events-summary")

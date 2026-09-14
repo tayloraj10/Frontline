@@ -16,10 +16,12 @@ export interface BuildNavLinksArgs {
   isAdmin: boolean;
   /** Only show the Team Events nav entry when there's at least one active event to discover. */
   hasActiveTeamEvent: boolean;
+  /** Pulses the Groups nav link when the viewer admins a group with a pending organizer action. */
+  hasPendingOrganizerItems: boolean;
 }
 
 /** Single source of truth for the app's primary nav links, shared by the desktop nav row and the mobile bottom tab bar. */
-export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasActiveTeamEvent }: BuildNavLinksArgs): NavLink[] {
+export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasActiveTeamEvent, hasPendingOrganizerItems }: BuildNavLinksArgs): NavLink[] {
   return isBusinessOnly
     ? [
         { href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business" },
@@ -31,7 +33,7 @@ export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasAct
         { href: "/campaigns", label: "Campaigns", shortLabel: "Campaigns", mobileHref: "/campaigns/trash-war" },
         { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard" },
         { href: "/partners", label: "Partners", shortLabel: "Partners" },
-        { href: "/groups", label: "Groups", shortLabel: "Groups" },
+        { href: "/groups", label: "Groups", shortLabel: "Groups", pulse: hasPendingOrganizerItems },
         ...(isAdmin && hasActiveTeamEvent
           ? [{ href: "/team-events", label: "Team Events", shortLabel: "Events", pulse: true }]
           : []),

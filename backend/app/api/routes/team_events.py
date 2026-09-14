@@ -164,6 +164,14 @@ class PatchSubmissionRequest(BaseModel):
     pounds: float | None = None
     value: float | None = None
 
+    @field_validator("pounds")
+    @classmethod
+    def _round_pounds(cls, v: float | None) -> float | None:
+        # Rounding to a whole number before binding avoids asyncpg encoding a
+        # non-terminating binary float into the NUMERIC metrics_pounds column
+        # (e.g. 123.8 becomes 123.79999999999999715782905695999926515502929688).
+        return round(v) if v is not None else None
+
 
 @router.post("")
 async def create_team_event(payload: CreateTeamEventRequest, db: AsyncSession = Depends(get_db)):

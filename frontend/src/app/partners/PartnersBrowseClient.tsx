@@ -6,6 +6,7 @@ import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { type RedemptionProof } from "./RedemptionConfirmationModal";
 import { haversineMeters } from "@/lib/nearbyPartners";
 import PartnersMap from "@/components/partners/PartnersMap";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 
 export type BrowseLocation = {
   id: string;
@@ -34,6 +35,7 @@ export type BrowseBusiness = {
   website_url: string | null;
   locations: BrowseLocation[];
   social_links: Record<string, string> | null;
+  adults_only: boolean;
   campaigns?: { slug: string; title: string }[];
 };
 
@@ -353,6 +355,7 @@ export default function PartnersBrowseClient({
           businessSlug: business.slug,
           businessName: business.name,
           hasEventOffer,
+          adultsOnly: business.adults_only,
           lat: l.lat,
           lng: l.lng,
         }));
@@ -431,6 +434,7 @@ export default function PartnersBrowseClient({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm font-bold text-zinc-100 break-words">{business.name}</h2>
+                {business.adults_only && <AdultsOnlyBadge />}
                 {hasEventOffer && (
                   <span
                     title="This business has at least one offer that's free to redeem for anyone who checks in to a cleanup event it's attached to -- no points required."

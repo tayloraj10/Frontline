@@ -16,7 +16,7 @@ export default async function PartnersPage() {
       .schema("public")
       .from("partner_businesses")
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, partner_business_locations(id, label, address_line1, city, state, lat, lng, status)"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, partner_business_locations(id, label, address_line1, city, state, lat, lng, status)"
       )
       .eq("status", "active")
       .order("name"),
@@ -51,7 +51,7 @@ export default async function PartnersPage() {
 
   type RawBusinessRow = {
     id: string; name: string; slug: string; description: string | null; logo_url: string | null;
-    website_url: string | null; social_links: Record<string, string> | null;
+    website_url: string | null; social_links: Record<string, string> | null; adults_only: boolean;
     partner_business_locations: { id: string; label: string | null; address_line1: string | null; city: string | null; state: string | null; lat: number; lng: number; status: string }[];
   };
   const businessesWithLocations: BrowseBusiness[] = ((businesses ?? []) as unknown as RawBusinessRow[]).map((b) => ({
@@ -62,6 +62,7 @@ export default async function PartnersPage() {
     logo_url: b.logo_url,
     website_url: b.website_url,
     social_links: b.social_links,
+    adults_only: b.adults_only,
     locations: b.partner_business_locations
       .filter((l) => l.status === "active")
       .map((l) => ({ id: l.id, label: l.label, address_line1: l.address_line1, city: l.city, state: l.state, lat: l.lat, lng: l.lng })),
