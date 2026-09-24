@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import PremiumInsightsCard from "./PremiumInsightsCard";
 import Link from "next/link";
 import { formatPoints } from "@/lib/formatPoints";
 import { computeRanks } from "@/lib/ranking";
@@ -824,6 +825,7 @@ export default function GroupStatsView({
   groupLogoUrl,
   viewerUserId,
   isAdmin,
+  canSeePayments,
   fastapiUrl,
   slug,
 }: {
@@ -832,6 +834,7 @@ export default function GroupStatsView({
   groupLogoUrl: string | null;
   viewerUserId: string | null;
   isAdmin: boolean;
+  canSeePayments: boolean;
   fastapiUrl: string;
   slug: string;
 }) {
@@ -1042,6 +1045,10 @@ export default function GroupStatsView({
           </div>
         )}
       </div>
+
+      {isAdmin && canSeePayments && viewerUserId && (
+        <PremiumInsightsCard groupId={groupId} viewerUserId={viewerUserId} fastapiUrl={fastapiUrl} />
+      )}
 
       {loading && <div className="text-center text-zinc-600 text-sm py-10">Loading…</div>}
       {!loading && error && (

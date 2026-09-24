@@ -3,12 +3,16 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
+import { getPaymentsEnabled } from "@/lib/gameSettings.server";
 import { formatPoints } from "@/lib/formatPoints";
 import type { Database } from "@/types/database";
 import UserActivityList from "@/components/contributions/UserActivityList";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import ShareButton from "@/components/ShareButton";
 import BlockUserButton from "@/components/BlockUserButton";
+import SubscriptionWidget from "@/components/billing/SubscriptionWidget";
+import SupporterBadge from "@/components/billing/SupporterBadge";
+import PersonalInsightsCard from "./PersonalInsightsCard";
 
 const CAMPAIGN_UNIT: Record<string, string> = {
   territory: "pts",
@@ -77,6 +81,17 @@ export default async function UserProfilePage({ params }: Props) {
   if (!profile) notFound();
 
   const isOwn = currentUser?.id === profile.id;
+
+  // Not scoped to isOwn: a site admin viewing someone else's profile still needs this
+  // (e.g. to see that profile's supporter badge), not just an admin viewing their own.
+  const [{ data: viewerAdminCheck }, paymentsEnabled] = await Promise.all([
+    currentUser
+      ? supabase.from("profiles").select("is_admin").eq("id", currentUser.id).single()
+      : Promise.resolve({ data: null as { is_admin: boolean } | null }),
+    getPaymentsEnabled(),
+  ]);
+  const isSiteAdmin = !!viewerAdminCheck?.is_admin;
+  const canSeePayments = isSiteAdmin || paymentsEnabled;
 
   const { data: existingBlock } =
     !isOwn && currentUser
@@ -191,6 +206,8 @@ export default async function UserProfilePage({ params }: Props) {
   });
   const totalTractsCount = tractsData?.length ?? 0;
 
+  const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
+
   const joinedDate = new Date(profile.created_at).toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
@@ -231,6 +248,7 @@ export default async function UserProfilePage({ params }: Props) {
               {profile.display_name ?? profile.username}
             </h1>
             <p className="text-sm text-zinc-500">@{profile.username}</p>
+            {canSeePayments && <SupporterBadge ownerType="user" ownerId={profile.id} />}
             {profile.bio && (
               <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{profile.bio}</p>
             )}
@@ -259,6 +277,11 @@ export default async function UserProfilePage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {isOwn && canSeePayments && <SubscriptionWidget ownerType="user" ownerId={profile.id} />}
+      {isOwn && canSeePayments && currentUser && (
+        <PersonalInsightsCard userId={profile.id} viewerUserId={currentUser.id} fastapiUrl={fastapiUrl} />
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

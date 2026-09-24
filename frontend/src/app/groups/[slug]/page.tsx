@@ -4,12 +4,14 @@ import type { Metadata } from "next";
 import { BarChart3, CalendarPlus, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
+import { getPaymentsEnabled } from "@/lib/gameSettings.server";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
 import Avatar from "@/components/ui/Avatar";
 import PastEventsList from "@/components/groups/PastEventsList";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
 import BackButton from "@/components/ui/BackButton";
+import SubscriptionWidget from "@/components/billing/SubscriptionWidget";
 import type { Database } from "@/types/database";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
@@ -110,6 +112,14 @@ export default async function GroupProfilePage({ params }: Props) {
   const isAdmin = user ? members.some((m) => m.user_id === user.id && m.role === "admin") : false;
   const adminCount = members.filter((m) => m.role === "admin").length;
   const isOnlyAdmin = isAdmin && adminCount === 1;
+
+  const [{ data: siteAdminCheck }, paymentsEnabled] = await Promise.all([
+    isAdmin && user
+      ? supabase.from("profiles").select("is_admin").eq("id", user.id).single()
+      : Promise.resolve({ data: null as { is_admin: boolean } | null }),
+    getPaymentsEnabled(),
+  ]);
+  const isSiteAdmin = !!siteAdminCheck?.is_admin;
 
   const { data: groupTeamEventsData } = await supabase
     .from("team_event_group_participants")
@@ -243,6 +253,8 @@ export default async function GroupProfilePage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {isAdmin && (isSiteAdmin || paymentsEnabled) && <SubscriptionWidget ownerType="group" ownerId={group.id} />}
 
       <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">

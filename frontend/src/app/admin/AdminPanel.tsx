@@ -3522,6 +3522,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   milestones: "Milestone ladders",
   notifications: "Email notifications",
   bonus_spots: "Bonus spots",
+  payments: "Payments",
 };
 
 // Settings that are conceptually booleans (stored as 0/1 in the numeric game_settings
@@ -3530,6 +3531,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
   "email_partner_coordination_enabled",
   "email_attendee_reminder_enabled",
   "email_organizer_stats_reminder_enabled",
+  "payments_enabled",
 ]);
 
 const METERS_TO_FEET = 3.28084;

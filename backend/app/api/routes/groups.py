@@ -14,6 +14,7 @@ from app.api.routes.cleanup_events import CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALL
 from app.api.routes.leaderboard import _GEO_STATS_LEVEL_UNIT_TYPES, _GEO_STATS_LEVELS, _ZIP_UNIT_TYPES, _scope_filter
 from app.api.routes.upload import delete_r2_object
 from app.db.database import get_db
+from app.services import payments as payments_service
 from app.services.game_settings import get_game_settings
 from app.services.stats_window import resolve_stats_window, trend_bucket_unit
 
@@ -1054,6 +1055,76 @@ async def get_group_stats_trend(
     if not await _is_group_admin(db, group_id, viewer_user_id):
         raise HTTPException(403, "Only a group admin can view this group's deep-dive trend.")
     return await _compute_group_trend(db, group_id, interval, campaign_id, user_id, start_date, end_date)
+
+
+@router.get("/{group_id}/stats/premium-insights")
+async def get_group_premium_insights(
+    group_id: UUID,
+    viewer_user_id: UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Advanced group analytics gated on an active group subscription -- the first real
+    feature gated by has_premium() (dev-docs/payments-scoping-2026-08-20.md use case 1).
+    Day-of-week activity breakdown + top contributors over the last 30 days."""
+    if not await _is_group_admin(db, group_id, viewer_user_id):
+        raise HTTPException(403, "Only a group admin can view this group's premium insights.")
+    if not await payments_service.has_premium(db, "group", group_id):
+        raise HTTPException(402, "This group doesn't have an active premium subscription.")
+
+    dow_rows = (
+        await db.execute(
+            text("""
+                SELECT EXTRACT(DOW FROM c.submitted_at)::int AS dow,
+                       COALESCE(SUM(c.value), 0)::float AS total_value,
+                       COUNT(*)::int AS contribution_count
+                FROM contributions c
+                WHERE c.group_id = :gid
+                GROUP BY dow
+                ORDER BY dow
+            """),
+            {"gid": str(group_id)},
+        )
+    ).fetchall()
+    dow_by_index = {r.dow: r for r in dow_rows}
+    dow_labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    day_of_week = [
+        {
+            "dow": i,
+            "label": dow_labels[i],
+            "total_value": dow_by_index[i].total_value if i in dow_by_index else 0.0,
+            "contribution_count": dow_by_index[i].contribution_count if i in dow_by_index else 0,
+        }
+        for i in range(7)
+    ]
+
+    top_contributors = (
+        await db.execute(
+            text("""
+                SELECT c.user_id, p.display_name, p.username,
+                       COALESCE(SUM(c.value), 0)::float AS total_value
+                FROM contributions c
+                JOIN profiles p ON p.id = c.user_id
+                WHERE c.group_id = :gid AND c.submitted_at >= now() - interval '30 days'
+                GROUP BY c.user_id, p.display_name, p.username
+                ORDER BY total_value DESC
+                LIMIT 5
+            """),
+            {"gid": str(group_id)},
+        )
+    ).fetchall()
+
+    return {
+        "day_of_week": day_of_week,
+        "top_contributors_30d": [
+            {
+                "user_id": str(r.user_id),
+                "display_name": r.display_name,
+                "username": r.username,
+                "total_value": r.total_value,
+            }
+            for r in top_contributors
+        ],
+    }
 
 
 @router.get("/{group_id}/stats/members/{user_id}/activity")
