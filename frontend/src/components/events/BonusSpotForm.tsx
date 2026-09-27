@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import BonusSpotContextMap from "@/components/events/BonusSpotContextMap";
 import { createBonusSpot, suggestBonusSpot, type BonusSpot } from "@/lib/events";
 import { useGameSettings } from "@/lib/gameSettings";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
@@ -115,7 +116,7 @@ export default function BonusSpotForm({
         setSuggestError("No eligible report found to suggest a spot from. Try dropping the pin manually instead.");
       }
     } catch (err) {
-      setSuggestError(err instanceof Error ? err.message : "Failed to find a spot");
+      setSuggestError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to find a spot");
     } finally {
       setSuggestLoading(false);
     }
@@ -144,7 +145,7 @@ export default function BonusSpotForm({
       });
       onCreated(spot);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create bonus spot");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to create bonus spot");
     } finally {
       setLoading(false);
     }

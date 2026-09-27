@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LogOut, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface Props {
   groupId: string;
@@ -26,7 +27,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
     const { error: err } = await supabase
       .from("group_members")
       .insert({ group_id: groupId, user_id: userId, role: "member" });
-    if (err) setError(err.message);
+    if (err) setError(friendlyErrorMessage(err.message));
     else router.refresh();
     setLoading(false);
   };
@@ -41,7 +42,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
       .delete()
       .eq("group_id", groupId)
       .eq("user_id", userId);
-    if (err) setError(err.message);
+    if (err) setError(friendlyErrorMessage(err.message));
     else router.refresh();
     setLoading(false);
   };

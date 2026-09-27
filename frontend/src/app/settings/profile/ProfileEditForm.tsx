@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface Props {
   userId: string;
@@ -78,7 +79,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
       router.push(`/users/${encodeURIComponent(username)}`);
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Save failed");
     } finally {
       setSaving(false);
     }

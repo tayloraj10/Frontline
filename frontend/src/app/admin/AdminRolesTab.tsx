@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AdminRole } from "@/lib/adminRoles";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 type UserSearchResult = { id: string; username: string | null; email: string };
 type RoleHolder = { user_id: string; username: string | null; email: string; roles: AdminRole[] };
@@ -24,7 +25,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   } catch {
     // not JSON
   }
-  return err.message || fallback;
+  return friendlyErrorMessage(err.message) || fallback;
 }
 
 export default function AdminRolesTab({ requestingUserId }: { requestingUserId: string }) {

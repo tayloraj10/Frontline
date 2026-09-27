@@ -8,6 +8,7 @@ import { isNativePlatform, isAndroidNative } from "@/lib/capacitor";
 import { acceptLegal } from "@/app/legal/actions";
 import { applyAppleProfileName } from "@/lib/applyAppleProfileName";
 import { Card } from "@/components/ui/Card";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -36,7 +37,7 @@ function SignupForm() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(friendlyErrorMessage(error.message));
       setLoading(false);
     } else if (data.session) {
       // Email confirmation disabled — user is immediately logged in
@@ -107,7 +108,7 @@ function SignupForm() {
           nonce: rawNonce,
         });
         if (error) {
-          setError(error.message);
+          setError(friendlyErrorMessage(error.message));
           return;
         }
 
@@ -126,7 +127,7 @@ function SignupForm() {
           await supabase.schema("public").from("profiles").update({ is_business_only: true }).eq("id", signedUpUser.id);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Apple sign-in failed.");
+        setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Apple sign-in failed.");
         return;
       } finally {
         appleSignupInFlight.current = false;

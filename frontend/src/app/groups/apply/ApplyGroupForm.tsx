@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const SOCIAL_PLATFORMS: { key: string; label: string; baseUrl: string }[] = [
   { key: "instagram", label: "Instagram", baseUrl: "https://instagram.com/" },
@@ -105,7 +106,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
         .single();
 
       if (insertErr) {
-        setError(insertErr.code === "23505" ? "That slug is already taken. Try a different name." : insertErr.message);
+        setError(insertErr.code === "23505" ? "That slug is already taken. Try a different name." : friendlyErrorMessage(insertErr.message));
         setLoading(false);
         return;
       }
@@ -113,7 +114,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
       router.push(`/groups/${group.slug}`);
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Submission failed");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Submission failed");
       setLoading(false);
     }
   };

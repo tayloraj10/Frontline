@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 focus:outline-none focus:border-zinc-500";
 
@@ -304,7 +305,7 @@ export default function BusinessForm({ initial, initialCampaignIds, campaigns, o
       setLoading(false);
       if (err) setError(err);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Save failed");
       setLoading(false);
     }
   };

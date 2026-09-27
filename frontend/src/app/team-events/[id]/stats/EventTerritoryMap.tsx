@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { formatPoints } from "@/lib/formatPoints";
 import type { TeamEventGeoEntry } from "@/lib/teamEvents";
 import { resolveTeamColor } from "@/lib/teamColors";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -112,7 +113,7 @@ export default function EventTerritoryMap({ entries }: { entries: TeamEventGeoEn
         if (!cancelled) setLoading(false);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load area boundaries");
+          setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to load area boundaries");
           setLoading(false);
         }
       }

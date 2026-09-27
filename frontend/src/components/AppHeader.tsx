@@ -7,6 +7,7 @@ import NotificationBellWrapper from "./NotificationBellWrapper";
 import AchievementModalWrapper from "./AchievementModalWrapper";
 import ActivitySnapshotModalWrapper from "./ActivitySnapshotModalWrapper";
 import SupportButton from "./SupportButton";
+import HelpButton from "./HelpButton";
 import BottomTabBar from "./nav/BottomTabBar";
 import DesktopNavMenu from "./nav/DesktopNavMenu";
 import HeaderHeightObserver from "./nav/HeaderHeightObserver";
@@ -157,6 +158,7 @@ export default async function AppHeader() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-0">
+            <HelpButton />
             <SupportButton />
             {isAdmin && <ActivitySnapshotModalWrapper hasPendingReviewItems={hasPendingAdminReviewItems} />}
             {user && <NotificationBellWrapper userId={user.id} />}

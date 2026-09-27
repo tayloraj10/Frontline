@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteAccount } from "./actions";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface Props {
   email: string;
@@ -48,7 +49,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
     const { error } = await supabase.auth.updateUser({ email: newEmail });
     setEmailLoading(false);
     if (error) {
-      setEmailMsg({ ok: false, text: error.message });
+      setEmailMsg({ ok: false, text: friendlyErrorMessage(error.message) });
     } else {
       setEmailMsg({ ok: true, text: "Check your new email address for a confirmation link." });
       setNewEmail("");
@@ -71,7 +72,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     setPwLoading(false);
     if (error) {
-      setPwMsg({ ok: false, text: error.message });
+      setPwMsg({ ok: false, text: friendlyErrorMessage(error.message) });
     } else {
       setPwMsg({ ok: true, text: "Password updated successfully." });
       setCurrentPassword("");
@@ -85,7 +86,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
       try {
         await deleteAccount();
       } catch (err: unknown) {
-        setDeleteError(err instanceof Error ? err.message : "Failed to delete account.");
+        setDeleteError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to delete account.");
       }
     });
   }
@@ -131,7 +132,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      setExportError(err instanceof Error ? err.message : "Failed to export account data.");
+      setExportError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to export account data.");
     } finally {
       setExportLoading(null);
       setExportProgress(null);
@@ -144,7 +145,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
     const { error } = await supabase.auth.signOut({ scope: "global" });
     setLogoutLoading(false);
     if (error) {
-      setLogoutMsg({ ok: false, text: error.message });
+      setLogoutMsg({ ok: false, text: friendlyErrorMessage(error.message) });
       return;
     }
     router.push("/login");

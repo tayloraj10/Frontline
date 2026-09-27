@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { DashboardLocation } from "@/app/partners/dashboard/PartnerDashboardClient";
 import RadiusRadarMap from "./RadiusRadarMap";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 type RadiusTier = "block" | "neighborhood" | "wide";
 
@@ -123,7 +124,7 @@ export default function BusinessRadiusView({
         if (!cancelled) setData(json);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) setError(friendlyErrorMessage(err.message));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -94,7 +95,7 @@ export default function TerritoryMapModal({
         if (!cancelled) setLoading(false);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load area boundaries");
+          setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to load area boundaries");
           setLoading(false);
         }
       }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 export type RedemptionProof = {
   redemptionId: string;
@@ -65,7 +66,7 @@ export default function RedemptionConfirmationModal({
       if (!res.ok) throw new Error(data.detail ?? "Failed to mark as used");
       onMarkedUsed(proof.redemptionId, data.used_at ?? new Date().toISOString());
     } catch (err) {
-      setMarkError(err instanceof Error ? err.message : "Failed to mark as used");
+      setMarkError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to mark as used");
     } finally {
       setMarking(false);
     }

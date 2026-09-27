@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { DashboardOffer } from "@/app/partners/dashboard/PartnerDashboardClient";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 type Redemption = {
   id: string;
@@ -55,7 +56,7 @@ export default function RedemptionHistoryTable({
         setTotalCount(json.total_count);
         setRedemptions((prev) => (replace ? json.redemptions : [...prev, ...json.redemptions]));
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(friendlyErrorMessage(err.message)))
       .finally(() => setLoading(false));
   };
 

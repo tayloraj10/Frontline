@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -22,7 +23,7 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
-      setError(error.message);
+      setError(friendlyErrorMessage(error.message));
       setLoading(false);
     } else {
       window.location.href = "/campaigns";

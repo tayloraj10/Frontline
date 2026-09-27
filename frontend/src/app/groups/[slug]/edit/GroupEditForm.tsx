@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface Props {
   groupId: string;
@@ -100,7 +101,7 @@ export default function GroupEditForm({ groupId, slug, name, description, social
       router.push(`/groups/${slug}`);
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Save failed");
     } finally {
       setSaving(false);
     }

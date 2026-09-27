@@ -5,6 +5,7 @@ import BackButton from "@/components/ui/BackButton";
 import { Card } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Lightbox from "@/components/Lightbox";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 type Submission = {
   id: string;
@@ -52,7 +53,7 @@ export default function VerificationClient({
         if (!res.ok) throw new Error(data.detail ?? "Failed to load submissions");
         setSubmissions(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load submissions");
+        setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to load submissions");
       } finally {
         setLoading(false);
       }

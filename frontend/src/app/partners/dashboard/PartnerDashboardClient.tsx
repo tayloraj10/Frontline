@@ -10,17 +10,7 @@ import { OfferRow } from "@/app/admin/AdminPanel";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BusinessRadiusView, { MIN_TIER_ACTIVITY } from "@/components/partners/BusinessRadiusView";
 import RedemptionHistoryTable from "@/components/partners/RedemptionHistoryTable";
-
-// Browsers report a fetch that failed before getting an HTTP response (dropped
-// connection, app backgrounded mid-request, etc.) with cryptic wording like
-// "TypeError: Load Failed" (Safari/WKWebView) or "Failed to fetch" (Chrome) --
-// not something a user can act on, so swap in something they can.
-function friendlyErrorMessage(message: string): string {
-  if (/load failed|failed to fetch|network\s*error/i.test(message)) {
-    return "Couldn't connect. Check your internet connection and try again.";
-  }
-  return message;
-}
+import { friendlyErrorMessage } from "@/lib/errors";
 
 export type DashboardBusiness = {
   id: string;
@@ -195,7 +185,7 @@ function BusinessPanel({
         .schema("public")
         .from("campaign_partner_businesses")
         .insert(toAdd.map((campaign_id) => ({ business_id: business.id, campaign_id })));
-      if (linkErr) return `Business updated, but failed to link some campaigns: ${linkErr.message}`;
+      if (linkErr) return `Business updated, but failed to link some campaigns: ${friendlyErrorMessage(linkErr.message)}`;
     }
     if (toRemove.length > 0) {
       const { error: unlinkErr } = await supabase
@@ -204,7 +194,7 @@ function BusinessPanel({
         .delete()
         .eq("business_id", business.id)
         .in("campaign_id", toRemove);
-      if (unlinkErr) return `Business updated, but failed to unlink some campaigns: ${unlinkErr.message}`;
+      if (unlinkErr) return `Business updated, but failed to unlink some campaigns: ${friendlyErrorMessage(unlinkErr.message)}`;
     }
 
     setCampaignIdsByBusiness((prev) => ({ ...prev, [business.id]: nextCampaignIds }));

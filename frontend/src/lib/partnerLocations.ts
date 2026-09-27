@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { LocationPayload } from "@/components/partners/BusinessForm";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 type ExistingLocation = { id: string };
 
@@ -24,7 +25,7 @@ export async function reconcileBusinessLocations<T extends ExistingLocation>(
       .from("partner_business_locations")
       .update({ status: "inactive" })
       .in("id", idsToDeactivate);
-    if (deactivateErr) return { rows: null, error: `Business updated, but failed to remove some locations: ${deactivateErr.message}` };
+    if (deactivateErr) return { rows: null, error: `Business updated, but failed to remove some locations: ${friendlyErrorMessage(deactivateErr.message)}` };
   }
 
   let rows: T[] = currentLocations.filter((l) => nextIds.has(l.id));
@@ -34,7 +35,7 @@ export async function reconcileBusinessLocations<T extends ExistingLocation>(
       .from("partner_business_locations")
       .upsert(locationsToUpsert.map((l) => ({ ...l, business_id: businessId, status: "active" })))
       .select(selectColumns);
-    if (upsertErr) return { rows: null, error: `Business updated, but failed to save some locations: ${upsertErr.message}` };
+    if (upsertErr) return { rows: null, error: `Business updated, but failed to save some locations: ${friendlyErrorMessage(upsertErr.message)}` };
     rows = data as unknown as T[];
   }
 

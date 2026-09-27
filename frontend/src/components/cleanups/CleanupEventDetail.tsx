@@ -40,6 +40,7 @@ import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -74,7 +75,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   } catch {
     // not JSON, fall through to raw message
   }
-  return err.message || fallback;
+  return friendlyErrorMessage(err.message) || fallback;
 }
 
 function formatSchedule(start: string | null, end: string | null): string {
@@ -1544,7 +1545,7 @@ function EventOfferRedemptionCard({
       });
       setShowModal(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to redeem offer");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to redeem offer");
     } finally {
       setRedeeming(false);
     }
@@ -1624,7 +1625,7 @@ function OrganizerCheckInButton({
       const result = await organizerCheckInAttendee({ cleanupId, organizerUserId, attendeeUserId });
       await onCheckedIn(result.points_awarded);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to check in attendee");
+      onError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to check in attendee");
     } finally {
       setLoading(false);
     }
@@ -1708,7 +1709,7 @@ function OrganizerLogButton({
       await onLogged();
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to log contribution");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to log contribution");
     } finally {
       setLoading(false);
     }
@@ -1871,7 +1872,7 @@ function RemoveEventOfferButton({
       setConfirming(false);
       onRemoved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove offer");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to remove offer");
     } finally {
       setLoading(false);
     }
@@ -1928,7 +1929,7 @@ function SendAttendeeReminderButton({
       const p = await previewAttendeeReminder({ cleanupId, organizerUserId, message: message.trim() || undefined });
       setPreview(p);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to build preview");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to build preview");
     } finally {
       setLoading(false);
     }
@@ -1941,7 +1942,7 @@ function SendAttendeeReminderButton({
       const r = await sendAttendeeReminder({ cleanupId, organizerUserId, message: message.trim() || undefined });
       setResult(r);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send reminder");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to send reminder");
     } finally {
       setLoading(false);
     }
@@ -2700,7 +2701,7 @@ function OrganizerRoleButton({
       }
       await onChanged();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to update organizer");
+      onError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to update organizer");
     } finally {
       setLoading(false);
     }

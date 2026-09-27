@@ -10,6 +10,7 @@ import {
   type TeamEventSubmission,
   type TeamEventTeam,
 } from "@/lib/teamEvents";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -29,7 +30,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   } catch {
     // not JSON
   }
-  return err.message || fallback;
+  return friendlyErrorMessage(err.message) || fallback;
 }
 
 const inputCls = "bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-zinc-100 text-sm";

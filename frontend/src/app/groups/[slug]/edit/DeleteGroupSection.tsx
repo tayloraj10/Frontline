@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { deleteGroup, GroupHasBlockingEventsError, type BlockingEvent } from "@/lib/groups";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface Props {
   groupId: string;
@@ -32,7 +33,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
         setBlockingEvents(err.blockingEvents);
         setError(err.message);
       } else {
-        setError(err instanceof Error ? err.message : "Failed to delete group");
+        setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to delete group");
       }
     } finally {
       setDeleting(false);

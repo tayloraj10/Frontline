@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface Member {
   userId: string;
@@ -36,7 +37,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
       .eq("group_id", groupId)
       .eq("user_id", userId);
     setBusy(null);
-    if (error) { setError(error.message); return; }
+    if (error) { setError(friendlyErrorMessage(error.message)); return; }
     setMembers((prev) => prev.map((m) => m.userId === userId ? { ...m, role: "admin" } : m));
   };
 
@@ -53,7 +54,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
       .eq("group_id", groupId)
       .eq("user_id", userId);
     setBusy(null);
-    if (error) { setError(error.message); return; }
+    if (error) { setError(friendlyErrorMessage(error.message)); return; }
     setMembers((prev) => prev.map((m) => m.userId === userId ? { ...m, role: "member" } : m));
   };
 
@@ -70,7 +71,7 @@ export default function MemberManager({ groupId, currentUserId, initialMembers }
       .eq("group_id", groupId)
       .eq("user_id", userId);
     setBusy(null);
-    if (error) { setError(error.message); return; }
+    if (error) { setError(friendlyErrorMessage(error.message)); return; }
     setMembers((prev) => prev.filter((m) => m.userId !== userId));
   };
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import BusinessForm, { type BusinessFormInitial, type BusinessFormPayload } from "@/components/partners/BusinessForm";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 const STORAGE_KEY = "frontline:pendingBusinessSubmission";
 
@@ -20,7 +21,7 @@ async function insertBusiness(payload: BusinessFormPayload, userId: string): Pro
     .from("partner_businesses")
     .insert({ ...rest, id: businessId, status: "pending", created_by: userId });
 
-  if (error) return error.message;
+  if (error) return friendlyErrorMessage(error.message);
 
   if (locations.length > 0) {
     const { error: locationsError } = await supabase
@@ -29,7 +30,7 @@ async function insertBusiness(payload: BusinessFormPayload, userId: string): Pro
       .insert(
         locations.map(({ id: _id, ...loc }) => ({ ...loc, business_id: businessId }))
       );
-    if (locationsError) return locationsError.message;
+    if (locationsError) return friendlyErrorMessage(locationsError.message);
   }
 
   return null;

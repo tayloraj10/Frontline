@@ -15,6 +15,7 @@ import {
 } from "@/lib/teamEvents";
 import { resolveTeamColor } from "@/lib/teamColors";
 import TerritoryMapModal, { type TerritoryMapArea } from "@/components/geo/TerritoryMapModal";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;
@@ -27,7 +28,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   } catch {
     // not JSON, fall through
   }
-  return err.message || fallback;
+  return friendlyErrorMessage(err.message) || fallback;
 }
 
 function formatSchedule(start: string, end: string | null): string {

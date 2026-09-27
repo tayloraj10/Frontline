@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import type { Json } from "@/types/database";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 export type CreatedEvent = {
   id: string;
@@ -79,14 +80,14 @@ export async function createTimedEvent({
     .select("id, event_type, title, description, image_url, effect_config, status, started_at, ends_at, campaign_id")
     .single();
 
-  if (insertErr) throw new Error(insertErr.message);
+  if (insertErr) throw new Error(friendlyErrorMessage(insertErr.message));
 
   if (areas.length > 0) {
     const { error: linkErr } = await supabase
       .schema("public")
       .from("campaign_event_geo_units")
       .insert(areas.map(a => ({ event_id: data.id, geo_unit_id: a.geoUnitId })));
-    if (linkErr) throw new Error(`Event created, but failed to link areas: ${linkErr.message}`);
+    if (linkErr) throw new Error(`Event created, but failed to link areas: ${friendlyErrorMessage(linkErr.message)}`);
   }
 
   return data as CreatedEvent;
@@ -234,6 +235,6 @@ export async function updateEvent({
     .select("id, event_type, title, description, image_url, effect_config, status, started_at, ends_at, campaign_id")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyErrorMessage(error.message));
   return data as CreatedEvent;
 }

@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { cn } from "@/lib/cn";
+import { friendlyErrorMessage } from "@/lib/errors";
 import type { SelectedArea } from "./EventAreaMapPicker";
 import BusinessLocationMapPicker from "./BusinessLocationMapPicker";
 import AddressAutocomplete from "./AddressAutocomplete";
@@ -1198,7 +1199,7 @@ function EventsTab({ campaigns, events, setEvents, currentUserId }: {
       setEvents(events.map(ev => ev.id === event.id ? { ...ev, ...updated, campaigns: ev.campaigns } : ev));
       cancelEdit();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Failed to update event");
+      setEditError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to update event");
     } finally {
       setEditLoading(false);
     }
@@ -1250,7 +1251,7 @@ function EventsTab({ campaigns, events, setEvents, currentUserId }: {
     try {
       if (imageFile) imageUrl = await uploadEventImage(imageFile);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Image upload failed");
+      setCreateError(err instanceof Error ? friendlyErrorMessage(err.message) : "Image upload failed");
       setCreateLoading(false);
       return;
     }
@@ -1685,7 +1686,7 @@ function CleanupEventWipeTool() {
       );
       setCleanupId("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Error");
     } finally {
       setLoading(false);
     }
@@ -2616,7 +2617,7 @@ function GroupCard({
       await deleteGroup(group.id, group.created_by ?? "");
       setGroups(groups.filter(g => g.id !== group.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to delete");
     } finally {
       setWorking(false);
     }
@@ -2629,7 +2630,7 @@ function GroupCard({
       await deleteGroup(group.id, currentUserId);
       setGroups(groups.filter(g => g.id !== group.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to delete");
       setWorking(false);
     }
   };
@@ -3076,7 +3077,7 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
       if (!res.ok) throw new Error(data.detail ?? "Failed to load leaderboard");
       setEntries(data.users ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load leaderboard");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to load leaderboard");
     } finally {
       setLoading(false);
     }
@@ -3252,7 +3253,7 @@ function ModerationTab() {
       if (!res.ok) throw new Error(data.detail ?? "Failed to load flag queue");
       setFlags(data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load flag queue");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to load flag queue");
     } finally {
       setLoading(false);
     }
@@ -3292,7 +3293,7 @@ function ModerationTab() {
       setFlags(prev => prev.filter(x => keyOf(x) !== keyOf(f)));
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to resolve flag");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to resolve flag");
     } finally {
       setResolvingKey(null);
     }
@@ -3475,7 +3476,7 @@ function BlockedUsersSection() {
         if (!res.ok) throw new Error(data.detail ?? "Failed to load blocked users");
         setBlocks(data ?? []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load blocked users");
+        setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to load blocked users");
       } finally {
         setLoading(false);
       }
@@ -3785,7 +3786,7 @@ function TeamEventsTab({ campaigns, teamEvents, setTeamEvents, currentUserId }: 
       const detail = await getTeamEvent(id);
       setEditingEvent(detail);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load event");
+      setLoadError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to load event");
     }
   };
 

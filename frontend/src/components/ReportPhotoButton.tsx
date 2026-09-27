@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useGameSettings } from "@/lib/gameSettings";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 type ContentType = "contribution_photo" | "cleanup_log_photo" | "cleanup_event_photo" | "avatar";
 
@@ -49,7 +50,7 @@ export default function ReportPhotoButton({
       }
       setState("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to report this photo.");
+      setError(e instanceof Error ? friendlyErrorMessage(e.message) : "Failed to report this photo.");
       setState("idle");
     }
   };

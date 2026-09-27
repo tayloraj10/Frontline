@@ -7,6 +7,7 @@ import RedemptionConfirmationModal, { type RedemptionProof } from "./RedemptionC
 import { haversineMeters } from "@/lib/nearbyPartners";
 import PartnersMap from "@/components/partners/PartnersMap";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 export type BrowseLocation = {
   id: string;
@@ -171,7 +172,7 @@ export function OfferCard({
       });
       onRedeemed(offer.id, data.points_spent ?? 0);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to redeem offer");
+      setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Failed to redeem offer");
     } finally {
       setRedeeming(false);
     }

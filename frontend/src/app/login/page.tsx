@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isNativePlatform, isAndroidNative } from "@/lib/capacitor";
 import { applyAppleProfileName } from "@/lib/applyAppleProfileName";
 import { Card } from "@/components/ui/Card";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -36,7 +37,7 @@ function LoginForm() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError(error.message);
+      setError(friendlyErrorMessage(error.message));
       setLoading(false);
       return;
     }
@@ -114,11 +115,11 @@ function LoginForm() {
           nonce: rawNonce,
         });
         if (error) {
-          setError(error.message);
+          setError(friendlyErrorMessage(error.message));
           return;
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Google sign-in failed.");
+        setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Google sign-in failed.");
         return;
       } finally {
         googleLoginInFlight.current = false;
@@ -182,7 +183,7 @@ function LoginForm() {
           nonce: rawNonce,
         });
         if (error) {
-          setError(error.message);
+          setError(friendlyErrorMessage(error.message));
           return;
         }
 
@@ -191,7 +192,7 @@ function LoginForm() {
           await applyAppleProfileName(supabase, signInData.user.id, profile);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Apple sign-in failed.");
+        setError(err instanceof Error ? friendlyErrorMessage(err.message) : "Apple sign-in failed.");
         return;
       } finally {
         appleLoginInFlight.current = false;

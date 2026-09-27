@@ -7,7 +7,10 @@ import type { Database } from "@/types/database";
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 
 interface Props {
-  campaigns: Campaign[];
+  campaigns?: Campaign[];
+  /** Controlled mode: when provided, ignores the first-visit localStorage gate and shows/hides based on this value (e.g. a "Help" nav trigger replaying onboarding on demand). */
+  open?: boolean;
+  onClose?: () => void;
 }
 
 const STORAGE_KEY = "frontline_onboarded";
@@ -36,19 +39,32 @@ const STEPS = [
   },
 ];
 
-export default function OnboardingModal({ campaigns }: Props) {
-  const [visible, setVisible] = useState(false);
+export default function OnboardingModal({ campaigns = [], open, onClose }: Props) {
+  const controlled = open !== undefined;
+  const [autoVisible, setAutoVisible] = useState(false);
   const [step, setStep] = useState(0);
 
   useEffect(() => {
+    if (controlled) return;
     if (typeof window !== "undefined" && !localStorage.getItem(STORAGE_KEY)) {
-      setVisible(true);
+      setAutoVisible(true);
     }
-  }, []);
+  }, [controlled]);
+
+  // Replaying via the Help entry point always restarts from step 0.
+  useEffect(() => {
+    if (controlled && open) setStep(0);
+  }, [controlled, open]);
+
+  const visible = controlled ? !!open : autoVisible;
 
   function dismiss() {
     localStorage.setItem(STORAGE_KEY, "1");
-    setVisible(false);
+    if (controlled) {
+      onClose?.();
+    } else {
+      setAutoVisible(false);
+    }
   }
 
   function next() {
@@ -134,12 +150,22 @@ export default function OnboardingModal({ campaigns }: Props) {
                 Back
               </button>
             )}
-            <button
-              onClick={next}
-              className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              {isLast ? "Browse all campaigns" : "Next"}
-            </button>
+            {isLast ? (
+              <Link
+                href="/campaigns"
+                onClick={dismiss}
+                className="flex-1 text-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                Browse all campaigns
+              </Link>
+            ) : (
+              <button
+                onClick={next}
+                className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                Next
+              </button>
+            )}
           </div>
 
           <button
