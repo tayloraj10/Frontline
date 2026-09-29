@@ -45,7 +45,7 @@ export default async function TeamEventsPage() {
         <div className="text-center py-28 text-zinc-600">
           <p className="text-5xl mb-4">🏁</p>
           <p className="font-semibold text-zinc-500">No team events right now.</p>
-          <p className="text-sm mt-1">Check back soon — new competitions are announced here.</p>
+          <p className="text-sm mt-1">Check back soon. New competitions are announced here.</p>
         </div>
       ) : (
         <div className="space-y-8">
