@@ -313,12 +313,12 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))]"
       onClick={(e) => onCancel && e.target === e.currentTarget && onCancel()}
     >
       <form
         onSubmit={handleSubmit}
-        className="relative w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl flex flex-col max-h-[90dvh] my-auto"
+        className="relative w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl flex flex-col modal-max-h"
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 shrink-0">
           <div>
