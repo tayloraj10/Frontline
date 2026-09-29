@@ -313,7 +313,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => onCancel && e.target === e.currentTarget && onCancel()}
     >
       <form
