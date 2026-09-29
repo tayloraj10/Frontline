@@ -27,6 +27,9 @@ export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasAct
         { href: "/partners/dashboard", label: "Manage Business", shortLabel: "Business" },
         { href: "/partners", label: "Partners", shortLabel: "Partners" },
         { href: "/campaigns", label: "Explore Frontline", shortLabel: "Explore" },
+        ...(hasActiveTeamEvent
+          ? [{ href: "/team-events", label: "Team Events", shortLabel: "Events", pulse: true }]
+          : []),
         ...(isAdmin ? [{ href: "/admin", label: "Admin", shortLabel: "Admin", highlight: true }] : []),
       ]
     : [
@@ -34,7 +37,7 @@ export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasAct
         { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard" },
         { href: "/partners", label: "Partners", shortLabel: "Partners" },
         { href: "/groups", label: "Groups", shortLabel: "Groups", pulse: hasPendingOrganizerItems },
-        ...(isAdmin && hasActiveTeamEvent
+        ...(hasActiveTeamEvent
           ? [{ href: "/team-events", label: "Team Events", shortLabel: "Events", pulse: true }]
           : []),
         ...(isBusinessAdmin
