@@ -1,6 +1,18 @@
+import { Capacitor } from "@capacitor/core";
 import { isNativePlatform } from "@/lib/capacitor";
 
-export type TrackingPermissionResult = "granted" | "whenInUseOnly" | "denied";
+export type TrackingPermissionResult = "granted" | "whenInUseOnly" | "denied" | "unsupported";
+
+const PLUGIN_NAME = "BackgroundGeolocationFrontline";
+
+// True only once we're actually on a native binary that has this plugin compiled in.
+// Because the web app is served live to every installed build regardless of its native
+// version, a user can be on native Capacitor but running an older binary from before this
+// plugin existed — isNativePlatform() alone can't tell those apart, so callers must check
+// this before touching the plugin at all, not just catch the resulting bridge error.
+export function isTrackingSupported(): boolean {
+  return isNativePlatform() && Capacitor.isPluginAvailable(PLUGIN_NAME);
+}
 
 // Dev-only escape hatch so Track Route's UI (map, controls, review screen) can be
 // worked on from a desktop browser, where there's no native plugin to talk to.
@@ -48,6 +60,10 @@ export async function requestTrackingPermission(): Promise<TrackingPermissionRes
   if (!isNativePlatform()) {
     console.log("[track] requestTrackingPermission: not native, returning denied");
     return "denied";
+  }
+  if (!isTrackingSupported()) {
+    console.log("[track] requestTrackingPermission: plugin not available on this build, returning unsupported");
+    return "unsupported";
   }
   console.log("[track] requestTrackingPermission: loading plugin");
   const { plugin } = await loadPlugin();

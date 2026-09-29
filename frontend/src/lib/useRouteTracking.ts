@@ -88,7 +88,7 @@ async function dataUrlToFile(dataUrl: string): Promise<File> {
  */
 export function useRouteTracking(campaignId: string | null | undefined) {
   const [phase, setPhase] = useState<RouteTrackingPhase>("idle");
-  const [permissionError, setPermissionError] = useState<"whenInUseOnly" | "denied" | null>(null);
+  const [permissionError, setPermissionError] = useState<"whenInUseOnly" | "denied" | "unsupported" | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -120,7 +120,7 @@ export function useRouteTracking(campaignId: string | null | undefined) {
     try {
       const result = await requestTrackingPermission();
       if (result !== "granted") {
-        setPermissionError(result === "whenInUseOnly" ? "whenInUseOnly" : "denied");
+        setPermissionError(result);
         return;
       }
       coordsRef.current = startCoords ? [startCoords] : [];
