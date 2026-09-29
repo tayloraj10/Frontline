@@ -313,12 +313,12 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
       onClick={(e) => onCancel && e.target === e.currentTarget && onCancel()}
     >
       <form
         onSubmit={handleSubmit}
-        className="relative w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl flex flex-col max-h-[90dvh] my-auto"
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 shrink-0">
           <div>
@@ -350,7 +350,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
           )}
           {error && <p className="text-red-400 text-xs">{error}</p>}
         </div>
-        <div className="px-5 pb-5 pt-3 border-t border-zinc-800 space-y-3 shrink-0">
+        <div className="px-5 pt-3 border-t border-zinc-800 space-y-3 shrink-0 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {viewMode === "guided" && (
             <StepperNav
               activeIndex={activeGuidedStep}
