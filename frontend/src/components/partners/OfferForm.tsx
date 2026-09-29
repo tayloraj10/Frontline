@@ -334,7 +334,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
         <div className="px-5 pb-3 shrink-0">
           <ViewModeToggle viewMode={viewMode} onChange={changeViewMode} />
         </div>
-        <div className="px-5 pb-4 overflow-y-auto space-y-4 flex-1">
+        <div className="px-5 pb-4 overflow-y-auto space-y-4 flex-1 min-h-0">
           {viewMode === "guided" ? (
             <>
               <GuidedStepper steps={offerSteps} activeIndex={activeGuidedStep} onJump={setGuidedStep} />
