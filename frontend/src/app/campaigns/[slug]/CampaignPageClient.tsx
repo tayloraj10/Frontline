@@ -27,6 +27,9 @@ type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 type Contribution = Database["public"]["Tables"]["contributions"]["Row"];
 
+// Admin gear button on the map is redundant for now; the dialog stays mounted.
+const SHOW_ADMIN_GEAR = false;
+
 function displayStatValue(n: number): string {
   return n.toLocaleString();
 }
@@ -1028,11 +1031,6 @@ export default function CampaignPageClient({
   // reachable for admins via the admin dialog (gear button) instead.
   const nycNeighborhoodsAvailable = !!isAdmin && campaign.slug === "trash-war";
   const [showAdminDialog, setShowAdminDialog] = useState(false);
-  // "Hide until next page refresh" (triggered from inside AdminDialog) — mirrors
-  // CreateTimedEventButton's own dismiss pattern. Lets an admin clear the gear
-  // button out of screenshots/recordings without needing to remember anything;
-  // it comes back on the next page load.
-  const [adminControlsHidden, setAdminControlsHidden] = useState(false);
 
   const [cleanupRoutesList, setCleanupRoutesList] = useState<CampaignCleanupRoute[]>([]);
 
@@ -1416,7 +1414,8 @@ export default function CampaignPageClient({
 
       {isAdmin && !pinPickerActive && (
         <>
-          {!adminControlsHidden && !openPanel && (
+          {/* Gear button hidden (redundant now) — flip SHOW_ADMIN_GEAR to restore. */}
+          {SHOW_ADMIN_GEAR && !openPanel && (
             <button
               onClick={() => setShowAdminDialog(true)}
               title="Admin controls"
@@ -1435,10 +1434,7 @@ export default function CampaignPageClient({
             showNycToggle={nycNeighborhoodsAvailable}
             nycNeighborhoodsVisible={nycNeighborhoodsVisible}
             onNycNeighborhoodsVisibleChange={setNycNeighborhoodsVisible}
-            onHideControls={() => {
-              setAdminControlsHidden(true);
-              setShowAdminDialog(false);
-            }}
+            onHideControls={() => setShowAdminDialog(false)}
           />
           <CreateTimedEventButton
             campaignId={campaign.id}
