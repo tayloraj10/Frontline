@@ -497,7 +497,7 @@ async def get_campaign_geo_stats(
     top_groups = (
         await db.execute(
             text(f"""
-                SELECT c.group_id::text, g.name,
+                SELECT c.group_id::text, g.name, g.image_url AS logo_url,
                        COALESCE(SUM(c.value), 0)::float AS total_value,
                        COUNT(*)::int                     AS contribution_count
                 FROM contributions c
@@ -505,7 +505,7 @@ async def get_campaign_geo_stats(
                 WHERE c.campaign_id = :cid AND c.group_id IS NOT NULL
                   AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
                   {scope_filter}
-                GROUP BY c.group_id, g.name
+                GROUP BY c.group_id, g.name, g.image_url
                 ORDER BY total_value DESC, contribution_count DESC
                 LIMIT 10
             """),
@@ -713,6 +713,7 @@ async def get_campaign_geo_stats(
             {
                 "group_id": r.group_id,
                 "name": r.name,
+                "logo_url": r.logo_url,
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "small_bags": group_bag_totals.get(r.group_id, {}).get("small_bags", 0),

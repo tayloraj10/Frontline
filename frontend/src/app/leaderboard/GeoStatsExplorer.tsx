@@ -34,6 +34,7 @@ interface TopUser {
 interface TopGroup {
   group_id: string;
   name: string | null;
+  logo_url?: string | null;
   total_value: number;
   contribution_count: number;
   small_bags: number;
@@ -481,9 +482,7 @@ export default function GeoStatsExplorer({
               <li key={g.group_id} className="px-5 py-3 flex items-center gap-3">
                 <RankBadge rank={groupRanks[i]} />
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-xs font-bold shrink-0 text-emerald-400">
-                    {(g.name ?? "?")[0].toUpperCase()}
-                  </div>
+                  <Avatar avatarUrl={g.logo_url} name={g.name ?? "?"} size="sm" />
                   <span className="text-sm text-zinc-200 truncate font-medium">{g.name ?? "Unknown Group"}</span>
                 </div>
                 <div className="flex items-center gap-4 shrink-0 text-right">
