@@ -57,8 +57,9 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Backs @capacitor/camera (see ContributionPanel.tsx's cleanup-photo capture).
-         READ_MEDIA_IMAGES replaces READ_EXTERNAL_STORAGE for gallery access on API 33+. -->
+         Gallery picking goes through Camera.chooseFromGallery (photoCapture.tsx), which
+         the plugin implements via Android's PickVisualMedia system photo picker on API 33+,
+         so no READ_MEDIA_IMAGES/READ_EXTERNAL_STORAGE permission is needed — see Play
+         Console "Photo and Video Permissions policy" rejection (2026-10-06). -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 </manifest>
