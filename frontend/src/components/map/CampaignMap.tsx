@@ -1631,6 +1631,15 @@ function HexPanel({
 
 // ─── Fit-to-extent control ────────────────────────────────────────────────────
 
+// maplibre's GeolocateControl only drops its ACTIVE_LOCK camera-follow when a movestart
+// arrives while !map.isZooming(), and programmatic fitBounds() zooms — so the zoom-to
+// buttons below never broke the lock and every later watchPosition fix yanked the camera
+// back to the user. Each button calls this before moving the camera.
+const geolocateLockReleasers = new WeakMap<maplibregl.Map, () => void>();
+const releaseGeolocateLock = (map: maplibregl.Map | null) => {
+  if (map) geolocateLockReleasers.get(map)?.();
+};
+
 class FitExtentControl implements maplibregl.IControl {
   private _map: maplibregl.Map | null = null;
   private _container: HTMLDivElement | null = null;
@@ -1655,6 +1664,7 @@ class FitExtentControl implements maplibregl.IControl {
     btn.onclick = () => {
       const bounds = this._getBounds();
       if (bounds && this._map) {
+        releaseGeolocateLock(this._map);
         this._map.fitBounds(bounds as maplibregl.LngLatBoundsLike, {
           padding: 60,
           maxZoom: 12,
@@ -1749,6 +1759,7 @@ class MultiCityZoomControl implements maplibregl.IControl {
         `<span style="font-size:8px;line-height:1;color:#3f3f46">${city.label}</span>`;
       b.onclick = (e) => {
         e.stopPropagation();
+        releaseGeolocateLock(this._map);
         this._map?.fitBounds(city.bounds, {
           padding: 60,
           duration: 800,
@@ -1818,6 +1829,7 @@ class ZoomToRegionControl implements maplibregl.IControl {
       "background:none;border:none;cursor:pointer;padding:0";
     btn.innerHTML = this._flagSvg;
     btn.onclick = () => {
+      releaseGeolocateLock(this._map);
       this._map?.fitBounds(this._bounds, { padding: 40, duration: 800 });
     };
     const container = document.createElement("div");
@@ -4397,6 +4409,14 @@ export default function CampaignMap({
         onUserLocationErrorRef.current?.(err.code);
       });
       map.current.addControl(control, "top-right");
+      const geoMap = map.current;
+      geolocateLockReleasers.set(geoMap, () => {
+        const c = control as unknown as { _watchState: string; _geolocateButton?: HTMLElement };
+        if (c._watchState !== "ACTIVE_LOCK") return;
+        c._watchState = "BACKGROUND";
+        c._geolocateButton?.classList.remove("maplibregl-ctrl-geolocate-active");
+        c._geolocateButton?.classList.add("maplibregl-ctrl-geolocate-background");
+      });
       // trigger() toggles tracking on/off, so every caller that wants tracking
       // *started* (as opposed to explicitly re-clicked) must funnel through this
       // single startedRef-guarded helper. Without it, our own auto-locate-on-mount
