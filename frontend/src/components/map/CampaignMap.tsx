@@ -441,6 +441,7 @@ interface Props {
   onAreaPickerConfirm?: () => void;
   onAreaPickerCancel?: () => void;
   routePickerActive?: boolean;
+  routePickerStartCoords?: { latitude: number; longitude: number } | null;
   onRoutePickerChange?: (coordinates: [number, number][]) => void;
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;
@@ -1853,6 +1854,7 @@ export default function CampaignMap({
   onAreaPickerConfirm,
   onAreaPickerCancel,
   routePickerActive = false,
+  routePickerStartCoords = null,
   onRoutePickerChange,
   onRoutePickerFinish,
   onRoutePickerCancel,
@@ -2143,6 +2145,16 @@ export default function CampaignMap({
       src?.setData({ type: "FeatureCollection", features: [] });
     }
   }, [routePickerActive]);
+  // Entering the route picker from a host-event form with an address already set: start
+  // the camera there rather than wherever the map happened to be (often the user's GPS fix).
+  useEffect(() => {
+    if (!routePickerActive || !routePickerStartCoords || !map.current) return;
+    map.current.flyTo({
+      center: [routePickerStartCoords.longitude, routePickerStartCoords.latitude],
+      zoom: 16,
+      duration: 700,
+    });
+  }, [routePickerActive, routePickerStartCoords]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
   useEffect(() => { areaPickerActiveRef.current = areaPickerActive; }, [areaPickerActive]);
   useEffect(() => { areaPickerUnitTypeRef.current = areaPickerUnitType; }, [areaPickerUnitType]);

@@ -921,6 +921,7 @@ export default function CampaignPageClient({
   const [areaPickerActive, setAreaPickerActive] = useState(false);
   const [pickedAreas, setPickedAreas] = useState<SelectedArea[]>([]);
   const [routePickerActive, setRoutePickerActive] = useState(false);
+  const [routePickerStartCoords, setRoutePickerStartCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [liveRouteVertices, setLiveRouteVertices] = useState<[number, number][]>([]);
   // Live coords from an in-progress Track Route session, shown on the main map while
   // ContributionPanel's own Log Cleanup modal is closed.
@@ -1216,7 +1217,8 @@ export default function CampaignPageClient({
     setPinPickerActive(false);
   };
 
-  const handleEnterRoutePicker = () => {
+  const handleEnterRoutePicker = (startCoords?: { latitude: number; longitude: number }) => {
+    setRoutePickerStartCoords(startCoords ?? null);
     setPlacedRouteVertices(null);
     setLiveRouteVertices([]);
     setRoutePickerActive(true);
@@ -1291,6 +1293,7 @@ export default function CampaignPageClient({
         onAreaPickerConfirm={handleAreaPickerConfirm}
         onAreaPickerCancel={handleAreaPickerCancel}
         routePickerActive={routePickerActive}
+        routePickerStartCoords={routePickerStartCoords}
         onRoutePickerChange={setLiveRouteVertices}
         onRoutePickerFinish={handleRoutePickerFinish}
         onRoutePickerCancel={handleRoutePickerCancel}

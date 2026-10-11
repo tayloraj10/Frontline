@@ -48,6 +48,7 @@ interface Props {
   onGeolocateTrigger?: (trigger: () => boolean) => void;
   nycNeighborhoodsVisible?: boolean;
   routePickerActive?: boolean;
+  routePickerStartCoords?: { latitude: number; longitude: number } | null;
   onRoutePickerChange?: (vertices: [number, number][]) => void;
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;

@@ -276,7 +276,7 @@ interface ContributionPanelProps {
   onEnterPinPicker: (coords: Coords, constrained?: boolean, pinPickerLabel?: string) => void;
   pinPickerActive: boolean;
   placedPinCoords: Coords | null;
-  onEnterRoutePicker?: () => void;
+  onEnterRoutePicker?: (startCoords?: Coords) => void;
   routePickerActive?: boolean;
   placedRouteVertices?: [number, number][] | null;
   onContributionSubmitted?: (lat: number | null, lng: number | null, value: number, photoUrl?: string, resolvedReportId?: string, newRoute?: { id: string; route: RouteLineString }, isGroupEvent?: boolean, contributionId?: string) => void;
@@ -3157,7 +3157,7 @@ function HostEventModal({
   gps: ReturnType<typeof useGPS>;
   overrideCoords: Coords | null;
   onEnterPinPicker: (coords: Coords) => void;
-  onEnterRoutePicker: () => void;
+  onEnterRoutePicker: (startCoords?: Coords) => void;
   routeOverride: RouteLineString | null;
   onClose: () => void;
   activeMapStyle?: string;
@@ -3536,7 +3536,7 @@ function HostEventModal({
         {!route ? (
           <button
             type="button"
-            onClick={onEnterRoutePicker}
+            onClick={() => onEnterRoutePicker(overrideCoords ?? addressCoords ?? undefined)}
             className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
           >
             🛤️ Draw route on map
@@ -3550,7 +3550,7 @@ function HostEventModal({
               </span>
               <button
                 type="button"
-                onClick={onEnterRoutePicker}
+                onClick={() => onEnterRoutePicker(overrideCoords ?? addressCoords ?? undefined)}
                 className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
               >
                 Redraw
@@ -4514,8 +4514,8 @@ export default function ContributionPanel({
     onEnterRoutePicker?.();
   };
 
-  const handleEnterRoutePickerForHostEvent = () => {
-    onEnterRoutePicker?.();
+  const handleEnterRoutePickerForHostEvent = (startCoords?: Coords) => {
+    onEnterRoutePicker?.(startCoords);
   };
 
   const showReport = campaignContributionType === "cleanup";

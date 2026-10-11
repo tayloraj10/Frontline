@@ -144,6 +144,15 @@ export default function RoutePicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The map is created once, so an address picked/changed after it mounted would
+  // otherwise leave the camera on the old spot. Follow the event location until the
+  // user has started drawing, at which point their vertices own the viewport.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || coordsRef.current.length > 0) return;
+    m.jumpTo({ center: [centerLng, centerLat] });
+  }, [centerLat, centerLng]);
+
   const undoLast = () => {
     coordsRef.current = coordsRef.current.slice(0, -1);
     setCoordCount(coordsRef.current.length);
