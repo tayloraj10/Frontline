@@ -9,6 +9,7 @@ import UserActivityList from "@/components/contributions/UserActivityList";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import ShareButton from "@/components/ShareButton";
 import BlockUserButton from "@/components/BlockUserButton";
+import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
 
 const CAMPAIGN_UNIT: Record<string, string> = {
   territory: "pts",
@@ -214,7 +215,7 @@ export default async function UserProfilePage({ params }: Props) {
           <div className="shrink-0">
             <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 shadow-elevation-1 overflow-hidden flex items-center justify-center">
               {profile.avatar_url ? (
-                <img src={profile.avatar_url} alt={profile.display_name ?? profile.username} className="w-full h-full object-cover" />
+                <GroupAvatarLightbox imageUrl={profile.avatar_url} name={profile.display_name ?? profile.username} />
               ) : (
                 <span className="text-2xl font-black text-zinc-300">
                   {(profile.display_name ?? profile.username)[0].toUpperCase()}
