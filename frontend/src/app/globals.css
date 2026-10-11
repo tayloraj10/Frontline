@@ -261,3 +261,23 @@ html, body {
 .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
   border-bottom-color: #18181b !important;
 }
+
+/* Top navigation progress bar (NavigationProgress). Eases toward ~85% so it
+   reads as "in flight" without ever claiming to be finished; the "done" state
+   snaps to full and fades once the route commits. */
+@keyframes nav-progress-grow {
+  0% { width: 0%; }
+  20% { width: 45%; }
+  100% { width: 85%; }
+}
+@keyframes nav-progress-finish {
+  0% { width: 85%; opacity: 1; }
+  60% { width: 100%; opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+@utility nav-progress-loading {
+  animation: nav-progress-grow 8s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
+}
+@utility nav-progress-done {
+  animation: nav-progress-finish 300ms ease-out forwards;
+}

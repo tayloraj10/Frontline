@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
+import { startNavigationProgress } from "@/lib/navigationProgress";
 import { buildCampaignHrefWithSavedPosition } from "@/lib/mapPosition";
 
 interface Props {
@@ -17,6 +18,7 @@ export default function BackToCampaignButton({ campaignSlug, campaignTitle, clas
   const router = useRouter();
 
   function handleClick() {
+    startNavigationProgress();
     router.push(buildCampaignHrefWithSavedPosition(campaignSlug));
   }
 

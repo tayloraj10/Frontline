@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { startNavigationProgress } from "@/lib/navigationProgress";
 import { buildCampaignHrefWithSavedPosition } from "@/lib/mapPosition";
 
 type Tab = "map" | "leaderboard" | "feed";
@@ -17,6 +18,7 @@ export default function CampaignTabNav({ slug, active }: { slug: string; active:
 
   function handleMapClick(e: React.MouseEvent) {
     e.preventDefault();
+    startNavigationProgress();
     router.push(buildCampaignHrefWithSavedPosition(slug));
   }
 
