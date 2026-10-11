@@ -1,6 +1,6 @@
 export default function CampaignsLoading() {
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-10">
         <div className="h-10 w-52 bg-zinc-800 rounded-lg animate-pulse" />
         <div className="h-4 w-36 bg-zinc-800/60 rounded mt-3 animate-pulse" />

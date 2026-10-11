@@ -30,7 +30,7 @@ interface Props {
 
 function KpiTile({ label, value, sublabel }: { label: string; value: string; sublabel?: string }) {
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5 shadow-elevation-1">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3 py-2.5">
       <div className="text-xs text-zinc-500">{label}</div>
       <div className="text-lg font-bold text-zinc-100 tabular-nums">{value}</div>
       {sublabel && <div className="text-[11px] text-zinc-600 tabular-nums">{sublabel}</div>}

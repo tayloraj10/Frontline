@@ -77,12 +77,12 @@ export default async function GroupProfilePage({ params }: Props) {
   if (group.status !== "approved") {
     const isPending = group.status === "pending";
     return (
-      <main className="max-w-lg mx-auto px-6 py-16 w-full text-center">
+      <main className="max-w-lg mx-auto px-4 sm:px-6 py-16 w-full text-center">
         <div className="mb-2 text-left">
           <BackButton href="/groups" label="Groups" />
         </div>
         <p className="text-5xl mb-4">{isPending ? "⏳" : "🚫"}</p>
-        <h1 className="text-2xl font-black text-zinc-100 mb-2">{group.name}</h1>
+        <h1 className="font-display font-extrabold text-2xl text-zinc-100 mb-2">{group.name}</h1>
         <p className="text-zinc-400 text-sm leading-relaxed">
           {isPending
             ? "This group is pending review. It'll be listed once a site admin approves it."
@@ -143,7 +143,7 @@ export default async function GroupProfilePage({ params }: Props) {
       : "Date TBD";
 
   return (
-    <main className="max-w-4xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-2">
         <BackButton href="/groups" label="Groups" />
       </div>
@@ -159,7 +159,7 @@ export default async function GroupProfilePage({ params }: Props) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-black text-zinc-100 leading-tight">{group.name}</h1>
+              <h1 className="font-display font-extrabold text-2xl text-zinc-100 leading-tight">{group.name}</h1>
               {group.verified && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
                   ✓ Verified
@@ -248,7 +248,7 @@ export default async function GroupProfilePage({ params }: Props) {
           {!user && (
             <Link
               href={`/login?next=/groups/${slug}`}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Sign In to Join
             </Link>

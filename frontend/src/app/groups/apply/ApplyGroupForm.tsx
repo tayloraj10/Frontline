@@ -119,9 +119,9 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
   };
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-16 w-full">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-16 w-full">
       <div className="mb-8">
-        <h1 className="text-3xl font-black tracking-tight text-zinc-100">Add Your Group</h1>
+        <h1 className="font-display font-extrabold text-3xl tracking-tight text-zinc-100">Add Your Group</h1>
         <p className="text-zinc-500 mt-2 text-sm">
           Already running a crew? Add it here. A site admin will review it before it's listed.
         </p>
@@ -245,7 +245,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
         <button
           type="submit"
           disabled={loading || !name.trim() || !slug.trim()}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 text-white font-semibold rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation text-sm"
+          className="w-full py-3 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 text-emerald-950 font-semibold rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation text-sm"
         >
           {loading ? "Submitting…" : "Submit Group"}
         </button>

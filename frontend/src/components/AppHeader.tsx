@@ -114,12 +114,10 @@ export default async function AppHeader() {
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
           <Link
             href="/"
-            className="flex items-center gap-2 font-black text-base tracking-widest min-w-0 active:scale-[0.97] transition-transform duration-150"
+            className="flex items-center gap-2 font-display font-extrabold text-lg tracking-tight min-w-0 active:scale-[0.97] transition-transform duration-150"
           >
-            <span className="text-emerald-400 text-lg shrink-0 drop-shadow-[0_0_6px_rgba(16,185,129,0.5)]">⚑</span>
-            <span className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent truncate">
-              FRONTLINE
-            </span>
+            <span className="text-emerald-400 text-lg shrink-0">⚑</span>
+            <span className="text-zinc-100 truncate">Frontline</span>
             <span className="text-[10px] font-semibold text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 tracking-wider shrink-0">
               {appVersion}
             </span>

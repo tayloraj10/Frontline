@@ -103,20 +103,20 @@ export default async function GroupsPage() {
   groups.sort((a, b) => activityScore(b) - activityScore(a));
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-10 flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+          <h1 className="font-display font-extrabold text-4xl tracking-tight text-zinc-100">
             Groups
           </h1>
-          <p className="text-zinc-500 mt-2 text-sm">
-            {groups.length} group{groups.length !== 1 ? "s" : ""} — organize your collective.
+          <p className="text-zinc-400 mt-2 text-sm max-w-md leading-relaxed">
+            {groups.length} group{groups.length !== 1 ? "s" : ""}. Join one to log cleanups together, share territory credit and show up on the group leaderboard.
           </p>
         </div>
         {canCreateGroup && (
           <Link
             href="/groups/apply"
-            className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+            className="shrink-0 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
           >
             Add Your Group
           </Link>
@@ -133,7 +133,7 @@ export default async function GroupsPage() {
               <Link
                 key={g.id}
                 href={`/groups/${g.slug}`}
-                className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.98] touch-manipulation"
+                className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-3 py-2 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.98] touch-manipulation"
               >
                 <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
                   {g.image_url ? (

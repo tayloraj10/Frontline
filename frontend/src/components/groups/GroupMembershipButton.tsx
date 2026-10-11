@@ -61,7 +61,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
         <button
           onClick={handleJoin}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.96] disabled:active:scale-100 text-white font-semibold rounded-lg shadow-elevation-1 transition-[background-color,transform] duration-150 disabled:opacity-40 touch-manipulation"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.96] disabled:active:scale-100 text-emerald-950 font-semibold rounded-xl shadow-elevation-1 transition-[background-color,transform] duration-150 disabled:opacity-40 touch-manipulation"
         >
           <UserPlus className="w-3.5 h-3.5" />
           {loading ? "Joining…" : "Join Group"}

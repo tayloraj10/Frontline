@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AppPromoCard from "@/components/AppPromoCard";
 import { createClient } from "@/lib/supabase/server";
 import HomeAutoRedirect from "@/components/HomeAutoRedirect";
 
@@ -33,87 +34,77 @@ export default async function HomePage() {
 
   const primaryHref = isBusinessOnly ? "/partners/dashboard" : "/campaigns/trash-war";
 
-  return (
-    <main className="relative flex flex-col items-center justify-center flex-1 px-6 py-24 text-center gap-10 overflow-hidden">
-      {user && <HomeAutoRedirect href={primaryHref} />}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_58%_at_50%_40%,rgba(16,185,129,0.18),transparent)] pointer-events-none" />
+  const steps = [
+    { title: "Log what you clean", body: "Take a photo and add a bag count or weight." },
+    { title: "Claim territory", body: "Your block turns green on the map. Groups can claim together." },
+    { title: "Spend your points", body: "Trade them for perks at local partner shops." },
+  ];
 
-      <div className="relative space-y-5">
-        <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-900/30 border border-emerald-700/40 rounded-full text-emerald-400 text-xs font-semibold tracking-wide mb-1">
+  return (
+    <main className="flex flex-col flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-16 gap-10 lg:grid lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-16">
+      {user && <HomeAutoRedirect href={primaryHref} />}
+
+      <div className="flex flex-col gap-6">
+        <div className="inline-flex self-start items-center gap-2 px-3 py-1 bg-emerald-500/15 rounded-full text-emerald-400 text-xs font-semibold">
           <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
           {campaignCount ?? 0} campaign{campaignCount !== 1 ? "s" : ""} live now
         </div>
-        <h1 className="text-4xl sm:text-7xl font-black tracking-tighter bg-gradient-to-b from-white via-zinc-100 to-zinc-500 bg-clip-text text-transparent leading-none">
-          FRONTLINE
+        <h1 className="font-display text-5xl sm:text-6xl font-extrabold tracking-tight leading-[1.02] text-balance">
+          Clean your block.
+          <br />
+          <span className="text-emerald-400">Claim the map.</span>
         </h1>
-        <p className="text-zinc-400 text-lg max-w-sm mx-auto leading-relaxed">
-          Collective action on the map.{" "}
-          <span className="text-zinc-200">
-            Join campaigns, take action, change the world.
-          </span>
+        <p className="text-zinc-400 text-base sm:text-lg max-w-md leading-relaxed">
+          Frontline turns real cleanups into a live game. Pick up trash, log it, and watch your neighborhood light up.
         </p>
-        <p className="text-emerald-400/80 text-sm font-semibold tracking-wide">
-          Join us on the frontline.
-        </p>
-      </div>
-
-      {/* Live stats */}
-      <div className="relative flex gap-8">
-        {stats.map((s, i) => (
-          <div key={i} className="text-center">
-            <div className="text-2xl font-black text-zinc-100 tabular-nums">{s.value}</div>
-            <div className="text-xs text-zinc-500 mt-0.5">{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="relative flex gap-3">
-        <Link
-          href="/campaigns"
-          className="px-7 py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white font-semibold rounded-xl transition-[background-color,transform] duration-150 text-sm shadow-lg shadow-emerald-950/60 touch-manipulation"
-        >
-          Browse Campaigns
-        </Link>
-        {user ? (
+        <div className="flex flex-col sm:flex-row gap-3 max-w-md">
           <Link
-            href={primaryHref}
-            className="px-7 py-3 border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900 active:border-zinc-500 active:bg-zinc-900 active:scale-[0.97] text-zinc-300 font-semibold rounded-xl transition-[background-color,border-color,transform] duration-150 text-sm touch-manipulation"
+            href={user ? primaryHref : "/signup"}
+            className="inline-flex items-center justify-center min-h-12 px-6 bg-emerald-400 text-emerald-950 hover:bg-emerald-300 active:scale-[0.97] font-bold rounded-2xl transition-[background-color,transform] duration-150 touch-manipulation sm:flex-1"
           >
-            {isBusinessOnly ? "Go to Dashboard" : "Open Trash War Map"}
+            {user ? (isBusinessOnly ? "Go to dashboard" : "Open the map") : "Create free account"}
           </Link>
-        ) : (
           <Link
-            href="/signup"
-            className="px-7 py-3 border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900 active:border-zinc-500 active:bg-zinc-900 active:scale-[0.97] text-zinc-300 font-semibold rounded-xl transition-[background-color,border-color,transform] duration-150 text-sm touch-manipulation"
+            href={user ? "/campaigns" : "/login"}
+            className="inline-flex items-center justify-center min-h-12 px-6 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:scale-[0.97] font-semibold rounded-2xl transition-[background-color,transform] duration-150 touch-manipulation sm:flex-1"
           >
-            Sign Up
+            {user ? "Browse campaigns" : "Sign in"}
           </Link>
-        )}
+        </div>
+        <div className="flex gap-x-8 gap-y-3 flex-wrap">
+          {stats.map((st) => (
+            <div key={st.label}>
+              <div className="font-display text-2xl font-bold text-zinc-100 tabular-nums">{st.value}</div>
+              <div className="text-xs text-zinc-500">{st.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Feature pills */}
-      <div className="relative flex flex-wrap justify-center gap-2 max-w-md">
-        {[
-          { icon: "🗺", label: "Zip code control" },
-          { icon: "📍", label: "Live maps" },
-          { icon: "⚡", label: "Map events" },
-          { icon: "👥", label: "Group competition" },
-          { icon: "🌱", label: "Real impact" },
-        ].map(({ icon, label }) => (
-          <span
-            key={label}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-xs text-zinc-500"
-          >
-            <span>{icon}</span>
-            {label}
-          </span>
-        ))}
-      </div>
-
-      <div className="relative flex gap-4 text-xs text-zinc-600">
-        <Link href="/legal/terms" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Terms</Link>
-        <Link href="/legal/privacy" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Privacy</Link>
-      </div>
+      <section aria-labelledby="how-it-works" className="flex flex-col gap-4 rounded-3xl bg-zinc-900 p-5 sm:p-7">
+        <h2 id="how-it-works" className="font-mono text-[11px] uppercase tracking-[0.12em] text-zinc-400">
+          How it works
+        </h2>
+        <ol className="flex flex-col gap-5">
+          {steps.map((step, i) => (
+            <li key={step.title} className="flex gap-4">
+              <span className="w-8 h-8 shrink-0 rounded-full bg-zinc-800 text-emerald-400 grid place-items-center font-mono text-sm">
+                {i + 1}
+              </span>
+              <div>
+                <h3 className="font-display font-bold text-zinc-100">{step.title}</h3>
+                <p className="text-sm text-zinc-400 mt-0.5">{step.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <AppPromoCard className="!bg-zinc-800/60" />
+        <div className="flex gap-4 text-xs text-zinc-500 pt-2 border-t border-zinc-800">
+          <Link href="/how-points-work" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">How points work</Link>
+          <Link href="/legal/terms" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Terms</Link>
+          <Link href="/legal/privacy" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Privacy</Link>
+        </div>
+      </section>
     </main>
   );
 }

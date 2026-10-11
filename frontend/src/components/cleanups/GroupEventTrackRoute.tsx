@@ -148,7 +148,7 @@ export default function GroupEventTrackRoute({
 
   if (!route) {
     return (
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-2">
         <TrackRouteScreen session={session} onConfirm={handleConfirm} onCancel={resetAll} />
       </div>
     );

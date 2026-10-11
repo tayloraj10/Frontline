@@ -95,7 +95,7 @@ export default function PartnerApplyPage() {
       <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
         <div className="w-full max-w-sm space-y-4 text-center rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 shadow-elevation-2">
           <div className="text-4xl">📬</div>
-          <h1 className="text-2xl font-bold">Submitted for review</h1>
+          <h1 className="font-display text-2xl font-bold">Submitted for review</h1>
           <p className="text-zinc-400 text-sm">
             Thanks! A Frontline admin will review your business and get it added to the right campaigns soon.
           </p>
@@ -113,7 +113,7 @@ export default function PartnerApplyPage() {
     <main className="flex flex-col items-center flex-1 px-6 py-16">
       <div className="w-full max-w-lg space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold">List your business</h1>
+          <h1 className="font-display text-2xl font-bold">List your business</h1>
           <p className="text-zinc-400 text-sm">
             Submit your business to appear on Frontline campaign maps. An admin will review it before it goes live.
           </p>

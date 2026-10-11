@@ -1,13 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Geist } from "next/font/google";
+import { Geist, Bricolage_Grotesque, Figtree, DM_Mono } from "next/font/google";
 import "./globals.css";
 import AppHeader from "@/components/AppHeader";
 import LegalGate from "@/components/LegalGate";
 import NativeAppBridge from "@/components/NativeAppBridge";
 import PullToRefresh from "@/components/PullToRefresh";
 
+// Geist stays loaded because the campaign map page (excluded from the UI rework) still uses it.
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
+const figtree = Figtree({ variable: "--font-body", subsets: ["latin"] });
+const bricolage = Bricolage_Grotesque({ variable: "--font-display-face", subsets: ["latin"], weight: ["600", "700", "800"] });
+const dmMono = DM_Mono({ variable: "--font-mono-ui", subsets: ["latin"], weight: ["400", "500"] });
 
 const SITE_URL = "https://www.frontlinemaps.com";
 const SITE_DESCRIPTION =
@@ -50,13 +54,13 @@ export async function generateViewport(): Promise<Viewport> {
     initialScale: 1,
     ...(isNativeApp && { maximumScale: 1, userScalable: false }),
     viewportFit: "cover",
-    themeColor: "#09090b",
+    themeColor: "#17140f",
   };
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geist.variable} dark h-full antialiased`}>
+    <html lang="en" className={`${geist.variable} ${figtree.variable} ${bricolage.variable} ${dmMono.variable} dark h-full antialiased`}>
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
         <NativeAppBridge />
         <AppHeader />

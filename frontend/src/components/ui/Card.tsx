@@ -25,7 +25,7 @@ type CardOwnProps = {
 
 function cardClasses({ elevation = 1, interactive, padding = "md" }: CardOwnProps) {
   return cn(
-    "rounded-xl border border-zinc-800/80 bg-zinc-900/80",
+    "rounded-2xl border border-zinc-800 bg-zinc-900",
     ELEVATION_CLASS[elevation],
     PADDING_CLASS[padding],
     interactive &&

@@ -18,9 +18,9 @@ export default function StatTile({ icon, value, label, hero = false, className =
       {icon && <span className="text-zinc-500">{icon}</span>}
       <span
         className={cn(
-          "text-lg font-bold leading-tight",
+          "font-display text-lg font-bold leading-tight tabular-nums",
           hero
-            ? "bg-gradient-to-b from-emerald-300 to-emerald-500 bg-clip-text text-transparent text-2xl"
+            ? "text-emerald-400 text-2xl"
             : "text-zinc-100"
         )}
       >

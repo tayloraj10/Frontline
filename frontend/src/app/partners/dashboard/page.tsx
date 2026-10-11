@@ -105,9 +105,9 @@ export default async function PartnerDashboardPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-6 pt-10 pb-24 sm:pb-10 w-full">
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-black text-zinc-100">Partner Dashboard</h1>
+        <h1 className="font-display font-extrabold text-2xl text-zinc-100">Partner Dashboard</h1>
         <p className="text-sm text-zinc-500 mt-1">
           Manage your business listing and offers.
         </p>

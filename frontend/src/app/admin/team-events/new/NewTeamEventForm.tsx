@@ -338,7 +338,7 @@ export default function NewTeamEventForm({
       <button
         type="submit"
         disabled={!canSubmit || loading}
-        className="w-full min-h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100 touch-manipulation"
+        className="w-full min-h-11 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 rounded-xl text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100 touch-manipulation"
       >
         {loading ? "Creating..." : "Create event"}
       </button>

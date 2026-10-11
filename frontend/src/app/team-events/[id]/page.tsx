@@ -32,7 +32,7 @@ export default async function TeamEventPage({ params }: Props) {
   }
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
       <TeamEventPageClient
         initialEvent={event}
         userId={user?.id ?? null}

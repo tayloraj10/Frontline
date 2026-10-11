@@ -17,11 +17,11 @@ export default async function EventRoutesPage({ params }: Props) {
   if (!event) notFound();
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-2">
         <BackToCampaignButton campaignSlug={event.campaign_slug} />
       </div>
-      <h1 className="flex items-center gap-2 mt-6 text-xl font-bold text-zinc-100">
+      <h1 className="font-display flex items-center gap-2 mt-6 text-xl font-bold text-zinc-100">
         Routes &amp; photos
         <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-violet-950/60 border border-violet-700/60 text-violet-300">
           BETA

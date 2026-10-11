@@ -135,7 +135,7 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
       ref={barRef}
       className="sm:hidden fixed inset-x-0 bottom-0 z-40 px-3 pt-1 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
     >
-      <div className="flex items-stretch gap-1.5 p-1.5 rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900/95 backdrop-blur-md shadow-elevation-3">
+      <div className="flex items-stretch gap-1 p-1.5 rounded-[1.75rem] border border-zinc-800 bg-zinc-900/95 backdrop-blur-md shadow-elevation-3">
         {primary.map((link) => {
           const active = isActive(link.href);
           const Icon = iconFor(link.href);
@@ -146,7 +146,7 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
               href={link.href}
               className={cn(
                 "relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[52px] rounded-2xl border text-[10.5px] font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.93] touch-manipulation",
-                active ? "border-transparent" : "border-zinc-800/70 bg-zinc-800/30 active:bg-zinc-800/60"
+                active ? "border-transparent" : "border-transparent active:bg-zinc-800/60"
               )}
             >
               {active && (
@@ -192,7 +192,7 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
                 "w-full h-full flex flex-col items-center justify-center gap-0.5 py-2 min-h-[52px] rounded-2xl border text-[10.5px] font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.93] touch-manipulation",
                 moreOpen || overflowActive
                   ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                  : "border-zinc-800/70 bg-zinc-800/30 text-zinc-500 active:bg-zinc-800/60"
+                  : "border-transparent text-zinc-500 active:bg-zinc-800/60"
               )}
             >
               <MoreHorizontal className="w-5 h-5" strokeWidth={2.25} />

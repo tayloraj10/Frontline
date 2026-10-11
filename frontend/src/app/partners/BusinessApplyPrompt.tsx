@@ -19,7 +19,7 @@ export default function BusinessApplyPrompt() {
   }
 
   return (
-    <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between shadow-elevation-1">
+    <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between shadow-elevation-1">
       <div>
         <p className="text-sm font-semibold text-zinc-200">Own a local business?</p>
         <p className="text-xs text-zinc-500 mt-1 max-w-md">

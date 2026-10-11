@@ -37,7 +37,7 @@ export function GuidedStepper({
 
 const STEPPER_ACCENT = {
   sky: "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 text-sky-950",
-  emerald: "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 text-white",
+  emerald: "bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 text-emerald-950",
 } as const;
 
 /**

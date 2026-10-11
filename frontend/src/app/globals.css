@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
-  --foreground: #f4f4f5;
+  --background: #17140f;
+  --foreground: #f2ecdf;
   /* Real height of the fixed mobile bottom tab bar (BottomTabBar.tsx measures and
      sets this via JS; 0px here is just the pre-hydration/no-JS/desktop fallback). */
   --bottom-nav-h: 0px;
@@ -15,13 +15,48 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display-face), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-ui), ui-monospace, Menlo, monospace;
+
+  /* Warm charcoal + cream replaces Tailwind's cool zinc scale app-wide, so every
+     existing zinc-* class picks up the new palette without per-file edits.
+     The campaign map page opts back out via .legacy-palette below. */
+  --color-zinc-50: #faf7f0;
+  --color-zinc-100: #f2ecdf;
+  --color-zinc-200: #e0d9ca;
+  --color-zinc-300: #c7bfae;
+  --color-zinc-400: #a89f90;
+  --color-zinc-500: #857d6f;
+  --color-zinc-600: #5f584c;
+  --color-zinc-700: #433d32;
+  --color-zinc-800: #2e2922;
+  --color-zinc-900: #211d17;
+  --color-zinc-950: #17140f;
+}
+
+/* The map is intentionally untouched by the UI rework: this restores Tailwind's
+   original zinc scale and body font for everything inside the campaign map page.
+   Remove it when the map gets its own pass. */
+.legacy-palette {
+  --color-zinc-50: oklch(98.5% 0 0);
+  --color-zinc-100: oklch(96.7% 0.001 286.375);
+  --color-zinc-200: oklch(92% 0.004 286.32);
+  --color-zinc-300: oklch(87.1% 0.006 286.286);
+  --color-zinc-400: oklch(70.5% 0.015 286.067);
+  --color-zinc-500: oklch(55.2% 0.016 285.938);
+  --color-zinc-600: oklch(44.2% 0.017 285.786);
+  --color-zinc-700: oklch(37% 0.013 285.805);
+  --color-zinc-800: oklch(27.4% 0.006 286.033);
+  --color-zinc-900: oklch(21% 0.006 285.885);
+  --color-zinc-950: oklch(14.1% 0.005 285.823);
+  --color-foreground: #f4f4f5;
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
 }
 
 html, body {
-  background-color: #09090b;
-  color: #f4f4f5;
+  background-color: #17140f;
+  color: #f2ecdf;
 }
 
 /* Shared modal height cap (ModalShell, ContributionPanel.tsx): keeps every

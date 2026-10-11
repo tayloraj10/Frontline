@@ -298,7 +298,7 @@ export default function EditTeamEventView({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+          <h1 className="font-display font-extrabold text-2xl tracking-tight text-zinc-100">
             {event.title}
           </h1>
         </div>
@@ -353,7 +353,7 @@ export default function EditTeamEventView({
                   <button
                     onClick={() => handleSaveTeam(t.id)}
                     disabled={teamSavingId === t.id}
-                    className="shrink-0 min-h-11 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 touch-manipulation"
+                    className="shrink-0 min-h-11 px-4 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 touch-manipulation"
                   >
                     {teamSavingId === t.id ? "Saving..." : "Save"}
                   </button>
@@ -454,7 +454,7 @@ export default function EditTeamEventView({
                 <button
                   onClick={handleAddTeam}
                   disabled={!newTeamName.trim() || addingTeam}
-                  className="shrink-0 min-h-11 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 touch-manipulation"
+                  className="shrink-0 min-h-11 px-4 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 touch-manipulation"
                 >
                   {addingTeam ? "Adding..." : "Add team"}
                 </button>
@@ -614,7 +614,7 @@ export default function EditTeamEventView({
             <button
               onClick={handleSaveDetails}
               disabled={detailsSaving}
-              className="min-h-11 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 touch-manipulation"
+              className="min-h-11 px-5 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 touch-manipulation"
             >
               {detailsSaving ? "Saving..." : "Save details"}
             </button>

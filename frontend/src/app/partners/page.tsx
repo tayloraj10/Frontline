@@ -73,10 +73,10 @@ export default async function PartnersPage() {
   );
 
   return (
-    <main className="max-w-4xl mx-auto px-6 pt-10 pb-24 sm:pb-10 w-full">
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-black text-zinc-100">Partner Perks</h1>
-        <p className="text-sm text-zinc-500 mt-1">
+        <h1 className="font-display font-extrabold text-2xl text-zinc-100">Partner Perks</h1>
+        <p className="text-sm text-zinc-400 mt-1 max-w-lg leading-relaxed">
           Redeem the points you've earned from campaigns for discounts at local partner businesses.
         </p>
       </div>

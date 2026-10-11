@@ -208,7 +208,7 @@ export default async function UserProfilePage({ params }: Props) {
     .slice(0, 5);
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 w-full">
       {/* Header */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
@@ -233,7 +233,7 @@ export default async function UserProfilePage({ params }: Props) {
             )}
           </div>
           <div className="min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100 leading-tight">
+            <h1 className="font-display font-extrabold text-2xl text-zinc-100 leading-tight">
               {profile.display_name ?? profile.username}
             </h1>
             <p className="text-sm text-zinc-500">@{profile.username}</p>

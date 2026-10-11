@@ -83,7 +83,7 @@ export default function LegalAcceptForm({
           <div className="shrink-0 px-6 py-5 border-t border-zinc-800 bg-zinc-900">
             <button
               onClick={handleAgree}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.98] text-white font-bold text-base rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+              className="w-full py-4 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.98] text-emerald-950 font-bold text-base rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {accepted[doc] ? "Accepted ✓" : `I Agree to the ${DOC_LABEL[doc]}`}
             </button>
@@ -98,7 +98,7 @@ export default function LegalAcceptForm({
       <div className="w-full max-w-sm space-y-5 bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-elevation-4">
         <div className="space-y-2 text-center">
           <p className="text-3xl">📋</p>
-          <h1 className="text-xl font-black text-zinc-100">
+          <h1 className="font-display font-extrabold text-xl  text-zinc-100">
             We've updated our {docs.map((doc) => DOC_LABEL[doc]).join(" and ")}
           </h1>
           <p className="text-zinc-400 text-sm leading-relaxed">
@@ -132,7 +132,7 @@ export default function LegalAcceptForm({
         <button
           onClick={handleAccept}
           disabled={!allAccepted || loading}
-          className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.98] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+          className="w-full py-4 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.98] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-bold text-base rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
         >
           {loading ? "Saving…" : "Continue"}
         </button>

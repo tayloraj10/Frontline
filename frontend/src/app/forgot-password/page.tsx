@@ -34,7 +34,7 @@ export default function ForgotPasswordPage() {
       <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
         <div className="w-full max-w-sm space-y-4 text-center">
           <div className="text-4xl">📬</div>
-          <h1 className="text-2xl font-bold">Check your email</h1>
+          <h1 className="font-display text-2xl font-bold">Check your email</h1>
           <p className="text-zinc-400 text-sm">
             We sent a password reset link to <span className="text-zinc-200">{email}</span>.
           </p>
@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
     <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold">Reset your password</h1>
+          <h1 className="font-display text-2xl font-bold">Reset your password</h1>
           <p className="text-zinc-400 text-sm">Enter your email and we'll send a reset link</p>
         </div>
 
@@ -74,7 +74,7 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-[background-color,transform] duration-150 text-sm touch-manipulation"
+            className="w-full py-3 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-medium rounded-xl transition-[background-color,transform] duration-150 text-sm touch-manipulation"
           >
             {loading ? "Sending…" : "Send reset link"}
           </button>

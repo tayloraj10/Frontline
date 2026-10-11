@@ -13,7 +13,7 @@ export default async function CleanupRoutePage({ params }: Props) {
   if (!route) notFound();
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
       <CleanupRouteDetail route={route} />
     </main>
   );

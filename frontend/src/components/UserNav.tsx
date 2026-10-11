@@ -82,7 +82,7 @@ export default function UserNav({
     return (
       <Link
         href={`/login?next=${pathname}`}
-        className="px-4 py-1.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-elevation-2 transition-[background-color,transform] active:scale-[0.97] duration-150"
+        className="px-4 py-1.5 text-sm font-semibold bg-emerald-400 hover:bg-emerald-300 text-emerald-950 rounded-xl shadow-elevation-2 transition-[background-color,transform] active:scale-[0.97] duration-150"
       >
         Sign In
       </Link>

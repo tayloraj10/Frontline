@@ -40,11 +40,11 @@ export default async function GroupOrganizerPage({ params }: Props) {
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-2">
         <BackButton href={`/groups/${slug}`} label={group.name} />
       </div>
-      <h1 className="text-2xl font-black text-zinc-100 mb-1 mt-6">{group.name} Organizer Dashboard</h1>
+      <h1 className="font-display font-extrabold text-2xl text-zinc-100 mb-1 mt-6">{group.name} Organizer Dashboard</h1>
       <p className="text-sm text-zinc-500 mb-6">
         Actions that need your attention as an organizer of {group.name}.
       </p>

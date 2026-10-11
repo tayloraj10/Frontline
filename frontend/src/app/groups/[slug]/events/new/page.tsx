@@ -40,7 +40,7 @@ export default async function NewCleanupEventPage({ params }: Props) {
 
   if (!campaignData) {
     return (
-      <main className="max-w-lg mx-auto px-6 py-10 w-full">
+      <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
         <div className="mb-2">
           <BackButton href={`/groups/${slug}`} label={groupData.name} />
         </div>
@@ -52,12 +52,12 @@ export default async function NewCleanupEventPage({ params }: Props) {
   }
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-2">
         <BackButton href={`/groups/${slug}`} label={groupData.name} />
       </div>
 
-      <h1 className="text-xl font-black text-zinc-100 mt-6 mb-8 flex items-center gap-2">
+      <h1 className="font-display font-extrabold text-xl text-zinc-100 mt-6 mb-8 flex items-center gap-2">
         New cleanup event
       </h1>
 

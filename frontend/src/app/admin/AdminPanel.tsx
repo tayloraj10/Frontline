@@ -3860,7 +3860,7 @@ function TeamEventsTab({ campaigns, teamEvents, setTeamEvents, currentUserId }: 
           <button
             key={e.id}
             onClick={() => openEvent(e.id)}
-            className="w-full text-left flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-elevation-1 px-4 py-3 hover:border-zinc-700 transition-colors duration-150"
+            className="w-full text-left flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 shadow-elevation-1 px-4 py-3 hover:border-zinc-700 transition-colors duration-150"
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-zinc-200 truncate">{e.title}</p>
@@ -3948,7 +3948,7 @@ export default function AdminPanel({
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6">
         <BackButton href="/" label="Back to app" className="sm:hidden mb-1 text-xs" />
-        <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
+        <h1 className="font-display font-extrabold text-2xl text-zinc-100">Admin Panel</h1>
         <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
       </div>
 

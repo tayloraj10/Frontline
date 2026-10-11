@@ -461,7 +461,7 @@ export default function CleanupEventDetail({
         </div>
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100 leading-tight break-words">{event.title}</h1>
+            <h1 className="font-display font-extrabold text-2xl  text-zinc-100 leading-tight break-words">{event.title}</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0 sm:pt-1">
             <ShareButton variant="icon" content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
@@ -656,7 +656,7 @@ export default function CleanupEventDetail({
       </div>
 
       {event.is_organizer && !isCancelled && (
-        <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3 flex-wrap rounded-2xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
           {previewAsAttendee ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-700/60 bg-sky-900/30 px-2.5 py-1 text-xs font-semibold text-sky-300">
               👁️ Previewing what attendees see
@@ -796,7 +796,7 @@ export default function CleanupEventDetail({
             )}
 
             {event.logging_mode === "organizer_total" ? (
-              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg shadow-elevation-1">
+              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900 border border-zinc-800 rounded-2xl">
                 <span aria-hidden="true">ℹ️</span>
                 The organizer will log the event totals for everyone.
               </div>
@@ -855,7 +855,7 @@ export default function CleanupEventDetail({
 
         const checkedInCount = event.rsvps.filter((r) => r.checked_in_at).length;
         const checkinSummarySection = effectiveIsOrganizer && !isCancelled && (
-          <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
             <div className="flex items-center gap-3 text-sm flex-wrap">
               <span className="font-semibold text-zinc-200">{goingCount} <span className="font-normal text-zinc-500">RSVP&apos;d yes</span></span>
               <span className="text-zinc-700">·</span>
@@ -1779,7 +1779,7 @@ function OrganizerLogButton({
             selected below — this will score 0 points unless you switch it.
           </p>
         )}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 mb-3 shadow-elevation-1">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3 space-y-2 mb-3 shadow-elevation-1">
           <p className="text-[11px] text-zinc-600">
             Bags and pounds are two ways of estimating the same haul — pick which one determines points.
             Both are still saved for the event&apos;s record.
@@ -2370,7 +2370,7 @@ function LogTeamTotalForm({
       )}
 
       {(nearbyReports.length > 0 || persistedReportsClearedCount > 0) && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3 space-y-2 shadow-elevation-1">
           {persistedReportsClearedCount > 0 && (
             <p className="text-[11px] text-zinc-500">
               🧹 {persistedReportsClearedCount} report{persistedReportsClearedCount === 1 ? "" : "s"} already
@@ -2435,7 +2435,7 @@ function LogTeamTotalForm({
         </div>
       )}
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3 space-y-2 shadow-elevation-1">
         <p className="text-[11px] text-zinc-600">
           Bags and pounds are two ways of estimating the same haul — pick which one determines points for
           this submission. Both are still saved for the event&apos;s record.

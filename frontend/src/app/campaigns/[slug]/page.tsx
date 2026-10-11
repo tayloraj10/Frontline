@@ -438,7 +438,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   };
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="legacy-palette flex flex-col flex-1">
       <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <BackButton href="/campaigns" label="Campaigns" labelClassName="hidden sm:inline" />

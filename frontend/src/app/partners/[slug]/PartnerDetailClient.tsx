@@ -68,7 +68,7 @@ export default function PartnerDetailClient({
             <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-xl object-cover shrink-0 shadow-elevation-1" />
           )}
           <div className="min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100 flex items-center gap-2 flex-wrap">
+            <h1 className="font-display font-extrabold text-2xl text-zinc-100 flex items-center gap-2 flex-wrap">
               {business.name}
               {business.adults_only && <AdultsOnlyBadge />}
             </h1>

@@ -792,7 +792,7 @@ interface StatsResponse {
 
 function StatChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex-1 min-w-[90px] rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5 text-center">
+    <div className="flex-1 min-w-[90px] rounded-2xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-center">
       <div className="text-lg font-black text-zinc-100 tabular-nums">{value}</div>
       <div className="text-[11px] text-zinc-500 uppercase tracking-wide">{label}</div>
     </div>
@@ -801,7 +801,7 @@ function StatChip({ label, value }: { label: string; value: string }) {
 
 function BagSplitChip({ smallBags, largeBags }: { smallBags: number; largeBags: number }) {
   return (
-    <div className="flex-1 min-w-[120px] rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+    <div className="flex-1 min-w-[120px] rounded-2xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
       <div className="text-[11px] text-zinc-500 uppercase tracking-wide text-center mb-1.5">Bag Split</div>
       <div className="flex items-center justify-center gap-3">
         <div className="text-center">

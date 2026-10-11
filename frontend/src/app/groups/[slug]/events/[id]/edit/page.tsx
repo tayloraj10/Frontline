@@ -36,12 +36,12 @@ export default async function EditCleanupEventPage({ params }: Props) {
   if (!event.is_organizer) redirect(`/cleanup-events/${id}`);
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-2">
         <BackButton href={`/cleanup-events/${id}`} label={event.title} />
       </div>
 
-      <h1 className="text-xl font-black text-zinc-100 mt-6 mb-8 flex items-center gap-2">
+      <h1 className="font-display font-extrabold text-xl text-zinc-100 mt-6 mb-8 flex items-center gap-2">
         Edit cleanup event
       </h1>
 

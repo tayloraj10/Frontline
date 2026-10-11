@@ -19,7 +19,7 @@ export default function OtherCampaignRow({ campaign }: { campaign: Campaign }) {
   };
 
   return (
-    <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/40 shadow-elevation-1 transition-colors hover:border-zinc-700">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 shadow-elevation-1 transition-colors hover:border-zinc-700">
       <div className="flex items-center gap-1">
         <Link
           href={`/campaigns/${campaign.slug}`}

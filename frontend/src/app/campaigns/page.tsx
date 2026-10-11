@@ -6,6 +6,7 @@ import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS, CAMPAIGN_SLUG_ORDER } from "
 import type { Database } from "@/types/database";
 import OnboardingModalClient from "@/components/OnboardingModalClient";
 import OtherCampaignRow from "@/components/OtherCampaignRow";
+import AppPromoCard from "@/components/AppPromoCard";
 import ShareButton from "@/components/ShareButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -42,10 +43,10 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
   return (
     <div
       key={campaign.id}
-      className={`group relative overflow-hidden rounded-2xl p-5 pl-[18px] shadow-elevation-1 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] active:duration-100 ${
+      className={`group relative overflow-hidden rounded-3xl p-5 pl-[18px] transition-[transform,border-color] duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] active:duration-100 ${
         featured
-          ? "border border-emerald-700/60 bg-gradient-to-br from-emerald-950/50 via-zinc-900 to-zinc-900 shadow-[0_0_0_1px_rgba(16,185,129,0.08),0_20px_50px_-15px_rgba(16,185,129,0.35)] hover:border-emerald-500/80 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.15),0_25px_60px_-15px_rgba(16,185,129,0.5)] active:border-emerald-500/80"
-          : "border border-zinc-800/80 bg-zinc-900/80 hover:border-zinc-700 hover:shadow-xl hover:shadow-black/40 active:border-zinc-700"
+          ? "border border-emerald-500/40 bg-gradient-to-br from-emerald-950/60 via-zinc-900 to-zinc-900 hover:border-emerald-400/70 active:border-emerald-400/70"
+          : "border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:border-zinc-700"
       }`}
     >
       {/* Full-card click target — sits below the content/share button (z-10) so both stay clickable. */}
@@ -112,8 +113,8 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
           </div>
 
           <h2
-            className={`font-black leading-snug text-zinc-100 group-hover:text-white ${
-              featured ? "text-2xl tracking-tight bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent" : "text-lg font-bold"
+            className={`font-display font-extrabold leading-snug text-zinc-100 text-balance ${
+              featured ? "text-2xl sm:text-3xl tracking-tight" : "text-lg"
             }`}
           >
             {campaign.title}
@@ -186,18 +187,18 @@ export default async function CampaignsPage() {
   const otherCampaigns = campaigns.filter((c) => c.slug !== "trash-war");
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 w-full">
       {user && <OnboardingModalClient campaigns={campaigns} />}
       <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-100">
           Active Campaigns
         </h1>
         <p className="text-zinc-500 mt-2 text-sm">
           {campaigns.length} mission{campaigns.length !== 1 ? "s" : ""} running —{" "}
           pick your fight.
         </p>
-        <p className="text-emerald-400/80 mt-1 text-xs font-semibold tracking-wide">
-          Join us on the frontline.
+        <p className="text-zinc-400 mt-3 text-sm max-w-xl leading-relaxed">
+          Each campaign is a shared goal. Open one, log what you do, and your points go toward its leaderboard and your group&apos;s total.
         </p>
       </div>
 
@@ -213,17 +214,17 @@ export default async function CampaignsPage() {
             <div className="mx-auto mt-6 max-w-xl">
               <CampaignCard campaign={featuredCampaign} featured />
               <div className="mt-4 flex justify-center gap-3">
-                <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
-                  <div className="text-lg font-bold text-emerald-400 tabular-nums">{campaigns.length}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">active campaigns</div>
+                <div className="flex-1 max-w-[130px] rounded-2xl bg-zinc-900 px-3 py-3 text-center">
+                  <div className="font-display text-lg font-bold text-emerald-400 tabular-nums">{campaigns.length}</div>
+                  <div className="text-[11px] text-zinc-500 mt-0.5">active campaigns</div>
                 </div>
-                <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
-                  <div className="text-lg font-bold text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">contributions logged</div>
+                <div className="flex-1 max-w-[130px] rounded-2xl bg-zinc-900 px-3 py-3 text-center">
+                  <div className="font-display text-lg font-bold text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
+                  <div className="text-[11px] text-zinc-500 mt-0.5">contributions logged</div>
                 </div>
-                <div className="flex-1 max-w-[130px] rounded-xl border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-center">
-                  <div className="text-lg font-bold text-emerald-400 tabular-nums">{userCount.toLocaleString()}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5 tracking-wide">users on the platform</div>
+                <div className="flex-1 max-w-[130px] rounded-2xl bg-zinc-900 px-3 py-3 text-center">
+                  <div className="font-display text-lg font-bold text-emerald-400 tabular-nums">{userCount.toLocaleString()}</div>
+                  <div className="text-[11px] text-zinc-500 mt-0.5">users on the platform</div>
                 </div>
               </div>
             </div>
@@ -231,7 +232,7 @@ export default async function CampaignsPage() {
 
           {otherCampaigns.length > 0 && (
             <div className={featuredCampaign ? "mt-10" : ""}>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-600">
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.12em] text-zinc-500">
                 Other campaigns
               </h2>
               <div className="grid items-start gap-2 sm:grid-cols-2">
@@ -243,6 +244,7 @@ export default async function CampaignsPage() {
           )}
         </>
       )}
+      <AppPromoCard className="mt-10 max-w-xl" />
     </main>
   );
 }
