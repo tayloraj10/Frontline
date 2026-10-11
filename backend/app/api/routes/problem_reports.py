@@ -675,7 +675,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
                 "trigger_id": str(trigger.id),
                 "geo_unit_id": geo_unit_id,
                 "event_type": trigger.event_type,
-                "title": "Trash Hotspot — Surge Needed!",
+                "title": (trigger.condition_config or {}).get("title", "Boss Event — Surge Needed!"),
                 "description": f"Reports have reached critical mass. Clean it up in {duration_hours:g} hours for {bonus_text}!",
                 "effect_config": json.dumps(effect_config),
                 "duration_hours": duration_hours,

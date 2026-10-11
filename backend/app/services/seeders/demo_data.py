@@ -719,7 +719,7 @@ class DemoDataSeeder(Seeder):
                 "cid": TRASH_WAR_ID,
                 "geo_id": chicago_geo,
                 "etype": "boss_spawn",
-                "title": "Boss Event: Downtown Chicago Hotspot",
+                "title": "Hotspot: Downtown Chicago Hotspot",
                 "desc": "A surge of illegal dumping near the Loop. Responders needed — every bag counts double.",
                 "effect": json.dumps({"type": "score_multiplier", "multiplier": 2.0, "duration_hours": 72}),
                 "ends_at": _ts(-7, 12),
@@ -729,7 +729,7 @@ class DemoDataSeeder(Seeder):
                 "cid": TRASH_WAR_ID,
                 "geo_id": houston_geo,
                 "etype": "boss_spawn",
-                "title": "Boss Event: Bayou City Cleanup",
+                "title": "Hotspot: Bayou City Cleanup",
                 "desc": "Heavy rains pushed debris into Buffalo Bayou. Emergency cleanup needed now.",
                 "effect": json.dumps({"type": "score_multiplier", "multiplier": 1.5, "duration_hours": 48}),
                 "ends_at": _ts(-5, 18),
@@ -788,7 +788,8 @@ class DemoDataSeeder(Seeder):
                         (:id, :cid, 'Trash Hotspot Trigger', 'report_count',
                          jsonb_build_object(
                              'threshold',
-                             (SELECT value FROM game_settings WHERE key = 'report_count_threshold_default')
+                             (SELECT value FROM game_settings WHERE key = 'report_count_threshold_default'),
+                             'title', 'Trash Hotspot — Surge Needed!'
                          ), 'boss_spawn',
                          '{"type": "score_multiplier", "multiplier": 2.0}'::jsonb, TRUE)
                     ON CONFLICT (id) DO UPDATE SET
