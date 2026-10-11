@@ -67,17 +67,31 @@ function ProgressBar() {
   if (phase === "idle") return null;
 
   return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-[3px]"
-      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
-    >
+    <>
       <div
-        className={`h-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)] ${
-          phase === "loading" ? "nav-progress-loading" : "nav-progress-done"
-        }`}
-      />
-    </div>
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-[3px]"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        <div
+          className={`h-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)] ${
+            phase === "loading" ? "nav-progress-loading" : "nav-progress-done"
+          }`}
+        />
+      </div>
+      {/* Phone-sized screens only: a thin bar is easy to miss there. Fades in
+          after a short delay so fast navigations never flash a spinner. */}
+      {phase === "loading" && (
+        <div
+          aria-hidden="true"
+          className="sm:hidden pointer-events-none fixed inset-0 z-[100] flex items-center justify-center"
+        >
+          <div className="nav-spinner-in rounded-full bg-zinc-900/90 border border-zinc-800 p-3 shadow-elevation-3">
+            <div className="w-7 h-7 border-[3px] border-zinc-700 border-t-emerald-400 rounded-full animate-spin" />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
