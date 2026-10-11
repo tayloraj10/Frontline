@@ -17,12 +17,15 @@ export default function Lightbox({
   onClose,
   onNavigate,
   renderActions,
+  upscale = false,
 }: {
   images: string[];
   index: number;
   onClose: () => void;
   onNavigate: (nextIndex: number) => void;
   renderActions?: (currentUrl: string, index: number) => ReactNode;
+  /** Scale small images up to fill the viewport (e.g. avatars) instead of showing them at natural size. */
+  upscale?: boolean;
 }) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -208,7 +211,7 @@ export default function Lightbox({
             touchAction: "none",
             cursor: zoomed ? "grab" : "zoom-in",
           }}
-          className="block max-h-[78vh] max-w-[90vw] object-contain rounded-lg select-none"
+          className={`block max-h-[78vh] max-w-[90vw] object-contain rounded-lg select-none ${upscale ? "w-[min(90vw,78vh)] h-[min(90vw,78vh)]" : ""}`}
         />
         {renderActions && !zoomed && <div className="flex justify-center">{renderActions(current, index)}</div>}
         {images.length > 1 && !zoomed && (

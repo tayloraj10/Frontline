@@ -18,7 +18,7 @@ export default function GroupAvatarLightbox({ imageUrl, name }: { imageUrl: stri
         <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
       </button>
       {open && (
-        <Lightbox images={[imageUrl]} index={0} onClose={() => setOpen(false)} onNavigate={() => {}} />
+        <Lightbox images={[imageUrl]} index={0} onClose={() => setOpen(false)} onNavigate={() => {}} upscale />
       )}
     </>
   );
