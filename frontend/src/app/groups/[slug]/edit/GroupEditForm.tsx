@@ -159,7 +159,7 @@ export default function GroupEditForm({ groupId, slug, name, description, social
           onChange={(e) => setNameVal(e.target.value)}
           required
           maxLength={80}
-          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 shadow-elevation-1 focus:outline-none focus:border-zinc-500 transition-colors"
+          className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 shadow-elevation-1 focus:outline-none focus:border-zinc-500 transition-colors"
         />
       </div>
 
@@ -173,7 +173,7 @@ export default function GroupEditForm({ groupId, slug, name, description, social
           rows={3}
           maxLength={400}
           placeholder="Who you are and what you're about."
-          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 shadow-elevation-1 focus:outline-none focus:border-zinc-500 transition-colors resize-none"
+          className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 shadow-elevation-1 focus:outline-none focus:border-zinc-500 transition-colors resize-none"
         />
       </div>
 
@@ -188,7 +188,7 @@ export default function GroupEditForm({ groupId, slug, name, description, social
             value={websiteVal}
             onChange={(e) => setWebsiteVal(e.target.value)}
             placeholder="https://yourorg.org"
-            className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+            className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
           />
         </div>
         {SOCIAL_PLATFORMS.map((p) => (

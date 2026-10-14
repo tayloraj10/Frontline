@@ -127,7 +127,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 shadow-elevation-2">
+      <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-zinc-800/40 bg-zinc-900/40 p-6 shadow-elevation-2">
         <div>
           <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Group logo
@@ -175,7 +175,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
             required
             maxLength={80}
             placeholder="Riverside Cleanup Crew"
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600"
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600"
           />
         </div>
 
@@ -205,7 +205,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
             rows={3}
             maxLength={400}
             placeholder="Who you are and what you're about."
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600 resize-none"
+            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none shadow-elevation-1 transition-colors text-zinc-100 placeholder:text-zinc-600 resize-none"
           />
         </div>
 
@@ -220,7 +220,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
               placeholder="https://yourorg.org"
-              className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+              className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
             />
           </div>
           {SOCIAL_PLATFORMS.map((p) => (

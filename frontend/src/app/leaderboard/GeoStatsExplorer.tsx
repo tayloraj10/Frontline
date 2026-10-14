@@ -130,7 +130,7 @@ function StatTile({ label, value, onClick }: { label: string; value: string; onC
     <button
       onClick={onClick}
       disabled={!onClick}
-      className="border border-zinc-800 rounded-lg px-3 py-2.5 text-left hover:bg-zinc-800/40 hover:border-zinc-700 transition-colors touch-manipulation disabled:hover:bg-transparent disabled:hover:border-zinc-800"
+      className="border border-zinc-800 rounded-xl px-3 py-2.5 text-left hover:bg-zinc-800/40 hover:border-zinc-700 transition-colors touch-manipulation disabled:hover:bg-transparent disabled:hover:border-zinc-800"
     >
       <div className="text-base font-bold text-zinc-100 tabular-nums">{value}</div>
       <div className="text-[11px] text-zinc-500">{label}</div>
@@ -397,7 +397,7 @@ export default function GeoStatsExplorer({
       )}
 
       {level && data?.children && dataMatchesRequest && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">{LEVEL_LABELS[level]} breakdown</span>
           </div>
@@ -466,7 +466,7 @@ export default function GeoStatsExplorer({
         </div>
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+      <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Groups</span>
         </div>
@@ -516,7 +516,7 @@ export default function GeoStatsExplorer({
         )}
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+      <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Individuals</span>
         </div>

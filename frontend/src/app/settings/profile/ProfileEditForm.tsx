@@ -137,7 +137,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
           onChange={(e) => setDisplay(e.target.value)}
           maxLength={60}
           placeholder={username}
-          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors shadow-elevation-1"
+          className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors shadow-elevation-1"
         />
         <p className="mt-1 text-xs text-zinc-600">Shown on your profile and leaderboards. Defaults to your username.</p>
       </div>
@@ -152,7 +152,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
           rows={3}
           maxLength={200}
           placeholder="Tell the community something about yourself…"
-          className="w-full px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors resize-none shadow-elevation-1"
+          className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors resize-none shadow-elevation-1"
         />
         <p className="mt-1 text-xs text-zinc-600">{bioVal.length}/200</p>
       </div>

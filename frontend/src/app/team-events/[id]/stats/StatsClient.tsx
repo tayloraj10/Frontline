@@ -31,7 +31,7 @@ export default function StatsClient({
   return (
     <div className="space-y-6">
       {stats.map((team) => (
-        <div key={team.team_id} className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+        <div key={team.team_id} className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
               {team.color && (

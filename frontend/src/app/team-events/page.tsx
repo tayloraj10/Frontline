@@ -80,7 +80,7 @@ function TeamEventCard({ event }: { event: TeamEventListItem }) {
   return (
     <Link
       href={`/team-events/${event.id}`}
-      className="flex items-center gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.99] touch-manipulation"
+      className="flex items-center gap-4 rounded-2xl border border-zinc-800/40 bg-zinc-900/60 p-4 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.99] touch-manipulation"
     >
       {event.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element

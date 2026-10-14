@@ -74,7 +74,7 @@ function PartnerCard({
               <div key={offer.id} className="space-y-1">
                 <label
                   htmlFor={`event-offer-${offer.id}`}
-                  className={`flex items-start gap-2 rounded-lg px-2 py-1.5 cursor-pointer border transition-colors duration-150 ${checked ? "border-amber-500 bg-amber-950/30" : "border-dashed border-zinc-700 hover:border-amber-700/60"
+                  className={`flex items-start gap-2 rounded-xl px-2 py-1.5 cursor-pointer border transition-colors duration-150 ${checked ? "border-amber-500 bg-amber-950/30" : "border-dashed border-zinc-700 hover:border-amber-700/60"
                     }`}
                 >
                   <input
@@ -174,7 +174,7 @@ export default function NearbyPartnersPanel({
       )}
 
       {otherPartners.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+        <div className="space-y-2 rounded-lg border border-zinc-800/40 bg-zinc-900/50 p-3">
           <div className="space-y-0.5">
             <p className="text-xs font-medium text-zinc-300">Partners near this cleanup</p>
             <p className="text-[11px] text-zinc-600">

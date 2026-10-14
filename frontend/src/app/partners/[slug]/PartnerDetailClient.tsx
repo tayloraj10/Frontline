@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import SocialIcon from "@/components/ui/SocialIcon";
 import ShareButton from "@/components/ShareButton";
 import { OfferCard, type BrowseBusiness, type BrowseOffer } from "../PartnersBrowseClient";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
@@ -119,14 +120,15 @@ export default function PartnerDetailClient({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-4 text-sm">
+      <div className="flex flex-wrap gap-2 text-sm">
         {business.website_url && (
           <a
             href={business.website_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300"
+            className="inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-emerald-500/10 text-emerald-400 font-medium transition-[background-color,color,transform] duration-150 hover:bg-emerald-500/15 active:bg-emerald-500/20 active:scale-[0.97] touch-manipulation"
           >
+            <SocialIcon platform="website" className="w-4 h-4" />
             Website
           </a>
         )}
@@ -136,8 +138,9 @@ export default function PartnerDetailClient({
             href={url as string}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-400 transition-colors duration-150 hover:text-emerald-300 active:text-emerald-300 capitalize"
+            className="inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-emerald-500/10 text-emerald-400 font-medium transition-[background-color,color,transform] duration-150 hover:bg-emerald-500/15 active:bg-emerald-500/20 active:scale-[0.97] touch-manipulation capitalize"
           >
+            <SocialIcon platform={platform} className="w-4 h-4" />
             {platform}
           </a>
         ))}
@@ -151,7 +154,7 @@ export default function PartnerDetailClient({
               <h3 className="text-sm font-semibold text-zinc-200">{location.label ?? "Location"}</h3>
             )}
             <MiniMapPreview lat={location.lat} lng={location.lng} interactive heightClassName="h-[260px]" />
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2">
               <a
                 href={
                   location.google_maps_url ??
@@ -159,7 +162,7 @@ export default function PartnerDetailClient({
                 }
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
+                className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-sky-500/10 text-sm font-medium text-sky-400 transition-[background-color,color,transform] duration-150 hover:bg-sky-500/15 active:bg-sky-500/20 active:scale-[0.97] touch-manipulation"
               >
                 <span aria-hidden="true">🧭</span>
                 Get directions
@@ -169,7 +172,7 @@ export default function PartnerDetailClient({
                 <Link
                   key={c.slug}
                   href={`/campaigns/${c.slug}?lat=${location.lat}&lng=${location.lng}`}
-                  className="inline-flex items-center gap-1.5 text-sm text-sky-400 transition-colors duration-150 hover:text-sky-300 active:text-sky-300"
+                  className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-sky-500/10 text-sm font-medium text-sky-400 transition-[background-color,color,transform] duration-150 hover:bg-sky-500/15 active:bg-sky-500/20 active:scale-[0.97] touch-manipulation"
                 >
                   <span aria-hidden="true">📍</span>
                   {(business.campaigns?.length ?? 0) > 1 ? `Show on map (${c.title})` : "Show on map"}

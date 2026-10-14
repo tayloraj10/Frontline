@@ -1,3 +1,4 @@
+import LegalModalLink from "@/components/legal/LegalModalLink";
 import Link from "next/link";
 import AppPromoCard from "@/components/AppPromoCard";
 import { createClient } from "@/lib/supabase/server";
@@ -20,23 +21,21 @@ export default async function HomePage() {
     isBusinessOnly = profile?.is_business_only ?? false;
   }
 
-  const [{ count: campaignCount }, { count: contribCount }, { count: userCount }] = await Promise.all([
-    supabase.schema("public").from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active"),
+  const [{ count: contribCount }, { count: userCount }] = await Promise.all([
     supabase.from("contributions").select("*", { count: "exact", head: true }),
     supabase.schema("public").from("profiles").select("*", { count: "exact", head: true }),
   ]);
 
   const stats = [
-    { value: campaignCount ?? 0, label: "active campaigns" },
-    { value: (contribCount ?? 0).toLocaleString(), label: "contributions logged" },
-    { value: (userCount ?? 0).toLocaleString(), label: "users on the frontline" },
+    { value: (contribCount ?? 0).toLocaleString(), label: "contributions" },
+    { value: (userCount ?? 0).toLocaleString(), label: "users" },
   ];
 
   const primaryHref = isBusinessOnly ? "/partners/dashboard" : "/campaigns/trash-war";
 
   const steps = [
     { title: "Log what you clean", body: "Take a photo and add a bag count or weight." },
-    { title: "Claim territory", body: "Your block turns green on the map. Groups can claim together." },
+    { title: "Earn points", body: "Every bag counts toward your total and your group's. Join an event to meet people and earn more." },
     { title: "Spend your points", body: "Trade them for perks at local partner shops." },
   ];
 
@@ -45,17 +44,13 @@ export default async function HomePage() {
       {user && <HomeAutoRedirect href={primaryHref} />}
 
       <div className="flex flex-col gap-6">
-        <div className="inline-flex self-start items-center gap-2 px-3 py-1 bg-emerald-500/15 rounded-full text-emerald-400 text-xs font-semibold">
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-          {campaignCount ?? 0} campaign{campaignCount !== 1 ? "s" : ""} live now
-        </div>
         <h1 className="font-display text-5xl sm:text-6xl font-extrabold tracking-tight leading-[1.02] text-balance">
-          Clean your block.
+          Clean your neighborhood.
           <br />
-          <span className="text-emerald-400">Claim the map.</span>
+          <span className="text-emerald-400">Earn rewards for it.</span>
         </h1>
         <p className="text-zinc-400 text-base sm:text-lg max-w-md leading-relaxed">
-          Frontline turns real cleanups into a live game. Pick up trash, log it, and watch your neighborhood light up.
+          Join cleanup events or head out on your own. Log what you pick up, earn points, and spend them at local partner shops. Groups get tools to run events and show their impact.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 max-w-md">
           <Link
@@ -64,18 +59,20 @@ export default async function HomePage() {
           >
             {user ? (isBusinessOnly ? "Go to dashboard" : "Open the map") : "Create free account"}
           </Link>
-          <Link
-            href={user ? "/campaigns" : "/login"}
-            className="inline-flex items-center justify-center min-h-12 px-6 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:scale-[0.97] font-semibold rounded-2xl transition-[background-color,transform] duration-150 touch-manipulation sm:flex-1"
-          >
-            {user ? "Browse campaigns" : "Sign in"}
-          </Link>
+          {!user && (
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center min-h-12 px-6 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:scale-[0.97] font-semibold rounded-2xl transition-[background-color,transform] duration-150 touch-manipulation sm:flex-1"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
-        <div className="flex gap-x-8 gap-y-3 flex-wrap">
+        <div className="grid max-w-md grid-cols-2 divide-x divide-zinc-800 rounded-[20px] bg-zinc-900 py-4 text-center">
           {stats.map((st) => (
-            <div key={st.label}>
-              <div className="font-display text-2xl font-bold text-zinc-100 tabular-nums">{st.value}</div>
-              <div className="text-xs text-zinc-500">{st.label}</div>
+            <div key={st.label} className="px-4">
+              <div className="font-display text-3xl font-extrabold tracking-tight text-emerald-400 tabular-nums">{st.value}</div>
+              <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">{st.label}</div>
             </div>
           ))}
         </div>
@@ -100,9 +97,9 @@ export default async function HomePage() {
         </ol>
         <AppPromoCard className="!bg-zinc-800/60" />
         <div className="flex gap-4 text-xs text-zinc-500 pt-2 border-t border-zinc-800">
-          <Link href="/how-points-work" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">How points work</Link>
-          <Link href="/legal/terms" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Terms</Link>
-          <Link href="/legal/privacy" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Privacy</Link>
+          <LegalModalLink doc="points" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">How points work</LegalModalLink>
+          <LegalModalLink doc="terms" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Terms</LegalModalLink>
+          <LegalModalLink doc="privacy" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Privacy</LegalModalLink>
         </div>
       </section>
     </main>

@@ -81,7 +81,7 @@ export default function CohostGroupPicker({
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-900 border border-zinc-700 text-left touch-manipulation"
+        className="flex w-full items-center justify-between gap-2 min-h-11 px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-left touch-manipulation"
       >
         <span className="flex items-center gap-2 text-sm text-zinc-300">
           Co-hosting groups
@@ -121,12 +121,12 @@ export default function CohostGroupPicker({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search all groups..."
-            className="w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
+            className="w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
           />
           {showingTopActiveOnly && (
             <p className="px-1 text-[11px] text-zinc-600">Showing the most active groups — search to find others.</p>
           )}
-          <div className="max-h-52 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-lg divide-y divide-zinc-800">
+          <div className="max-h-52 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-xl divide-y divide-zinc-800">
             {options.length === 0 && (
               <p className="px-3 py-3 text-xs text-zinc-600">No groups found.</p>
             )}

@@ -52,7 +52,7 @@ export default function GroupMembershipButton({ groupId, userId, isMember, isOnl
         <button
           onClick={() => setConfirmingLeave(true)}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-zinc-700 bg-zinc-900/40 hover:bg-red-950/30 hover:border-red-700 active:border-red-700 active:scale-[0.96] disabled:active:scale-100 text-zinc-400 hover:text-red-400 active:text-red-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,color,transform] duration-150 disabled:opacity-40 touch-manipulation"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-zinc-700 bg-zinc-900/40 hover:bg-red-950/30 hover:border-red-700 active:border-red-700 active:scale-[0.96] disabled:active:scale-100 text-zinc-400 hover:text-red-400 active:text-red-400 rounded-xl shadow-elevation-1 transition-[background-color,border-color,color,transform] duration-150 disabled:opacity-40 touch-manipulation"
         >
           <LogOut className="w-3.5 h-3.5" />
           {loading ? "Leaving…" : "Leave Group"}

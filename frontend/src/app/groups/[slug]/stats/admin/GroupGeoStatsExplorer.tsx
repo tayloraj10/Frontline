@@ -301,7 +301,7 @@ export default function GroupGeoStatsExplorer({
       )}
 
       {level && data?.children && dataMatchesRequest && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">{LEVEL_LABELS[level]} breakdown</span>
           </div>
@@ -356,7 +356,7 @@ export default function GroupGeoStatsExplorer({
         </div>
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+      <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Members</span>
         </div>

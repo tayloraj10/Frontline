@@ -65,7 +65,7 @@ export default function LegalAcceptForm({
 
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm px-6 py-10">
-        <div className="w-full max-w-2xl max-h-full flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-4">
+        <div className="w-full max-w-2xl max-h-full flex flex-col bg-zinc-900 rounded-[20px] overflow-hidden shadow-elevation-4">
           <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-800 shrink-0">
             <BackButton onClick={() => setView("list")} label="Back" className="-ml-2" />
             <div>
@@ -95,7 +95,7 @@ export default function LegalAcceptForm({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm px-6">
-      <div className="w-full max-w-sm space-y-5 bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-elevation-4">
+      <div className="w-full max-w-sm space-y-5 bg-zinc-900 rounded-[20px] p-6 shadow-elevation-4">
         <div className="space-y-2 text-center">
           <p className="text-3xl">📋</p>
           <h1 className="font-display font-extrabold text-xl  text-zinc-100">

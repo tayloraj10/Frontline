@@ -9,6 +9,8 @@ import ContributionPanel from "@/components/contributions/ContributionPanel";
 import CreateTimedEventButton from "@/components/events/CreateTimedEventButton";
 import AdminDialog from "@/components/map/AdminDialog";
 import BottomSheet from "@/components/ui/BottomSheet";
+import { MapBackButton, MapOverflowMenu } from "@/components/map/MapChrome";
+import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
@@ -65,7 +67,11 @@ export function CampaignStatBar({
   initialSmallBags,
   initialLargeBags,
   initialPounds,
+  variant = "bar",
+  onChipClick,
 }: {
+  variant?: "bar" | "chip";
+  onChipClick?: () => void;
   campaignId: string;
   campaignType: string | null;
   eventsCount: number;
@@ -146,6 +152,27 @@ export function CampaignStatBar({
   const isTerritory =
     campaignType !== "collage" && campaignType !== "choropleth" && campaignType !== "heatmap" && campaignType !== "hex_bloom";
   const totalBagCount = smallBags + largeBags;
+
+  if (variant === "chip") {
+    const headline =
+      campaignType === "collage" ? `${displayStatValue(contributionCount)} photos`
+      : campaignType === "choropleth" ? `${displayStatValue(totalBags)} registrations`
+      : campaignType === "heatmap" ? `${displayStatValue(contributionCount)} unfollows`
+      : campaignType === "hex_bloom" ? `${displayStatValue(totalBags)} bloom`
+      : `${displayStatValue(totalBagCount)} bags`;
+    return (
+      <button
+        type="button"
+        onClick={onChipClick}
+        className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-zinc-900/90 backdrop-blur-md shadow-elevation-3 text-xs font-semibold text-zinc-100 tabular-nums transition-transform duration-150 active:scale-[0.96] touch-manipulation"
+      >
+        <span aria-hidden="true">📊</span>
+        {headline}
+        <span className="text-zinc-500">·</span>
+        <span className="text-zinc-400 font-medium">{displayStatValue(contributionCount)} logged</span>
+      </button>
+    );
+  }
 
   return (
     <div className="border-b border-zinc-800/60 bg-zinc-950/60 shadow-elevation-1">
@@ -327,6 +354,8 @@ interface Props {
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   bagMetrics?: { small: number; large: number; pounds: number };
   contributionCount?: number;
+  totalBags?: number;
+  tractsCount?: number;
 }
 
 interface NewContribution {
@@ -885,6 +914,8 @@ export default function CampaignPageClient({
   focusCoords,
   bagMetrics = { small: 0, large: 0, pounds: 0 },
   contributionCount = 0,
+  totalBags = 0,
+  tractsCount = 0,
 }: Props) {
   const [hexEventsExpanded, setHexEventsExpanded] = useState(false);
   const [pinPickerActive, setPinPickerActive] = useState(false);
@@ -1259,6 +1290,7 @@ export default function CampaignPageClient({
     setShowTimedEventModal(true);
   };
 
+  const typeCfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type];
   const isHexBloom = campaign.campaign_type === "hex_bloom";
   const showEventsChip = activeEventsList.length > 0 && !isHexBloom;
   const statsButtonActive = !openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive;
@@ -1318,16 +1350,28 @@ export default function CampaignPageClient({
         }}
         onUserLocationError={setLocationError}
         onGeolocateTrigger={(trigger) => { triggerGeolocateRef.current = trigger; }}
-        onMobileStatsClick={
-          statsButtonActive && (showEventsChip || (campaign.geo_unit?.includes("zip") ?? false))
-            ? () => togglePanel("stats")
-            : undefined
+        statsChip={
+          statsButtonActive ? (
+            <CampaignStatBar
+              variant="chip"
+              onChipClick={() => togglePanel("stats")}
+              campaignId={campaign.id}
+              campaignType={campaign.campaign_type}
+              eventsCount={activeEventsList.length}
+              initialTotalBags={totalBags ?? 0}
+              initialTractsCount={tractsCount ?? 0}
+              initialContributionCount={contributionCount}
+              initialSmallBags={bagMetrics.small}
+              initialLargeBags={bagMetrics.large}
+              initialPounds={bagMetrics.pounds}
+            />
+          ) : undefined
         }
       />
 
       {/* Side panel — desktop: fixed right column. */}
       {openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive && (
-        <div className="hidden sm:flex absolute inset-y-0 right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-l border-zinc-800 flex-col z-20 overflow-hidden shadow-elevation-4">
+        <div className="hidden sm:flex absolute right-3 top-[calc(var(--map-top,0px)+4.25rem)] bottom-3 sm:w-80 bg-zinc-950/95 backdrop-blur-md rounded-[20px] flex-col z-20 overflow-hidden shadow-elevation-4">
           <PanelTabs openPanel={openPanel} onSelect={setOpenPanel} userId={userId} onClose={() => setOpenPanel(null)} />
           <div className="flex-1 overflow-y-auto">
             <PanelContent
@@ -1384,33 +1428,15 @@ export default function CampaignPageClient({
         </BottomSheet>
       </div>
 
-      {/* Activity button — opens the Leaderboard/Activity/Mine panel. Hidden when panel open. */}
-      {statsButtonActive && (
-        <>
-          {/* Desktop: always top-right, clear of native map controls */}
-          <div className="hidden sm:block absolute top-3 right-[3.25rem] z-20">
-            <button
-              onClick={() => togglePanel("stats")}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-elevation-2 bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.97] touch-manipulation"
-            >
-              📊 Stats
-            </button>
-          </div>
-          {/* Mobile: next to the Events chip if it's showing (handled inside CampaignMap), otherwise
-              upper-left — stacked above the World Bloom widget for hex_bloom campaigns via the
-              shared flex column below, so it never overlaps it. */}
-          {!showEventsChip && !isHexBloom && !(campaign.geo_unit?.includes("zip") ?? false) && (
-            <div className="sm:hidden absolute left-4 z-20 top-4">
-              <button
-                onClick={() => togglePanel("stats")}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.97] touch-manipulation"
-              >
-                📊 Stats
-              </button>
-            </div>
-          )}
-        </>
-      )}
+      <MapBackButton hidden={pinPickerActive || areaPickerActive || routePickerActive} />
+      <MapOverflowMenu
+        slug={campaign.slug}
+        title={campaign.title}
+        description={campaign.description}
+        typeLabel={typeCfg?.label}
+        typeIcon={typeCfg?.icon}
+        hidden={pinPickerActive || areaPickerActive || routePickerActive}
+      />
 
       {isAdmin && !pinPickerActive && (
         <>
@@ -1474,7 +1500,7 @@ export default function CampaignPageClient({
       )}
 
       {isHexBloom && !pinPickerActive && !areaPickerActive && (
-        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+        <div className="absolute left-[3.75rem] top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] z-10 flex flex-col gap-2">
           {activeEventsList.length > 0 && (
             <button
               onClick={() => setHexEventsExpanded((e) => !e)}
@@ -1524,13 +1550,17 @@ export default function CampaignPageClient({
               </div>
             </div>
             {statsButtonActive && (
-              <div className="sm:hidden z-20 shrink-0">
-                <button
-                  onClick={() => togglePanel("stats")}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.97] touch-manipulation"
-                >
-                  📊 Stats
-                </button>
+              <div className="z-20 shrink-0">
+                <CampaignStatBar
+                  variant="chip"
+                  onChipClick={() => togglePanel("stats")}
+                  campaignId={campaign.id}
+                  campaignType={campaign.campaign_type}
+                  eventsCount={activeEventsList.length}
+                  initialTotalBags={totalBags ?? 0}
+                  initialTractsCount={tractsCount ?? 0}
+                  initialContributionCount={contributionCount}
+                />
               </div>
             )}
           </div>
@@ -1538,7 +1568,7 @@ export default function CampaignPageClient({
       )}
 
       {!pinPickerActive && !areaPickerActive && nearbyCleanupEvent && (
-        <div className="absolute top-4 left-4 right-16 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm flex flex-col gap-2">
+        <div className="absolute top-[4.5rem] left-3 right-3 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm flex flex-col gap-2">
           {nearbyCleanupEvent && (
             <motion.div
               initial={{ opacity: 0, y: -8, scale: 0.98 }}

@@ -132,7 +132,7 @@ export default function ReviewClient({
           const images = Array.from(new Set([s.photo_url, ...(s.image_urls ?? [])].filter((u): u is string => Boolean(u))));
 
           return (
-            <div key={s.id} className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+            <div key={s.id} className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium text-zinc-100">{submitterLabel}</p>
@@ -151,7 +151,7 @@ export default function ReviewClient({
                     <button
                       onClick={() => startEdit(s)}
                       disabled={isSaving}
-                      className="px-2.5 py-1.5 rounded-lg border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
+                      className="px-2.5 py-1.5 rounded-xl border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
                     >
                       Edit
                     </button>
@@ -224,7 +224,7 @@ export default function ReviewClient({
                     <button
                       onClick={() => setEditingId(null)}
                       disabled={isSaving}
-                      className="px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
+                      className="px-3 py-1.5 rounded-xl border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
                     >
                       Cancel
                     </button>
@@ -265,7 +265,7 @@ export default function ReviewClient({
                   <button
                     onClick={() => setConfirmDeleteId(null)}
                     disabled={isSaving}
-                    className="px-2.5 py-1 rounded-lg border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
+                    className="px-2.5 py-1 rounded-xl border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
                   >
                     Cancel
                   </button>
@@ -282,7 +282,7 @@ export default function ReviewClient({
           onClick={() => setMapSubmission(null)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 w-full max-w-md space-y-3"
+            className="bg-zinc-900 rounded-[20px] p-4 w-full max-w-md space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

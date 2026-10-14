@@ -6,9 +6,10 @@ import { X } from "lucide-react";
 const DISMISS_KEY = "frontline:app-promo-dismissed-at";
 const DISMISS_MS = 30 * 24 * 60 * 60 * 1000;
 
-const APP_STORE_URL = process.env.NEXT_PUBLIC_APP_STORE_URL;
-const PLAY_STORE_URL =
-  process.env.NEXT_PUBLIC_PLAY_STORE_URL ?? "https://play.google.com/store/apps/details?id=com.frontlinemaps.app";
+const APP_STORE_URL =
+  process.env.NEXT_PUBLIC_APP_STORE_URL ?? "https://apps.apple.com/ca/app/frontline-maps/id6799487822";
+// Android isn't published yet: set NEXT_PUBLIC_PLAY_STORE_URL to show its button.
+const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL;
 
 function StoreButton({ href, kicker, label }: { href: string; kicker: string; label: string }) {
   return (
@@ -29,6 +30,7 @@ export default function AppPromoCard({ className = "" }: { className?: string })
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    if (!APP_STORE_URL && !PLAY_STORE_URL) return;
     if (navigator.userAgent.includes("FrontlineNativeApp")) return;
     try {
       const at = Number(localStorage.getItem(DISMISS_KEY) ?? 0);
@@ -55,7 +57,7 @@ export default function AppPromoCard({ className = "" }: { className?: string })
   return (
     <aside
       aria-label="Get the Frontline app"
-      className={`relative rounded-3xl bg-zinc-900 border border-zinc-800 p-5 pr-12 flex flex-col gap-4 ${className}`}
+      className={`relative rounded-[24px] bg-zinc-900 p-5 pr-12 flex flex-col gap-4 ${className}`}
     >
       <button
         type="button"
@@ -68,12 +70,12 @@ export default function AppPromoCard({ className = "" }: { className?: string })
       <div>
         <h2 className="font-display text-lg font-extrabold text-zinc-100">Get the Frontline app</h2>
         <p className="text-sm text-zinc-400 mt-1 max-w-md">
-          Log cleanups from the field with your phone camera and GPS, and get alerts when your block is claimed.
+          Log cleanups from the field with your phone camera and GPS, and see your points and rewards at a glance.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
         {APP_STORE_URL && <StoreButton href={APP_STORE_URL} kicker="Download on the" label="App Store" />}
-        <StoreButton href={PLAY_STORE_URL} kicker="Get it on" label="Google Play" />
+        {PLAY_STORE_URL && <StoreButton href={PLAY_STORE_URL} kicker="Get it on" label="Google Play" />}
       </div>
     </aside>
   );

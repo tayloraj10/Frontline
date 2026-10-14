@@ -109,31 +109,31 @@ export default async function AppHeader() {
   return (
     <>
     <HeaderHeightObserver />
-    <header className="pt-safe border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50 shadow-elevation-2">
-      <div className="max-w-[100rem] mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
+    <header className="pt-safe bg-zinc-950/85 backdrop-blur-md sticky top-0 z-50 shadow-[0_1px_0_0_var(--ink-800)]">
+      <div className="max-w-[100rem] mx-auto px-3 sm:px-6 lg:px-8 h-14 lg:h-16 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
           <Link
             href="/"
             className="flex items-center gap-2 font-display font-extrabold text-lg tracking-tight min-w-0 active:scale-[0.97] transition-transform duration-150"
           >
-            <span className="text-emerald-400 text-lg shrink-0">⚑</span>
+            <span className="grid place-items-center w-7 h-7 rounded-[10px] bg-emerald-400 text-emerald-950 text-sm shrink-0">⚑</span>
             <span className="text-zinc-100 truncate">Frontline</span>
-            <span className="text-[10px] font-semibold text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 tracking-wider shrink-0">
+            <span className="hidden md:inline text-[10px] font-semibold text-zinc-500 bg-zinc-800/70 rounded-full px-2 py-0.5 tracking-wider shrink-0">
               {appVersion}
             </span>
             {process.env.NODE_ENV !== "production" && (
-              <span className="text-[10px] font-semibold text-rose-400/80 bg-rose-500/10 border border-rose-500/20 rounded px-1.5 py-0.5 tracking-wider shrink-0">
+              <span className="hidden md:inline text-[10px] font-semibold text-rose-400/80 bg-rose-500/10 rounded-full px-2 py-0.5 tracking-wider shrink-0">
                 DEV
               </span>
             )}
           </Link>
           {/* Full inline nav only once there's real room for it (laptop-and-under falls back to the hamburger below). */}
-          <nav className="hidden xl:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg whitespace-nowrap shrink-0 transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/60 active:bg-zinc-800/60 active:scale-[0.97] touch-manipulation ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg whitespace-nowrap shrink-0 transition-[background-color,color,transform] duration-150 hover:bg-zinc-800/70 active:bg-zinc-800/70 active:scale-[0.97] touch-manipulation font-medium ${
                   link.highlight
                     ? "text-amber-500 hover:text-amber-400 active:text-amber-400"
                     : "text-zinc-400 hover:text-zinc-100 active:text-zinc-100"
@@ -149,7 +149,7 @@ export default async function AppHeader() {
               </Link>
             ))}
           </nav>
-          <div className="hidden sm:flex xl:hidden">
+          <div className="hidden sm:flex lg:hidden">
             <DesktopNavMenu links={navLinks} />
           </div>
         </div>

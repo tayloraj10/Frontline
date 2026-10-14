@@ -48,7 +48,7 @@ export default function ResetPasswordPage() {
               required
               minLength={8}
               autoFocus
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -62,7 +62,7 @@ export default function ResetPasswordPage() {
               onChange={(e) => setConfirm(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="••••••••"
             />
           </div>

@@ -463,7 +463,8 @@ interface Props {
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
-  onMobileStatsClick?: () => void;
+  /** Compact stats chip rendered in the top-left stack; opens the stats sheet. */
+  statsChip?: React.ReactNode;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
   onGeolocateTrigger?: (trigger: () => boolean) => void;
@@ -1886,7 +1887,7 @@ export default function CampaignMap({
   eventGeoUnitIds,
   partnerBusinesses,
   cleanupEvents,
-  onMobileStatsClick,
+  statsChip,
   onUserLocationChange,
   onUserLocationError,
   onGeolocateTrigger,
@@ -5750,28 +5751,67 @@ export default function CampaignMap({
         </>
       )}
 
-      {!pinPickerActive && !areaPickerActive && !routePickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
-        <div className="absolute top-4 left-4 z-10 max-w-[calc(100vw-2rem)] sm:max-w-xs flex flex-col gap-2">
-          {activeEvents.length > 0 && (
-            <div className="flex items-center gap-1.5 sm:hidden">
+      {!pinPickerActive && !areaPickerActive && !routePickerActive && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch || statsChip) && (
+        <div className="absolute z-10 left-[3.75rem] top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] w-[min(19rem,calc(100vw-7.75rem))] flex flex-col gap-2 items-start">
+          {(supportsZipSearch || supportsUkPostcodeSearch) && (
+            <form
+              onSubmit={handleGeoSearch}
+              className={`flex w-full items-center h-11 pl-4 pr-1 rounded-full bg-zinc-900/90 backdrop-blur-md shadow-elevation-3 ${geoSearchError ? "ring-1 ring-red-500/70" : ""}`}
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0 text-zinc-500">
+                <circle cx="7" cy="7" r="4.75" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                inputMode={supportsZipSearch && !supportsUkPostcodeSearch ? "numeric" : "text"}
+                maxLength={5}
+                aria-label="Go to location"
+                placeholder={
+                  supportsZipSearch && supportsUkPostcodeSearch
+                    ? "ZIP or postcode"
+                    : supportsZipSearch
+                      ? "Search ZIP code"
+                      : "Search postcode"
+                }
+                value={geoSearch}
+                onChange={(e) =>
+                  setGeoSearch(
+                    supportsZipSearch && !supportsUkPostcodeSearch
+                      ? e.target.value.replace(/\D/g, "")
+                      : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
+                  )
+                }
+                className="min-w-0 flex-1 bg-transparent px-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
+              />
               <button
-                onClick={() => setEventsExpanded((e) => !e)}
-                className="self-start px-3 py-1.5 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm shadow-glow-amber text-red-300 text-xs font-semibold transition-transform duration-150 active:scale-[0.96] touch-manipulation"
+                type="submit"
+                disabled={!geoSearch}
+                className="h-9 px-4 rounded-full bg-emerald-400 text-emerald-950 text-xs font-bold transition-[opacity,transform] duration-150 active:scale-[0.95] disabled:opacity-0 disabled:pointer-events-none touch-manipulation"
               >
-                ⚡ {activeEvents.length} Event{activeEvents.length > 1 ? "s" : ""} {eventsExpanded ? "▲" : "▼"}
+                Go
               </button>
-              {onMobileStatsClick && (
+            </form>
+          )}
+          {geoSearchError && <p className="text-xs text-red-300 px-3 py-1 rounded-full bg-zinc-900/90 backdrop-blur-md">{geoSearchError}</p>}
+          {(statsChip || activeEvents.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {statsChip}
+              {activeEvents.length > 0 && (
                 <button
-                  onClick={onMobileStatsClick}
-                  className="self-start px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-elevation-2 transition-transform duration-150 active:scale-[0.96] touch-manipulation"
+                  onClick={() => setEventsExpanded((e) => !e)}
+                  aria-expanded={eventsExpanded}
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-red-950/90 backdrop-blur-md shadow-elevation-3 text-red-200 text-xs font-semibold transition-transform duration-150 active:scale-[0.96] touch-manipulation"
                 >
-                  📊 Stats
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" aria-hidden="true" />
+                  {activeEvents.length} hotspot{activeEvents.length > 1 ? "s" : ""}
+                  <span className="text-red-300/70">{eventsExpanded ? "▲" : "▼"}</span>
                 </button>
               )}
             </div>
           )}
-          {activeEvents.length > 0 && (
-            <div className={`${eventsExpanded ? "flex" : "hidden"} sm:flex flex-col gap-2 max-h-64 overflow-y-auto pr-0.5`}>
+          {activeEvents.length > 0 && eventsExpanded && (
+            <div className="flex w-full flex-col gap-2 max-h-[40dvh] overflow-y-auto pr-0.5">
               {activeEvents.map((event) => {
                 const primaryId = eventGeoUnitIdsRef.current[event.id]?.[0] ?? event.geo_unit_id ?? "";
                 const centroid = eventCentroidsRef.current[primaryId];
@@ -5783,58 +5823,17 @@ export default function CampaignMap({
                         map.current.flyTo({ center: [centroid.lng, centroid.lat], zoom: 13, duration: 800 });
                       }
                     }}
-                    className={`px-3 py-2 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm shadow-elevation-1 transition-[background-color,transform] duration-150${centroid ? " cursor-pointer hover:bg-red-900/90 active:scale-[0.97] touch-manipulation" : ""}`}
+                    className={`px-4 py-2.5 bg-red-950/90 rounded-2xl backdrop-blur-md shadow-elevation-3 transition-[background-color,transform] duration-150${centroid ? " cursor-pointer hover:bg-red-900/90 active:scale-[0.97] touch-manipulation" : ""}`}
                   >
-                    <p className="text-red-300 text-xs font-semibold">{event.title}</p>
+                    <p className="text-red-200 text-xs font-semibold">{event.title}</p>
                     {event.description && (
-                      <p className="text-red-400 text-xs mt-0.5">{event.description}</p>
+                      <p className="text-red-300/80 text-xs mt-0.5">{event.description}</p>
                     )}
                   </div>
                 );
               })}
             </div>
           )}
-          {activeEvents.length === 0 && onMobileStatsClick && (
-            <button
-              onClick={onMobileStatsClick}
-              className="self-start sm:hidden px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-elevation-2 transition-transform duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              📊 Stats
-            </button>
-          )}
-          {(supportsZipSearch || supportsUkPostcodeSearch) && (
-            <form onSubmit={handleGeoSearch} className="flex gap-1">
-              <input
-                type="text"
-                inputMode={supportsZipSearch && !supportsUkPostcodeSearch ? "numeric" : "text"}
-                maxLength={5}
-                placeholder={
-                  supportsZipSearch && supportsUkPostcodeSearch
-                    ? "Go to ZIP or postcode"
-                    : supportsZipSearch
-                      ? "Go to ZIP"
-                      : "Go to postcode"
-                }
-                value={geoSearch}
-                onChange={(e) =>
-                  setGeoSearch(
-                    supportsZipSearch && !supportsUkPostcodeSearch
-                      ? e.target.value.replace(/\D/g, "")
-                      : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
-                  )
-                }
-                className={`w-[8.5rem] px-2 py-1.5 text-xs bg-zinc-900/90 border rounded shadow-elevation-1 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${geoSearchError ? "border-red-600" : "border-zinc-700"}`}
-              />
-              <button
-                type="submit"
-                disabled={!geoSearch}
-                className="px-2.5 py-1.5 text-xs bg-zinc-800/90 border border-zinc-700 rounded shadow-elevation-1 text-zinc-300 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:scale-[0.95] disabled:opacity-40 touch-manipulation"
-              >
-                Go
-              </button>
-            </form>
-          )}
-          {geoSearchError && <p className="text-xs text-red-400 px-1">{geoSearchError}</p>}
         </div>
       )}
 

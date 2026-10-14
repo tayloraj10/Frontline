@@ -118,9 +118,18 @@ function storageKey(slug: string): string {
 export default function CampaignInstructionsModal({
   slug,
   description,
+  hideTriggers = false,
+  helpSignal = 0,
+  infoSignal = 0,
 }: {
   slug: string;
   description?: string | null;
+  /** Omit the built-in ? / i buttons; open the dialogs via the signals instead (e.g. from an overflow menu). */
+  hideTriggers?: boolean;
+  /** Bump to open the "how it works" dialog. */
+  helpSignal?: number;
+  /** Bump to open the campaign description dialog. */
+  infoSignal?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
@@ -134,17 +143,35 @@ export default function CampaignInstructionsModal({
     }
   }, [slug, instructions]);
 
+  useEffect(() => {
+    if (!helpSignal) return;
+    if (instructions) {
+      setDontShowAgain(false);
+      setOpen(true);
+    } else if (description) {
+      setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [helpSignal]);
+
+  useEffect(() => {
+    if (!infoSignal || !description) return;
+    if (instructions) setDescOpen(true);
+    else setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [infoSignal]);
+
   if (!instructions) {
     if (!description) return null;
     return (
       <>
-        <button
+        {!hideTriggers && <button
           onClick={() => setOpen(true)}
           title="About this campaign"
           className="w-7 h-7 flex items-center justify-center text-xs font-bold rounded-full border border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 active:text-zinc-200 active:bg-zinc-800 active:border-zinc-600 active:scale-[0.92] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation shrink-0"
         >
           i
-        </button>
+        </button>}
         {open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setOpen(false)}>
             <div
@@ -183,7 +210,7 @@ export default function CampaignInstructionsModal({
 
   return (
     <>
-      <div className="flex items-center gap-1.5 shrink-0">
+      {!hideTriggers && <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={reopen}
           title="How this campaign works"
@@ -200,7 +227,7 @@ export default function CampaignInstructionsModal({
             i
           </button>
         )}
-      </div>
+      </div>}
 
       {description && descOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setDescOpen(false)}>

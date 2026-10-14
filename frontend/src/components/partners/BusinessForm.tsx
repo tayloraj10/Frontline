@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm shadow-elevation-1 focus:outline-none focus:border-zinc-500";
 
 let nextLocalLocationId = 0;
 

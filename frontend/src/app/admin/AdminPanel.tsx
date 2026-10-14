@@ -469,7 +469,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
+        <form onSubmit={handleCreate} className="rounded-[20px] bg-zinc-900 p-5 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Campaign</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-1">
@@ -538,7 +538,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
         <>
           <div className="sm:hidden space-y-2">
             {campaigns.map(c => (
-              <div key={c.id} className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
+              <div key={c.id} className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 active:text-zinc-300 font-medium transition-colors duration-150">
@@ -578,7 +578,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+          <div className="hidden sm:block rounded-[20px] bg-zinc-900 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/40">
@@ -967,7 +967,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
       </div>
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
+        <form onSubmit={handleCreate} className="rounded-[20px] bg-zinc-900 p-5 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Trigger</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-1">
@@ -1037,7 +1037,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
         <>
           <div className="sm:hidden space-y-2">
             {triggers.map(t => (
-              <div key={t.id} className="border border-zinc-800 rounded-xl p-4 space-y-1.5 shadow-elevation-1">
+              <div key={t.id} className="rounded-[20px] bg-zinc-900 p-4 space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-zinc-300 font-medium text-sm">{t.name}</p>
                   <button
@@ -1057,7 +1057,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+          <div className="hidden sm:block rounded-[20px] bg-zinc-900 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/40">
@@ -1326,7 +1326,7 @@ function EventsTab({ campaigns, events, setEvents, currentUserId }: {
       </div>
 
       {showCreate && (
-        <div className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
+        <div className="rounded-[20px] bg-zinc-900 p-5 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Event</p>
           <div className="space-y-1">
             <label className="text-xs text-zinc-500">Event type</label>
@@ -1486,7 +1486,7 @@ function EventsTab({ campaigns, events, setEvents, currentUserId }: {
       )}
 
       {events.length === 0 ? (
-        <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
           No active events.
         </div>
       ) : (
@@ -2510,7 +2510,7 @@ function PartnersTab({
 
       <div className="space-y-2">
         {businesses.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
             No partner businesses.
           </div>
         )}
@@ -2992,7 +2992,7 @@ function GroupsTab({ groups, setGroups, currentUserId }: { groups: AdminGroup[];
 
       <div className="space-y-2">
         {groups.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
             No groups.
           </div>
         )}
@@ -3126,7 +3126,7 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
         <>
           <div className="sm:hidden space-y-2">
             {entries.map((entry, i) => (
-              <div key={entry.user_id} className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
+              <div key={entry.user_id} className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-zinc-500 text-xs tabular-nums shrink-0">#{i + 1}</span>
                   <Link
@@ -3852,7 +3852,7 @@ function TeamEventsTab({ campaigns, teamEvents, setTeamEvents, currentUserId }: 
 
       <div className="space-y-2">
         {teamEvents.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
             No team events yet.
           </div>
         )}
@@ -3860,7 +3860,7 @@ function TeamEventsTab({ campaigns, teamEvents, setTeamEvents, currentUserId }: 
           <button
             key={e.id}
             onClick={() => openEvent(e.id)}
-            className="w-full text-left flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 shadow-elevation-1 px-4 py-3 hover:border-zinc-700 transition-colors duration-150"
+            className="w-full text-left flex items-center justify-between gap-3 rounded-2xl border border-zinc-800/40 bg-zinc-900 shadow-elevation-1 px-4 py-3 hover:border-zinc-700 transition-colors duration-150"
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-zinc-200 truncate">{e.title}</p>

@@ -23,7 +23,7 @@ type UserSearchResult = { id: string; username: string | null; email: string };
 const inputCls = "min-h-11 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-emerald-600 transition-colors duration-150";
 const dateInputCls = `${inputCls} [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-70`;
 const labelCls = "block text-sm font-medium text-zinc-400 mb-1.5";
-const cardCls = "rounded-2xl border border-zinc-800 bg-zinc-900/60 shadow-elevation-1 p-5 space-y-4";
+const cardCls = "rounded-2xl border border-zinc-800/40 bg-zinc-900/60 shadow-elevation-1 p-5 space-y-4";
 const sectionTitleCls = "text-xs font-bold text-zinc-500 uppercase tracking-wider";
 
 function extractErrorMessage(err: unknown, fallback: string): string {

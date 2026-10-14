@@ -1,5 +1,6 @@
 "use client";
 
+import LegalModalLink from "@/components/legal/LegalModalLink";
 import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -312,8 +313,8 @@ function LoginForm() {
         </p>
 
         <div className="flex justify-center gap-4 text-xs text-zinc-600">
-          <Link href="/legal/terms" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Terms</Link>
-          <Link href="/legal/privacy" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Privacy</Link>
+          <LegalModalLink doc="terms" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Terms</LegalModalLink>
+          <LegalModalLink doc="privacy" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Privacy</LegalModalLink>
         </div>
       </Card>
     </main>

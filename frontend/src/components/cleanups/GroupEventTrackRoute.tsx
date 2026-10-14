@@ -125,7 +125,7 @@ export default function GroupEventTrackRoute({
           title={disabled ? disabledReason : undefined}
           className={
             disabled
-              ? "w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-dashed border-zinc-700 text-zinc-500 bg-zinc-900/40 rounded-lg grayscale cursor-not-allowed touch-manipulation"
+              ? "w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-dashed border-zinc-700 text-zinc-500 bg-zinc-900/40 rounded-xl grayscale cursor-not-allowed touch-manipulation"
               : `w-full ${launcherCls}`
           }
         >
@@ -148,7 +148,7 @@ export default function GroupEventTrackRoute({
 
   if (!route) {
     return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-2">
+      <div className="rounded-2xl border border-zinc-800/40 bg-zinc-900 p-2">
         <TrackRouteScreen session={session} onConfirm={handleConfirm} onCancel={resetAll} />
       </div>
     );

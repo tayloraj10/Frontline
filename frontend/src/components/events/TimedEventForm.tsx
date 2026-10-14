@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import EventAreaMapPicker, { type SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createTimedEvent, type CreatedEvent } from "@/lib/events";
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 export interface TimedEventFormCampaign {
   id: string;
@@ -159,7 +159,7 @@ export default function TimedEventForm({
               <button
                 type="button"
                 onClick={areaPicker.onRequestPick}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+                className="px-3 py-1.5 text-xs font-medium rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 {selectedAreas.length > 0 ? "Edit selection on map" : "Pick areas on the map"}
               </button>

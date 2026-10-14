@@ -89,7 +89,7 @@ export default function ShareButton({
           <button
             onClick={handleShare}
             title={copied ? "Link copied!" : "Share"}
-            className={`${dim} flex items-center justify-center rounded-full border border-sky-800/60 bg-sky-950/30 text-sky-400 hover:text-sky-300 hover:bg-sky-950/50 hover:border-sky-700 active:text-sky-300 active:bg-sky-950/50 active:border-sky-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
+            className={`${dim} flex items-center justify-center rounded-full border border-sky-500/30 bg-zinc-800/70 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 hover:border-sky-500/50 active:text-sky-300 active:bg-sky-500/10 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
           >
             <ShareGlyph />
           </button>
@@ -97,7 +97,7 @@ export default function ShareButton({
             <button
               onClick={() => setQrOpen(true)}
               title="Show QR code"
-              className={`${dim} flex items-center justify-center rounded-full border border-violet-800/60 bg-violet-950/30 text-violet-400 hover:text-violet-300 hover:bg-violet-950/50 hover:border-violet-700 active:text-violet-300 active:bg-violet-950/50 active:border-violet-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
+              className={`${dim} flex items-center justify-center rounded-full border border-violet-500/30 bg-zinc-800/70 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 hover:border-violet-500/50 active:text-violet-300 active:bg-violet-500/10 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
             >
               <QRGlyph />
             </button>

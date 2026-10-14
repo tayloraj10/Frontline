@@ -93,7 +93,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
             <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
               <span className="text-sm font-semibold text-zinc-300">
                 Activity{" "}

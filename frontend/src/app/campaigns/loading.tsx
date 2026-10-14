@@ -9,7 +9,7 @@ export default function CampaignsLoading() {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 animate-pulse"
+            className="rounded-2xl border border-zinc-800/40 bg-zinc-900/60 p-5 animate-pulse"
           >
             <div className="flex gap-2 mb-3">
               <div className="h-6 w-20 bg-zinc-800 rounded-full" />

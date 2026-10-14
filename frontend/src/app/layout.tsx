@@ -15,7 +15,7 @@ const dmMono = DM_Mono({ variable: "--font-mono-ui", subsets: ["latin"], weight:
 
 const SITE_URL = "https://www.frontlinemaps.com";
 const SITE_DESCRIPTION =
-  "Join campaigns, log cleanups, and claim territory on the map with Frontline — gamified collective action for your neighborhood.";
+  "Join campaigns, log cleanups, and earn points for real action in your neighborhood with Frontline.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -54,13 +54,22 @@ export async function generateViewport(): Promise<Viewport> {
     initialScale: 1,
     ...(isNativeApp && { maximumScale: 1, userScalable: false }),
     viewportFit: "cover",
-    themeColor: "#17140f",
+    themeColor: [
+      { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
+      { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    ],
   };
 }
 
+// Applies a saved light/dark choice before first paint. No saved choice = follow the system.
+const THEME_INIT = `try{var t=localStorage.getItem("frontline:theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geist.variable} ${figtree.variable} ${bricolage.variable} ${dmMono.variable} dark h-full antialiased`}>
+    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${figtree.variable} ${bricolage.variable} ${dmMono.variable} h-full antialiased`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+      </head>
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
         <NativeAppBridge />
         <AppHeader />

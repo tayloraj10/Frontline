@@ -4,7 +4,7 @@ import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const VARIANT_CLASS = {
-  primary: "bg-emerald-400 text-emerald-950 hover:bg-emerald-300",
+  primary: "bg-emerald-400 text-emerald-950 hover:bg-emerald-300 shadow-elevation-1",
   secondary: "bg-zinc-800 text-zinc-100 hover:bg-zinc-700",
   destructive: "bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25",
   ghost: "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60",
@@ -36,7 +36,7 @@ export default function Button({
       type="button"
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center gap-2 min-h-11 px-5 rounded-2xl text-sm font-bold",
+        "inline-flex items-center justify-center gap-2 min-h-11 px-5 rounded-2xl text-sm font-bold tracking-tight",
         "transition-[transform,background-color,box-shadow] duration-150 ease-out",
         "active:scale-[0.97] active:duration-100 touch-manipulation",
         "disabled:opacity-50 disabled:pointer-events-none",

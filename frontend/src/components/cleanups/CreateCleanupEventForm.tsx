@@ -22,7 +22,7 @@ const hostEventStepsBase: GuidedStep[] = [
 const hostEventStepPartners: GuidedStep = { key: "partners", label: "Nearby Partners" };
 const hostEventStepPhoto: GuidedStep = { key: "photo", label: "Cover photo" };
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
@@ -472,7 +472,7 @@ export default function CreateCleanupEventForm({
           <button
             type="button"
             onClick={() => router.push(mode === "edit" && cleanupId ? `/cleanup-events/${cleanupId}` : `/groups/${groupSlug}`)}
-            className="flex-1 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+            className="flex-1 py-2 text-sm rounded-xl border border-zinc-700 text-zinc-400 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Cancel
           </button>

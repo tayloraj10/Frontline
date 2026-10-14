@@ -233,7 +233,7 @@ export default function TeamEventPageClient({
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
       {showJoinFlow && eligibleRepresentGroups.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Join as</p>
           <div className="flex flex-col gap-1.5 text-sm text-zinc-300">
             <label className="flex items-center gap-2">
@@ -343,7 +343,7 @@ export default function TeamEventPageClient({
       )}
 
       {userId && viewerTeamId && !isCancelled && !changingJoin && (
-        <div className="border border-zinc-800 rounded-xl p-4 text-center space-y-1.5 shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 p-4 text-center space-y-1.5">
           <p className="text-sm font-semibold text-zinc-200">
             You&apos;re in{currentRepresentingGroup ? `, representing ${currentRepresentingGroup.group_name}` : " as yourself"}!
           </p>
@@ -378,7 +378,7 @@ export default function TeamEventPageClient({
       )}
 
       {userId && myGroups && myGroups.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Your groups</p>
           {myGroups.map((g) => {
             const gp = groupParticipantByGroupId.get(g.group_id);

@@ -13,7 +13,7 @@ const ROLE_OPTIONS: { value: AdminRole; label: string; description: string }[] =
 ];
 
 const inputCls = "min-h-11 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-emerald-600 transition-colors duration-150";
-const cardCls = "rounded-2xl border border-zinc-800 bg-zinc-900/60 shadow-elevation-1 p-5 space-y-4";
+const cardCls = "rounded-2xl border border-zinc-800/40 bg-zinc-900/60 shadow-elevation-1 p-5 space-y-4";
 const sectionTitleCls = "text-xs font-bold text-zinc-500 uppercase tracking-wider";
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -155,7 +155,7 @@ export default function AdminRolesTab({ requestingUserId }: { requestingUserId: 
           <h2 className={sectionTitleCls}>Assigned</h2>
           <div className="space-y-4">
             {holders.map((h) => (
-              <div key={h.user_id} className="border border-zinc-800 rounded-xl px-4 py-3 space-y-2">
+              <div key={h.user_id} className="rounded-[20px] bg-zinc-900 px-4 py-3 space-y-2">
                 <p className="text-sm font-semibold text-zinc-200">
                   {h.username ?? h.email} <span className="text-zinc-600 font-normal">({h.email})</span>
                 </p>

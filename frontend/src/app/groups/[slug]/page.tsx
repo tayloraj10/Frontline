@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { BarChart3, CalendarPlus, ClipboardList, Pencil } from "lucide-react";
+import { BarChart3, CalendarPlus, ClipboardList, Pencil, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
 import Avatar from "@/components/ui/Avatar";
 import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
+import SocialIcon from "@/components/ui/SocialIcon";
 import PastEventsList from "@/components/groups/PastEventsList";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
 import BackButton from "@/components/ui/BackButton";
+import { PageShell } from "@/components/ui/PageShell";
 import type { Database } from "@/types/database";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
@@ -77,7 +79,7 @@ export default async function GroupProfilePage({ params }: Props) {
   if (group.status !== "approved") {
     const isPending = group.status === "pending";
     return (
-      <main className="max-w-lg mx-auto px-4 sm:px-6 py-16 w-full text-center">
+      <PageShell width="narrow" className="text-center">
         <div className="mb-2 text-left">
           <BackButton href="/groups" label="Groups" />
         </div>
@@ -88,7 +90,7 @@ export default async function GroupProfilePage({ params }: Props) {
             ? "This group is pending review. It'll be listed once a site admin approves it."
             : "This group was not approved for listing."}
         </p>
-      </main>
+      </PageShell>
     );
   }
 
@@ -142,52 +144,54 @@ export default async function GroupProfilePage({ params }: Props) {
       ? new Date(start).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
       : "Date TBD";
 
+  const heldEvents = pastEvents.filter((e) => e.status !== "cancelled");
+  const peopleReached = heldEvents.reduce((n, e) => n + (e.going_count ?? 0), 0);
+  const nextEvent = [...upcomingEvents].sort((a, b) => (a.scheduled_start ?? "").localeCompare(b.scheduled_start ?? ""))[0];
+
+  const card = "rounded-[20px] bg-zinc-900 overflow-hidden";
+  const cardHead = "px-5 pt-4 pb-2 flex items-center justify-between font-display text-base font-extrabold tracking-tight text-zinc-100";
+  const chip = "inline-flex min-h-10 items-center gap-1.5 rounded-2xl px-4 text-sm font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation";
+  const liveBadge = (
+    <span className="shrink-0 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">Live</span>
+  );
+
   return (
-    <main className="max-w-4xl mx-auto px-4 sm:px-6 py-10 w-full">
+    <PageShell width="wide">
       <div className="mb-2">
         <BackButton href="/groups" label="Groups" />
       </div>
 
-      <div className="mt-6 mb-8 flex flex-col gap-4">
-        <div className="flex items-start gap-4 min-w-0">
-          <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+      <div className="mt-4 mb-6 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
+          <div className="flex h-16 w-16 lg:h-20 lg:w-20 shrink-0 items-center justify-center overflow-hidden rounded-[20px] bg-zinc-800">
             {group.image_url ? (
               <GroupAvatarLightbox imageUrl={group.image_url} name={group.name} />
             ) : (
-              <span className="text-2xl font-black text-zinc-300">{group.name[0].toUpperCase()}</span>
+              <span className="font-display text-3xl font-extrabold text-zinc-300">{group.name[0].toUpperCase()}</span>
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-display font-extrabold text-2xl text-zinc-100 leading-tight">{group.name}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-zinc-50 leading-tight">{group.name}</h1>
               {group.verified && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
-                  ✓ Verified
-                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">✓ Verified</span>
               )}
               {isAdmin && (
-                <span className="inline-flex items-center rounded-full border border-zinc-600 bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
-                  Admin
-                </span>
+                <span className="inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">Organizer</span>
               )}
             </div>
             {group.description && (
-              <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{group.description}</p>
+              <p className="mt-1.5 max-w-prose text-sm text-zinc-400 leading-relaxed">{group.description}</p>
             )}
             {group.social_links && Object.values(group.social_links).some(Boolean) && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-3">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 {SOCIAL_LABELS.map(({ key, label }) => {
                   const url = group.social_links?.[key];
                   if (!url) return null;
                   return (
-                    <a
-                      key={key}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150"
-                    >
-                      {key === "website" ? url.replace(/^https?:\/\//, "") : label} ↗
+                    <a key={key} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-emerald-500/10 text-sm font-medium text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 active:scale-[0.97] touch-manipulation transition-[background-color,color,transform] duration-150">
+                      <SocialIcon platform={key} className="w-4 h-4" />
+                      {label}
                     </a>
                   );
                 })}
@@ -196,205 +200,198 @@ export default async function GroupProfilePage({ params }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-x-2 gap-y-3 flex-wrap lg:justify-end">
-          <ShareButton
-            variant="icon"
-            content={{ title: group.name, text: group.description ?? undefined }}
-          />
-          {isMember && (
-            <Link
-              href={`/groups/${slug}/stats`}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-emerald-800/60 bg-emerald-950/30 text-emerald-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-emerald-900/40 hover:border-emerald-600 hover:text-emerald-300 active:scale-[0.95] touch-manipulation"
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              Stats
-            </Link>
-          )}
-          {isAdmin && (
-            <Link
-              href={`/groups/${slug}/events/new`}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-sky-800/60 bg-sky-950/30 text-sky-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-sky-900/40 hover:border-sky-600 hover:text-sky-300 active:scale-[0.95] touch-manipulation"
-            >
-              <CalendarPlus className="w-3.5 h-3.5" />
-              New event
-            </Link>
-          )}
-          {isAdmin && (
-            <Link
-              href={`/groups/${slug}/organizer`}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-zinc-700 bg-zinc-800/60 text-zinc-300 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-zinc-800 hover:border-zinc-600 hover:text-zinc-100 active:scale-[0.95] touch-manipulation"
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              Organizer dashboard
-            </Link>
-          )}
-          {isAdmin && (
-            <Link
-              href={`/groups/${slug}/edit`}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-800/60 bg-amber-950/30 text-amber-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:bg-amber-900/40 hover:border-amber-600 hover:text-amber-300 active:scale-[0.95] touch-manipulation"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              Edit group
-            </Link>
-          )}
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <ShareButton variant="icon" content={{ title: group.name, text: group.description ?? undefined }} />
           {user && (
-            <GroupMembershipButton
-              groupId={group.id}
-              userId={user.id}
-              isMember={isMember}
-              isOnlyAdmin={isOnlyAdmin}
-            />
+            <GroupMembershipButton groupId={group.id} userId={user.id} isMember={isMember} isOnlyAdmin={isOnlyAdmin} />
           )}
           {!user && (
             <Link
               href={`/login?next=/groups/${slug}`}
-              className="px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className={`${chip} bg-emerald-400 font-bold text-emerald-950 hover:bg-emerald-300`}
             >
-              Sign In to Join
+              Sign in to join
             </Link>
           )}
         </div>
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
-        <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
-          <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-            Upcoming Events <span className="text-zinc-500 font-normal">({upcomingEvents.length})</span>
-          </span>
-        </div>
-        {upcomingEvents.length === 0 ? (
-          <div className="px-5 py-8 text-center text-zinc-600 text-sm">No upcoming events.</div>
-        ) : (
-          <ul className="divide-y divide-zinc-800/60">
-            {upcomingEvents.map((e) => (
-              <li key={e.id}>
-                <Link
-                  href={`/cleanup-events/${e.id}`}
-                  className="px-5 py-3 flex items-center justify-between gap-3 transition-[background-color] duration-150 hover:bg-zinc-900/40 active:bg-zinc-900/60 touch-manipulation"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
-                      {e.image_url ? (
-                        <img src={e.image_url} alt={e.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-lg">🧹</span>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm text-zinc-200 break-words">{e.title}</p>
-                      <p className="text-xs text-zinc-500">
-                        {formatEventDate(e.scheduled_start)}
-                        {e.max_attendees ? ` · ${e.going_count}/${e.max_attendees} going` : e.going_count > 0 ? ` · ${e.going_count} going` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  {e.is_ongoing && (
-                    <span className="text-xs text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 shrink-0">
-                      Live
-                    </span>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {groupTeamEvents.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
-          <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
-            <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-              Team Events <span className="text-zinc-500 font-normal">({groupTeamEvents.length})</span>
-            </span>
+      {/* Group impact at a glance */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: "Members", value: members.length },
+          { label: "Events held", value: heldEvents.length },
+          { label: "Upcoming", value: upcomingEvents.length },
+          { label: "RSVPs to date", value: peopleReached },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-[20px] bg-zinc-900 px-5 py-4">
+            <div className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight tabular-nums text-zinc-50">{value.toLocaleString()}</div>
+            <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">{label}</div>
           </div>
-          <ul className="divide-y divide-zinc-800/60">
-            {groupTeamEvents.map(({ team_event: te, team, cascade_mode }) => (
-              <li key={te!.id}>
-                <Link
-                  href={`/team-events/${te!.id}`}
-                  className="px-5 py-3 flex items-center justify-between gap-3 transition-[background-color] duration-150 hover:bg-zinc-900/40 active:bg-zinc-900/60 touch-manipulation"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    {team?.color && (
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: team.color }}
-                      />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-sm text-zinc-200 break-words">{te!.title}</p>
-                      <p className="text-xs text-zinc-500">
-                        {team ? `Playing for ${team.name}` : "Team pending"}
-                        {cascade_mode === "individual_opt_in" ? " · members opt in" : ""}
-                      </p>
-                    </div>
-                  </div>
-                  {te!.status === "active" && (
-                    <span className="text-xs text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 shrink-0">
-                      Live
-                    </span>
-                  )}
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <div className="min-w-0 space-y-6">
+          {isAdmin && (
+            <div className="rounded-[20px] bg-zinc-900 p-5">
+              <h2 className="font-display text-base font-extrabold tracking-tight text-zinc-100">Organizer tools</h2>
+              <p className="mt-0.5 mb-4 text-sm text-zinc-400">
+                {nextEvent
+                  ? `Next up: ${nextEvent.title}, ${formatEventDate(nextEvent.scheduled_start)}.`
+                  : "No event scheduled yet. Put one on the calendar to get people out."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/groups/${slug}/events/new`} className={`${chip} bg-emerald-400 font-bold text-emerald-950 hover:bg-emerald-300`}>
+                  <CalendarPlus className="h-4 w-4" /> New event
                 </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                <Link href={`/groups/${slug}/organizer`} className={`${chip} bg-zinc-800 text-zinc-100 hover:bg-zinc-700`}>
+                  <ClipboardList className="h-4 w-4" /> To-do list
+                </Link>
+                <Link href={`/groups/${slug}/stats`} className={`${chip} bg-zinc-800 text-zinc-100 hover:bg-zinc-700`}>
+                  <BarChart3 className="h-4 w-4" /> Impact stats
+                </Link>
+                <Link href={`/groups/${slug}/edit`} className={`${chip} bg-zinc-800 text-zinc-100 hover:bg-zinc-700`}>
+                  <Pencil className="h-4 w-4" /> Edit group
+                </Link>
+              </div>
+            </div>
+          )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
-        <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
-          <span className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-            Event History <span className="text-zinc-500 font-normal">({pastEvents.length})</span>
-          </span>
-        </div>
-        {pastEvents.length === 0 ? (
-          <div className="px-5 py-8 text-center text-zinc-600 text-sm">No past events yet.</div>
-        ) : (
-          <PastEventsList events={pastEvents} />
-        )}
-      </div>
+          {!isAdmin && isMember && (
+            <Link href={`/groups/${slug}/stats`} className="flex items-center justify-between gap-3 rounded-[20px] bg-zinc-900 px-5 py-4 transition-colors hover:bg-zinc-800/70">
+              <span className="flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-400/15 text-emerald-400"><BarChart3 className="h-5 w-5" /></span>
+                <span>
+                  <span className="block text-sm font-semibold text-zinc-100">See the group&apos;s impact</span>
+                  <span className="block text-xs text-zinc-500">Bags, cleanups and where your group has been out</span>
+                </span>
+              </span>
+              <ChevronRight className="h-5 w-5 text-zinc-500" />
+            </Link>
+          )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
-        <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
-          <span className="text-sm font-semibold text-zinc-300">
-            Members <span className="text-zinc-500 font-normal">({members.length})</span>
-          </span>
+          <div className={card}>
+            <h2 className={cardHead}>
+              <span>Upcoming events <span className="font-normal text-zinc-500">({upcomingEvents.length})</span></span>
+            </h2>
+            {upcomingEvents.length === 0 ? (
+              <div className="px-5 pb-6 pt-2 text-sm text-zinc-500">
+                No upcoming events.{isAdmin ? " Use New event above to schedule one." : " Join the group to hear when the next one is set."}
+              </div>
+            ) : (
+              <ul className="px-2 pb-2">
+                {upcomingEvents.map((e) => (
+                  <li key={e.id}>
+                    <Link
+                      href={`/cleanup-events/${e.id}`}
+                      className="flex items-center justify-between gap-3 rounded-2xl px-3 py-3 transition-colors duration-150 hover:bg-zinc-800/60 active:bg-zinc-800 touch-manipulation"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-800">
+                          {e.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={e.image_url} alt={e.title} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="text-lg">🧹</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-semibold text-zinc-100">{e.title}</p>
+                          <p className="text-xs text-zinc-500">
+                            {formatEventDate(e.scheduled_start)}
+                            {e.max_attendees ? ` · ${e.going_count}/${e.max_attendees} going` : e.going_count > 0 ? ` · ${e.going_count} going` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      {e.is_ongoing && liveBadge}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {groupTeamEvents.length > 0 && (
+            <div className={card}>
+              <h2 className={cardHead}>
+                <span>Team events <span className="font-normal text-zinc-500">({groupTeamEvents.length})</span></span>
+              </h2>
+              <ul className="px-2 pb-2">
+                {groupTeamEvents.map(({ team_event: te, team, cascade_mode }) => (
+                  <li key={te!.id}>
+                    <Link
+                      href={`/team-events/${te!.id}`}
+                      className="flex items-center justify-between gap-3 rounded-2xl px-3 py-3 transition-colors duration-150 hover:bg-zinc-800/60 active:bg-zinc-800 touch-manipulation"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        {team?.color && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color }} />}
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-semibold text-zinc-100">{te!.title}</p>
+                          <p className="text-xs text-zinc-500">
+                            {team ? `Playing for ${team.name}` : "Team pending"}
+                            {cascade_mode === "individual_opt_in" ? " · members opt in" : ""}
+                          </p>
+                        </div>
+                      </div>
+                      {te!.status === "active" && liveBadge}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className={card}>
+            <h2 className={cardHead}>
+              <span>Event history <span className="font-normal text-zinc-500">({pastEvents.length})</span></span>
+            </h2>
+            {pastEvents.length === 0 ? (
+              <div className="px-5 pb-6 pt-2 text-sm text-zinc-500">No past events yet.</div>
+            ) : (
+              <PastEventsList events={pastEvents} />
+            )}
+          </div>
         </div>
-        {members.length === 0 ? (
-          <div className="px-5 py-8 text-center text-zinc-600 text-sm">No members yet.</div>
-        ) : (
-          <ul className="divide-y divide-zinc-800/60">
-            {members.map((m) => {
-              const profile = profilesById.get(m.user_id);
-              return (
-                <li key={m.user_id} className="px-5 py-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar
-                      avatarUrl={profile?.avatar_url}
-                      name={profile?.display_name ?? profile?.username ?? "?"}
-                      username={profile?.username}
-                      size="sm"
-                    />
-                    <span className="text-sm text-zinc-200 truncate">
-                      {profile?.display_name ?? profile?.username ?? "Unknown"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {m.role === "admin" && (
-                      <span className="text-xs text-zinc-500 border border-zinc-700 rounded px-1.5 py-0.5">
-                        admin
-                      </span>
-                    )}
-                    <span className="text-xs text-zinc-600">
-                      {new Date(m.joined_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+
+        <div className="min-w-0 lg:sticky lg:top-20">
+          <div className={card}>
+            <h2 className={cardHead}>
+              <span>Members <span className="font-normal text-zinc-500">({members.length})</span></span>
+            </h2>
+            {members.length === 0 ? (
+              <div className="px-5 pb-6 pt-2 text-sm text-zinc-500">No members yet.</div>
+            ) : (
+              <ul className="max-h-[32rem] overflow-y-auto px-2 pb-2">
+                {members.map((m) => {
+                  const profile = profilesById.get(m.user_id);
+                  return (
+                    <li key={m.user_id} className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar
+                          avatarUrl={profile?.avatar_url}
+                          name={profile?.display_name ?? profile?.username ?? "?"}
+                          username={profile?.username}
+                          size="sm"
+                        />
+                        <span className="truncate text-sm text-zinc-200">{profile?.display_name ?? profile?.username ?? "Unknown"}</span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {m.role === "admin" && (
+                          <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">organizer</span>
+                        )}
+                        <span className="text-xs text-zinc-600">
+                          {new Date(m.joined_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
-    </main>
+    </PageShell>
   );
 }

@@ -15,7 +15,7 @@ const selectArrowStyle = {
   backgroundSize: "16px 16px",
 };
 const labelCls = "block text-sm font-medium text-zinc-400 mb-1.5";
-const cardCls = "rounded-2xl border border-zinc-800 bg-zinc-900/60 shadow-elevation-1 p-5 space-y-4";
+const cardCls = "rounded-2xl border border-zinc-800/40 bg-zinc-900/60 shadow-elevation-1 p-5 space-y-4";
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;

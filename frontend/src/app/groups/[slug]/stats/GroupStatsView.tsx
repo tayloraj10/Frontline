@@ -792,7 +792,7 @@ interface StatsResponse {
 
 function StatChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex-1 min-w-[90px] rounded-2xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-center">
+    <div className="flex-1 min-w-[90px] rounded-2xl border border-zinc-800/40 bg-zinc-900 px-3 py-2.5 text-center">
       <div className="text-lg font-black text-zinc-100 tabular-nums">{value}</div>
       <div className="text-[11px] text-zinc-500 uppercase tracking-wide">{label}</div>
     </div>
@@ -801,7 +801,7 @@ function StatChip({ label, value }: { label: string; value: string }) {
 
 function BagSplitChip({ smallBags, largeBags }: { smallBags: number; largeBags: number }) {
   return (
-    <div className="flex-1 min-w-[120px] rounded-2xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
+    <div className="flex-1 min-w-[120px] rounded-2xl border border-zinc-800/40 bg-zinc-900 px-3 py-2.5">
       <div className="text-[11px] text-zinc-500 uppercase tracking-wide text-center mb-1.5">Bag Split</div>
       <div className="flex items-center justify-center gap-3">
         <div className="text-center">
@@ -1029,13 +1029,13 @@ export default function GroupStatsView({
             </Link>
             <button
               onClick={exportCsv}
-              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
+              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-xl shadow-elevation-1 transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
             >
               Export CSV
             </button>
             <button
               onClick={exportXlsx}
-              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-lg shadow-elevation-1 transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
+              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 rounded-xl shadow-elevation-1 transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
             >
               Export Excel
             </button>
@@ -1058,20 +1058,20 @@ export default function GroupStatsView({
         data?.campaigns.map((camp) => (
           <div
             key={camp.campaign_id}
-            className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950"
+            className="rounded-[20px] bg-zinc-900 overflow-hidden mb-6"
           >
             <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-zinc-300">{camp.campaign_name}</span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => openShareCard(camp)}
-                  className="px-2.5 py-1 text-[11px] font-medium border border-zinc-700 text-zinc-400 rounded-lg transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
+                  className="px-2.5 py-1 text-[11px] font-medium border border-zinc-700 text-zinc-400 rounded-xl transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
                 >
                   Create Share Card
                 </button>
                 <button
                   onClick={() => openMapSnapshot(camp)}
-                  className="px-2.5 py-1 text-[11px] font-medium border border-zinc-700 text-zinc-400 rounded-lg transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
+                  className="px-2.5 py-1 text-[11px] font-medium border border-zinc-700 text-zinc-400 rounded-xl transition-[background-color,border-color] duration-150 hover:text-zinc-200 hover:border-zinc-500 touch-manipulation"
                 >
                   Create Map Snapshot
                 </button>
@@ -1174,7 +1174,7 @@ export default function GroupStatsView({
                 <select
                   value={bgStyle}
                   onChange={(e) => setBgStyle(e.target.value as CardBgStyle)}
-                  className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
+                  className="rounded-lg border border-zinc-800/40 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
                 >
                   {CARD_BG_STYLES.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -1216,7 +1216,7 @@ export default function GroupStatsView({
               <button
                 onClick={handleDownloadCard}
                 disabled={shareBusy !== null}
-                className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-lg transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
+                className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-xl transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
               >
                 {shareBusy === "download" ? "Downloading…" : "Download"}
               </button>

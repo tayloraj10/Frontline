@@ -27,7 +27,7 @@ export default function PastEventsList({ events }: { events: GroupCleanupEventLi
               className="px-5 py-3 flex items-center justify-between gap-3 transition-[background-color] duration-150 hover:bg-zinc-900/40 active:bg-zinc-900/60 touch-manipulation"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center opacity-70">
+                <div className="w-9 h-9 rounded-xl bg-zinc-800 overflow-hidden shrink-0 flex items-center justify-center opacity-70">
                   {e.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={e.image_url} alt={e.title} className="w-full h-full object-cover" />
@@ -43,15 +43,15 @@ export default function PastEventsList({ events }: { events: GroupCleanupEventLi
                 </div>
               </div>
               {e.status === "cancelled" ? (
-                <span className="text-xs text-red-400 border border-red-800/60 rounded px-1.5 py-0.5 shrink-0">
+                <span className="text-xs text-red-400 bg-red-400/15 rounded-full px-2 py-0.5 shrink-0">
                   Cancelled
                 </span>
               ) : e.is_ongoing ? (
-                <span className="text-xs text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5 shrink-0">
+                <span className="text-xs text-emerald-400 bg-emerald-400/15 rounded-full px-2 py-0.5 shrink-0">
                   Ongoing
                 </span>
               ) : (
-                <span className="text-xs text-zinc-500 border border-zinc-700 rounded px-1.5 py-0.5 shrink-0">
+                <span className="text-xs text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5 shrink-0">
                   Over
                 </span>
               )}

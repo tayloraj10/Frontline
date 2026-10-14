@@ -66,7 +66,7 @@ export default function BlockUserButton({
         <button
           onClick={handleUnblock}
           disabled={state === "submitting"}
-          className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation disabled:opacity-50"
+          className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-xl shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation disabled:opacity-50"
         >
           {state === "submitting" ? "Unblocking…" : `Unblock @${blockedUsername}`}
         </button>
@@ -79,7 +79,7 @@ export default function BlockUserButton({
     <div className={className}>
       <button
         onClick={() => setState("confirming")}
-        className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-red-400 hover:border-red-500/50 rounded-lg shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
+        className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-red-400 hover:border-red-500/50 rounded-xl shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
       >
         Block user
       </button>
@@ -87,7 +87,7 @@ export default function BlockUserButton({
       {state === "confirming" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setState("idle")}>
           <div
-            className="w-full max-w-xs bg-zinc-900 border border-zinc-800 rounded-xl shadow-elevation-4 p-4 space-y-3"
+            className="w-full max-w-xs bg-zinc-900 rounded-[20px] shadow-elevation-4 p-4 space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-sm text-zinc-300">

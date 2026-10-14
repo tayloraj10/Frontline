@@ -93,7 +93,7 @@ export default function PartnerApplyPage() {
   if (submitted) {
     return (
       <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
-        <div className="w-full max-w-sm space-y-4 text-center rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 shadow-elevation-2">
+        <div className="w-full max-w-sm space-y-4 text-center rounded-2xl border border-zinc-800/40 bg-zinc-900/40 p-6 shadow-elevation-2">
           <div className="text-4xl">📬</div>
           <h1 className="font-display text-2xl font-bold">Submitted for review</h1>
           <p className="text-zinc-400 text-sm">

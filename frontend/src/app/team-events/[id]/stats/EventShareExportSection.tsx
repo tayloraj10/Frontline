@@ -325,7 +325,7 @@ export default function EventShareExportSection({ teamEventId, eventTitle, event
           </div>
 
           {teams.length > 0 && (
-            <div className="border border-zinc-800 rounded-xl p-4 bg-zinc-950">
+            <div className="rounded-[20px] p-4 bg-zinc-900">
               <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Share a team&apos;s card</h3>
               <select
                 value={selectedTeamId}
@@ -366,7 +366,7 @@ export default function EventShareExportSection({ teamEventId, eventTitle, event
                   <select
                     value={bgStyle}
                     onChange={(e) => setBgStyle(e.target.value as CardBgStyle)}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
+                    className="rounded-lg border border-zinc-800/40 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
                   >
                     {CARD_BG_STYLES.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -394,7 +394,7 @@ export default function EventShareExportSection({ teamEventId, eventTitle, event
                   <button
                     onClick={handleDownloadCard}
                     disabled={shareBusy !== null}
-                    className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-lg transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
+                    className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-xl transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
                   >
                     {shareBusy === "download" ? "Downloading…" : "Download"}
                   </button>

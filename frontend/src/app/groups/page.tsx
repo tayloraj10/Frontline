@@ -1,3 +1,4 @@
+import { PageShell } from "@/components/ui/PageShell";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -103,28 +104,29 @@ export default async function GroupsPage() {
   groups.sort((a, b) => activityScore(b) - activityScore(a));
 
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 w-full">
-      <div className="mb-10 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display font-extrabold text-4xl tracking-tight text-zinc-100">
+    <PageShell width="wide">
+      <div className="mb-4 sm:mb-10 flex flex-wrap sm:flex-nowrap items-center sm:items-end justify-between gap-x-4 gap-y-1">
+        <div className="contents sm:block">
+          <h1 className="font-display font-extrabold text-3xl sm:text-4xl tracking-tight text-zinc-100 flex-1 sm:flex-none">
             Groups
           </h1>
-          <p className="text-zinc-400 mt-2 text-sm max-w-md leading-relaxed">
-            {groups.length} group{groups.length !== 1 ? "s" : ""}. Join one to log cleanups together, share territory credit and show up on the group leaderboard.
+          <p className="order-last w-full sm:w-auto text-zinc-400 sm:mt-2 text-xs sm:text-sm max-w-md leading-snug sm:leading-relaxed">
+            {groups.length} group{groups.length !== 1 ? "s" : ""}<span>. Join one to log cleanups together, see your group's impact together and show up on the group leaderboard.</span>
           </p>
         </div>
         {canCreateGroup && (
           <Link
             href="/groups/apply"
-            className="shrink-0 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+            className="shrink-0 inline-flex items-center min-h-11 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
           >
-            Add Your Group
+            <span className="sm:hidden">+ Add group</span>
+            <span className="hidden sm:inline">Add Your Group</span>
           </Link>
         )}
       </div>
 
       {ownSubmissions.length > 0 && (
-        <div className="mb-8 rounded-2xl border border-amber-800/50 bg-amber-950/20 p-5 shadow-elevation-1">
+        <div className="mb-8 rounded-[20px] bg-amber-950/20 p-5">
           <h2 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">
             Your submission{ownSubmissions.length !== 1 ? "s" : ""}
           </h2>
@@ -133,7 +135,7 @@ export default async function GroupsPage() {
               <Link
                 key={g.id}
                 href={`/groups/${g.slug}`}
-                className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-3 py-2 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.98] touch-manipulation"
+                className="flex items-center gap-3 rounded-2xl bg-zinc-900 px-3 py-2 transition-[background-color,transform] duration-150 hover:bg-zinc-800 active:scale-[0.98] touch-manipulation"
               >
                 <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
                   {g.image_url ? (
@@ -160,8 +162,7 @@ export default async function GroupsPage() {
 
       {groups.length === 0 ? (
         <div className="text-center py-28 text-zinc-600">
-          <p className="text-5xl mb-4">🏴</p>
-          <p className="font-semibold text-zinc-500">No groups yet.</p>
+                    <p className="font-semibold text-zinc-500">No groups yet.</p>
           {canCreateGroup && (
             <p className="text-sm mt-1">
               <Link href="/groups/apply" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
@@ -179,6 +180,6 @@ export default async function GroupsPage() {
           isLoggedIn={!!user}
         />
       )}
-    </main>
+    </PageShell>
   );
 }

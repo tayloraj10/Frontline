@@ -8,6 +8,7 @@ import OnboardingModalClient from "@/components/OnboardingModalClient";
 import OtherCampaignRow from "@/components/OtherCampaignRow";
 import AppPromoCard from "@/components/AppPromoCard";
 import ShareButton from "@/components/ShareButton";
+import { PageShell, PageHeader, Section, EmptyState } from "@/components/ui/PageShell";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 
@@ -43,10 +44,10 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
   return (
     <div
       key={campaign.id}
-      className={`group relative overflow-hidden rounded-3xl p-5 pl-[18px] transition-[transform,border-color] duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] active:duration-100 ${
+      className={`group relative overflow-hidden rounded-[24px] p-5 lg:p-7 transition-[transform,background-color,box-shadow] duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] active:duration-100 ${
         featured
-          ? "border border-emerald-500/40 bg-gradient-to-br from-emerald-950/60 via-zinc-900 to-zinc-900 hover:border-emerald-400/70 active:border-emerald-400/70"
-          : "border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:border-zinc-700"
+          ? "bg-gradient-to-br from-emerald-400/15 via-zinc-900 to-zinc-900 ring-1 ring-inset ring-emerald-400/25 hover:ring-emerald-400/50"
+          : "bg-zinc-900 hover:bg-zinc-800/70"
       }`}
     >
       {/* Full-card click target — sits below the content/share button (z-10) so both stay clickable. */}
@@ -73,7 +74,7 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
               }}
             />
           )}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-zinc-950/90 via-zinc-950/70 to-emerald-950/40" />
+          
           {/* Ambient glow */}
           <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-emerald-500/20 blur-3xl transition-opacity duration-300 group-hover:opacity-80" />
           {/* Oversized watermark emblem */}
@@ -82,13 +83,6 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
           </span>
         </>
       )}
-
-      {/* Left accent border */}
-      <div
-        className={`absolute inset-y-0 left-0 rounded-l-2xl ${cfg.bar} transition-opacity duration-300 ${
-          featured ? "w-[4px] opacity-90 group-hover:opacity-100" : "w-[3px] opacity-50 group-hover:opacity-100"
-        }`}
-      />
 
       <div className="relative z-10 flex items-start justify-between gap-3 pointer-events-none">
         <div className="min-w-0 flex-1">
@@ -160,6 +154,67 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
   );
 }
 
+function FeaturedCampaignCard({ campaign }: { campaign: Campaign }) {
+  const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type];
+  const earn = [
+    { v: 1, l: "Small bag" },
+    { v: 3, l: "Large bag" },
+    { v: 1, l: "Trash report" },
+  ];
+  return (
+    <div className="group relative overflow-hidden rounded-[24px] bg-zinc-900 p-5 sm:p-7 ring-1 ring-inset ring-emerald-400/20 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:ring-emerald-400/45 active:scale-[0.99]">
+      <Link href={`/campaigns/${campaign.slug}`} className="absolute inset-0 z-0 touch-manipulation" aria-label={campaign.title} />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ backgroundImage: "radial-gradient(120% 90% at 100% 0%, rgb(52 211 153 / 0.16), transparent 60%)" }}
+      />
+      {cfg?.icon && (
+        <span className="pointer-events-none absolute -right-4 -bottom-8 select-none text-[11rem] leading-none opacity-[0.07]">
+          {cfg.icon}
+        </span>
+      )}
+
+      <div className="pointer-events-none relative z-10 flex flex-col gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            Live now
+          </span>
+          <ShareButton
+            variant="icon"
+            size="sm"
+            className="pointer-events-auto"
+            content={{ title: campaign.title, text: campaign.description ?? undefined, url: `/campaigns/${campaign.slug}` }}
+          />
+        </div>
+
+        <div>
+          <h2 className="font-display text-4xl font-extrabold leading-none tracking-tight text-zinc-50 sm:text-5xl">
+            {campaign.title}
+          </h2>
+          {campaign.description && (
+            <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-zinc-400">{campaign.description}</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex gap-2">
+            {earn.map((e) => (
+              <div key={e.l} className="rounded-2xl bg-zinc-950/50 px-3.5 py-2.5">
+                <div className="font-display text-lg font-extrabold leading-none text-amber-400 tabular-nums">+{e.v}</div>
+                <div className="mt-1 text-[11px] font-medium text-zinc-500">{e.l}</div>
+              </div>
+            ))}
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-2xl bg-emerald-400 px-5 py-3 text-sm font-bold text-emerald-950 transition-transform duration-150 group-hover:translate-x-0.5">
+            Open the map <span aria-hidden="true">→</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default async function CampaignsPage() {
   const supabase = await createClient();
   const [campaignsData, { data: { user } }] = await Promise.all([
@@ -187,64 +242,46 @@ export default async function CampaignsPage() {
   const otherCampaigns = campaigns.filter((c) => c.slug !== "trash-war");
 
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 w-full">
+    <PageShell>
       {user && <OnboardingModalClient campaigns={campaigns} />}
-      <div className="mb-8">
-        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-100">
-          Active Campaigns
-        </h1>
-        <p className="text-zinc-500 mt-2 text-sm">
-          {campaigns.length} mission{campaigns.length !== 1 ? "s" : ""} running —{" "}
-          pick your fight.
-        </p>
-        <p className="text-zinc-400 mt-3 text-sm max-w-xl leading-relaxed">
-          Each campaign is a shared goal. Open one, log what you do, and your points go toward its leaderboard and your group&apos;s total.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Campaigns"
+        title="Pick a campaign"
+        subtitle="Each campaign is a shared goal. Open one, log what you do, and your points count toward its leaderboard and your group's total."
+      />
 
       {campaigns.length === 0 ? (
-        <div className="text-center py-28 text-zinc-600">
-          <p className="text-5xl mb-4">🌍</p>
-          <p className="font-semibold text-zinc-500">No active campaigns yet.</p>
-          <p className="text-sm mt-1">Check back soon.</p>
-        </div>
+        <EmptyState title="No active campaigns yet" body="Check back soon." />
       ) : (
         <>
-          {featuredCampaign && (
-            <div className="mx-auto mt-6 max-w-xl">
-              <CampaignCard campaign={featuredCampaign} featured />
-              <div className="mt-4 flex justify-center gap-3">
-                <div className="flex-1 max-w-[130px] rounded-2xl bg-zinc-900 px-3 py-3 text-center">
-                  <div className="font-display text-lg font-bold text-emerald-400 tabular-nums">{campaigns.length}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5">active campaigns</div>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+            {featuredCampaign && <FeaturedCampaignCard campaign={featuredCampaign} />}
+            <div className="grid grid-cols-3 gap-2 lg:grid-cols-1 lg:gap-3">
+              {[
+                { v: campaigns.length, l: "Active campaigns" },
+                { v: contribCount, l: "Cleanups logged" },
+                { v: userCount, l: "People on Frontline" },
+              ].map((t) => (
+                <div key={t.l} className="rounded-[20px] bg-zinc-900 px-3 py-4 text-center lg:flex lg:items-center lg:justify-between lg:px-5 lg:text-left">
+                  <div className="font-display text-xl lg:text-2xl font-extrabold text-emerald-400 tabular-nums">{t.v.toLocaleString()}</div>
+                  <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 lg:mt-0">{t.l}</div>
                 </div>
-                <div className="flex-1 max-w-[130px] rounded-2xl bg-zinc-900 px-3 py-3 text-center">
-                  <div className="font-display text-lg font-bold text-emerald-400 tabular-nums">{contribCount.toLocaleString()}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5">contributions logged</div>
-                </div>
-                <div className="flex-1 max-w-[130px] rounded-2xl bg-zinc-900 px-3 py-3 text-center">
-                  <div className="font-display text-lg font-bold text-emerald-400 tabular-nums">{userCount.toLocaleString()}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5">users on the platform</div>
-                </div>
-              </div>
+              ))}
             </div>
-          )}
+          </div>
 
           {otherCampaigns.length > 0 && (
-            <div className={featuredCampaign ? "mt-10" : ""}>
-              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.12em] text-zinc-500">
-                Other campaigns
-              </h2>
+            <Section title="More campaigns" className="mt-10">
               <div className="grid items-start gap-2 sm:grid-cols-2">
                 {otherCampaigns.map((campaign) => (
                   <OtherCampaignRow key={campaign.id} campaign={campaign} />
                 ))}
               </div>
-            </div>
+            </Section>
           )}
         </>
       )}
       <AppPromoCard className="mt-10 max-w-xl" />
-    </main>
+    </PageShell>
   );
 }

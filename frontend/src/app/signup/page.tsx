@@ -1,5 +1,6 @@
 "use client";
 
+import LegalModalLink from "@/components/legal/LegalModalLink";
 import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -263,9 +264,9 @@ function SignupForm() {
             />
             <span>
               I agree to the{" "}
-              <Link href="/legal/terms" target="_blank" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Terms</Link>
+              <LegalModalLink doc="terms" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Terms</LegalModalLink>
               {" "}and{" "}
-              <Link href="/legal/privacy" target="_blank" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Privacy Policy</Link>
+              <LegalModalLink doc="privacy" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Privacy Policy</LegalModalLink>
               .
             </span>
           </label>

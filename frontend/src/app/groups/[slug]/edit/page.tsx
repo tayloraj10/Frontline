@@ -70,7 +70,7 @@ export default async function GroupEditPage({ params }: Props) {
 
       <h1 className="font-display font-extrabold text-xl text-zinc-100 mt-6 mb-8">Edit group</h1>
 
-      <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/30 mb-8 shadow-elevation-2">
+      <div className="rounded-[20px] p-6 bg-zinc-900 mb-8">
         <GroupEditForm
           groupId={groupData.id}
           slug={slug}
@@ -81,7 +81,7 @@ export default async function GroupEditPage({ params }: Props) {
         />
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2">
+      <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">
             Members <span className="text-zinc-500 font-normal">({members.length})</span>

@@ -213,7 +213,7 @@ export default function GroupStatsAdminView({
 
           {activeCampaign && (
             <>
-              <section className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
+              <section className="rounded-[20px] bg-zinc-900 overflow-hidden mb-6">
                 <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
                   <span className="text-sm font-semibold text-zinc-300">Trend</span>
                 </div>
@@ -227,7 +227,7 @@ export default function GroupStatsAdminView({
                 </div>
               </section>
 
-              <section className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
+              <section className="rounded-[20px] bg-zinc-900 overflow-hidden mb-6">
                 <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
                   <span className="text-sm font-semibold text-zinc-300">Breakdowns</span>
                 </div>
@@ -246,7 +246,7 @@ export default function GroupStatsAdminView({
                 </div>
               </section>
 
-              <section className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
+              <section className="rounded-[20px] bg-zinc-900 overflow-hidden mb-6">
                 <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
                   <span className="text-sm font-semibold text-zinc-300">Activity Map</span>
                   <span className="text-[11px] text-zinc-600">
@@ -264,7 +264,7 @@ export default function GroupStatsAdminView({
                 </div>
               </section>
 
-              <section className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
+              <section className="rounded-[20px] bg-zinc-900 overflow-hidden mb-6">
                 <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
                   <span className="text-sm font-semibold text-zinc-300">Geographic Deep Dive</span>
                 </div>
@@ -280,7 +280,7 @@ export default function GroupStatsAdminView({
                 </div>
               </section>
 
-              <section className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
+              <section className="rounded-[20px] bg-zinc-900 overflow-hidden mb-6">
                 <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
                   <span className="text-sm font-semibold text-zinc-300">Members</span>
                 </div>

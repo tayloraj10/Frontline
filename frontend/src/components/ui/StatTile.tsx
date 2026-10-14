@@ -14,11 +14,11 @@ interface StatTileProps {
 /** Icon + value + label tile, built on `Card`. Used for campaign stat bars, profile stats, leaderboard headline numbers. */
 export default function StatTile({ icon, value, label, hero = false, className = "" }: StatTileProps) {
   return (
-    <Card elevation={2} padding="sm" className={cn("flex flex-col items-center gap-1 text-center", className)}>
+    <Card elevation={1} padding="md" className={cn("flex flex-col items-center gap-1 text-center", className)}>
       {icon && <span className="text-zinc-500">{icon}</span>}
       <span
         className={cn(
-          "font-display text-lg font-bold leading-tight tabular-nums",
+          "font-display text-xl font-extrabold tracking-tight leading-tight tabular-nums",
           hero
             ? "text-emerald-400 text-2xl"
             : "text-zinc-100"
@@ -26,7 +26,7 @@ export default function StatTile({ icon, value, label, hero = false, className =
       >
         {value}
       </span>
-      <span className="text-xs text-zinc-500">{label}</span>
+      <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">{label}</span>
     </Card>
   );
 }
