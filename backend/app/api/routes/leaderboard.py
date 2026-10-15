@@ -24,7 +24,9 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
             text("""
                 SELECT
                     COALESCE(SUM(value), 0)::float AS total_value,
-                    COUNT(*)::int                   AS contribution_count
+                    COUNT(*)::int                   AS contribution_count,
+                    COUNT(DISTINCT user_id)::int    AS unique_contributors,
+                    COUNT(DISTINCT group_id)::int   AS unique_groups
                 FROM contributions
                 WHERE campaign_id = :cid
             """),
@@ -188,6 +190,10 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
     return {
         "total_value": totals_row.total_value,
         "contribution_count": totals_row.contribution_count,
+        # users/groups below are capped at the top 20, so their lengths are not counts;
+        # these are the real distinct totals.
+        "unique_contributors": totals_row.unique_contributors,
+        "unique_groups": totals_row.unique_groups,
         "users": [
             {
                 "entity_id": r.user_id,

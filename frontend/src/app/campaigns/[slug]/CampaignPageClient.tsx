@@ -355,7 +355,7 @@ interface Props {
   userDisplayName: string | null;
   userUsername: string | null;
   userGroups: { id: string; name: string; image_url?: string | null }[];
-  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[]; uniqueContributors: number };
   activity: ActivityItem[];
   unit: string;
   problemReports?: ProblemReports | null;
@@ -550,7 +550,7 @@ function StatsPanel({
   bagMetrics,
 }: {
   claims: TerritoryClaim[];
-  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[]; uniqueContributors: number };
   campaignType: string;
   unit: string;
   eventCount: number;
@@ -565,7 +565,7 @@ function StatsPanel({
     campaignType === "choropleth" ? "States active" :
     campaignType === "hex_bloom" ? "Hexes bloomed" :
     "Areas led";
-  const contributorCount = leaderboard.users.length + leaderboard.groups.length;
+  const contributorCount = leaderboard.uniqueContributors;
   const topUser = leaderboard.users[0];
   const topGroup = leaderboard.groups[0];
   const daysRunning = startsAt ? daysSince(startsAt) : null;
@@ -834,7 +834,7 @@ function PanelContent({
   deletingContributionId,
 }: {
   openPanel: PanelKey;
-  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[]; uniqueContributors: number };
   campaignType: string;
   unit: string;
   activityItems: ActivityItem[];

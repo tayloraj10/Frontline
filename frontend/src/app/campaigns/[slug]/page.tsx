@@ -207,7 +207,7 @@ const getCampaignPageData = unstable_cache(
       };
     });
 
-    const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number } = lbRes?.ok
+    const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number; unique_contributors?: number } = lbRes?.ok
       ? await lbRes.json()
       : { users: [], groups: [] };
 
@@ -379,6 +379,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
 
   // Enriched leaderboard
   const leaderboard = {
+    uniqueContributors: lbRaw.unique_contributors ?? lbRaw.users.length,
     users: lbRaw.users.map((u): LeaderboardEntry => {
       const p = profilesById.get(u.entity_id);
       return {

@@ -37,7 +37,7 @@ const getTrashWarStats = unstable_cache(
       fetch(`${fastapiUrl}/api/campaigns/${campaign.id}/leaderboard`, { cache: "no-store" }).catch(() => null),
     ]);
 
-    const lbRaw: { users: unknown[]; groups: TrashWarGroup[] } = lbRes?.ok
+    const lbRaw: { users: unknown[]; groups: TrashWarGroup[]; unique_contributors?: number } = lbRes?.ok
       ? await lbRes.json()
       : { users: [], groups: [] };
     const smallBags = (bagRows ?? []).reduce((sum, r) => sum + (r.metrics_small_bags ?? 0), 0);
@@ -53,7 +53,8 @@ const getTrashWarStats = unstable_cache(
       smallBags,
       largeBags,
       totalPounds,
-      contributorCount: lbRaw.users.length + lbRaw.groups.length,
+      // The lists are capped at the top 20, so use the backend's real distinct count.
+      contributorCount: lbRaw.unique_contributors ?? lbRaw.users.length,
       groups: lbRaw.groups,
     };
   },
