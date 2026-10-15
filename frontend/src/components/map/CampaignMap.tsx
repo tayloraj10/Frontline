@@ -6330,7 +6330,7 @@ export default function CampaignMap({
           onClick={() => setSelectedBusiness(null)}
         >
           <div
-            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 pr-14 shadow-2xl"
+            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-[20px] p-5 pr-14 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <IconButton
@@ -6386,15 +6386,16 @@ export default function CampaignMap({
                 </p>
               </div>
             )}
-            <div className="flex flex-col gap-1.5 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
               {selectedBusiness.business.website_url && (
                 <a
                   href={selectedBusiness.business.website_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
+                  className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
                 >
-                  Visit website
+                  <span aria-hidden="true">🌐</span>
+                  Website
                 </a>
               )}
               {selectedBusiness.location.google_maps_url && (
@@ -6402,23 +6403,25 @@ export default function CampaignMap({
                   href={selectedBusiness.location.google_maps_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
+                  className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
                 >
-                  Open in Google Maps
+                  <span aria-hidden="true">📍</span>
+                  Google Maps
                 </a>
               )}
               <a
                 href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.location.lat},${selectedBusiness.location.lng}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
+                className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
               >
-                Get directions
+                <span aria-hidden="true">🧭</span>
+                Directions
               </a>
             </div>
             <Link
               href={`/partners/${selectedBusiness.business.slug}`}
-              className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-400 active:scale-[0.97] text-emerald-950 text-sm font-semibold shadow-sm transition-[background-color,transform] duration-150 touch-manipulation"
+              className="mt-4 flex items-center justify-center gap-1.5 w-full min-h-12 px-4 rounded-full bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold transition-[background-color,transform] duration-150 touch-manipulation"
             >
               View offer & redeem
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
