@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import TimedEventForm, { type TimedEventAreaPicker } from "./TimedEventForm";
 import IconButton from "@/components/ui/IconButton";
-import FlowSheet from "@/components/ui/FlowSheet";
+import FlowSheet, { FlowHidden } from "@/components/ui/FlowSheet";
 import type { CreatedEvent } from "@/lib/events";
 
 export default function CreateTimedEventButton({
@@ -60,7 +60,7 @@ export default function CreateTimedEventButton({
       )}
 
       {everOpened && (
-        <div className={open ? "" : "hidden"}>
+        <FlowHidden hidden={!open}>
           <FlowSheet title="New timed event" onClose={() => onOpenChange(false)}>
             <TimedEventForm
               key={formKey}
@@ -73,7 +73,7 @@ export default function CreateTimedEventButton({
               onCancel={() => onOpenChange(false)}
             />
           </FlowSheet>
-        </div>
+        </FlowHidden>
       )}
     </>
   );

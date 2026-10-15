@@ -22,7 +22,7 @@ import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import Lightbox from "@/components/Lightbox";
 import IconButton from "@/components/ui/IconButton";
 import { GuidedStepper, StepperNav, ViewModeToggle, type GuidedStep } from "@/components/ui/GuidedStepper";
-import FlowSheet, { FlowFooter } from "@/components/ui/FlowSheet";
+import FlowSheet, { FlowFooter, FlowHidden } from "@/components/ui/FlowSheet";
 import { ChoiceChips } from "@/components/ui/fields";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
@@ -4746,7 +4746,7 @@ export default function ContributionPanel({
       )}
 
       {mode === "contribute" && (
-        <div className={pinPickerActive || routePickerActive ? "hidden" : undefined}>
+        <FlowHidden hidden={pinPickerActive || routePickerActive}>
           {isSolarpunk ? (
             <SolarpunkActionModal
               campaignId={campaignId}
@@ -4791,10 +4791,10 @@ export default function ContributionPanel({
               onForceTrackModeConsumed={onForceTrackModeConsumed}
             />
           )}
-        </div>
+        </FlowHidden>
       )}
       {mode === "claim" && activeClaimReport && (
-        <div className={pinPickerActive ? "hidden" : undefined}>
+        <FlowHidden hidden={pinPickerActive}>
           <ClaimReportModal
             report={activeClaimReport}
             userId={userId}
@@ -4817,7 +4817,7 @@ export default function ContributionPanel({
             myActiveClaimReport={myActiveClaimReport}
             onViewActiveClaim={() => myActiveClaimReport && setActiveClaimReport(myActiveClaimReport)}
           />
-        </div>
+        </FlowHidden>
       )}
       {mode === "all_actions" && !pinPickerActive && (
         <AllActionsModal
@@ -4826,7 +4826,7 @@ export default function ContributionPanel({
         />
       )}
       {mode === "solarpunk_photo" && (
-        <div className={pinPickerActive ? "hidden" : undefined}>
+        <FlowHidden hidden={pinPickerActive}>
           <SolarpunkPhotoModal
             campaignId={campaignId}
             userId={userId}
@@ -4838,10 +4838,10 @@ export default function ContributionPanel({
             onContributionSubmitted={onContributionSubmitted}
             activeMapStyle={activeMapStyle}
           />
-        </div>
+        </FlowHidden>
       )}
       {mode === "report" && (
-        <div className={pinPickerActive ? "hidden" : undefined}>
+        <FlowHidden hidden={pinPickerActive}>
           <ReportModal
             campaignId={campaignId}
             userId={userId}
@@ -4853,10 +4853,10 @@ export default function ContributionPanel({
             onReportSubmitted={onReportSubmitted}
             onReportRemoved={onReportRemoved}
           />
-        </div>
+        </FlowHidden>
       )}
       {mode === "host_event" && userId && (
-        <div className={pinPickerActive || routePickerActive ? "hidden" : undefined}>
+        <FlowHidden hidden={pinPickerActive || routePickerActive}>
           <HostEventModal
             campaignId={campaignId}
             userId={userId}
@@ -4870,7 +4870,7 @@ export default function ContributionPanel({
             activeMapStyle={activeMapStyle}
             onRouteAdded={onRouteAdded}
           />
-        </div>
+        </FlowHidden>
       )}
     </>
   );

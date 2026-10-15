@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { createPortal } from "react-dom";
+
+const FlowHiddenContext = createContext(false);
+
+/**
+ * FlowSheet is portaled to body, so a "hidden" ancestor no longer hides it. Wrap a flow in
+ * this when it has to stay mounted but invisible (e.g. while a map pin picker is active).
+ */
+export function FlowHidden({ hidden, children }: { hidden?: boolean; children: React.ReactNode }) {
+  return <FlowHiddenContext.Provider value={!!hidden}>{children}</FlowHiddenContext.Provider>;
+}
 
 export interface FlowStep {
   key: string;
@@ -40,6 +50,8 @@ export default function FlowSheet({
   glow = false,
   footerId,
 }: FlowSheetProps) {
+  const hidden = useContext(FlowHiddenContext);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -53,7 +65,7 @@ export default function FlowSheet({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm sm:px-4"
+      className={`${hidden ? "hidden" : "flex"} fixed inset-0 z-[60] items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm sm:px-4`}
       onClick={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-modal="true"

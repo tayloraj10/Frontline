@@ -680,3 +680,13 @@ body[data-map-full] .maplibregl-ctrl-top-right {
     top: 8.25rem;
   }
 }
+
+/* iOS Safari zooms the page when a focused field is under 16px and never zooms back out.
+   Unlayered, so it beats Tailwind text-sm/text-xs utilities on touch devices. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
