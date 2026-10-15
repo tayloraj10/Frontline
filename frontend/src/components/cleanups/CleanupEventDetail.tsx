@@ -162,7 +162,6 @@ export default function CleanupEventDetail({
   const [attendeeFilter, setAttendeeFilter] = useState<"all" | "not_checked_in">("all");
   const [moreRowId, setMoreRowId] = useState<string | null>(null);
   const [rosterOpen, setRosterOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [stepsEarly, setStepsEarly] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
@@ -660,18 +659,6 @@ export default function CleanupEventDetail({
             )}
           </div>
         )}
-        {effectiveIsOrganizer && (event.description || event.external_link) && (
-          <button
-            type="button"
-            onClick={() => setDetailsOpen((v) => !v)}
-            aria-expanded={detailsOpen}
-            className="mt-3 inline-flex items-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            {detailsOpen ? "Hide event details" : "Show event details"}
-          </button>
-        )}
-        {(!effectiveIsOrganizer || detailsOpen) && (
-          <>
         {event.description && <p className="mt-3 text-sm text-zinc-300 leading-relaxed">{event.description}</p>}
         {event.external_link && (
           <a
@@ -682,8 +669,6 @@ export default function CleanupEventDetail({
           >
             Event link ↗
           </a>
-        )}
-          </>
         )}
       </div>
 
