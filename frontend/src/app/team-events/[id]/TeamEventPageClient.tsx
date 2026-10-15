@@ -1,5 +1,6 @@
 "use client";
 
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -50,11 +51,13 @@ export default function TeamEventPageClient({
   userId,
   initialViewerTeamId,
   initialViewerRepresentingGroupId,
+  isSiteAdmin = false,
 }: {
   initialEvent: TeamEventDetail;
   userId: string | null;
   initialViewerTeamId: string | null;
   initialViewerRepresentingGroupId: string | null;
+  isSiteAdmin?: boolean;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const [viewerTeamId, setViewerTeamId] = useState(initialViewerTeamId);
@@ -203,7 +206,13 @@ export default function TeamEventPageClient({
       )}
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-2xl font-black text-zinc-100 leading-tight break-words">{event.title}</h1>
+          <h1 className="font-display font-extrabold text-2xl text-zinc-100 leading-tight break-words">{event.title}</h1>
+          <FlowGuide
+            id="team-events"
+            autoOpen
+            variant="icon"
+            roles={[...(canReview ? ["reviewer"] : []), ...(isSiteAdmin ? ["admin"] : [])]}
+          />
           {isCancelled && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-red-800/60 bg-red-950/30 px-2.5 py-1 text-xs font-semibold text-red-400">
               Cancelled
@@ -233,7 +242,7 @@ export default function TeamEventPageClient({
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
       {showJoinFlow && eligibleRepresentGroups.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Join as</p>
           <div className="flex flex-col gap-1.5 text-sm text-zinc-300">
             <label className="flex items-center gap-2">
@@ -343,7 +352,7 @@ export default function TeamEventPageClient({
       )}
 
       {userId && viewerTeamId && !isCancelled && !changingJoin && (
-        <div className="border border-zinc-800 rounded-xl p-4 text-center space-y-1.5 shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 p-4 text-center space-y-1.5">
           <p className="text-sm font-semibold text-zinc-200">
             You&apos;re in{currentRepresentingGroup ? `, representing ${currentRepresentingGroup.group_name}` : " as yourself"}!
           </p>
@@ -378,7 +387,7 @@ export default function TeamEventPageClient({
       )}
 
       {userId && myGroups && myGroups.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Your groups</p>
           {myGroups.map((g) => {
             const gp = groupParticipantByGroupId.get(g.group_id);

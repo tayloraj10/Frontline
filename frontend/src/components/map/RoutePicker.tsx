@@ -175,7 +175,7 @@ export default function RoutePicker({
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-zinc-900/95 border border-zinc-700 rounded-lg text-xs text-zinc-200 shadow-xl whitespace-nowrap">
         {justClosedLoop
-          ? "Route closed — click Undo to reopen"
+          ? "Route closed. Click Undo to reopen"
           : `Click the map to draw your route (${coordCount} point${coordCount === 1 ? "" : "s"})`}
       </div>
 

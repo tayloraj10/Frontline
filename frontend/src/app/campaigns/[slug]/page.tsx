@@ -3,14 +3,11 @@ import { unstable_cache } from "next/cache";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
-import CampaignPageClient, { CampaignStatBar } from "./CampaignPageClient";
+import CampaignPageClient from "./CampaignPageClient";
+import MapRouteFlag from "@/components/map/MapRouteFlag";
 import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
-import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 import type { MapBusiness, MapBusinessLocation, MapCleanupEvent } from "@/components/map/CampaignMap";
-import CampaignInstructionsModal from "@/components/CampaignInstructionsModal";
-import BackButton from "@/components/ui/BackButton";
-import ShareButton from "@/components/ShareButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -210,7 +207,7 @@ const getCampaignPageData = unstable_cache(
       };
     });
 
-    const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number } = lbRes?.ok
+    const lbRaw: { users: RawLbEntry[]; groups: RawLbEntry[]; total_value?: number; unique_contributors?: number } = lbRes?.ok
       ? await lbRes.json()
       : { users: [], groups: [] };
 
@@ -382,6 +379,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
 
   // Enriched leaderboard
   const leaderboard = {
+    uniqueContributors: lbRaw.unique_contributors ?? lbRaw.users.length,
     users: lbRaw.users.map((u): LeaderboardEntry => {
       const p = profilesById.get(u.entity_id);
       return {
@@ -428,82 +426,9 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   const userDisplayName = currentUserProfile ? (currentUserProfile.display_name ?? currentUserProfile.username) : null;
   const userUsername = currentUserProfile?.username ?? null;
 
-  const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type] ?? {
-    icon: "🏁",
-    label: campaign.campaign_type,
-    color: "text-zinc-400",
-    bg: "bg-zinc-800/20",
-    border: "border-zinc-700/50",
-    bar: "bg-zinc-600",
-  };
-
   return (
-    <div className="flex flex-col flex-1">
-      <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 sm:gap-3">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <BackButton href="/campaigns" label="Campaigns" labelClassName="hidden sm:inline" />
-          <span className="text-zinc-700 shrink-0 hidden sm:inline">|</span>
-          <div className="min-w-0 flex items-baseline gap-2 sm:gap-3">
-            <h1 className="text-sm sm:text-base font-bold text-zinc-100 truncate leading-tight shrink-0">
-              {campaign.title}
-            </h1>
-            {campaign.description && (
-              <p className="hidden sm:block text-xs text-zinc-500 truncate leading-tight min-w-0">
-                {campaign.description}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <ShareButton variant="icon" content={{ title: campaign.title, text: campaign.description ?? undefined }} />
-          <CampaignInstructionsModal slug={campaign.slug} description={campaign.description} />
-          {events.length > 0 && (
-            <span className="px-2 sm:px-3 py-0.5 sm:py-1 bg-red-900/40 border border-red-700/60 text-red-300 text-xs font-semibold rounded-full animate-pulse">
-              ⚡ {events.length}
-            </span>
-          )}
-          <span
-            className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border ${cfg.bg} ${cfg.border} ${cfg.color}`}
-          >
-            {cfg.icon}
-            <span>{cfg.label ?? campaign.campaign_type}</span>
-          </span>
-        </div>
-      </div>
-
-      <CampaignStatBar
-        campaignId={campaign.id}
-        campaignType={campaign.campaign_type}
-        eventsCount={events.length}
-        initialTotalBags={totalBags}
-        initialTractsCount={tractsCount}
-        initialContributionCount={contributionCount}
-        initialSmallBags={bagMetrics.small}
-        initialLargeBags={bagMetrics.large}
-        initialPounds={bagMetrics.pounds}
-      />
-
-      {campaign.campaign_type === "heatmap" && (
-        <div className="hidden sm:flex px-5 py-2 border-b border-zinc-800/60 bg-zinc-950/60 items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider shrink-0">What counts:</span>
-          {[
-            "Rage-bait accounts",
-            "Outrage addiction",
-            "Drama channels",
-            "Overconsumption hauls",
-            "Clout chasers",
-            "Narcissist influencers",
-            "Content farms",
-            "Doomscroll traps",
-          ].map((tag) => (
-            <span key={tag} className="px-2 py-0.5 rounded-full bg-orange-900/20 border border-orange-700/30 text-orange-400/80 text-[10px] font-medium">
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
+    <div className="legacy-palette flex flex-col flex-1">
+      <MapRouteFlag />
       <div className="flex flex-col flex-1 min-h-0 relative">
         <CampaignPageClient
           campaign={campaign}
@@ -526,6 +451,8 @@ export default async function CampaignPage({ params, searchParams }: Props) {
           focusCoords={focusCoords}
           bagMetrics={bagMetrics}
           contributionCount={contributionCount}
+          totalBags={totalBags}
+          tractsCount={tractsCount}
         />
       </div>
     </div>

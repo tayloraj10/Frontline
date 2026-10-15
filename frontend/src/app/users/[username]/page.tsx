@@ -10,6 +10,17 @@ import ReportPhotoButton from "@/components/ReportPhotoButton";
 import ShareButton from "@/components/ShareButton";
 import BlockUserButton from "@/components/BlockUserButton";
 import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
+import { PageShell } from "@/components/ui/PageShell";
+import ProgressBar from "@/components/ui/ProgressBar";
+
+const WEEKLY_GOAL = 1;
+const CLEANUP_TYPES = new Set(["cleanup", "cleanup_event_checkin"]);
+
+/** Start of the ISO-ish week (Monday 00:00 UTC) as a day number, used to bucket cleanups into weeks. */
+function weekIndex(d: Date) {
+  const day = Math.floor(d.getTime() / 86400000);
+  return Math.floor((day + 3) / 7);
+}
 
 const CAMPAIGN_UNIT: Record<string, string> = {
   territory: "pts",
@@ -111,7 +122,7 @@ export default async function UserProfilePage({ params }: Props) {
       .eq("user_id", profile.id),
     supabase
       .from("contributions")
-      .select("campaign_id, value, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
+      .select("campaign_id, value, submitted_at, contribution_type, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
       .eq("user_id", profile.id),
     supabase
       .from("territory_claims")
@@ -207,184 +218,194 @@ export default async function UserProfilePage({ params }: Props) {
     .sort(([, a], [, b]) => b.total_value - a.total_value)
     .slice(0, 5);
 
+  // Personal impact numbers (display only, derived from data already loaded above).
+  const bagsPerContrib = (allContribsData ?? []).map((c) => {
+    const cl = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+    return (cl?.metrics_small_bags ?? 0) + (cl?.metrics_large_bags ?? 0);
+  });
+  const lifetimeBags = bagsPerContrib.reduce((a, b) => a + b, 0);
+  const bestCleanup = bagsPerContrib.reduce((a, b) => Math.max(a, b), 0);
+  const nowWeek = weekIndex(new Date());
+  const perWeek = new Map<number, number>();
+  for (const c of allContribsData ?? []) {
+    if (!c.submitted_at || !CLEANUP_TYPES.has(c.contribution_type)) continue;
+    const w = weekIndex(new Date(c.submitted_at));
+    perWeek.set(w, (perWeek.get(w) ?? 0) + 1);
+  }
+  const thisWeek = perWeek.get(nowWeek) ?? 0;
+  let streak = 0;
+  for (let w = perWeek.has(nowWeek) ? nowWeek : nowWeek - 1; perWeek.has(w); w--) streak++;
+  const displayName = profile.display_name ?? profile.username;
+
+  const card = "rounded-[20px] bg-zinc-900 overflow-hidden";
+  const cardHead = "px-5 pt-4 pb-2 font-display text-base font-extrabold tracking-tight text-zinc-100";
+
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 w-full">
+    <PageShell width="wide">
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="flex items-start gap-4 min-w-0">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <div className="shrink-0">
-            <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 shadow-elevation-1 overflow-hidden flex items-center justify-center">
+            <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-[20px] bg-zinc-800 overflow-hidden flex items-center justify-center">
               {profile.avatar_url ? (
-                <GroupAvatarLightbox imageUrl={profile.avatar_url} name={profile.display_name ?? profile.username} />
+                <GroupAvatarLightbox imageUrl={profile.avatar_url} name={displayName} />
               ) : (
-                <span className="text-2xl font-black text-zinc-300">
-                  {(profile.display_name ?? profile.username)[0].toUpperCase()}
-                </span>
+                <span className="font-display text-3xl font-extrabold text-zinc-300">{displayName[0].toUpperCase()}</span>
               )}
             </div>
             {profile.avatar_url && !isOwn && currentUser && (
-              <ReportPhotoButton
-                contentType="avatar"
-                contentId={profile.id}
-                photoUrl={profile.avatar_url}
-                userId={currentUser.id}
-                className="mt-1"
-              />
+              <ReportPhotoButton contentType="avatar" contentId={profile.id} photoUrl={profile.avatar_url} userId={currentUser.id} className="mt-1" />
             )}
           </div>
           <div className="min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100 leading-tight">
-              {profile.display_name ?? profile.username}
-            </h1>
-            <p className="text-sm text-zinc-500">@{profile.username}</p>
-            {profile.bio && (
-              <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{profile.bio}</p>
-            )}
-            <p className="mt-1 text-xs text-zinc-600">Member since {joinedDate}</p>
+            <h1 className="font-display font-extrabold text-2xl lg:text-3xl tracking-tight text-zinc-50 leading-tight">{displayName}</h1>
+            <p className="text-sm text-zinc-500">@{profile.username} · Member since {joinedDate}</p>
+            {profile.bio && <p className="mt-1.5 max-w-prose text-sm text-zinc-400 leading-relaxed">{profile.bio}</p>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
-          <ShareButton
-            variant="icon"
-            content={{ title: profile.display_name ?? profile.username, text: profile.bio ?? undefined }}
-          />
+          <ShareButton variant="icon" content={{ title: displayName, text: profile.bio ?? undefined }} />
           {isOwn && (
-            <Link
-              href="/settings/profile"
-              className="px-3 py-1.5 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 rounded-lg shadow-elevation-1 transition-[color,border-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
-            >
+            <Link href="/settings/profile" className="inline-flex min-h-10 items-center px-4 text-sm font-semibold rounded-2xl bg-zinc-800 text-zinc-100 hover:bg-zinc-700 transition-[background-color,transform] active:scale-[0.97] touch-manipulation">
               Edit profile
             </Link>
           )}
           {!isOwn && currentUser && (
-            <BlockUserButton
-              blockedUserId={profile.id}
-              blockedUsername={profile.username}
-              initiallyBlocked={!!existingBlock}
-            />
+            <BlockUserButton blockedUserId={profile.id} blockedUsername={profile.username} initiallyBlocked={!!existingBlock} />
           )}
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      {/* Impact stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {[
-          { label: "Points", value: formatPoints(profile.points ?? 0) },
-          { label: "Contributions", value: (contribCount ?? 0).toLocaleString() },
-          { label: "Zip codes claimed", value: totalTractsCount.toLocaleString() },
-          { label: "Groups", value: (membersData?.length ?? 0).toLocaleString() },
-        ].map(({ label, value }) => (
-          <div
-            key={label}
-            className="border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/30 shadow-elevation-1 text-center"
-          >
-            <div className="text-xl font-black text-zinc-100 tabular-nums">{value}</div>
-            <div className="text-xs text-zinc-500 mt-0.5">{label}</div>
+          { label: "Points", value: formatPoints(profile.points ?? 0), accent: true },
+          { label: "Bags picked up", value: lifetimeBags.toLocaleString() },
+          { label: "Cleanups logged", value: (contribCount ?? 0).toLocaleString() },
+          { label: "Zip codes cleaned", value: totalTractsCount.toLocaleString() },
+        ].map(({ label, value, accent }) => (
+          <div key={label} className="rounded-[20px] bg-zinc-900 px-5 py-4">
+            <div className={`font-display text-2xl lg:text-3xl font-extrabold tracking-tight tabular-nums ${accent ? "text-amber-400" : "text-zinc-50"}`}>{value}</div>
+            <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">{label}</div>
           </div>
         ))}
       </div>
 
-      {/* Campaign Participation */}
-      {campaignEntries.length > 0 && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
-          <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-            <span className="text-sm font-semibold text-zinc-300">Campaigns</span>
-          </div>
-          <ul className="divide-y divide-zinc-800/60">
-            {campaignEntries.map(([campaignId, stats]) => {
-              const campaign = campaignsById.get(campaignId);
-              if (!campaign) return null;
-              const unit = CAMPAIGN_UNIT[campaign.campaign_type] ?? "pts";
-              const claimedLabel = CAMPAIGN_CLAIMED_LABEL[campaign.campaign_type] ?? "areas";
-              return (
-                <li key={campaignId} className="px-5 py-3 flex items-center gap-3">
-                  <Link
-                    href={`/campaigns/${campaign.slug}`}
-                    className="flex-1 text-sm text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150 font-medium truncate min-w-0"
-                  >
-                    {campaign.title}
-                  </Link>
-                  <div className="text-right shrink-0">
-                    <div className="text-xs font-semibold text-zinc-300 tabular-nums">
-                      {formatPoints(stats.total_value)} {unit}
-                    </div>
-                    {stats.small_bags + stats.large_bags > 0 && (
-                      <div className="text-[11px] text-zinc-600 tabular-nums">
-                        {stats.small_bags + stats.large_bags} bag{stats.small_bags + stats.large_bags !== 1 ? "s" : ""}
-                      </div>
-                    )}
-                    <div className="text-xs text-zinc-600">{stats.tracts_claimed} {claimedLabel}</div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {/* Groups */}
-      {(membersData ?? []).length > 0 && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
-          <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-            <span className="text-sm font-semibold text-zinc-300">Groups</span>
-          </div>
-          <ul className="divide-y divide-zinc-800/60">
-            {(membersData ?? []).map((m) => {
-              const group = groupsById.get(m.group_id);
-              if (!group) return null;
-              return (
-                <li key={m.group_id} className="px-5 py-3 flex items-center justify-between gap-3">
-                  <Link
-                    href={`/groups/${group.slug}`}
-                    className="text-sm text-zinc-200 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150 font-medium"
-                  >
-                    {group.name}
-                  </Link>
-                  <span className="text-xs text-zinc-600 capitalize">{m.role}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {/* Achievements */}
-      {(achievementsData ?? []).length > 0 && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
-          <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-            <span className="text-sm font-semibold text-zinc-300">Achievements</span>
-          </div>
-          <ul className="divide-y divide-zinc-800/60">
-            {(achievementsData ?? []).map((a) => (
-              <li key={a.id} className="px-5 py-3 flex items-start gap-3">
-                <span className="text-base shrink-0 mt-0.5">{a.type === "offer_eligible" ? "🎁" : "🏆"}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-zinc-200 font-medium leading-snug">{a.title}</p>
-                  {a.body && <p className="text-xs text-zinc-500 mt-0.5">{a.body}</p>}
-                  <p className="text-xs text-zinc-600 mt-1">
-                    {new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <div className="min-w-0 space-y-6">
+          {/* Weekly goal + streak: own profile only */}
+          {isOwn && (
+            <div className={`${card} p-5`}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-base font-extrabold tracking-tight text-zinc-100">This week</h2>
+                  <p className="mt-0.5 text-sm text-zinc-400">
+                    {thisWeek >= WEEKLY_GOAL
+                      ? "You cleaned up this week. Nice work."
+                      : "Log a cleanup this week to keep your streak going."}
                   </p>
                 </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                <div className="text-right">
+                  <div className="font-display text-2xl font-extrabold tabular-nums text-emerald-400">{streak}</div>
+                  <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">week streak</div>
+                </div>
+              </div>
+              <ProgressBar className="mt-4" value={(thisWeek / WEEKLY_GOAL) * 100} label="Weekly cleanup goal" />
+              <div className="mt-2 flex justify-between text-xs text-zinc-500 tabular-nums">
+                <span>{Math.min(thisWeek, WEEKLY_GOAL)} of {WEEKLY_GOAL} {WEEKLY_GOAL === 1 ? "cleanup" : "cleanups"}</span>
+                <span>Best cleanup: {bestCleanup} bag{bestCleanup === 1 ? "" : "s"}</span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/campaigns/trash-war" className="inline-flex min-h-10 items-center px-4 text-sm font-bold rounded-2xl bg-emerald-400 text-emerald-950 hover:bg-emerald-300 active:scale-[0.97] transition-[transform,background-color] touch-manipulation">Log a cleanup</Link>
+                <Link href="/partners" className="inline-flex min-h-10 items-center px-4 text-sm font-semibold rounded-2xl bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:scale-[0.97] transition-[transform,background-color] touch-manipulation">Spend {formatPoints(profile.spendable_points ?? 0)} pts</Link>
+              </div>
+            </div>
+          )}
 
-      {/* Recent Activity */}
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
-        <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-          <span className="text-sm font-semibold text-zinc-300">Recent activity</span>
+          {/* Recent Activity */}
+          <div className={card}>
+            <h2 className={cardHead}>Recent activity</h2>
+            <UserActivityList
+              initialContribs={contribs}
+              initialReports={reportsData ?? []}
+              campaigns={campaignsData ?? []}
+              isOwn={isOwn}
+              userId={currentUser?.id ?? null}
+              profileId={profile.id}
+            />
+          </div>
         </div>
-        <UserActivityList
-          initialContribs={contribs}
-          initialReports={reportsData ?? []}
-          campaigns={campaignsData ?? []}
-          isOwn={isOwn}
-          userId={currentUser?.id ?? null}
-          profileId={profile.id}
-        />
+
+        <div className="min-w-0 space-y-6">
+          {/* Achievements */}
+          <div className={card}>
+            <div className="flex items-center justify-between pr-5"><h2 className={cardHead}>Achievements</h2>{isOwn && <Link href="/achievements" className="text-xs font-semibold text-emerald-400 hover:text-emerald-300">See all</Link>}</div>
+            {(achievementsData ?? []).length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-zinc-500">Milestones you unlock will show up here. Log your first cleanup to get started.</p>
+            ) : (
+              <ul className="px-2 pb-2">
+                {(achievementsData ?? []).map((a) => (
+                  <li key={a.id} className="flex items-start gap-3 rounded-2xl px-3 py-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-base">{a.type === "offer_eligible" ? "🎁" : "🏆"}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold leading-snug text-zinc-100">{a.title}</p>
+                      {a.body && <p className="mt-0.5 text-xs text-zinc-500">{a.body}</p>}
+                      <p className="mt-1 text-xs text-zinc-600">{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Campaign Participation */}
+          {campaignEntries.length > 0 && (
+            <div className={card}>
+              <h2 className={cardHead}>Campaigns</h2>
+              <ul className="px-2 pb-2">
+                {campaignEntries.map(([campaignId, stats]) => {
+                  const campaign = campaignsById.get(campaignId);
+                  if (!campaign) return null;
+                  const unit = CAMPAIGN_UNIT[campaign.campaign_type] ?? "pts";
+                  const bags = stats.small_bags + stats.large_bags;
+                  return (
+                    <li key={campaignId}>
+                      <Link href={`/campaigns/${campaign.slug}`} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-zinc-800/60 transition-colors">
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100">{campaign.title}</span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-sm font-semibold tabular-nums text-zinc-200">{formatPoints(stats.total_value)} {unit}</span>
+                          {bags > 0 && <span className="block text-xs tabular-nums text-zinc-500">{bags} bag{bags !== 1 ? "s" : ""}</span>}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {/* Groups */}
+          {(membersData ?? []).length > 0 && (
+            <div className={card}>
+              <h2 className={cardHead}>Groups</h2>
+              <ul className="px-2 pb-2">
+                {(membersData ?? []).map((m) => {
+                  const group = groupsById.get(m.group_id);
+                  if (!group) return null;
+                  return (
+                    <li key={m.group_id}>
+                      <Link href={`/groups/${group.slug}`} className="flex items-center justify-between gap-3 rounded-2xl px-3 py-3 hover:bg-zinc-800/60 transition-colors">
+                        <span className="text-sm font-semibold text-zinc-100">{group.name}</span>
+                        <span className="text-xs capitalize text-zinc-500">{m.role}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
       </div>
-    </main>
+    </PageShell>
   );
 }

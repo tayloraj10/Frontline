@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import EventAreaMapPicker, { type SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createTimedEvent, type CreatedEvent } from "@/lib/events";
+import { FlowFooter } from "@/components/ui/FlowSheet";
+import { Note } from "@/components/ui/fields";
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-12 rounded-2xl bg-zinc-800 px-4 py-3 text-base sm:text-sm text-zinc-100 placeholder:text-zinc-500 ring-1 ring-inset ring-white/5 focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-shadow";
 
 export interface TimedEventFormCampaign {
   id: string;
@@ -60,8 +62,8 @@ export default function TimedEventForm({
   const totalDurationMinutes =
     (Number(durationDays) || 0) * 1440 + (Number(durationHours) || 0) * 60 + (Number(durationMinutes) || 0);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!campaignId || !title.trim() || selectedAreas.length === 0) return;
     setLoading(true);
     setError(null);
@@ -89,31 +91,31 @@ export default function TimedEventForm({
       <div className="grid grid-cols-2 gap-4">
         {campaigns && onCampaignChange && (
           <div className="col-span-2 space-y-1">
-            <label className="text-xs text-zinc-500">Campaign</label>
+            <label className="block text-sm font-semibold text-zinc-200">Campaign</label>
             <select className={inputCls} value={campaignId} onChange={e => onCampaignChange(e.target.value)} required>
               {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
             </select>
           </div>
         )}
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Title</label>
+          <label className="block text-sm font-semibold text-zinc-200">Title</label>
           <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Double Points Weekend" />
         </div>
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Description</label>
+          <label className="block text-sm font-semibold text-zinc-200">Description</label>
           <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
         </div>
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Score multiplier</label>
+          <label className="block text-sm font-semibold text-zinc-200">Score multiplier</label>
           <input type="number" min={1} step={0.1} className={inputCls} value={multiplier} onChange={e => setMultiplier(e.target.value)} />
         </div>
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Starts (optional)</label>
+          <label className="block text-sm font-semibold text-zinc-200">Starts (optional)</label>
           <input type="datetime-local" className={inputCls} value={startTime} onChange={e => setStartTime(e.target.value)} />
           <p className="text-[10px] text-zinc-600">Tap outside the calendar to confirm your selection. Leave blank to start immediately.</p>
         </div>
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Duration</label>
+          <label className="block text-sm font-semibold text-zinc-200">Duration</label>
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-0.5">
               <input type="number" min={0} className={inputCls} value={durationDays} onChange={e => setDurationDays(e.target.value)} placeholder="0" />
@@ -131,7 +133,7 @@ export default function TimedEventForm({
           <p className="text-[10px] text-zinc-600">All blank/zero = indefinite.</p>
         </div>
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Event area(s)</label>
+          <label className="block text-sm font-semibold text-zinc-200">Event area(s)</label>
           {areaPicker.mode === "embedded" ? (
             campaignId ? (
               <EventAreaMapPicker
@@ -159,7 +161,7 @@ export default function TimedEventForm({
               <button
                 type="button"
                 onClick={areaPicker.onRequestPick}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+                className="min-h-11 px-4 text-sm font-semibold rounded-full bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 {selectedAreas.length > 0 ? "Edit selection on map" : "Pick areas on the map"}
               </button>
@@ -167,12 +169,12 @@ export default function TimedEventForm({
           )}
         </div>
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-zinc-500">Event image</label>
+          <label className="block text-sm font-semibold text-zinc-200">Event image</label>
           <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={() => imageInputRef.current?.click()}
-              className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation group shrink-0"
+              className="relative w-16 h-16 rounded-2xl overflow-hidden bg-zinc-800 ring-1 ring-white/10 hover:ring-white/30 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation group shrink-0"
             >
               {imagePreview ? (
                 <img src={imagePreview} alt="Event" className="w-full h-full object-cover" />
@@ -201,25 +203,16 @@ export default function TimedEventForm({
         </div>
       </div>
       {selectedAreas.length === 0 && (
-        <p className="text-amber-400 text-xs">Select at least one area for this event to apply to.</p>
+        <Note tone="warn">Select at least one area for this event to apply to.</Note>
       )}
       {error && <p className="text-red-400 text-xs">{error}</p>}
-      <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={loading || !title.trim() || !campaignId || selectedAreas.length === 0}
-          className="px-4 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
-        >
-          {loading ? "Creating…" : "Create Timed Event"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] text-zinc-300 rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
-        >
-          Cancel
-        </button>
-      </div>
+      <FlowFooter
+        onBack={onCancel}
+        backLabel="Cancel"
+        primaryLabel={loading ? "Creating..." : "Create timed event"}
+        onPrimary={() => handleSubmit()}
+        primaryDisabled={loading || !title.trim() || !campaignId || selectedAreas.length === 0}
+      />
     </form>
   );
 }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import PartnerDashboardClient, { type DashboardBusiness, type DashboardOffer, type DashboardLocation } from "./PartnerDashboardClient";
 
 export default async function PartnerDashboardPage() {
@@ -105,12 +106,15 @@ export default async function PartnerDashboardPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-6 pt-10 pb-24 sm:pb-10 w-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-zinc-100">Partner Dashboard</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Manage your business listing and offers.
-        </p>
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-10 pb-24 sm:pb-10 w-full">
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display font-extrabold text-2xl text-zinc-100">Partner Dashboard</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Manage your business listing and offers.
+          </p>
+        </div>
+        <FlowGuide id="partner" autoOpen variant="link" label="How it works" />
       </div>
 
       <PartnerDashboardClient

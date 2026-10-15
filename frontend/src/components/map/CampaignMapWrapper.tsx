@@ -42,7 +42,7 @@ interface Props {
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
-  onMobileStatsClick?: () => void;
+  statsChip?: React.ReactNode;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
   onGeolocateTrigger?: (trigger: () => boolean) => void;

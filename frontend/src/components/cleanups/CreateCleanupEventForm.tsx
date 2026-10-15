@@ -1,5 +1,7 @@
 "use client";
 
+import InlineTip from "@/components/walkthrough/InlineTip";
+import PermissionHelp from "@/components/PermissionHelp";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
@@ -11,7 +13,8 @@ import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import NearbyPartnersPanel from "@/components/cleanups/NearbyPartnersPanel";
 import { useNearbyPartners } from "@/lib/nearbyPartners";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
-import { GuidedStepper, StepperNav, ViewModeToggle, type GuidedStep } from "@/components/ui/GuidedStepper";
+import type { FlowStep as GuidedStep } from "@/components/ui/FlowSheet";
+import { FlowFooter } from "@/components/ui/FlowSheet";
 
 const hostEventStepsBase: GuidedStep[] = [
   { key: "basics", label: "Basics" },
@@ -22,7 +25,7 @@ const hostEventStepsBase: GuidedStep[] = [
 const hostEventStepPartners: GuidedStep = { key: "partners", label: "Nearby Partners" };
 const hostEventStepPhoto: GuidedStep = { key: "photo", label: "Cover photo" };
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-12 rounded-2xl bg-zinc-800 px-4 py-3 text-base sm:text-sm text-zinc-100 placeholder:text-zinc-500 ring-1 ring-inset ring-white/5 focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-shadow";
 
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
@@ -105,15 +108,10 @@ export default function CreateCleanupEventForm({
   const hadInitialRoute = !!initialValues?.route;
   const [cohostGroupIds, setCohostGroupIds] = useState<string[]>(initialCohostGroupIds);
   const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">(initialValues?.loggingMode ?? "organizer_total");
-  const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
-    if (typeof window === "undefined") return "guided";
-    return localStorage.getItem("frontline:host-event-view-mode") === "full" ? "full" : "guided";
-  });
-  const changeViewMode = (mode: "guided" | "full") => {
-    setViewMode(mode);
-    localStorage.setItem("frontline:host-event-view-mode", mode);
-  };
   const [guidedStep, setGuidedStep] = useState(0);
+  const [locating, setLocating] = useState(false);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [showAddressDetails, setShowAddressDetails] = useState(false);
   const { partners: nearbyPartners } = useNearbyPartners(lat, lng, undefined, undefined, route?.coordinates);
   const hasNearbyPartners = nearbyPartners.length > 0;
   const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>([]);
@@ -135,8 +133,8 @@ export default function CreateCleanupEventForm({
 
   const canSubmit = !!title.trim() && !!scheduledStart && lat !== null && lng !== null && !endBeforeStart;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!canSubmit || lat === null || lng === null) return;
     if (endBeforeStart) {
       setError("End time must be after the start time.");
@@ -235,13 +233,13 @@ export default function CreateCleanupEventForm({
         onChange={setCohostGroupIds}
       />
 
-      <div className="space-y-1">
-        <label className="text-xs text-zinc-500">Title</label>
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-zinc-200">Title</label>
         <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Riverside Park Cleanup" />
       </div>
 
-      <div className="space-y-1">
-        <label className="text-xs text-zinc-500">Description</label>
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-zinc-200">Description</label>
         <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
       </div>
     </>
@@ -249,14 +247,14 @@ export default function CreateCleanupEventForm({
 
   const scheduleSection = (
     <>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-xs text-zinc-500">Starts</label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-zinc-200">Starts</label>
           <input type="datetime-local" className={inputCls} value={scheduledStart} onChange={e => setScheduledStart(e.target.value)} required />
           <p className="text-[11px] text-zinc-600">Tap outside the calendar to confirm your selection.</p>
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-zinc-500">Ends</label>
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-zinc-200">Ends</label>
           <input
             type="datetime-local"
             className={inputCls}
@@ -276,19 +274,29 @@ export default function CreateCleanupEventForm({
         </div>
       </div>
 
-      <div className="space-y-1">
-        <label className="text-xs text-zinc-500">How should cleanups get logged?</label>
-        <select
-          className={inputCls}
-          value={loggingMode}
-          onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
-        >
-          <option value="organizer_total">Organizer logs team total (recommended)</option>
-          <option value="individual">Attendees self-log individually</option>
-        </select>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <label className="block text-sm font-semibold text-zinc-200">How should cleanups get logged?</label>
+          <InlineTip title="Logging mode">
+            <p><span className="font-semibold text-zinc-200">Organizer logs team total:</span> you enter the combined haul once. Points are split across eligible attendees.</p>
+            <p><span className="font-semibold text-zinc-200">Attendees log themselves:</span> each person logs from the map near the event.</p>
+            <p>Re-entering a team total wipes the earlier split and re-splits the full new total.</p>
+          </InlineTip>
+        </div>
+        <div className="relative">
+          <select
+            className={`${inputCls} appearance-none pr-11 truncate`}
+            value={loggingMode}
+            onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
+          >
+            <option value="organizer_total">Organizer logs team total</option>
+            <option value="individual">Attendees log themselves</option>
+          </select>
+          <svg aria-hidden="true" viewBox="0 0 20 20" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 8l5 5 5-5" /></svg>
+        </div>
         <p className="text-xs text-zinc-400">
           {loggingMode === "organizer_total"
-            ? "You enter the combined haul once everyone's done; points get split across attendees."
+            ? "Recommended. You enter the combined haul once everyone's done; points get split across attendees."
             : "Attendees self-log from the map near the event; no team total needed."}
         </p>
       </div>
@@ -297,8 +305,8 @@ export default function CreateCleanupEventForm({
 
   const logisticsSection = (
     <>
-      <div className="space-y-1">
-        <label className="text-xs text-zinc-500">RSVP limit (optional)</label>
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-zinc-200">RSVP limit (optional)</label>
         <input
           type="number"
           min={1}
@@ -309,8 +317,8 @@ export default function CreateCleanupEventForm({
         />
       </div>
 
-      <div className="space-y-1">
-        <label className="text-xs text-zinc-500">Event link (optional)</label>
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-zinc-200">Event link (optional)</label>
         <input
           type="url"
           className={inputCls}
@@ -322,10 +330,62 @@ export default function CreateCleanupEventForm({
     </>
   );
 
+  const useMyLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    setLocationDenied(false);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLat(pos.coords.latitude);
+        setLng(pos.coords.longitude);
+        setLocating(false);
+      },
+      (err) => {
+        setLocating(false);
+        if (err.code === 1) setLocationDenied(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  const fullAddress = [addressLine1, city, [state, postalCode].filter(Boolean).join(" "), country].filter(Boolean).join(", ");
+
   const locationSection = (
     <>
-      <div className="space-y-1">
-        <label className="text-xs text-zinc-500">Street address</label>
+      <div className="grid grid-cols-2 gap-1 rounded-full bg-zinc-800 p-1" role="tablist" aria-label="Event location type">
+        {([
+          { route: false, label: "📍 One spot", hint: "Meet at an address" },
+          { route: true, label: "🛤️ A route", hint: "Clean along a stretch" },
+        ] as const).map((opt) => (
+          <button
+            key={opt.label}
+            type="button"
+            role="tab"
+            aria-selected={showRoutePicker === opt.route}
+            onClick={() => {
+              setShowRoutePicker(opt.route);
+              if (!opt.route) setRoute(null);
+            }}
+            className={`min-h-12 rounded-full px-3 text-sm font-bold transition-[background-color,color] duration-150 touch-manipulation ${showRoutePicker === opt.route ? "bg-zinc-100 text-zinc-900" : "text-zinc-400 hover:text-zinc-200"}`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-start justify-between gap-2 -mt-1">
+        <p className="text-xs text-zinc-400">
+          {showRoutePicker
+            ? "Jump to the area first, then tap the map to draw the route. The spot you searched is the meetup point."
+            : "Search for an address, or tap the map to drop the pin."}
+        </p>
+        <InlineTip title="Spot or route">
+          <p><span className="font-semibold text-zinc-200">One spot:</span> everyone meets at a single address or pin.</p>
+          <p><span className="font-semibold text-zinc-200">A route:</span> you draw a stretch of street or trail to clean along. Pick a meetup point where people gather first.</p>
+        </InlineTip>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-zinc-200">{showRoutePicker ? "Where is the route?" : "Find the spot"}</label>
         <AddressAutocomplete
           value={addressLine1}
           onChange={setAddressLine1}
@@ -338,53 +398,75 @@ export default function CreateCleanupEventForm({
             setLat(s.lat);
             setLng(s.lng);
           }}
-          placeholder="Search for an address..."
+          placeholder={showRoutePicker ? "Search a street, park, or neighborhood..." : "Search for an address..."}
         />
-        <BusinessLocationMapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} locationNoun="event" />
-        <div className="grid grid-cols-2 gap-4 pt-1">
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">City</label>
-            <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">State</label>
-            <input className={inputCls} value={state} onChange={e => setState(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">Postal code</label>
-            <input className={inputCls} value={postalCode} onChange={e => setPostalCode(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-500">Country</label>
-            <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} />
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={useMyLocation}
+          disabled={locating}
+          className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+        >
+          {locating ? "Locating..." : "📍 Use my location"}
+        </button>
       </div>
+      {locationDenied && <PermissionHelp kind="location" alternative="You can type an address instead." />}
 
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-xs text-zinc-500">
-          <input
-            type="checkbox"
-            checked={showRoutePicker}
-            onChange={(e) => {
-              setShowRoutePicker(e.target.checked);
-              if (!e.target.checked) setRoute(null);
-            }}
-          />
-          Add a cleanup route (optional)
-        </label>
-        {showRoutePicker && lat !== null && lng !== null && (
+      {showRoutePicker ? (
+        lat !== null && lng !== null ? (
           <RoutePicker
             centerLat={lat}
             centerLng={lng}
             initialCoordinates={route?.coordinates ?? null}
+            heightClassName="h-[420px]"
             onChange={(coords) => setRoute(coords ? { type: "LineString", coordinates: coords } : null)}
           />
-        )}
-        {showRoutePicker && (lat === null || lng === null) && (
-          <p className="text-[11px] text-zinc-600">Set the event location above first, then draw the route.</p>
-        )}
-      </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-zinc-700 px-4 py-10 text-center text-sm text-zinc-400">
+            Search above or use your location to jump the map to the right area.
+          </div>
+        )
+      ) : (
+        <BusinessLocationMapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} locationNoun="event" square />
+      )}
+
+      {fullAddress && (
+        <div className="rounded-2xl bg-zinc-800/60 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Address shown on the event</p>
+          <p className="mt-0.5 text-sm text-zinc-100">{fullAddress}</p>
+          <button
+            type="button"
+            onClick={() => setShowAddressDetails((v) => !v)}
+            className="mt-2 inline-flex items-center min-h-11 text-sm font-semibold text-zinc-300 hover:text-zinc-100"
+          >
+            {showAddressDetails ? "Hide details" : "Edit details"}
+          </button>
+        </div>
+      )}
+
+      {(showAddressDetails || !fullAddress) && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+          <div className="col-span-2 space-y-1.5">
+            <label className="block text-sm font-semibold text-zinc-200">Street address</label>
+            <input className={inputCls} value={addressLine1} onChange={e => setAddressLine1(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-semibold text-zinc-200">City</label>
+            <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-semibold text-zinc-200">State</label>
+            <input className={inputCls} value={state} onChange={e => setState(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-semibold text-zinc-200">Postal code</label>
+            <input className={inputCls} value={postalCode} onChange={e => setPostalCode(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-semibold text-zinc-200">Country</label>
+            <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} />
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -400,8 +482,8 @@ export default function CreateCleanupEventForm({
 
   const photoSection = (
     <>
-      <div className="space-y-1">
-        <label className="text-xs text-zinc-500">Cover photo (optional)</label>
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-zinc-200">Cover photo (optional)</label>
         <p className="text-[11px] text-zinc-600">Shown at the top of the event page. This is not a photo from the cleanup itself.</p>
         <input
           ref={imageInputRef}
@@ -439,51 +521,53 @@ export default function CreateCleanupEventForm({
     : [basicsSection, scheduleSection, logisticsSection, locationSection, photoSection];
   const activeGuidedStep = Math.min(guidedStep, hostEventSteps.length - 1);
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <ViewModeToggle viewMode={viewMode} onChange={changeViewMode} />
+  const lastStep = activeGuidedStep === hostEventSteps.length - 1;
+  const blocked = [
+    !title.trim() ? "Add a title to continue" : null,
+    !scheduledStart ? "Pick a start date to continue" : endBeforeStart ? "End time must be after the start" : null,
+    null,
+    lat === null || lng === null ? "Set a location to continue" : null,
+    ...(hasNearbyPartners ? [null] : []),
+    null,
+  ][activeGuidedStep];
+  const cancelHref = mode === "edit" && cleanupId ? `/cleanup-events/${cleanupId}` : `/groups/${groupSlug}`;
+  const goBack = activeGuidedStep > 0 ? () => setGuidedStep((s) => Math.max(0, s - 1)) : () => router.push(cancelHref);
 
-      {viewMode === "guided" ? (
-        <>
-          <GuidedStepper steps={hostEventSteps} activeIndex={activeGuidedStep} onJump={setGuidedStep} />
-          <div className="space-y-4">{hostEventStepSections[activeGuidedStep]}</div>
-          <StepperNav
-            activeIndex={activeGuidedStep}
-            count={hostEventSteps.length}
-            accent="emerald"
-            onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
-            onNext={() => setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1))}
-          />
-        </>
-      ) : (
-        <>
-          {basicsSection}
-          {scheduleSection}
-          {logisticsSection}
-          {locationSection}
-          {hasNearbyPartners && partnersSection}
-          {photoSection}
-        </>
-      )}
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
+        <div className="flex items-center gap-1.5" aria-hidden="true">
+          {hostEventSteps.map((st, n) => (
+            <span key={st.key} className={`h-1 flex-1 rounded-full transition-colors duration-200 ${n <= activeGuidedStep ? "bg-zinc-100" : "bg-zinc-700"}`} />
+          ))}
+        </div>
+        <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+          Step {activeGuidedStep + 1} of {hostEventSteps.length}
+        </p>
+        <h2 className="text-xl font-black text-zinc-100 tracking-tight">{hostEventSteps[activeGuidedStep].label}</h2>
+      </div>
+
+      <div className="space-y-4">{hostEventStepSections[activeGuidedStep]}</div>
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
-      {(viewMode === "full" || activeGuidedStep === hostEventSteps.length - 1) && (
-        <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : ""}`}>
-          <button
-            type="button"
-            onClick={() => router.push(mode === "edit" && cleanupId ? `/cleanup-events/${cleanupId}` : `/groups/${groupSlug}`)}
-            className="flex-1 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading || !canSubmit}
-            className="flex-1 py-2 text-sm bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            {mode === "edit" ? (loading ? "Saving…" : "Save Changes") : (loading ? "Creating…" : "Create Event")}
-          </button>
-        </div>
+
+      {lastStep ? (
+        <FlowFooter
+          onBack={goBack}
+          backLabel={activeGuidedStep > 0 ? "Back" : "Cancel"}
+          primaryLabel={mode === "edit" ? (loading ? "Saving..." : "Save changes") : loading ? "Creating..." : "Create event"}
+          onPrimary={() => handleSubmit()}
+          primaryDisabled={loading || !canSubmit}
+        />
+      ) : (
+        <FlowFooter
+          onBack={goBack}
+          backLabel={activeGuidedStep > 0 ? "Back" : "Cancel"}
+          primaryLabel="Next"
+          onPrimary={() => setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1))}
+          primaryDisabled={!!blocked}
+          hint={blocked}
+        />
       )}
     </form>
   );

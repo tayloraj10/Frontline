@@ -69,7 +69,7 @@ async def redeem_offer(
     checks the user's balance, per-user redemption cap, and offer-wide total redemption cap,
     deducts points for 'spend' offers, and records the ledger row with the offer's shared code.
     Runs entirely inside one DB transaction on the backend's direct Postgres connection, which
-    bypasses RLS — this is the endpoint partner_redemptions_select's policy comment says
+    bypasses RLS: this is the endpoint partner_redemptions_select's policy comment says
     redemption logic "belongs in a backend endpoint, not a direct insert."
     """
     offer_result = await db.execute(
@@ -117,7 +117,7 @@ async def redeem_offer(
         elif len(location_ids) == 0:
             redemption_location_id = None
         else:
-            raise HTTPException(status_code=400, detail="This business has multiple locations — pick one to redeem at")
+            raise HTTPException(status_code=400, detail="This business has multiple locations. Pick one to redeem at")
 
     now_result = await db.execute(text("SELECT now()"))
     now = now_result.scalar()
@@ -310,7 +310,7 @@ async def notify_event_offer_attachment(
 ):
     """Emails a business's admins when an organizer attaches their offer to a cleanup
     event, CC'ing the organizer. Called by the frontend right after its own direct-Supabase
-    insert into cleanup_event_offers succeeds — this endpoint only sends the notification
+    insert into cleanup_event_offers succeeds: this endpoint only sends the notification
     and never itself creates the attachment, since email needs auth.users + Resend, both
     only reachable from the backend. A failed send never surfaces as an error to the
     organizer (send_email swallows and logs it); the attachment itself already succeeded.

@@ -25,11 +25,11 @@ type CardOwnProps = {
 
 function cardClasses({ elevation = 1, interactive, padding = "md" }: CardOwnProps) {
   return cn(
-    "rounded-xl border border-zinc-800/80 bg-zinc-900/80",
+    "rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-zinc-800/40",
     ELEVATION_CLASS[elevation],
     PADDING_CLASS[padding],
     interactive &&
-      "transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-elevation-3 active:translate-y-0 active:scale-[0.98] active:shadow-elevation-1 active:duration-100 cursor-pointer touch-manipulation"
+      "transition-[transform,box-shadow,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:bg-zinc-800/70 hover:shadow-elevation-3 active:translate-y-0 active:scale-[0.98] active:shadow-elevation-1 active:duration-100 cursor-pointer touch-manipulation"
   );
 }
 

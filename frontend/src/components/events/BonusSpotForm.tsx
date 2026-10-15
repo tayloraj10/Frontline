@@ -5,7 +5,7 @@ import BonusSpotContextMap from "@/components/events/BonusSpotContextMap";
 import { createBonusSpot, suggestBonusSpot, type BonusSpot } from "@/lib/events";
 import { useGameSettings } from "@/lib/gameSettings";
 
-const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+const inputCls = "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 const NYC_CENTER: [number, number] = [-73.95, 40.7];
 
@@ -211,7 +211,7 @@ export default function BonusSpotForm({
               type="button"
               onClick={rollSuggestion}
               disabled={suggestLoading}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:scale-95 transition-[background-color,transform] duration-150 disabled:opacity-40"
+              className="px-3 py-1.5 text-xs font-medium rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 active:scale-95 transition-[background-color,transform] duration-150 disabled:opacity-40"
             >
               {suggestLoading ? "Rolling…" : sourceProblemReportId ? "Re-roll" : "Suggest a spot"}
             </button>

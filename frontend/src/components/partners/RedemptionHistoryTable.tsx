@@ -104,7 +104,7 @@ export default function RedemptionHistoryTable({
                 </div>
                 <p className="text-zinc-400 mt-0.5">{r.offer_title}</p>
                 <p className="text-zinc-600 text-[11px] mt-0.5">
-                  {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : "—"}
+                  {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : "-"}
                 </p>
               </li>
             ))}
@@ -126,7 +126,7 @@ export default function RedemptionHistoryTable({
                     <td className="py-2 pr-3 text-zinc-300">{r.display_name ?? r.username ?? "Unknown user"}</td>
                     <td className="py-2 pr-3 text-zinc-400">{r.offer_title}</td>
                     <td className="py-2 pr-3 text-zinc-500">
-                      {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : "—"}
+                      {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : "-"}
                     </td>
                     <td className="py-2 pr-3">
                       {r.used_at ? (

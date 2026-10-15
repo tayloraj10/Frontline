@@ -10,6 +10,7 @@ import {
   type TeamEventSubmission,
   type TeamEventTeam,
 } from "@/lib/teamEvents";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -132,7 +133,7 @@ export default function ReviewClient({
           const images = Array.from(new Set([s.photo_url, ...(s.image_urls ?? [])].filter((u): u is string => Boolean(u))));
 
           return (
-            <div key={s.id} className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+            <div key={s.id} className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium text-zinc-100">{submitterLabel}</p>
@@ -151,7 +152,7 @@ export default function ReviewClient({
                     <button
                       onClick={() => startEdit(s)}
                       disabled={isSaving}
-                      className="px-2.5 py-1.5 rounded-lg border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
+                      className="px-2.5 py-1.5 rounded-xl border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
                     >
                       Edit
                     </button>
@@ -224,7 +225,7 @@ export default function ReviewClient({
                     <button
                       onClick={() => setEditingId(null)}
                       disabled={isSaving}
-                      className="px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
+                      className="px-3 py-1.5 rounded-xl border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
                     >
                       Cancel
                     </button>
@@ -232,7 +233,7 @@ export default function ReviewClient({
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-300">
-                  <span>Value: <span className="text-zinc-100">{s.value ?? "—"}</span></span>
+                  <span>Value: <span className="text-zinc-100">{s.value ?? "-"}</span></span>
                   {s.small_bags != null && <span>Small bags: <span className="text-zinc-100">{s.small_bags}</span></span>}
                   {s.large_bags != null && <span>Large bags: <span className="text-zinc-100">{s.large_bags}</span></span>}
                   {s.pounds != null && <span>Pounds: <span className="text-zinc-100">{s.pounds}</span></span>}
@@ -246,7 +247,7 @@ export default function ReviewClient({
               {(s.route || (s.lat != null && s.lng != null)) && (
                 <button
                   onClick={() => setMapSubmission(s)}
-                  className="text-xs text-zinc-500 hover:text-emerald-400 underline decoration-dotted transition-colors duration-150"
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-emerald-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
                 >
                   {s.route ? "View route" : `Location: ${s.lat!.toFixed(5)}, ${s.lng!.toFixed(5)}`}
                 </button>
@@ -265,7 +266,7 @@ export default function ReviewClient({
                   <button
                     onClick={() => setConfirmDeleteId(null)}
                     disabled={isSaving}
-                    className="px-2.5 py-1 rounded-lg border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
+                    className="px-2.5 py-1 rounded-xl border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition-colors duration-150"
                   >
                     Cancel
                   </button>
@@ -277,40 +278,42 @@ export default function ReviewClient({
       )}
 
       {mapSubmission && (mapSubmission.route || (mapSubmission.lat != null && mapSubmission.lng != null)) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setMapSubmission(null)}
-        >
+        <BodyPortal>
           <div
-            className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 w-full max-w-md space-y-3"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+            onClick={() => setMapSubmission(null)}
           >
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-zinc-100">{mapSubmission.route ? "Submission route" : "Submission location"}</p>
-              <button
-                onClick={() => setMapSubmission(null)}
-                className="text-zinc-500 hover:text-zinc-300 text-sm"
-              >
-                Close
-              </button>
+            <div
+              className="bg-zinc-900 rounded-[20px] p-4 w-full max-w-md space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-zinc-100">{mapSubmission.route ? "Submission route" : "Submission location"}</p>
+                <button
+                  onClick={() => setMapSubmission(null)}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Close
+                </button>
+              </div>
+              {mapSubmission.route ? (
+                <RoutePreviewMap
+                  coordinates={mapSubmission.route.coordinates}
+                  photos={mapSubmission.route_photos}
+                  heightClassName="h-[280px]"
+                  interactive
+                />
+              ) : (
+                <>
+                  <MiniMapPreview lat={mapSubmission.lat!} lng={mapSubmission.lng!} heightClassName="h-[280px]" interactive />
+                  <p className="text-xs text-zinc-500">
+                    {mapSubmission.lat!.toFixed(5)}, {mapSubmission.lng!.toFixed(5)}
+                  </p>
+                </>
+              )}
             </div>
-            {mapSubmission.route ? (
-              <RoutePreviewMap
-                coordinates={mapSubmission.route.coordinates}
-                photos={mapSubmission.route_photos}
-                heightClassName="h-[280px]"
-                interactive
-              />
-            ) : (
-              <>
-                <MiniMapPreview lat={mapSubmission.lat!} lng={mapSubmission.lng!} heightClassName="h-[280px]" interactive />
-                <p className="text-xs text-zinc-500">
-                  {mapSubmission.lat!.toFixed(5)}, {mapSubmission.lng!.toFixed(5)}
-                </p>
-              </>
-            )}
           </div>
-        </div>
+        </BodyPortal>
       )}
     </div>
   );

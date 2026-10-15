@@ -1,3 +1,5 @@
+import FlowGuide from "@/components/walkthrough/FlowGuide";
+import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import { createClient } from "@/lib/supabase/server";
 import PartnersBrowseClient, { type BrowseBusiness, type BrowseOffer } from "./PartnersBrowseClient";
 import BusinessApplyPrompt from "./BusinessApplyPrompt";
@@ -73,18 +75,18 @@ export default async function PartnersPage() {
   );
 
   return (
-    <main className="max-w-4xl mx-auto px-6 pt-10 pb-24 sm:pb-10 w-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-zinc-100">Partner Perks</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Redeem the points you've earned from campaigns for discounts at local partner businesses.
-        </p>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        eyebrow="Rewards"
+        title="Partner perks"
+        subtitle="Spend the points you earn from cleanups on discounts at local businesses."
+        action={<FlowGuide id="rewards" autoOpen variant="link" label="How rewards work" />}
+      />
 
       <BusinessApplyPrompt />
 
       {isBusinessOnly && (
-        <div className="mb-6 px-4 py-3 rounded-lg border border-sky-900/50 bg-sky-950/30 text-sm text-sky-300 shadow-elevation-1">
+        <div className="mb-6 px-4 py-3 rounded-2xl bg-sky-950/30 text-sm text-sky-300">
           This is what other users see for your business's listing and offers. A business
           only appears here while it has at least one active offer, but it shows up on the
           map at all times regardless of offers.
@@ -97,6 +99,6 @@ export default async function PartnersPage() {
         userId={user?.id ?? null}
         userPoints={profileResult?.data?.spendable_points ?? null}
       />
-    </main>
+    </PageShell>
   );
 }

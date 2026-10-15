@@ -27,7 +27,7 @@ export default function DesktopNavMenu({ links }: { links: NavLink[] }) {
         {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border border-zinc-800 bg-zinc-900 shadow-elevation-4 py-1.5 z-50">
+        <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border border-zinc-800/40 bg-zinc-900 shadow-elevation-4 py-1.5 z-50">
           {links.map((link) => (
             <Link
               key={link.href}

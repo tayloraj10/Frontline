@@ -265,7 +265,17 @@ export default function UserActivityList({
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   if (items.length === 0) {
-    return <div className="px-5 py-8 text-center text-zinc-600 text-sm">No contributions yet.</div>;
+    return isOwn ? (
+      <div className="px-5 py-8 text-center space-y-3">
+        <p className="text-sm font-semibold text-zinc-300">Nothing logged yet</p>
+        <p className="text-sm text-zinc-500">Pick up some litter, log it on the map, and it shows up here with your points.</p>
+        <Link href="/campaigns/trash-war" className="inline-flex min-h-11 items-center px-5 rounded-full bg-emerald-400 text-emerald-950 text-sm font-bold active:scale-[0.97] transition-transform touch-manipulation">
+          Open the map
+        </Link>
+      </div>
+    ) : (
+      <div className="px-5 py-8 text-center text-zinc-600 text-sm">No contributions yet.</div>
+    );
   }
 
   return (
@@ -397,7 +407,7 @@ export default function UserActivityList({
         <button
           onClick={handleLoadMore}
           disabled={loadingMore}
-          className="text-xs text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 disabled:opacity-40"
+          className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>

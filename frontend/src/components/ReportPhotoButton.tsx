@@ -55,7 +55,7 @@ export default function ReportPhotoButton({
   };
 
   if (state === "done") {
-    return <p className={`text-xs text-zinc-500 ${className}`}>Reported — thanks for flagging this.</p>;
+    return <p className={`text-xs text-zinc-500 ${className}`}>Reported, thanks for flagging this.</p>;
   }
 
   if (state === "confirming") {
@@ -72,13 +72,13 @@ export default function ReportPhotoButton({
         <div className="flex items-center gap-3">
           <button
             onClick={handleReport}
-            className="text-xs font-semibold text-red-400 hover:text-red-300 active:text-red-300 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-red-600 hover:bg-red-500 text-sm font-bold text-white active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Yes, report it
           </button>
           <button
             onClick={() => setState("idle")}
-            className="text-xs text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Cancel
           </button>
@@ -92,7 +92,7 @@ export default function ReportPhotoButton({
       <button
         onClick={() => setState("confirming")}
         disabled={state === "submitting"}
-        className="text-xs text-zinc-400 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:opacity-40 underline"
+        className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-red-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
       >
         {state === "submitting" ? "Reporting…" : "🚩 Report photo"}
       </button>

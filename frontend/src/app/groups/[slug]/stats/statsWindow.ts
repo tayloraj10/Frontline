@@ -93,11 +93,11 @@ export function detailedIntervalLabel(window: StatsWindow): string {
       sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" }
     );
     const range = `${startStr}–${endStr}`;
-    return current ? `${INTERVAL_LABELS.week} — ${range}` : range;
+    return current ? `${INTERVAL_LABELS.week}: ${range}` : range;
   }
   if (window.interval === "month") {
     const monthStr = window.anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-    return current ? `${INTERVAL_LABELS.month} — ${monthStr}` : monthStr;
+    return current ? `${INTERVAL_LABELS.month}: ${monthStr}` : monthStr;
   }
   if (window.interval === "today") {
     if (current) return INTERVAL_LABELS.today;

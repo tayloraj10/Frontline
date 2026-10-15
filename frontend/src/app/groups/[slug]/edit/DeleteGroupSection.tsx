@@ -86,7 +86,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
         value={typedName}
         onChange={(e) => setTypedName(e.target.value)}
         placeholder={groupName}
-        className="w-full mb-4 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 shadow-elevation-1 focus:outline-none focus:border-red-700 transition-colors"
+        className="w-full mb-4 px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 placeholder-zinc-600 shadow-elevation-1 focus:outline-none focus:border-red-700 transition-colors"
       />
 
       <div className="flex items-center gap-3">
@@ -106,7 +106,7 @@ export default function DeleteGroupSection({ groupId, groupName, currentUserId }
             setError(null);
             setBlockingEvents(null);
           }}
-          className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+          className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           Cancel
         </button>

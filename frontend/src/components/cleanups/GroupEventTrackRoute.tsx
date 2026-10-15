@@ -125,7 +125,7 @@ export default function GroupEventTrackRoute({
           title={disabled ? disabledReason : undefined}
           className={
             disabled
-              ? "w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-dashed border-zinc-700 text-zinc-500 bg-zinc-900/40 rounded-lg grayscale cursor-not-allowed touch-manipulation"
+              ? "w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-dashed border-zinc-700 text-zinc-500 bg-zinc-900/40 rounded-xl grayscale cursor-not-allowed touch-manipulation"
               : `w-full ${launcherCls}`
           }
         >
@@ -136,6 +136,9 @@ export default function GroupEventTrackRoute({
         {disabled && disabledReason && (
           <p className="mt-1.5 text-xs text-zinc-500 text-center">{disabledReason}</p>
         )}
+        <p className="mt-1.5 text-xs text-zinc-500 text-center">
+          Records your GPS path, even with your phone locked (needs &quot;Always&quot; location). Everyone&apos;s routes show on this page afterward.
+        </p>
         {done && (
           <div className="mt-2 flex items-center gap-1.5 px-3 py-2 text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-800/60 rounded-lg">
             <span aria-hidden="true">✅</span>
@@ -148,7 +151,7 @@ export default function GroupEventTrackRoute({
 
   if (!route) {
     return (
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2">
+      <div className="rounded-2xl border border-zinc-800/40 bg-zinc-900 p-2">
         <TrackRouteScreen session={session} onConfirm={handleConfirm} onCancel={resetAll} />
       </div>
     );

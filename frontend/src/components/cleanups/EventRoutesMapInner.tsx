@@ -107,7 +107,7 @@ export default function EventRoutesMap({ routes }: { routes: EventAttendeeRoute[
   return (
     <div className="space-y-4">
       <div ref={containerRef} className="w-full h-[320px] rounded-lg overflow-hidden border border-zinc-700/50" />
-      <ul className="divide-y divide-zinc-800/60 border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+      <ul className="divide-y divide-zinc-800/60 rounded-[20px] bg-zinc-900 overflow-hidden">
         {routes.map((route, i) => {
           const submitterName = route.submitted_by.display_name ?? route.submitted_by.username ?? "A volunteer";
           const color = ROUTE_COLORS[i % ROUTE_COLORS.length];

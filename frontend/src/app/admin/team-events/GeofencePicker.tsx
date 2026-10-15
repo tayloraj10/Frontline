@@ -178,7 +178,7 @@ export default function GeofencePicker({
       <select
         value={unitType}
         onChange={(e) => setUnitType(e.target.value)}
-        className="mb-2 w-full rounded-lg border border-zinc-700/50 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+        className="mb-2 w-full rounded-xl border border-zinc-700/50 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
       >
         {UNIT_TYPE_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>

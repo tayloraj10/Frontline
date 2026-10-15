@@ -26,13 +26,13 @@ export default async function TeamEventStatsPage({ params }: Props) {
   const stats = await getTeamEventStats(id).catch(() => []);
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full space-y-6">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full space-y-6">
       <div>
         <Link href={`/team-events/${id}`} className="text-xs font-medium text-sky-400 hover:text-sky-300">
           ← Back to event
         </Link>
         <div className="mt-2">
-          <h1 className="text-2xl font-black text-zinc-100 leading-tight">{event.title} Stats</h1>
+          <h1 className="font-display font-extrabold text-2xl text-zinc-100 leading-tight">{event.title} Stats</h1>
         </div>
       </div>
 

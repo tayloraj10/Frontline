@@ -269,7 +269,7 @@ function BusinessPanel({
           ))}
           <button
             onClick={() => setEditing(!editing)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.95] touch-manipulation px-2 py-1"
+            className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             {editing ? "Cancel edit" : "Edit business info"}
           </button>

@@ -2,14 +2,14 @@ import Link from "next/link";
 import PrivacyContent from "@/components/legal/PrivacyContent";
 import { CURRENT_PRIVACY_VERSION, formatLegalVersion } from "@/lib/legal";
 
-export const metadata = { title: "Privacy Policy — Frontline" };
+export const metadata = { title: "Privacy Policy | Frontline" };
 
 export default function PrivacyPage() {
   return (
-    <main className="max-w-2xl mx-auto px-6 py-16 space-y-8 text-zinc-300">
+    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-16 space-y-8 text-zinc-300">
       <div className="space-y-2">
         <p className="text-xs text-zinc-500 uppercase tracking-widest">Legal</p>
-        <h1 className="text-3xl font-black text-zinc-100">Privacy Policy</h1>
+        <h1 className="font-display font-extrabold text-3xl text-zinc-100">Privacy Policy</h1>
         <p className="text-zinc-500 text-sm">
           Last updated: {formatLegalVersion(CURRENT_PRIVACY_VERSION)} · Beta
         </p>

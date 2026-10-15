@@ -1,5 +1,6 @@
 "use client";
 
+import LegalModalLink from "@/components/legal/LegalModalLink";
 import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -220,7 +221,7 @@ function LoginForm() {
     <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
       <Card elevation={2} padding="lg" className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold">Sign in to Frontline</h1>
+          <h1 className="font-display font-display text-2xl font-extrabold">Sign in to Frontline</h1>
           <p className="text-zinc-400 text-sm">Join the collective action</p>
         </div>
 
@@ -270,7 +271,7 @@ function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="you@example.com"
             />
           </div>
@@ -288,7 +289,7 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -298,7 +299,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
+            className="w-full py-3 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-medium rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>
@@ -312,8 +313,8 @@ function LoginForm() {
         </p>
 
         <div className="flex justify-center gap-4 text-xs text-zinc-600">
-          <Link href="/legal/terms" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Terms</Link>
-          <Link href="/legal/privacy" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Privacy</Link>
+          <LegalModalLink doc="terms" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Terms</LegalModalLink>
+          <LegalModalLink doc="privacy" className="hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150">Privacy</LegalModalLink>
         </div>
       </Card>
     </main>

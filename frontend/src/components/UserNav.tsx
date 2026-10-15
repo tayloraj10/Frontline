@@ -8,7 +8,9 @@ import { createClient } from "@/lib/supabase/client";
 import { syncUserPoints, useUserPoints } from "@/lib/userPoints";
 import { formatPoints } from "@/lib/formatPoints";
 import { isNativePlatform } from "@/lib/capacitor";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useClickOutside } from "@/hooks/useClickOutside";
+import { version as appVersion } from "../../package.json";
 import type { User } from "@supabase/supabase-js";
 
 export default function UserNav({
@@ -82,7 +84,7 @@ export default function UserNav({
     return (
       <Link
         href={`/login?next=${pathname}`}
-        className="px-4 py-1.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-elevation-2 transition-[background-color,transform] active:scale-[0.97] duration-150"
+        className="px-4 py-1.5 text-sm font-bold bg-zinc-100 hover:bg-white text-zinc-900 rounded-full shadow-elevation-2 transition-[background-color,transform] active:scale-[0.97] duration-150"
       >
         Sign In
       </Link>
@@ -132,7 +134,7 @@ export default function UserNav({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -4 }}
             transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute right-0 mt-1 w-48 max-w-[calc(100vw-2rem)] bg-zinc-900 border border-zinc-800 rounded-xl shadow-elevation-4 z-50 py-1 text-sm origin-top-right"
+            className="absolute right-0 mt-1 w-48 max-w-[calc(100vw-2rem)] bg-zinc-900 rounded-[20px] shadow-elevation-4 z-50 py-1 text-sm origin-top-right"
           >
             <div className="px-4 py-2.5 space-y-1.5">
               <div
@@ -169,6 +171,13 @@ export default function UserNav({
               </Link>
             )}
             <Link
+              href="/achievements"
+              onClick={() => setOpen(false)}
+              className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 hover:text-zinc-100 transition-colors"
+            >
+              Achievements
+            </Link>
+            <Link
               href="/settings/profile"
               onClick={() => setOpen(false)}
               className="flex items-center min-h-11 px-4 py-2 text-zinc-300 hover:bg-zinc-800 active:bg-zinc-800 hover:text-zinc-100 transition-colors"
@@ -183,12 +192,17 @@ export default function UserNav({
               Account settings
             </Link>
             <div className="border-t border-zinc-800 my-1" />
+            <div className="px-3 py-1">
+              <ThemeToggle compact />
+            </div>
+            <div className="border-t border-zinc-800 my-1" />
             <button
               onClick={handleSignOut}
               className="w-full flex items-center min-h-11 text-left px-4 py-2 text-zinc-500 hover:bg-zinc-800 active:bg-zinc-800 hover:text-zinc-300 transition-colors"
             >
               Sign out
             </button>
+            <div className="px-4 pt-1 pb-2 text-[10px] text-zinc-600">v{appVersion}</div>
           </motion.div>
         )}
       </AnimatePresence>

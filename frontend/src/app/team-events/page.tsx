@@ -31,12 +31,12 @@ export default async function TeamEventsPage() {
   const completed = visible.filter((e) => e.status === "completed");
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-10">
-        <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+        <h1 className="font-display font-extrabold text-4xl tracking-tight text-zinc-100">
           Team Events
         </h1>
-        <p className="text-zinc-500 mt-2 text-sm">
+        <p className="text-zinc-400 mt-2 text-sm max-w-md leading-relaxed">
           Join a team, log cleanups while the event is live, and climb the scoreboard together.
         </p>
       </div>
@@ -80,7 +80,7 @@ function TeamEventCard({ event }: { event: TeamEventListItem }) {
   return (
     <Link
       href={`/team-events/${event.id}`}
-      className="flex items-center gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.99] touch-manipulation"
+      className="flex items-center gap-4 rounded-2xl border border-zinc-800/40 bg-zinc-900/60 p-4 shadow-elevation-1 transition-[background-color,border-color,transform] duration-150 hover:border-zinc-600 active:scale-[0.99] touch-manipulation"
     >
       {event.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element

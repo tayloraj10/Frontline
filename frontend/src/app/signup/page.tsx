@@ -1,5 +1,6 @@
 "use client";
 
+import LegalModalLink from "@/components/legal/LegalModalLink";
 import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -150,7 +151,7 @@ function SignupForm() {
       <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
         <Card elevation={2} padding="lg" className="w-full max-w-sm space-y-4 text-center">
           <div className="text-4xl">📬</div>
-          <h1 className="text-2xl font-bold">Check your email</h1>
+          <h1 className="font-display text-2xl font-bold">Check your email</h1>
           <p className="text-zinc-400 text-sm">
             We sent a confirmation link to <span className="text-zinc-200">{email}</span>. Click it to activate your account.
           </p>
@@ -169,7 +170,7 @@ function SignupForm() {
     <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
       <Card elevation={2} padding="lg" className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold">Join Frontline</h1>
+          <h1 className="font-display text-2xl font-bold">Join Frontline</h1>
           <p className="text-zinc-400 text-sm">Start making an impact</p>
         </div>
 
@@ -219,7 +220,7 @@ function SignupForm() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="trashslayer99"
             />
           </div>
@@ -232,7 +233,7 @@ function SignupForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="you@example.com"
             />
           </div>
@@ -246,7 +247,7 @@ function SignupForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -263,9 +264,9 @@ function SignupForm() {
             />
             <span>
               I agree to the{" "}
-              <Link href="/legal/terms" target="_blank" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Terms</Link>
+              <LegalModalLink doc="terms" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Terms</LegalModalLink>
               {" "}and{" "}
-              <Link href="/legal/privacy" target="_blank" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Privacy Policy</Link>
+              <LegalModalLink doc="privacy" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Privacy Policy</LegalModalLink>
               .
             </span>
           </label>
@@ -273,7 +274,7 @@ function SignupForm() {
           <button
             type="submit"
             disabled={loading || !agreedToLegal}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
+            className="w-full py-3 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-medium rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
           >
             {loading ? "Creating account…" : "Create account"}
           </button>

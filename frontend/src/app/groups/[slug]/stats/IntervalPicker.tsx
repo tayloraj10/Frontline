@@ -62,7 +62,7 @@ export default function IntervalPicker({
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex items-center gap-1 border border-zinc-800 rounded-lg p-1 w-fit">
+      <div className="flex items-center gap-1 bg-zinc-900 rounded-xl p-1 w-fit">
         {(Object.keys(INTERVAL_LABELS) as Interval[]).map((key) => (
           <button
             key={key}
@@ -77,7 +77,7 @@ export default function IntervalPicker({
       </div>
 
       {window.interval !== "all" && (
-        <div className="flex items-center gap-1 border border-zinc-800 rounded-lg p-1 w-fit">
+        <div className="flex items-center gap-1 bg-zinc-900 rounded-xl p-1 w-fit">
           <button
             onClick={() => nav(-1)}
             aria-label="Previous period"

@@ -94,7 +94,7 @@ async def _expire_stale_claim(report_id: UUID, db: AsyncSession) -> None:
             text("""
                 INSERT INTO user_notifications (user_id, type, title, body, campaign_id, campaign_slug)
                 SELECT :user_id, 'claim_expired', 'Your claim expired',
-                       'Your claimed trash report reverted to open — someone else can pick it up now.',
+                       'Your claimed trash report reverted to open: someone else can pick it up now.',
                        :campaign_id, camps.slug
                 FROM campaigns camps WHERE camps.id = :campaign_id
             """),
@@ -185,7 +185,7 @@ async def delete_problem_report(report_id: UUID, user_id: UUID, db: AsyncSession
 @router.get("/campaign/{campaign_id}/pending-challenge-completion")
 async def get_pending_challenge_completion(campaign_id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db)):
     """A claim challenge resolves the report (POST .../claim/after-photo) before the user logs
-    the actual cleanup contribution that earns points and the challenge bonus — if they cancel or
+    the actual cleanup contribution that earns points and the challenge bonus: if they cancel or
     exit out of that Log Cleanup step, the report drops off the open-reports list entirely with
     no way back in. Surface it here so the frontend can offer to resume it."""
     result = await db.execute(
@@ -607,7 +607,7 @@ async def flag_problem_report(report_id: UUID, payload: FlagReportRequest, db: A
                 text("""
                     INSERT INTO user_notifications (user_id, type, title, body, campaign_id, campaign_slug)
                     SELECT :user_id, 'claim_expired', 'Report pulled from the map',
-                           'The trash report you claimed was flagged as inaccurate by other users and removed from the map — your claim has been released.',
+                           'The trash report you claimed was flagged as inaccurate by other users and removed from the map: your claim has been released.',
                            :campaign_id, camps.slug
                     FROM campaigns camps WHERE camps.id = :campaign_id
                 """),
@@ -675,7 +675,7 @@ async def _check_report_triggers(campaign_id: UUID, geo_unit_id: str, db: AsyncS
                 "trigger_id": str(trigger.id),
                 "geo_unit_id": geo_unit_id,
                 "event_type": trigger.event_type,
-                "title": (trigger.condition_config or {}).get("title", "Boss Event — Surge Needed!"),
+                "title": (trigger.condition_config or {}).get("title", "Boss Event: Surge Needed!"),
                 "description": f"Reports have reached critical mass. Clean it up in {duration_hours:g} hours for {bonus_text}!",
                 "effect_config": json.dumps(effect_config),
                 "duration_hours": duration_hours,

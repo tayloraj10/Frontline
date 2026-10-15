@@ -24,7 +24,7 @@ export async function generateMetadata({
   if (!business) return {};
 
   const title = business.name;
-  const description = business.description ?? `${business.name} — Frontline partner.`;
+  const description = business.description ?? `${business.name}: Frontline partner.`;
 
   return {
     title,
@@ -132,7 +132,7 @@ export default async function PartnerDetailPage({
     .order("created_at", { ascending: false });
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 w-full">
       <BackButton href="/partners" label="All partners" />
       <div className="mt-4">
         <PartnerDetailClient

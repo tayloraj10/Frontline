@@ -158,8 +158,8 @@ export default function BusinessRadiusView({
       {!hasActivity ? (
         <p className="text-xs text-zinc-600">
           {locations.length > 1
-            ? "No nearby activity for this location yet — try another location, or check back once cleanups, events, or trash reports happen close by."
-            : "No nearby activity yet — this will show up once cleanups, events, or trash reports happen close by."}
+            ? "No nearby activity for this location yet. Try another location, or check back once cleanups, events, or trash reports happen close by."
+            : "No nearby activity yet. This will show up once cleanups, events, or trash reports happen close by."}
         </p>
       ) : (
         <>
@@ -196,7 +196,7 @@ export default function BusinessRadiusView({
               <p className="text-sm font-semibold text-zinc-200 mb-2">{c.campaign_name}</p>
               {c.floor_state === "building" ? (
                 <p className="text-xs text-zinc-500">
-                  This spot is just getting started — activity nearby will show up here as it comes in.
+                  This spot is just getting started, activity nearby will show up here as it comes in.
                 </p>
               ) : (
                 <div className="space-y-4">
