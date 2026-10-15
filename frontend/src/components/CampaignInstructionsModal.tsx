@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import TrashWarWalkthrough from "./TrashWarWalkthrough";
 
 interface Feature {
   icon: string;
@@ -120,7 +121,6 @@ export default function CampaignInstructionsModal({
   description,
   hideTriggers = false,
   helpSignal = 0,
-  infoSignal = 0,
 }: {
   slug: string;
   description?: string | null;
@@ -128,8 +128,6 @@ export default function CampaignInstructionsModal({
   hideTriggers?: boolean;
   /** Bump to open the "how it works" dialog. */
   helpSignal?: number;
-  /** Bump to open the campaign description dialog. */
-  infoSignal?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
@@ -154,13 +152,6 @@ export default function CampaignInstructionsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [helpSignal]);
 
-  useEffect(() => {
-    if (!infoSignal || !description) return;
-    if (instructions) setDescOpen(true);
-    else setOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [infoSignal]);
-
   if (!instructions) {
     if (!description) return null;
     return (
@@ -184,7 +175,7 @@ export default function CampaignInstructionsModal({
               <div className="px-6 pb-5 shrink-0">
                 <button
                   onClick={() => setOpen(false)}
-                  className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+                  className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
                 >
                   Got it
                 </button>
@@ -197,7 +188,7 @@ export default function CampaignInstructionsModal({
   }
 
   function close() {
-    if (dontShowAgain) {
+    if (dontShowAgain || slug === "trash-war") {
       localStorage.setItem(storageKey(slug), "1");
     }
     setOpen(false);
@@ -241,7 +232,7 @@ export default function CampaignInstructionsModal({
             <div className="px-6 pb-5 shrink-0">
               <button
                 onClick={() => setDescOpen(false)}
-                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+                className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 Got it
               </button>
@@ -250,7 +241,9 @@ export default function CampaignInstructionsModal({
         </div>
       )}
 
-      {open && (
+      {open && slug === "trash-war" && <TrashWarWalkthrough onClose={close} />}
+
+      {open && slug !== "trash-war" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto">
           <div className="relative w-full max-w-md sm:max-w-2xl modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto">
             <div className="px-6 pt-5 pb-3 shrink-0 border-b border-zinc-800/60">
@@ -259,6 +252,9 @@ export default function CampaignInstructionsModal({
                 {instructions.title}
               </h2>
               <p className="text-zinc-400 text-xs text-center leading-relaxed">{instructions.intro}</p>
+              {hideTriggers && description && (
+                <p className="mt-2 text-zinc-500 text-xs text-center leading-relaxed">{description}</p>
+              )}
             </div>
 
             <div className="px-3 py-3 sm:px-5 sm:py-4 overflow-y-auto min-h-0 flex-1">
@@ -295,7 +291,7 @@ export default function CampaignInstructionsModal({
               </label>
               <button
                 onClick={close}
-                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+                className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 Got it
               </button>

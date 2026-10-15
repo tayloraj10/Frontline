@@ -660,7 +660,7 @@ html, body {
     top: 0.75rem;
     left: 50%;
     transform: translateX(-50%);
-    width: min(calc(100% - 1.5rem), 80rem);
+    width: calc(100% - 1.5rem);
     border-radius: 9999px;
     box-shadow: 0 8px 30px rgb(0 0 0 / 0.35);
     padding-top: 0;

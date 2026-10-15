@@ -85,7 +85,7 @@ export default function BlockUserButton({
       </button>
       {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
       {state === "confirming" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setState("idle")}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setState("idle")}>
           <div
             className="w-full max-w-xs bg-zinc-900 rounded-[20px] shadow-elevation-4 p-4 space-y-3"
             onClick={(e) => e.stopPropagation()}
@@ -96,13 +96,13 @@ export default function BlockUserButton({
             <div className="flex items-center justify-end gap-4">
               <button
                 onClick={() => setState("idle")}
-                className="text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
                 Cancel
               </button>
               <button
                 onClick={handleBlock}
-                className="text-sm font-semibold text-red-400 hover:text-red-300 active:text-red-300 transition-colors duration-150"
+                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-red-600 hover:bg-red-500 text-sm font-bold text-white active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
                 Yes, block
               </button>

@@ -44,7 +44,7 @@ export default function ConfirmModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 8 }}
             transition={{ type: "spring", stiffness: 400, damping: 32 }}
-            className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-elevation-3"
+            className="w-full max-w-sm rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-white/5 p-5 shadow-elevation-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-base font-bold text-zinc-100">{title}</h2>
@@ -53,15 +53,17 @@ export default function ConfirmModal({
               <button
                 type="button"
                 onClick={onCancel}
-                className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900/40 px-4 py-2.5 text-sm font-medium text-zinc-300 shadow-elevation-1 transition-[background-color,transform] duration-150 hover:bg-zinc-800 active:scale-[0.96] touch-manipulation"
+                className="flex-1 min-h-11 rounded-xl border border-zinc-700 bg-zinc-900/40 px-4 py-2.5 text-sm font-medium text-zinc-300 shadow-elevation-1 transition-[background-color,transform] duration-150 hover:bg-zinc-800 active:scale-[0.96] touch-manipulation"
               >
                 {cancelLabel}
               </button>
               <button
                 type="button"
                 onClick={onConfirm}
-                className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
-                  destructive ? "bg-red-700 hover:bg-red-600" : "bg-emerald-700 hover:bg-emerald-600"
+                className={`flex-1 min-h-11 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
+                  destructive
+                    ? "bg-red-600 text-white hover:bg-red-500"
+                    : "bg-emerald-400 text-emerald-950 hover:bg-emerald-300"
                 }`}
               >
                 {confirmLabel}

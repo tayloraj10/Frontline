@@ -20,13 +20,13 @@ const SITE_DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Frontline — Collective Action on the Map",
-    template: "%s — Frontline",
+    default: "Frontline: Collective Action on the Map",
+    template: "%s | Frontline",
   },
   description: SITE_DESCRIPTION,
   openGraph: {
     siteName: "Frontline",
-    title: "Frontline — Collective Action on the Map",
+    title: "Frontline: Collective Action on the Map",
     description: SITE_DESCRIPTION,
     url: "/",
     type: "website",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary",
-    title: "Frontline — Collective Action on the Map",
+    title: "Frontline: Collective Action on the Map",
     description: SITE_DESCRIPTION,
     images: ["/icon.png"],
   },

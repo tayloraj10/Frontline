@@ -95,7 +95,7 @@ export function CameraModal({
       {error ? (
         <>
           <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
-          <button onClick={onClose} className="text-zinc-400 text-sm underline">
+          <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
             Close
           </button>
         </>

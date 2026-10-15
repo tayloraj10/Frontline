@@ -22,6 +22,8 @@ import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
 import Lightbox from "@/components/Lightbox";
 import IconButton from "@/components/ui/IconButton";
 import { GuidedStepper, StepperNav, ViewModeToggle, type GuidedStep } from "@/components/ui/GuidedStepper";
+import FlowSheet, { FlowFooter } from "@/components/ui/FlowSheet";
+import { ChoiceChips } from "@/components/ui/fields";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -289,6 +291,8 @@ interface ContributionPanelProps {
   requestLocation?: () => boolean;
   activeMapStyle?: string;
   onStyleChange?: (id: string) => void;
+  /** Trash War only: restyled pill action buttons. */
+  modernActions?: boolean;
   pendingCleanupEventId?: string | null;
   onPendingCleanupEventConsumed?: () => void;
   // Set alongside pendingCleanupEventId when the caller (e.g. a group event's "Track my
@@ -443,11 +447,11 @@ function useGPS(
 // ─── GPS status indicator ─────────────────────────────────────────────────────
 
 const GPS_ERROR_MSG: Record<number, string> = {
-  0: "Location requires HTTPS — use localhost or deploy with SSL",
-  1: "Location blocked — allow it in your browser/OS settings",
+  0: "Location requires HTTPS. Use localhost or deploy with SSL",
+  1: "Location blocked. Allow it in your browser/OS settings",
   2: "Location signal unavailable",
   3: "Location timed out",
-  4: "Map is still loading — try again in a moment",
+  4: "Map is still loading. Try again in a moment",
 };
 
 function GpsIndicator({
@@ -487,7 +491,7 @@ function GpsIndicator({
           <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
           <span className="text-red-400">{msg}</span>
         </div>
-        <button onClick={onRetry} className="self-start text-zinc-400 underline hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 text-xs ml-4">
+        <button onClick={onRetry} className="self-start inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
           Try again
         </button>
       </div>
@@ -1115,7 +1119,7 @@ function ContributeModal({
       onContributionRemoved?.(submittedContributionId);
       refreshUserPoints(userId);
     } catch {
-      setError("Couldn't undo — please delete it from your activity list instead.");
+      setError("Couldn't undo. Please delete it from your activity list instead.");
     } finally {
       setUndoing(false);
     }
@@ -1141,7 +1145,7 @@ function ContributeModal({
           {isCleanup && claimedReportId && (
             <p className={`text-sm font-semibold text-center ${challengeMultiplier >= (appliedMultiplier?.multiplier ?? 1) ? "text-violet-300" : "text-violet-500/50 line-through"}`}>
               🎯 Challenge bonus: <SettingValue value={gameSettings.claim_challenge_multiplier} loading={settingsLoading} />× score
-              {challengeMultiplier >= (appliedMultiplier?.multiplier ?? 1) ? " applied!" : " (not applied — hotspot bonus was bigger)"}
+              {challengeMultiplier >= (appliedMultiplier?.multiplier ?? 1) ? " applied!" : " (not applied, hotspot bonus was bigger)"}
             </p>
           )}
           {isCleanup && appliedMultiplier && (
@@ -1153,7 +1157,7 @@ function ContributeModal({
             >
               <span className="inline-block animate-bounce">🔥</span>{" "}
               +{appliedMultiplier.multiplier}× hotspot bonus
-              {appliedMultiplier.multiplier > challengeMultiplier ? " applied!" : claimedReportId ? " (not applied — challenge bonus was bigger)" : " applied!"}
+              {appliedMultiplier.multiplier > challengeMultiplier ? " applied!" : claimedReportId ? " (not applied, challenge bonus was bigger)" : " applied!"}
             </p>
           )}
           {isCleanup && hotspotCleared && (
@@ -1182,19 +1186,19 @@ function ContributeModal({
             </>
           )}
           {error && <p className="text-red-400 text-xs text-center">{error}</p>}
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
-            Close
+          <button onClick={onClose} className="mt-3 w-full min-h-12 rounded-full bg-zinc-100 hover:bg-white text-zinc-900 text-sm font-bold active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation">
+            Done
           </button>
           {undone ? (
-            <p className="mt-6 pt-3 border-t border-zinc-800 text-sm text-emerald-400 font-medium text-center">Undone — this contribution was deleted.</p>
+            <p className="mt-2 text-sm text-zinc-400 font-medium text-center">Undone. This contribution was deleted.</p>
           ) : submittedContributionId ? (
-            <button
-              onClick={handleUndo}
-              disabled={undoing}
-              className="mt-6 pt-3 border-t border-zinc-800 text-xs font-medium text-red-400 hover:text-red-300 active:text-red-300 disabled:opacity-50 transition-colors duration-150"
-            >
-              {undoing ? "Undoing…" : "Submitted by mistake? Undo"}
-            </button>
+            <UndoButton
+              onConfirm={handleUndo}
+              busy={undoing}
+              label="Submitted by mistake? Undo"
+              busyLabel="Undoing…"
+              confirmLabel="Yes, undo"
+            />
           ) : null}
         </div>
       </ModalShell>
@@ -1213,7 +1217,7 @@ function ContributeModal({
         <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg border border-violet-800/60 bg-violet-950/30 text-xs text-violet-300">
           <div className="flex items-center gap-2">
             <span className="text-base shrink-0">🎯</span>
-            <span>Challenge complete — {effectiveMultiplier ? "two bonuses are eligible" : "this cleanup earns a score bonus"}:</span>
+            <span>Challenge complete: {effectiveMultiplier ? "two bonuses are eligible" : "this cleanup earns a score bonus"}:</span>
           </div>
           <div className="flex flex-col gap-1 pl-6">
             <span className={challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "font-bold text-violet-200" : "text-violet-400/60 line-through"}>
@@ -1228,7 +1232,7 @@ function ContributeModal({
             )}
           </div>
           {effectiveMultiplier && (
-            <span className="pl-6 text-violet-400/70">Only the larger bonus applies — they don&apos;t stack.</span>
+            <span className="pl-6 text-violet-400/70">Only the larger bonus applies. They don&apos;t stack.</span>
           )}
         </div>
       )}
@@ -1397,7 +1401,7 @@ function ContributeModal({
       {needsLocation && !isRouteMode && (
         <div>
           <p className="text-xs text-zinc-500 mb-1.5">
-            {isUnfollow ? "Your location (optional — helps build the global heatmap)" : "Your location"}
+            {isUnfollow ? "Your location (optional, helps build the global heatmap)" : "Your location"}
           </p>
           <GpsIndicator
             status={gps.status}
@@ -1414,7 +1418,7 @@ function ContributeModal({
           {gps.status === "success" && gps.coords && (
             <button
               onClick={() => onEnterPinPicker(photos.length > 0 || existingPhotoUrls.length > 0)}
-              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+              className="mt-2 self-start inline-flex items-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {overrideCoords ? "Reposition on map" : "Place pin on map"}
             </button>
@@ -1422,13 +1426,18 @@ function ContributeModal({
           {isCleanup && gps.status === "success" && gps.coords && (
             <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-lg border border-amber-800/60 bg-amber-950/30 text-[10px] text-amber-300">
               {photos.length > 0 || existingPhotoUrls.length > 0
-                ? "Photo attached — the pin can go anywhere on the map."
-                : "Pin must stay in your ZIP code unless a photo is added. Turn on ZIP codes in the trash map's Layers panel to see the boundary."}
+                ? "Photo attached, the pin can go anywhere on the map."
+                : "Without a photo the pin must stay in your ZIP code. The blue outline on the map is the boundary."}
             </div>
           )}
           {submitCoords && (
             <div className="mt-2">
-              <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
+              <MiniMapPreview
+                lat={submitCoords.latitude}
+                lng={submitCoords.longitude}
+                styleId={activeMapStyle}
+                zoneCampaignId={isCleanup && photos.length === 0 && existingPhotoUrls.length === 0 ? campaignId : undefined}
+              />
             </div>
           )}
         </div>
@@ -1447,7 +1456,7 @@ function ContributeModal({
             <button
               type="button"
               onClick={onEnterRoutePicker}
-              className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
+              className="w-full min-h-12 inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               🛤️ Draw route on map
             </button>
@@ -1464,7 +1473,7 @@ function ContributeModal({
                     setRoute(null);
                     if (contributeMode !== "track") onEnterRoutePicker();
                   }}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
                 >
                   Redraw
                 </button>
@@ -1473,7 +1482,7 @@ function ContributeModal({
               {loadingIntersecting ? (
                 <p className="text-xs text-zinc-500">Finding zips along your route…</p>
               ) : intersectingUnits.length === 0 ? (
-                <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips — try drawing within the campaign area.</p>
+                <p className="text-xs text-orange-400">This route doesn&apos;t cross any known zips. Try drawing within the campaign area.</p>
               ) : (
                 <div>
                   <p className="text-xs text-zinc-500 mb-1.5">Credit which zip?</p>
@@ -1608,7 +1617,7 @@ function ContributeModal({
             ))}
           </div>
           {pointsBasis !== "bags" && (
-            <p className="mb-2 text-[11px] text-amber-400">A photo is required for this log type.</p>
+            <p className="mb-3 flex items-center gap-2 rounded-2xl bg-amber-500/15 ring-1 ring-amber-500/40 px-4 py-2.5 text-sm font-bold text-amber-300">📷 A photo is required for this log type</p>
           )}
 
           {pointsBasis === "bags" && (
@@ -1711,7 +1720,7 @@ function ContributeModal({
               <div className="mt-3" key="pounds-input">
                 <label className={`block text-[11px] mb-1 ${(isEventMode && !pounds.trim()) || pointsBasis === "pounds" ? "text-amber-400" : "text-zinc-600"}`}>
                   Pounds cleaned up {pointsBasis === "pounds" ? "(required)" : "(optional)"}
-                  {isEventMode && !pounds.trim() && pointsBasis !== "pounds" ? " — helps the event's total!" : ""}
+                  {isEventMode && !pounds.trim() && pointsBasis !== "pounds" ? ", helps the event's total!" : ""}
                 </label>
                 <input
                   type="number"
@@ -1726,8 +1735,8 @@ function ContributeModal({
               </div>
             );
             const pointsPreview = pointsBasis === "bags" ? (
-              <p className="mt-2 text-xs text-zinc-500" key="points-preview">
-                Total points:{" "}
+              <p className="mt-3 flex flex-wrap items-center gap-x-2 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/30 px-4 py-3 text-sm font-semibold text-zinc-300" key="points-preview">
+                You'll earn{" "}
                 {!bagValuesReady ? (
                   <SettingValue value={undefined} loading={settingsLoading} />
                 ) : (
@@ -1736,7 +1745,7 @@ function ContributeModal({
                       <span className="line-through text-zinc-600 mr-1.5">{formatPoints(baseValue)}</span>
                     )}
                     <span
-                      className={`text-lg font-bold inline-block transition-transform duration-300 ${combinedMultiplier > 1 ? "text-orange-400" : "text-emerald-400"
+                      className={`text-2xl font-extrabold inline-block transition-transform duration-300 ${combinedMultiplier > 1 ? "text-orange-400" : "text-emerald-400"
                         } ${valueFlash ? "scale-125" : "scale-100"}`}
                     >
                       {formatPoints(displayValue)}
@@ -1752,9 +1761,9 @@ function ContributeModal({
                 )}
               </p>
             ) : (
-              <p className="mt-2 text-xs text-zinc-500" key="points-preview">
-                Total points:{" "}
-                <span className="text-lg font-bold text-emerald-400">{formatPoints(displayValue)}</span>
+              <p className="mt-3 flex flex-wrap items-center gap-x-2 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/30 px-4 py-3 text-sm font-semibold text-zinc-300" key="points-preview">
+                You'll earn{" "}
+                <span className="text-2xl font-extrabold text-emerald-400">{formatPoints(displayValue)}</span>
               </p>
             );
             const bonusNote = firstCleanupBonusPreview ? (
@@ -1836,7 +1845,7 @@ function ContributeModal({
         <div>
           <label className={`block text-xs mb-1.5 ${isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? "text-amber-400" : "text-zinc-500"}`}>
             {isCleanup ? "Photos" : "Photo"} {isPhoto || (isTeamEventMode && joinedTeamEvent?.requires_photo) ? "(required)" : "(optional)"}
-            {isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? " — helps the event's gallery!" : ""}
+            {isEventMode && photos.length === 0 && existingPhotoUrls.length === 0 ? ", helps the event's gallery!" : ""}
           </label>
           <PhotoCaptureInput
             multiple={isCleanup}
@@ -1929,79 +1938,51 @@ function ContributeModal({
 
   const guidedStepSections = [photoAndNotesSection, modeAndLocationSection, groupAndBagsSection];
 
+  const stepped = isCleanup;
+  const lastStep = !stepped || guidedStep === cleanupSteps.length - 1;
+  const footer = lastStep ? (
+    <FlowFooter
+      onBack={stepped && guidedStep > 0 ? () => setGuidedStep((n) => Math.max(0, n - 1)) : onClose}
+      backLabel={stepped && guidedStep > 0 ? "Back" : "Cancel"}
+      primaryLabel={userId ? (submitting ? "Submitting..." : "Submit") : "Sign in to submit"}
+      onPrimary={userId ? handleSubmit : undefined}
+      primaryDisabled={userId ? !canSubmit : false}
+      primaryHref={userId ? undefined : `/login?next=${pathname}`}
+    />
+  ) : (
+    <FlowFooter
+      onBack={guidedStep > 0 ? () => setGuidedStep((n) => Math.max(0, n - 1)) : onClose}
+      backLabel={guidedStep > 0 ? "Back" : "Cancel"}
+      primaryLabel="Next"
+      onPrimary={() => setGuidedStep((n) => Math.min(cleanupSteps.length - 1, n + 1))}
+    />
+  );
+
   return (
     <ModalShell
       title={config.title}
       onClose={onClose}
       glow={isEventMode ? "blue" : isCleanup && Boolean(activeMultiplier) ? "orange" : false}
+      steps={stepped ? cleanupSteps : undefined}
+      stepIndex={guidedStep}
+      footer={footer}
     >
       <div className="flex flex-col gap-4">
         {heroSection}
         {unfollowField}
 
-        {isCleanup && (
-          <ViewModeToggle viewMode={viewMode} onChange={changeViewMode} />
-        )}
-
-        {isCleanup && viewMode === "guided" ? (
-          <>
-            <GuidedStepper steps={cleanupSteps} activeIndex={guidedStep} onJump={setGuidedStep} />
-            {guidedStepSections[guidedStep]}
-            <StepperNav
-              activeIndex={guidedStep}
-              count={cleanupSteps.length}
-              accent="emerald"
-              onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
-              onNext={() => setGuidedStep((s) => Math.min(cleanupSteps.length - 1, s + 1))}
-            />
-          </>
+        {stepped ? (
+          guidedStepSections[guidedStep]
         ) : (
           <>
-            {isCleanup ? (
-              <>
-                {photoAndNotesSection}
-                {modeAndLocationSection}
-                {groupAndBagsSection}
-              </>
-            ) : (
-              <>
-                {modeAndLocationSection}
-                {groupAndBagsSection}
-                {civicActionSelector}
-                {photoAndNotesSection}
-              </>
-            )}
+            {modeAndLocationSection}
+            {groupAndBagsSection}
+            {civicActionSelector}
+            {photoAndNotesSection}
           </>
         )}
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
-
-        {(!isCleanup || viewMode === "full" || guidedStep === cleanupSteps.length - 1) && (
-          <div className={`flex gap-2 ${isCleanup && viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
-            <button
-              onClick={onClose}
-              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              Cancel
-            </button>
-            {userId ? (
-              <button
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                {submitting ? "Submitting…" : "Submit"}
-              </button>
-            ) : (
-              <Link
-                href={`/login?next=${pathname}`}
-                className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                Sign in to submit
-              </Link>
-            )}
-          </div>
-        )}
       </div>
     </ModalShell>
   );
@@ -2034,6 +2015,7 @@ function ReportModal({
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
+  const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [hotspotTriggered, setHotspotTriggered] = useState(false);
@@ -2105,7 +2087,7 @@ function ReportModal({
       setUndone(true);
       onReportRemoved?.(submittedReportId);
     } catch {
-      setError("Couldn't undo — you can delete it from the report itself instead.");
+      setError("Couldn't undo. You can delete it from the report itself instead.");
     } finally {
       setUndoing(false);
     }
@@ -2116,144 +2098,133 @@ function ReportModal({
       <ModalShell onClose={onClose}>
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">{hotspotTriggered ? "🔥" : "📍"}</span>
-          <p className="text-zinc-100 font-semibold text-center">
+          <p className="text-zinc-100 font-semibold text-center">Report submitted</p>
+          <p className="text-sm text-zinc-400 text-center max-w-xs">
             {hotspotTriggered
-              ? "Report submitted! Your report just pushed this area over the threshold — a Hotspot has spawned!"
-              : "Report submitted! If enough reports come in, a Hotspot will spawn."}
+              ? "Your report just turned this area into a hotspot. Anyone who cleans it up now earns bonus points."
+              : "Thanks for flagging it. When several reports pile up in one area it becomes a hotspot, and cleaning it up earns bonus points."}
           </p>
           {error && <p className="text-red-400 text-xs text-center">{error}</p>}
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
-            Close
+          <button onClick={onClose} className="mt-3 w-full min-h-12 rounded-full bg-zinc-100 hover:bg-white text-zinc-900 text-sm font-bold active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation">
+            Done
           </button>
           {undone ? (
-            <p className="mt-6 pt-3 border-t border-zinc-800 text-sm text-emerald-400 font-medium text-center">Undone — this report was deleted.</p>
+            <p className="mt-2 text-sm text-zinc-400 font-medium text-center">Undone. This report was deleted.</p>
           ) : submittedReportId ? (
-            <button
-              onClick={handleUndo}
-              disabled={undoing}
-              className="mt-6 pt-3 border-t border-zinc-800 text-xs font-medium text-red-400 hover:text-red-300 active:text-red-300 disabled:opacity-50 transition-colors duration-150"
-            >
-              {undoing ? "Undoing…" : "Reported by mistake? Undo"}
-            </button>
+            <UndoButton
+              onConfirm={handleUndo}
+              busy={undoing}
+              label="Reported by mistake? Undo"
+              busyLabel="Undoing…"
+              confirmLabel="Yes, undo"
+            />
           ) : null}
         </div>
       </ModalShell>
     );
   }
 
+  const lastStep = step === REPORT_STEPS.length - 1;
+  const stepHint =
+    step === 0 && !photo ? "Add a photo to continue" : step === 1 && !submitCoords ? "Waiting for your location" : null;
+  const footer = lastStep ? (
+    <FlowFooter
+      onBack={() => setStep((n) => n - 1)}
+      primaryLabel={userId ? (submitting ? "Submitting..." : "Submit report") : "Sign in to report"}
+      onPrimary={userId ? handleSubmit : undefined}
+      primaryDisabled={userId ? !submitCoords || !photo || submitting : false}
+      primaryHref={userId ? undefined : `/login?next=${pathname}`}
+    />
+  ) : (
+    <FlowFooter
+      onBack={step > 0 ? () => setStep((n) => n - 1) : onClose}
+      backLabel={step > 0 ? "Back" : "Cancel"}
+      primaryLabel="Next"
+      onPrimary={() => setStep((n) => n + 1)}
+      primaryDisabled={!!stepHint}
+      hint={stepHint}
+    />
+  );
+
   return (
-    <ModalShell title="Report Trash" onClose={onClose}>
+    <ModalShell title="Report Trash" onClose={onClose} steps={REPORT_STEPS} stepIndex={step} footer={footer}>
       <div className="flex flex-col gap-4">
-        <div>
-          <p className="text-xs text-zinc-500 mb-1.5">Trash location</p>
-          <GpsIndicator
-            status={gps.status}
-            coords={gps.coords}
-            errorCode={gps.errorCode}
-            onRetry={gps.capture}
-          />
-          {overrideCoords && (
-            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
-            </div>
-          )}
-          {gps.status === "success" && gps.coords && (
-            <button
-              onClick={onEnterPinPicker}
-              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-            >
-              {overrideCoords ? "Reposition pin on map" : "Place pin on map"}
-            </button>
-          )}
-        </div>
-
-        {submitCoords && (
-          <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />
-        )}
-
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Photo (required)</label>
-          <PhotoCaptureInput multiple={false} onFilesSelected={(files) => setPhoto(files[0] ?? null)} />
-          {photoPreview && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+        {step === 0 && (
+          <>
+            <p className="text-sm text-zinc-400">A clear photo helps cleaners find and verify the spot.</p>
+            <PhotoCaptureInput multiple={false} onFilesSelected={(files) => setPhoto(files[0] ?? null)} />
+            {photoPreview && (
+              <div className="relative w-full h-40 rounded-2xl overflow-hidden ring-1 ring-white/10">
                 <img src={photoPreview} alt="" className="w-full h-full object-cover" />
                 <IconButton
                   onClick={() => setPhoto(null)}
                   size="sm"
-                  className="absolute top-1 right-1 bg-black/70 text-white text-[10px] leading-none rounded-lg! w-6! h-6!"
+                  className="absolute top-2 right-2 bg-black/70 text-white text-xs leading-none rounded-full! w-8! h-8!"
                   aria-label="Remove photo"
                 >
                   ×
                 </IconButton>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </>
+        )}
 
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Severity</label>
-          <div className="flex gap-2">
-            {(["low", "medium", "high"] as const).map((s) => (
+        {step === 1 && (
+          <>
+            <GpsIndicator status={gps.status} coords={gps.coords} errorCode={gps.errorCode} onRetry={gps.capture} />
+            {overrideCoords && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
+              </div>
+            )}
+            {submitCoords && <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} />}
+            {gps.status === "success" && gps.coords && (
               <button
-                key={s}
-                onClick={() => setSeverity(s)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize ${severity === s
-                  ? s === "high"
-                    ? "bg-red-900/60 border-red-600 text-red-300"
-                    : s === "medium"
-                      ? "bg-yellow-900/60 border-yellow-600 text-yellow-300"
-                      : "bg-zinc-700 border-zinc-500 text-zinc-200"
-                  : "bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.95]"
-                  }`}
+                type="button"
+                onClick={onEnterPinPicker}
+                className="self-start min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
               >
-                {s}
+                {overrideCoords ? "Move pin on map" : "Trash is somewhere else? Place pin"}
               </button>
-            ))}
-          </div>
-          <p className="mt-1.5 text-xs text-zinc-500">{SEVERITY_DESCRIPTIONS[severity]}</p>
-        </div>
+            )}
+          </>
+        )}
 
-        <p className="text-xs text-zinc-500">
-          Points earned:{" "}
-          {gameSettings.trash_report_value === undefined ? (
-            <SettingValue value={undefined} loading={settingsLoading} />
-          ) : (
-            <span className="text-lg font-bold text-emerald-400">{formatPoints(gameSettings.trash_report_value)}</span>
-          )}
-        </p>
-
-        {error && <p className="text-red-400 text-xs">{error}</p>}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            Cancel
-          </button>
-          {userId ? (
-            <button
-              onClick={handleSubmit}
-              disabled={!submitCoords || !photo || submitting}
-              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              {submitting ? "Submitting…" : "Report"}
-            </button>
-          ) : (
-            <Link
-              href={`/login?next=${pathname}`}
-              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-500 active:scale-[0.97] text-white text-sm font-semibold text-center transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              Sign in to report
-            </Link>
-          )}
-        </div>
+        {step === 2 && (
+          <>
+            <ChoiceChips
+              value={severity}
+              onChange={setSeverity}
+              options={[
+                { value: "low", label: "Low", activeClass: "bg-emerald-500 text-white", idleClass: "bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60" },
+                { value: "medium", label: "Medium", activeClass: "bg-amber-500 text-white", idleClass: "bg-amber-950/50 text-amber-300 hover:bg-amber-900/60" },
+                { value: "high", label: "High", activeClass: "bg-red-500 text-white", idleClass: "bg-red-950/50 text-red-300 hover:bg-red-900/60" },
+              ]}
+            />
+            <p className="text-sm text-zinc-400">{SEVERITY_DESCRIPTIONS[severity]}</p>
+            <p className="text-xs text-zinc-500">
+              You earn{" "}
+              {gameSettings.trash_report_value === undefined ? (
+                <SettingValue value={undefined} loading={settingsLoading} />
+              ) : (
+                <span className="text-base font-bold text-emerald-400">{formatPoints(gameSettings.trash_report_value)}</span>
+              )}{" "}
+              for reporting.
+            </p>
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+          </>
+        )}
       </div>
     </ModalShell>
   );
 }
+
+const REPORT_STEPS: GuidedStep[] = [
+  { key: "photo", label: "Snap the trash" },
+  { key: "where", label: "Where is it?" },
+  { key: "severity", label: "How bad is it?" },
+];
 
 // ─── Claim-a-report challenge mode ────────────────────────────────────────────
 
@@ -2265,7 +2236,7 @@ function claimAfterWindowMinutes(severity: string, windows: Record<string, numbe
 // long the clean-up will actually take, since that's the window a claimant gets to
 // submit an after photo (windows come from the claim_after_window_minutes_* settings).
 const SEVERITY_DESCRIPTIONS: Record<"low" | "medium" | "high", string> = {
-  low: "A few scattered items — a quick grab-and-go.",
+  low: "A few scattered items, a quick grab-and-go.",
   medium: "A noticeable pile or small dump site.",
   high: "A large dump, bulky items, or hazardous material.",
 };
@@ -2471,7 +2442,7 @@ function ClaimReportModal({
   const handleBeforePhoto = async () => {
     if (!userId || !photo) return;
     if (!gps.coords) {
-      setError("We need your location to confirm you're at the report — enable location and try again.");
+      setError("We need your location to confirm you're at the report. Enable location and try again.");
       return;
     }
     setSubmitting(true);
@@ -2515,7 +2486,7 @@ function ClaimReportModal({
   const handleAfterPhoto = async () => {
     if (!userId || !photo) return;
     if (!gps.coords) {
-      setError("We need your location to confirm you're at the report — enable location and try again.");
+      setError("We need your location to confirm you're at the report. Enable location and try again.");
       return;
     }
     setSubmitting(true);
@@ -2680,13 +2651,13 @@ function ClaimReportModal({
           <div className="flex items-center gap-3">
             <button
               onClick={handleFlag}
-              className="text-xs text-red-400 hover:text-red-300 active:text-red-300 transition-colors duration-150 underline"
+              className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-red-600 hover:bg-red-500 text-sm font-bold text-white active:scale-[0.97] transition-[background-color,transform] duration-150"
             >
               Yes, flag it
             </button>
             <button
               onClick={() => setFlagState("idle")}
-              className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+              className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
             >
               Cancel
             </button>
@@ -2697,7 +2668,7 @@ function ClaimReportModal({
           <p className="text-xs text-zinc-500">Thanks, this report has been flagged for review.</p>
           <button
             onClick={handleUnflag}
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Undo
           </button>
@@ -2706,7 +2677,7 @@ function ClaimReportModal({
         <button
           onClick={() => setFlagState("confirming")}
           disabled={flagState === "submitting"}
-          className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40"
+          className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-red-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
           title={
             gameSettings.flag_auto_hide_threshold !== undefined
               ? `Flag this if it's fake, inaccurate, or has an inappropriate photo. If ${gameSettings.flag_auto_hide_threshold} people flag it, it's automatically removed from the map.`
@@ -2766,7 +2737,7 @@ function ClaimReportModal({
           <p className="text-zinc-100 text-sm text-center">
             Someone else is already working this report. If they don&apos;t finish in time, it&apos;ll reopen for anyone to claim.
           </p>
-          <button onClick={onClose} className="mt-1 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
+          <button onClick={onClose} className="mt-1 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
             Close
           </button>
           {flagControl}
@@ -2784,7 +2755,7 @@ function ClaimReportModal({
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">⛔</span>
           <p className="text-zinc-100 text-sm text-center">
-            You already have an active claim in progress. Finish it — or let its timer run out — before claiming another report.
+            You already have an active claim in progress. Finish it, or let its timer run out, before claiming another report.
           </p>
           <button
             onClick={onViewActiveClaim}
@@ -2792,7 +2763,7 @@ function ClaimReportModal({
           >
             View my active claim
           </button>
-          <button onClick={onClose} className="text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">
+          <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
             Close
           </button>
         </div>
@@ -2810,7 +2781,7 @@ function ClaimReportModal({
         <div className="flex flex-col items-center gap-3 py-8">
           <span className="w-6 h-6 border-2 border-zinc-600 border-t-violet-500 rounded-full animate-spin" />
           <p className="text-xs text-zinc-500">
-            {settingsLoading ? "Loading challenge settings…" : "Couldn't load challenge settings — try again."}
+            {settingsLoading ? "Loading challenge settings…" : "Couldn't load challenge settings. Try again."}
           </p>
         </div>
       </ModalShell>
@@ -2916,7 +2887,7 @@ function ClaimReportModal({
                   ? "Loading claim settings…"
                   : distanceToReport === null
                     ? "Waiting for your location to confirm you're at the report…"
-                    : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
+                    : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away. Get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
               </span>
             </div>
           )}
@@ -2974,7 +2945,7 @@ function ClaimReportModal({
           <button
             onClick={handleRelease}
             disabled={submitting}
-            className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40 text-center"
+            className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Back out of this claim
           </button>
@@ -3001,7 +2972,7 @@ function ClaimReportModal({
           <span className="text-base shrink-0">⏱️</span>
           <span>
             {afterCountdown.expired
-              ? "Time's up — this claim has expired. Close and reclaim if it's still available."
+              ? "Time's up. This claim has expired. Close and reclaim if it's still available."
               : <>Time left to finish: <span className="font-bold">{afterCountdown.label}</span></>}
           </span>
         </div>
@@ -3014,7 +2985,7 @@ function ClaimReportModal({
                 ? "Loading claim settings…"
                 : distanceToReport === null
                   ? "Waiting for your location to confirm you're at the report…"
-                  : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away — get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
+                  : <>You&apos;re ~{formatHotspotDistance(distanceToReport, localReport.unit_type)} away. Get within {formatHotspotDistance(radiusMeters, localReport.unit_type)} to submit a photo.</>}
             </span>
           </div>
         )}
@@ -3081,7 +3052,7 @@ function ClaimReportModal({
         <button
           onClick={handleRelease}
           disabled={submitting}
-          className="text-xs text-zinc-500 hover:text-red-400 active:text-red-400 transition-colors duration-150 disabled:active:text-zinc-500 underline disabled:opacity-40 text-center"
+          className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           Back out of this claim
         </button>
@@ -3125,7 +3096,7 @@ function ActiveClaimBadge({
       <span className="text-sm">🎯</span>
       <span>
         {countdown.expired ? (
-          "Claim expired — tap to view"
+          "Claim expired. Tap to view"
         ) : isScheduled ? (
           <>Arrive by <span className="font-bold tabular-nums">{countdown.label}</span></>
         ) : (
@@ -3187,6 +3158,8 @@ function HostEventModal({
   const [externalLink, setExternalLink] = useState("");
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">("organizer_total");
+  const [locationKind, setLocationKind] = useState<"spot" | "route">("spot");
+  const [showAddressDetails, setShowAddressDetails] = useState(false);
   const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
     if (typeof window === "undefined") return "guided";
     return localStorage.getItem("frontline:host-event-view-mode") === "full" ? "full" : "guided";
@@ -3205,6 +3178,7 @@ function HostEventModal({
   useEffect(() => {
     if (!routeOverride) return;
     setRoute(routeOverride);
+    setLocationKind("route");
   }, [routeOverride]);
 
   useEffect(() => { if (gps.status === "idle") gps.capture(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3256,7 +3230,7 @@ function HostEventModal({
     !title.trim() ? "Add a title to continue" : null,
     !scheduledStart ? "Pick a start date to continue" : endBeforeStart ? "End time must be after the start to continue" : null,
     null,
-    !submitCoords ? "Set a location to continue" : null,
+    !submitCoords ? "Set a location to continue" : locationKind === "route" && !route ? "Draw your route to continue" : null,
     ...(hasNearbyPartners ? [null] : []),
     null,
   ];
@@ -3265,7 +3239,7 @@ function HostEventModal({
   const handleSubmit = async () => {
     if (!canSubmit || !submitCoords) return;
     if (endBeforeStart) {
-      setError("End time can't be before the start time — pick a later time.");
+      setError("End time can't be before the start time. Pick a later time.");
       return;
     }
     setSubmitting(true);
@@ -3333,7 +3307,7 @@ function HostEventModal({
       setCancelled(true);
       router.refresh();
     } catch {
-      setError("Couldn't cancel — you can cancel it from the event page instead.");
+      setError("Couldn't cancel. You can cancel it from the event page instead.");
     } finally {
       setCancelling(false);
     }
@@ -3349,32 +3323,32 @@ function HostEventModal({
           </p>
           {!cancelled && (
             <p className="text-zinc-500 text-xs text-center">
-              Join code <span className="font-mono text-zinc-300">{created.join_code}</span> — share it so attendees can check in without GPS.
+              Join code <span className="font-mono text-zinc-300">{created.join_code}</span>. Share it so attendees can check in without GPS.
             </p>
           )}
           {error && <p className="text-red-400 text-xs text-center">{error}</p>}
           <div className="flex gap-2 w-full mt-1">
             <Link
               href={`/cleanup-events/${created.id}`}
-              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-300 text-sm text-center hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+              className="flex-1 inline-flex items-center justify-center min-h-12 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-bold active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               View event
             </Link>
             <button
               onClick={onClose}
-              className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
+              className="flex-1 min-h-12 rounded-full bg-zinc-100 hover:bg-white text-zinc-900 text-sm font-bold active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Done
             </button>
           </div>
           {!cancelled && (
-            <button
-              onClick={handleCancelJustCreated}
-              disabled={cancelling}
-              className="mt-8 pt-3 border-t border-zinc-800 text-xs font-medium text-red-400 hover:text-red-300 active:text-red-300 disabled:opacity-50 transition-colors duration-150"
-            >
-              {cancelling ? "Cancelling…" : "Created by mistake? Cancel event"}
-            </button>
+            <UndoButton
+              onConfirm={handleCancelJustCreated}
+              busy={cancelling}
+              label="Created by mistake? Cancel event"
+              busyLabel="Cancelling…"
+              confirmLabel="Yes, cancel event"
+            />
           )}
         </div>
       </ModalShell>
@@ -3527,53 +3501,45 @@ function HostEventModal({
     </>
   );
 
+  const useMyLocation = () => {
+    if (gps.coords) setAddressCoords(gps.coords);
+    else gps.capture();
+  };
+
+  const fullAddress = [addressValue, addressCity, [addressState, addressPostalCode].filter(Boolean).join(" "), addressCountry].filter(Boolean).join(", ");
+  const areaCoords = overrideCoords ?? addressCoords ?? gps.coords ?? undefined;
+
   const locationSection = (
     <>
-      <div>
-        <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1.5">
-          Pre-planned route (optional)
-        </label>
-        {!route ? (
+      <div className="grid grid-cols-2 gap-1 rounded-full bg-zinc-800 p-1" role="tablist" aria-label="Event location type">
+        {([
+          { kind: "spot", label: "📍 One spot" },
+          { kind: "route", label: "🛤️ A route" },
+        ] as const).map((opt) => (
           <button
+            key={opt.kind}
             type="button"
-            onClick={() => onEnterRoutePicker(overrideCoords ?? addressCoords ?? undefined)}
-            className="w-full py-2.5 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-sm hover:border-zinc-500 hover:text-zinc-200 active:border-zinc-500 active:text-zinc-200 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 touch-manipulation"
+            role="tab"
+            aria-selected={locationKind === opt.kind}
+            onClick={() => {
+              setLocationKind(opt.kind);
+              if (opt.kind === "spot") setRoute(null);
+            }}
+            className={`min-h-12 rounded-full px-3 text-sm font-bold transition-[background-color,color] duration-150 touch-manipulation ${locationKind === opt.kind ? "bg-zinc-100 text-zinc-900" : "text-zinc-400 hover:text-zinc-200"}`}
           >
-            🛤️ Draw route on map
+            {opt.label}
           </button>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
-              </span>
-              <button
-                type="button"
-                onClick={() => onEnterRoutePicker(overrideCoords ?? addressCoords ?? undefined)}
-                className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-              >
-                Redraw
-              </button>
-            </div>
-            <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[140px]" interactive />
-          </div>
-        )}
+        ))}
       </div>
-
-      {route && (
-        <button
-          type="button"
-          onClick={() => setRoute(null)}
-          className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
-        >
-          Use a single pin instead
-        </button>
-      )}
+      <p className="text-xs text-zinc-400 -mt-1">
+        {locationKind === "route"
+          ? "Jump to the area first, then draw the route on the map. The start of the route is the meetup point."
+          : "Search for an address, or move the pin on the map."}
+      </p>
 
       {!route && (
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Street address</label>
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-zinc-200">{locationKind === "route" ? "Where is the route?" : "Find the spot"}</label>
           <AddressAutocomplete
             value={addressValue}
             onChange={setAddressValue}
@@ -3585,73 +3551,110 @@ function HostEventModal({
               setAddressCountry(s.country);
               setAddressCoords({ latitude: s.lat, longitude: s.lng });
             }}
-            placeholder="Search for an address..."
+            placeholder={locationKind === "route" ? "Search a street, park, or neighborhood..." : "Search for an address..."}
           />
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">City</label>
-              <input
-                value={addressCity}
-                onChange={(e) => setAddressCity(e.target.value)}
-                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">State</label>
-              <input
-                value={addressState}
-                onChange={(e) => setAddressState(e.target.value)}
-                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">Postal code</label>
-              <input
-                value={addressPostalCode}
-                onChange={(e) => setAddressPostalCode(e.target.value)}
-                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">Country</label>
-              <input
-                value={addressCountry}
-                onChange={(e) => setAddressCountry(e.target.value)}
-                className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
-              />
-            </div>
-          </div>
-          {!overrideCoords && !addressCoords && (
-            <GpsIndicator
-              status={gps.status}
-              coords={gps.coords}
-              errorCode={gps.errorCode}
-              onRetry={gps.capture}
-            />
-          )}
-          {overrideCoords ? (
-            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              Pinned: {overrideCoords.latitude.toFixed(5)}, {overrideCoords.longitude.toFixed(5)}
-            </div>
-          ) : addressCoords ? (
-            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              Address set: {addressCoords.latitude.toFixed(5)}, {addressCoords.longitude.toFixed(5)}
-            </div>
-          ) : null}
-          {submitCoords && (
+          {!overrideCoords && (
             <button
-              onClick={() => onEnterPinPicker(submitCoords)}
-              className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline"
+              type="button"
+              onClick={useMyLocation}
+              className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
             >
-              {overrideCoords ? "Reposition pin on map" : "Fine-tune pin on map"}
+              📍 Use my location
             </button>
           )}
-          {submitCoords && (
-            <MiniMapPreview lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} interactive />
+          {!overrideCoords && !addressCoords && (
+            <GpsIndicator status={gps.status} coords={gps.coords} errorCode={gps.errorCode} onRetry={gps.capture} />
           )}
         </div>
+      )}
+
+      {locationKind === "route" ? (
+        route ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                Route drawn ({route.coordinates.length} node{route.coordinates.length === 1 ? "" : "s"})
+              </span>
+              <button
+                type="button"
+                onClick={() => onEnterRoutePicker(areaCoords ? { latitude: areaCoords.latitude, longitude: areaCoords.longitude } : undefined)}
+                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+              >
+                Redraw
+              </button>
+            </div>
+            <RoutePreviewMap coordinates={route.coordinates} heightClassName="h-[200px]" interactive />
+          </div>
+        ) : (
+          <>
+            {areaCoords && (
+              <MiniMapPreview key="route-area" lat={areaCoords.latitude} lng={areaCoords.longitude} styleId={activeMapStyle} heightClassName="h-[180px]" />
+            )}
+            <button
+              type="button"
+              onClick={() => onEnterRoutePicker(areaCoords ? { latitude: areaCoords.latitude, longitude: areaCoords.longitude } : undefined)}
+              className="w-full min-h-12 inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              🛤️ Draw route here
+            </button>
+          </>
+        )
+      ) : (
+        <>
+          {submitCoords && (
+            <MiniMapPreview key="spot-pin" lat={submitCoords.latitude} lng={submitCoords.longitude} styleId={activeMapStyle} interactive heightClassName="h-[200px]" />
+          )}
+          {submitCoords && (
+            <button
+              type="button"
+              onClick={() => onEnterPinPicker(submitCoords)}
+              className="self-start inline-flex items-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              {overrideCoords ? "Reposition pin on map" : "Move pin on map"}
+            </button>
+          )}
+          {fullAddress && (
+            <div className="rounded-2xl bg-zinc-800/60 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Address shown on the event</p>
+              <p className="mt-0.5 text-sm text-zinc-100">{fullAddress}</p>
+              <button
+                type="button"
+                onClick={() => setShowAddressDetails((v) => !v)}
+                className="mt-1 inline-flex items-center min-h-11 text-sm font-semibold text-zinc-300 hover:text-zinc-100"
+              >
+                {showAddressDetails ? "Hide details" : "Edit details"}
+              </button>
+            </div>
+          )}
+          {(showAddressDetails || !fullAddress) && (
+            <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-500 mb-1.5">Street address</label>
+                <input
+                  value={addressValue}
+                  onChange={(e) => setAddressValue(e.target.value)}
+                  className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+              {([
+                ["City", addressCity, setAddressCity],
+                ["State", addressState, setAddressState],
+                ["Postal code", addressPostalCode, setAddressPostalCode],
+                ["Country", addressCountry, setAddressCountry],
+              ] as const).map(([label, value, set]) => (
+                <div key={label}>
+                  <label className="block text-xs text-zinc-500 mb-1.5">{label}</label>
+                  <input
+                    value={value}
+                    onChange={(e) => set(e.target.value)}
+                    className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </>
   );
@@ -3700,57 +3703,32 @@ function HostEventModal({
     ? [basicsSection, scheduleSection, logisticsSection, locationSection, partnersSection, photoSection]
     : [basicsSection, scheduleSection, logisticsSection, locationSection, photoSection];
 
+  const lastHostStep = activeGuidedStep === hostEventSteps.length - 1;
+  const hostBlocked = hostEventStepBlockedReason[activeGuidedStep];
+  const hostFooter = lastHostStep ? (
+    <FlowFooter
+      onBack={activeGuidedStep > 0 ? () => setGuidedStep((s) => Math.max(0, s - 1)) : onClose}
+      backLabel={activeGuidedStep > 0 ? "Back" : "Cancel"}
+      primaryLabel={submitting ? "Creating..." : "Create event"}
+      onPrimary={handleSubmit}
+      primaryDisabled={!canSubmit || submitting}
+    />
+  ) : (
+    <FlowFooter
+      onBack={activeGuidedStep > 0 ? () => setGuidedStep((s) => Math.max(0, s - 1)) : onClose}
+      backLabel={activeGuidedStep > 0 ? "Back" : "Cancel"}
+      primaryLabel="Next"
+      onPrimary={() => setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1))}
+      primaryDisabled={!!hostBlocked}
+      hint={hostBlocked}
+    />
+  );
+
   return (
-    <ModalShell title="Host Cleanup Event" onClose={onClose}>
+    <ModalShell title="Host Cleanup Event" onClose={onClose} steps={hostEventSteps} stepIndex={activeGuidedStep} footer={hostFooter}>
       <div className="flex flex-col gap-4">
-        <ViewModeToggle viewMode={viewMode} onChange={changeViewMode} />
-
-        {viewMode === "guided" ? (
-          <>
-            <GuidedStepper steps={hostEventSteps} activeIndex={activeGuidedStep} onJump={setGuidedStep} />
-            {hostEventStepSections[activeGuidedStep]}
-            <StepperNav
-              activeIndex={activeGuidedStep}
-              count={hostEventSteps.length}
-              accent="sky"
-              onPrev={() => setGuidedStep((s) => Math.max(0, s - 1))}
-              onNext={() => {
-                if (hostEventStepBlockedReason[activeGuidedStep]) return;
-                setGuidedStep((s) => Math.min(hostEventSteps.length - 1, s + 1));
-              }}
-              nextDisabledReason={hostEventStepBlockedReason[activeGuidedStep]}
-            />
-          </>
-        ) : (
-          <>
-            {basicsSection}
-            {scheduleSection}
-            {logisticsSection}
-            {locationSection}
-            {hasNearbyPartners && partnersSection}
-            {photoSection}
-          </>
-        )}
-
+        {hostEventStepSections[activeGuidedStep]}
         {error && <p className="text-red-400 text-xs">{error}</p>}
-
-        {(viewMode === "full" || activeGuidedStep === hostEventSteps.length - 1) && (
-          <div className={`flex gap-2 ${viewMode === "guided" ? "pt-3 mt-1 border-t border-zinc-800" : "pt-1"}`}>
-            <button
-              onClick={onClose}
-              className="flex-1 py-2 rounded-lg border border-zinc-700 text-zinc-400 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={!canSubmit || submitting}
-              className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-sky-950 text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              {submitting ? "Creating…" : "Create Event"}
-            </button>
-          </div>
-        )}
       </div>
     </ModalShell>
   );
@@ -3852,7 +3830,7 @@ function SolarpunkActionModal({
               ? `+${selectedAction?.points ?? 0} bloom points! Your hex is growing.`
               : "Action logged! 🌱"}
           </p>
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">Close</button>
+          <button onClick={onClose} className="mt-2 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">Close</button>
         </div>
       </ModalShell>
     );
@@ -3875,7 +3853,7 @@ function SolarpunkActionModal({
             </div>
           )}
           {gps.status === "success" && gps.coords && (
-            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline">
+            <button onClick={onEnterPinPicker} className="mt-2 self-start inline-flex items-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation">
               {overrideCoords ? "Reposition on map" : "Place pin on map"}
             </button>
           )}
@@ -4101,14 +4079,14 @@ function SolarpunkPhotoModal({
         <div className="flex flex-col items-center gap-3 py-4">
           <span className="text-4xl">🌿</span>
           <p className="text-zinc-100 font-semibold text-center">Photo added to the bloom map!</p>
-          <button onClick={onClose} className="mt-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150">Close</button>
+          <button onClick={onClose} className="mt-2 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">Close</button>
         </div>
       </ModalShell>
     );
   }
 
   return (
-    <ModalShell title="Spot It — Photograph the Future" onClose={onClose}>
+    <ModalShell title="Spot It: Photograph the Future" onClose={onClose}>
       <div className="flex flex-col gap-4">
 
         {/* Location */}
@@ -4122,7 +4100,7 @@ function SolarpunkPhotoModal({
             </div>
           )}
           {gps.status === "success" && gps.coords && (
-            <button onClick={onEnterPinPicker} className="mt-1.5 text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline">
+            <button onClick={onEnterPinPicker} className="mt-2 self-start inline-flex items-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation">
               {overrideCoords ? "Reposition on map" : "Place pin on map"}
             </button>
           )}
@@ -4134,7 +4112,7 @@ function SolarpunkPhotoModal({
 
         {/* Photo */}
         <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">Photo (required) — something solarpunk you spotted</label>
+          <label className="block text-xs text-zinc-500 mb-1.5">Photo (required): something solarpunk you spotted</label>
           <input
             type="file"
             accept="image/*"
@@ -4267,68 +4245,84 @@ function AllActionsModal({
 
 // ─── Modal shell ──────────────────────────────────────────────────────────────
 
+function UndoButton({
+  onConfirm,
+  busy,
+  label,
+  busyLabel,
+  confirmLabel,
+}: {
+  onConfirm: () => void;
+  busy: boolean;
+  label: string;
+  busyLabel: string;
+  confirmLabel: string;
+}) {
+  const [asking, setAsking] = useState(false);
+  if (busy) {
+    return <p className="mt-8 text-sm text-zinc-400 font-medium text-center">{busyLabel}</p>;
+  }
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        className="mt-8 w-full min-h-12 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-300 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-8 w-full flex flex-col gap-2">
+      <p className="text-sm text-zinc-300 text-center">Are you sure? This can&apos;t be brought back.</p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setAsking(false)}
+          className="flex-1 min-h-12 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+        >
+          Keep it
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="flex-1 min-h-12 rounded-full bg-red-600 hover:bg-red-500 text-sm font-bold text-white active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ModalShell({
   title,
   badge,
   onClose,
   children,
   glow,
-  compact,
   footerId,
+  steps,
+  stepIndex,
+  footer,
 }: {
   title?: string;
   badge?: string;
   onClose: () => void;
   children: React.ReactNode;
   glow?: "orange" | "blue" | false;
+  /** Kept for call-site compatibility; the new sheet spacing is uniform. */
   compact?: boolean;
   footerId?: string;
+  steps?: GuidedStep[];
+  stepIndex?: number;
+  footer?: React.ReactNode;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))]"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="relative w-full max-w-sm">
-        {glow && (
-          <div
-            className={`absolute -inset-1 rounded-xl blur-md animate-pulse pointer-events-none ${glow === "blue" ? "bg-sky-500/50" : "bg-orange-500/50"
-              }`}
-          />
-        )}
-        <div
-          className={`relative w-full bg-zinc-900 border rounded-xl shadow-2xl flex flex-col modal-max-h ${footerId ? "modal-fill-h" : ""} ${glow === "blue" ? "border-sky-600/70" : glow === "orange" ? "border-orange-600/70" : "border-zinc-800"
-            }`}
-        >
-          {title && (
-            <div className={`flex items-center justify-between px-5 pt-5 shrink-0 ${compact ? "pb-3" : "pb-4"}`}>
-              <div className="flex items-center gap-2">
-                <h2 className="text-zinc-100 font-semibold text-base">{title}</h2>
-                {badge && (
-                  <span
-                    title="This feature should work but is still being tested."
-                    className="text-[10px] text-amber-400 border border-amber-700/60 rounded px-1.5 py-0.5 shrink-0 cursor-help"
-                  >
-                    {badge}
-                  </span>
-                )}
-              </div>
-              <IconButton onClick={onClose} className="-mr-2.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 text-lg leading-none" aria-label="Close">
-                ×
-              </IconButton>
-            </div>
-          )}
-          <div className={`overflow-y-auto min-h-0 flex-1 ${title ? "px-5 pb-5" : "p-5"}`}>
-            {children}
-            {footerId && (
-              <div className="mt-3">
-                <span className="text-[9px] text-zinc-700 select-text">{footerId}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <FlowSheet title={title} badge={badge} onClose={onClose} glow={glow} footerId={footerId} steps={steps} stepIndex={stepIndex} footer={footer}>
+      {children}
+    </FlowSheet>
   );
 }
 
@@ -4356,6 +4350,7 @@ export default function ContributionPanel({
   requestLocation,
   activeMapStyle,
   onStyleChange,
+  modernActions = false,
   pendingCleanupEventId,
   onPendingCleanupEventConsumed,
   forceTrackMode,
@@ -4601,9 +4596,9 @@ export default function ContributionPanel({
                     whileTap={{ scale: 0.9 }}
                     animate={{ rotate: logHostExpanded ? 45 : 0 }}
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    className="absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-zinc-700 text-2xl backdrop-blur-sm shadow-elevation-3 touch-manipulation"
+                    className={`absolute top-0 left-0 flex items-center justify-center w-14 h-14 rounded-full transition-colors duration-150 text-2xl backdrop-blur-sm shadow-elevation-3 touch-manipulation ${modernActions ? "bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 ring-1 ring-inset ring-white/10 text-zinc-100" : "bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-800 border border-zinc-700"}`}
                   >
-                    {logHostExpanded ? "+" : btn.icon}
+                    {modernActions ? <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg> : logHostExpanded ? "+" : btn.icon}
                   </motion.button>
                   <AnimatePresence>
                     {logHostExpanded && (
@@ -4620,8 +4615,14 @@ export default function ContributionPanel({
                           whileTap={{ scale: 0.9 }}
                           className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-zinc-700 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                         >
-                          <span className="text-base leading-none">{btn.icon}</span>
-                          <span className="text-[8px] leading-none text-zinc-300">Log</span>
+                          {modernActions && campaignContributionType === "cleanup" ? (
+                            <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5" />
+                            </svg>
+                          ) : (
+                            <span className="text-base leading-none">{btn.icon}</span>
+                          )}
+                          <span className={`leading-none text-zinc-300 ${modernActions ? "text-[9px] font-semibold" : "text-[8px]"}`}>Log</span>
                         </motion.button>
                         <motion.button
                           key="event"
@@ -4635,23 +4636,32 @@ export default function ContributionPanel({
                           whileTap={{ scale: 0.9 }}
                           className="absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-800 transition-colors duration-150 border border-sky-800/60 backdrop-blur-sm shadow-elevation-3 touch-manipulation"
                         >
-                          <span className="text-base leading-none">📅</span>
-                          <span className="text-[8px] leading-none text-sky-300">Event</span>
+                          {modernActions ? (
+                            <svg className="w-5 h-5 text-sky-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <rect x="3" y="4" width="18" height="18" rx="2" />
+                              <path d="M16 2v4M8 2v4M3 10h18" />
+                            </svg>
+                          ) : (
+                            <span className="text-base leading-none">📅</span>
+                          )}
+                          <span className={`leading-none text-sky-300 ${modernActions ? "text-[9px] font-semibold" : "text-[8px]"}`}>Event</span>
                         </motion.button>
                       </>
                     )}
                   </AnimatePresence>
                 </div>
-                <span className="text-zinc-300 text-sm font-medium bg-zinc-900/90 border border-zinc-700 px-2 py-1 rounded-lg backdrop-blur-sm shadow-elevation-2">
+                <span className={`text-zinc-300 text-sm font-medium bg-zinc-900/90 backdrop-blur-sm shadow-elevation-2 ${modernActions ? "px-3 py-1.5 rounded-full" : "border border-zinc-700 px-2 py-1 rounded-lg"}`}>
                   Cleanup
                 </span>
               </div>
             ) : (
               <button
                 onClick={openContribute}
-                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.96] shadow-elevation-3 touch-manipulation"
+                className={modernActions
+                  ? "flex items-center gap-2 h-11 pl-3.5 pr-4 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-zinc-100 text-sm backdrop-blur-md shadow-elevation-3 font-semibold transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+                  : "flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.96] shadow-elevation-3 touch-manipulation"}
               >
-                {btn.icon} {btn.label}
+                {modernActions && campaignContributionType === "cleanup" ? <><svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg> {btn.label}</> : <>{btn.icon} {btn.label}</>}
               </button>
             )}
             {isSolarpunk && (
@@ -4669,16 +4679,20 @@ export default function ContributionPanel({
           <div className="hidden sm:flex items-center gap-2">
             <button
               onClick={openContribute}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
+              className={modernActions
+                ? "flex items-center gap-2 h-11 pl-3.5 pr-4 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-zinc-100 text-sm backdrop-blur-md shadow-elevation-3 font-semibold transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+                : "flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"}
             >
-              {btn.icon} {btn.label}
+              {modernActions && campaignContributionType === "cleanup" ? <><svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg> {btn.label}</> : <>{btn.icon} {btn.label}</>}
             </button>
             {showHostEvent && (
               <button
                 onClick={() => { setMode("host_event"); setHostEventOverrideCoords(null); gps.capture(); }}
-                className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-sky-800/60 rounded-lg text-sky-300 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
+                className={modernActions
+                  ? "flex items-center gap-2 h-11 px-4 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-sky-300 text-sm backdrop-blur-md shadow-elevation-3 font-semibold transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+                  : "flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-sky-800/60 rounded-lg text-sky-300 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"}
               >
-                📅 Host Event
+                {modernActions ? <><svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg> Host Event</> : <>📅 Host Event</>}
               </button>
             )}
             {isSolarpunk && (
@@ -4703,19 +4717,21 @@ export default function ContributionPanel({
           {showReport && (
             <button
               onClick={() => { setMode("report"); setReportOverrideCoords(null); gps.capture(); }}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"
+              className={modernActions
+                ? "flex items-center gap-2 h-11 px-4 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 text-sm backdrop-blur-md shadow-elevation-3 font-semibold transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+                : "flex items-center gap-2 px-4 py-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm font-medium backdrop-blur-sm transition-[background-color,transform] duration-150 active:scale-[0.97] shadow-elevation-3 touch-manipulation"}
             >
-              ⚠️ Report Trash
+              {modernActions ? <><svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m10.3 3.9-8.2 14.2A2 2 0 0 0 3.8 21h16.4a2 2 0 0 0 1.7-2.9L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></svg> Report Trash</> : <>⚠️ Report Trash</>}
             </button>
           )}
           {onStyleChange && (
             <div className="self-start flex flex-wrap gap-2">
-              <div className="flex gap-0.5 p-1 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3">
+              <div className={`flex gap-0.5 p-1 bg-zinc-900/90 backdrop-blur-sm shadow-elevation-3 ${modernActions ? "rounded-full" : "border border-zinc-700/60 rounded-lg"}`}>
                 {MAP_STYLES.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => onStyleChange(s.id)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-[background-color,color,transform] duration-150 active:scale-[0.95] touch-manipulation ${activeMapStyle === s.id
+                    className={`px-2.5 py-1 text-xs font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.95] touch-manipulation ${modernActions ? "rounded-full min-h-8 px-3" : "rounded-md"} ${activeMapStyle === s.id
                       ? "bg-zinc-600 text-zinc-100"
                       : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.95]"
                       }`}

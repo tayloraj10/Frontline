@@ -639,7 +639,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {(spendableLoading || spendableImpact || spendableError) && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 max-w-lg w-full max-h-[80vh] overflow-y-auto space-y-4 shadow-elevation-4">
             {spendableLoading && <p className="text-sm text-zinc-400">Loading impact preview…</p>}
             {spendableError && (
@@ -731,7 +731,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {(recomputeLoading || recomputeImpact || recomputeError) && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-elevation-4">
             {recomputeLoading && (
               <p className="text-sm text-zinc-400">Checking affected users…</p>
@@ -1679,7 +1679,7 @@ function CleanupEventWipeTool() {
       if (!res.ok) throw new Error(data.detail ?? "Failed");
       setResult(
         `✓ Deleted ${data.contributions_deleted} contribution(s), ` +
-        `${data.territory_claims_deleted} zip claim(s) removed, ` +
+        `${data.territory_claims_deleted} zip leader record(s) removed, ` +
         `${data.territory_claims_updated} recomputed, ` +
         `${data.team_total_logs_deleted} group-log record(s) removed.`
       );
@@ -1697,7 +1697,7 @@ function CleanupEventWipeTool() {
       <p className="text-xs text-zinc-500 leading-relaxed">
         Use this to undo bad logging on a cleanup event — e.g. an individual log made before
         "log group total" existed, followed by a group-total run that didn't cover everyone.
-        Wipes all contributions, the zip claim, and group-log history for the event so
+        Wipes all contributions, the zip leader record, and group-log history for the event so
         it can be re-logged from scratch. Does not delete the event itself or its RSVPs.
       </p>
       <div className="flex items-center gap-2">
@@ -1720,7 +1720,7 @@ function CleanupEventWipeTool() {
       <ConfirmModal
         open={confirmingWipe}
         title="Wipe event data?"
-        message="This deletes every contribution logged for this cleanup event (individual and group-total), removes/recomputes the zip claim, deletes its group-log audit history, and resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone."
+        message="This deletes every contribution logged for this cleanup event (individual and group-total), removes/recomputes the zip leader, deletes its group-log audit history, and resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone."
         confirmLabel="Wipe data"
         onConfirm={handleWipe}
         onCancel={() => setConfirmingWipe(false)}

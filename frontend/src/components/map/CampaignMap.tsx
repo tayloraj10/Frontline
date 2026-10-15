@@ -796,17 +796,26 @@ function LegendToggle({
 }) {
   return (
     <label
-      className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded shadow-elevation-1 backdrop-blur-sm cursor-pointer select-none transition-[background-color,transform] duration-150 hover:bg-zinc-800/80 active:scale-[0.97] touch-manipulation ${
-        indent ? "ml-3" : ""
-      } ${checked ? "" : "opacity-50"}`}
+      className={`flex items-center gap-2.5 min-h-10 px-3 rounded-xl cursor-pointer select-none transition-[background-color,transform] duration-150 hover:bg-zinc-800/70 active:bg-zinc-800 active:scale-[0.98] touch-manipulation ${
+        indent ? "ml-4" : ""
+      }`}
     >
+      <span className={`flex flex-1 items-center gap-2.5 min-w-0 text-[13px] ${checked ? "" : "opacity-50"}`}>{children}</span>
       <input
         type="checkbox"
+        role="switch"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-3 h-3 flex-shrink-0 accent-emerald-500"
+        className="peer sr-only"
       />
-      {children}
+      <span
+        aria-hidden="true"
+        className={`relative w-9 h-5 shrink-0 rounded-full transition-colors duration-150 ${checked ? "bg-emerald-400" : "bg-zinc-700"}`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`}
+        />
+      </span>
     </label>
   );
 }
@@ -1166,19 +1175,19 @@ function TerritoryPanel({
         <div className="flex items-start justify-between">
           <div>
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-              {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Claim`}
+              {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Leader`}
             </p>
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">
               {variant === "stats" ? displayName : `${unitLabel} ${displayName}`}
             </p>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            {isClaimed && (
+            {isClaimed && isContested && (
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${isContested
                 ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
                 : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
                 }`}>
-                {isContested ? "Contested" : "Claimed"}
+                Contested
               </span>
             )}
             <IconButton onClick={onClose} className="-mr-2.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
@@ -1203,10 +1212,10 @@ function TerritoryPanel({
                     {claimLabel.name}
                   </span>
                 )}
-                <span className="ml-auto text-[10px] text-zinc-600 shrink-0">holds</span>
+                <span className="ml-auto text-[10px] text-zinc-600 shrink-0">leads</span>
               </div>
             ) : (
-              <span className="text-sm text-zinc-600">Unclaimed</span>
+              <span className="text-sm text-zinc-600">No leader yet</span>
             )
           )}
           {hasStats && (
@@ -1297,7 +1306,7 @@ function TerritoryPanel({
                   />
                 </div>
                 {reportCount >= reportThreshold && (
-                  <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached — hotspot active!</p>
+                  <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached. Hotspot active!</p>
                 )}
                 {reportPhotos.length > 0 && (
                   <div className="mt-2 flex gap-1.5 flex-wrap">
@@ -1423,25 +1432,27 @@ function TerritoryPanel({
     </div>
     {showPointsInfo && (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
         onClick={() => setShowPointsInfo(false)}
       >
         <div
-          className="max-w-xs rounded-xl border border-zinc-700/70 bg-zinc-900 p-4 shadow-2xl"
+          className="w-full max-w-xs rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-white/5 p-5 shadow-elevation-4"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-start justify-between mb-2">
-            <p className="text-sm font-semibold text-zinc-100">What are points?</p>
-            <IconButton onClick={() => setShowPointsInfo(false)} className="-mr-2.5 -mt-1.5 text-lg leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
-          </div>
-          <p className="text-xs text-zinc-400 leading-relaxed">
-            The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
-            <SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> point{pointValues.small_bag_value !== 1 ? "s" : ""}, large bags are
-            worth <SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> points, and pound-based cleanups convert at{" "}
-            <SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> points per pound. The &quot;bags picked up&quot; line below it is the
-            actual physical bag count (small + large), the real-world impact this campaign is about, so the
-            two numbers won&apos;t always match.
-          </p>
+          <h2 className="text-base font-bold text-zinc-100">What are points?</h2>
+          <p className="mt-2 text-sm text-zinc-400">Points are how we rank cleanups. Bigger hauls earn more.</p>
+          <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">
+            <li className="flex justify-between"><span>Small bag</span><span className="tabular-nums"><SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> pt{pointValues.small_bag_value !== 1 ? "s" : ""}</span></li>
+            <li className="flex justify-between"><span>Large bag</span><span className="tabular-nums"><SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> pts</span></li>
+            <li className="flex justify-between"><span>Per pound</span><span className="tabular-nums"><SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> pts</span></li>
+          </ul>
+          <button
+            type="button"
+            onClick={() => setShowPointsInfo(false)}
+            className="mt-5 w-full min-h-11 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,transform] duration-150 touch-manipulation"
+          >
+            Got it
+          </button>
         </div>
       </div>
     )}
@@ -1905,6 +1916,8 @@ export default function CampaignMap({
   const [selectedZip, setSelectedZip] = useState<SelectedZip | null>(null);
   const [geoSearch, setGeoSearch] = useState("");
   const [geoSearchError, setGeoSearchError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<{ id: string; place_name: string; center: [number, number]; bbox?: number[] }[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const geoSearchErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
   const [hexPhotoVersion, setHexPhotoVersion] = useState(0);
@@ -2403,9 +2416,9 @@ export default function CampaignMap({
         const locationSuffix = location.label ? ` (${location.label})` : "";
         const adultsSuffix = business.adults_only ? " (21+ only)" : "";
         el.title = affordable
-          ? `${business.name}${locationSuffix} — you have enough points for ${location.affordableOfferTitle}!${adultsSuffix}`
+          ? `${business.name}${locationSuffix}: you have enough points for ${location.affordableOfferTitle}!${adultsSuffix}`
           : hasOffer
-            ? `${business.name}${locationSuffix} — ${location.activeOfferTitle}${adultsSuffix}`
+            ? `${business.name}${locationSuffix}: ${location.activeOfferTitle}${adultsSuffix}`
             : `${business.name}${locationSuffix}${adultsSuffix}`;
 
         if (!layerToggleRef.current.showPartners) {
@@ -2445,7 +2458,7 @@ export default function CampaignMap({
 
       const cohostNames = cohostGroups.map((g) => g.group_name).join(", ");
       const hostLabel = cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name;
-      wrapper.title = event.is_past ? `${event.title} — ${hostLabel} (ended)` : `${event.title} — ${hostLabel}`;
+      wrapper.title = event.is_past ? `${event.title}: ${hostLabel} (ended)` : `${event.title}: ${hostLabel}`;
 
       if (!layerToggleRef.current.showGroupEvents) {
         wrapper.style.display = "none";
@@ -2603,7 +2616,7 @@ export default function CampaignMap({
       el.appendChild(countdownEl);
       bonusSpotCountdownRef.current.push({ el: countdownEl, endsAt: spot.ends_at });
 
-      const titleSuffix = spot.title ? `${spot.title} — ` : "";
+      const titleSuffix = spot.title ? `${spot.title}: ` : "";
       el.title = `${titleSuffix}${spot.multiplier}x bonus spot`;
 
       el.addEventListener("click", (e) => {
@@ -2878,7 +2891,7 @@ export default function CampaignMap({
 
         const cohostNames = (event?.cohost_groups ?? []).map((g) => g.group_name).join(", ");
         const hostLabel = event ? (cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name) : "";
-        wrapper.title = event ? `${event.title} — ${hostLabel}${isPast ? " (ended)" : ""}` : "View this cleanup route";
+        wrapper.title = event ? `${event.title}: ${hostLabel}${isPast ? " (ended)" : ""}` : "View this cleanup route";
 
         const routeVisible = event ? layerToggleRef.current.showGroupEvents : layerToggleRef.current.showAdhocRoutes;
         if (!routeVisible) {
@@ -4745,7 +4758,7 @@ export default function CampaignMap({
             claimed_label?: string | null;
             claim_is_group?: boolean;
           };
-          const displayName = props.display_name ?? "—";
+          const displayName = props.display_name ?? "-";
           const featureUnitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
           const totalVal = featureState.total_value ?? 0;
           if (isChoropleth) {
@@ -5028,7 +5041,7 @@ export default function CampaignMap({
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
-          `<div style="font-weight:700;font-size:12px;color:${color}">Stage ${stage} — ${label}</div>` +
+          `<div style="font-weight:700;font-size:12px;color:${color}">Stage ${stage}: ${label}</div>` +
           `<div style="color:#a1a1aa;font-size:11px;margin-top:3px">${formatPoints(score)} bloom pts</div>` +
           (props.seed_source ? `<div style="color:#52525b;font-size:10px;margin-top:2px">🌍 pre-seeded</div>` : "");
       };
@@ -5071,7 +5084,7 @@ export default function CampaignMap({
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
-          `<div style="font-weight:700;font-size:12px;color:#f4f4f5">${props.display_name ?? "—"}</div>`;
+          `<div style="font-weight:700;font-size:12px;color:#f4f4f5">${props.display_name ?? "-"}</div>`;
       };
       const hideNycNeighborhoodTooltip = () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
@@ -5243,8 +5256,7 @@ export default function CampaignMap({
       .then((d: { geo_unit_id: string | null }) => { userGeoUnitId = d.geo_unit_id; })
       .catch(() => { userGeoUnitId = null; });
 
-    marker.on("dragend", () => {
-      const pos = marker.getLngLat();
+    const placePin = (pos: { lng: number; lat: number }) => {
       if (!pinPickerConstrainedRef.current || userGeoUnitId === undefined || userGeoUnitId === null) {
         lastValidLng = pos.lng;
         lastValidLat = pos.lat;
@@ -5269,9 +5281,34 @@ export default function CampaignMap({
           lastValidLng = pos.lng;
           lastValidLat = pos.lat;
         });
-    });
+    };
+
+    marker.on("dragend", () => placePin(marker.getLngLat()));
+    // Tapping the map moves the pin too. Out-of-zone taps revert via placePin.
+    const m = map.current;
+    const onMapClick = (e: maplibregl.MapMouseEvent) => {
+      marker.setLngLat(e.lngLat);
+      placePin(e.lngLat);
+    };
+    m.on("click", onMapClick);
+
+    // Out-of-zone pins are rejected, so show the zone boundary while picking
+    // even if the user has the ZIP layer toggled off.
+    const zipLayers = ["zip-stats-fill", "zip-stats-outline"];
+    const forcedZip = pinPickerConstrainedRef.current && !layerToggleRef.current.showZipStats;
+    if (forcedZip) {
+      for (const id of zipLayers) {
+        if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", "visible");
+      }
+    }
 
     return () => {
+      if (forcedZip && m.getStyle()) {
+        for (const id of zipLayers) {
+          if (m.getLayer(id) && !layerToggleRef.current.showZipStats) m.setLayoutProperty(id, "visibility", "none");
+        }
+      }
+      m.off("click", onMapClick);
       marker.remove();
       pinPickerMarkerRef.current = null;
       if (outOfZoneTimerRef.current) clearTimeout(outOfZoneTimerRef.current);
@@ -5591,29 +5628,98 @@ export default function CampaignMap({
   const supportsZipSearch = campaign.geo_unit?.includes("zip") ?? false;
   const supportsUkPostcodeSearch = campaign.geo_unit?.includes("uk_postcode_district") ?? false;
 
-  const handleGeoSearch = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  const goToFeature = useCallback((feature: { center: [number, number]; bbox?: number[] }) => {
+    if (feature.bbox) {
+      map.current?.fitBounds(
+        [[feature.bbox[0], feature.bbox[1]], [feature.bbox[2], feature.bbox[3]]],
+        { padding: 40, maxZoom: 17 },
+      );
+    } else {
+      map.current?.flyTo({ center: feature.center, zoom: 16, duration: 800 });
+    }
+  }, []);
+
+  // Debounced autocomplete: skip pure ZIP-shaped input, which has its own exact lookup.
+  useEffect(() => {
     const query = geoSearch.trim();
-    if (!query) return;
-    // When a campaign supports both ZIP and UK postcode lookup, route purely
-    // numeric input to the ZIP endpoint and everything else to UK postcodes.
-    const useZip = supportsZipSearch && (/^\d+$/.test(query) || !supportsUkPostcodeSearch);
-    const endpoint = useZip
-      ? `/api/geo-units/zip/${query}/centroid`
-      : `/api/geo-units/uk-postcode/${query}/centroid`;
-    const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}${endpoint}`);
-    if (!res.ok) {
-      setGeoSearchError(useZip ? "ZIP not found" : "Postcode district not found");
-      if (geoSearchErrorTimerRef.current) clearTimeout(geoSearchErrorTimerRef.current);
-      geoSearchErrorTimerRef.current = setTimeout(() => setGeoSearchError(null), 3000);
+    const key = process.env.NEXT_PUBLIC_MAPTILER_KEY;
+    if (!suggestOpen || !key || query.length < 3 || /^\d{1,5}$/.test(query.replace(/\s+/g, ""))) {
+      setSuggestions([]);
       return;
     }
-    const data = await res.json();
-    map.current?.fitBounds(
-      [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]],
-      { padding: 40, maxZoom: 14 },
-    );
-  }, [geoSearch, supportsZipSearch, supportsUkPostcodeSearch]);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const center = map.current?.getCenter();
+        const proximity = center ? `&proximity=${center.lng},${center.lat}` : "";
+        const res = await fetch(
+          `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${key}&limit=5&autocomplete=true${proximity}`,
+        );
+        const data = res.ok ? await res.json() : null;
+        if (!cancelled) setSuggestions(data?.features ?? []);
+      } catch {
+        if (!cancelled) setSuggestions([]);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [geoSearch, suggestOpen]);
+
+  const handleGeoSearch = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSuggestOpen(false);
+    const query = geoSearch.trim();
+    if (!query) return;
+    const fail = (msg: string) => {
+      setGeoSearchError(msg);
+      if (geoSearchErrorTimerRef.current) clearTimeout(geoSearchErrorTimerRef.current);
+      geoSearchErrorTimerRef.current = setTimeout(() => setGeoSearchError(null), 3000);
+    };
+    // Pure 5-digit input is a ZIP and a UK postcode district is its own shape; anything
+    // else is treated as a street address / place and geocoded.
+    const compact = query.replace(/\s+/g, "").toUpperCase();
+    const useZip = supportsZipSearch && /^\d{5}$/.test(compact);
+    const useUk = !useZip && supportsUkPostcodeSearch && /^[A-Z]{1,2}\d[A-Z\d]?$/.test(compact);
+    if (useZip || useUk) {
+      const endpoint = useZip
+        ? `/api/geo-units/zip/${compact}/centroid`
+        : `/api/geo-units/uk-postcode/${compact}/centroid`;
+      const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}${endpoint}`);
+      if (!res.ok) {
+        fail(useZip ? "ZIP not found" : "Postcode district not found");
+        return;
+      }
+      const data = await res.json();
+      map.current?.fitBounds(
+        [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]],
+        { padding: 40, maxZoom: 14 },
+      );
+      return;
+    }
+    const key = process.env.NEXT_PUBLIC_MAPTILER_KEY;
+    if (!key) {
+      fail("Address search unavailable");
+      return;
+    }
+    try {
+      const center = map.current?.getCenter();
+      const proximity = center ? `&proximity=${center.lng},${center.lat}` : "";
+      const res = await fetch(
+        `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${key}&limit=1${proximity}`,
+      );
+      const data = res.ok ? await res.json() : null;
+      const feature = data?.features?.[0];
+      if (!feature?.center) {
+        fail("Address not found");
+        return;
+      }
+      goToFeature(feature);
+    } catch {
+      fail("Address not found");
+    }
+  }, [geoSearch, supportsZipSearch, supportsUkPostcodeSearch, goToFeature]);
 
   const handleConfirmPin = () => {
     const pos = pinPickerMarkerRef.current?.getLngLat();
@@ -5656,20 +5762,20 @@ export default function CampaignMap({
 
       {areaPickerActive && (
         <>
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200">
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md whitespace-nowrap bg-zinc-900/95 text-zinc-100">
             Click areas on the map to include them in this event.
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-2">
             <button
               onClick={onAreaPickerConfirm}
               disabled={areaPickerCount === 0}
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Confirm ({areaPickerCount})
             </button>
             <button
               onClick={onAreaPickerCancel}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-zinc-900/95 hover:bg-zinc-800 backdrop-blur-md text-zinc-200 text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
             </button>
@@ -5679,9 +5785,9 @@ export default function CampaignMap({
 
       {pinPickerActive && (
         <>
-          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 max-w-[90vw] px-4 py-2 border rounded-lg text-center text-sm shadow-xl transition-colors duration-200 ${outOfZoneWarning
-            ? "leading-snug bg-red-950/95 border-red-700 text-red-300"
-            : "whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200"
+          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 max-w-[90vw] px-5 py-2.5 rounded-3xl text-center text-sm font-semibold shadow-elevation-3 backdrop-blur-md transition-colors duration-200 ${outOfZoneWarning
+            ? "leading-snug bg-red-950/95 text-red-200"
+            : "whitespace-nowrap bg-zinc-900/95 text-zinc-100"
             }`}>
             {outOfZoneWarning
               ? (
@@ -5693,16 +5799,16 @@ export default function CampaignMap({
               )
               : pinPickerLabel ?? "Drag the pin to your exact cleanup location"}
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-2">
             <button
               onClick={handleConfirmPin}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Confirm location
             </button>
             <button
               onClick={onPinCancelled}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-zinc-900/95 hover:bg-zinc-800 backdrop-blur-md text-zinc-200 text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
             </button>
@@ -5712,48 +5818,51 @@ export default function CampaignMap({
 
       {routePickerActive && (
         <>
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200 flex items-center gap-2">
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md whitespace-nowrap bg-zinc-900/95 text-zinc-100 flex items-center gap-2">
             <span>
               {routePickerJustClosedLoop
-                ? "Route closed — click Undo to reopen"
+                ? "Route closed. Click Undo to reopen"
                 : `Click the map to draw your cleanup route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
             </span>
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
-            <button
-              onClick={handleUndoRouteVertex}
-              disabled={routePickerVertexCount === 0}
-              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Undo
-            </button>
-            <button
-              onClick={handleClearRouteVertices}
-              disabled={routePickerVertexCount === 0}
-              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Clear
-            </button>
+          <div className="absolute bottom-20 left-3 right-3 sm:left-1/2 sm:right-auto sm:w-[26rem] sm:-translate-x-1/2 z-30 flex flex-col gap-2 p-2.5 rounded-3xl bg-zinc-950/95 backdrop-blur-md shadow-elevation-3 border border-zinc-700/60">
+            <div className="flex gap-2">
+              <button
+                onClick={handleUndoRouteVertex}
+                disabled={routePickerVertexCount === 0}
+                className="min-h-12 flex-1 px-4 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              >
+                Undo
+              </button>
+              <button
+                onClick={handleClearRouteVertices}
+                disabled={routePickerVertexCount === 0}
+                className="min-h-12 flex-1 px-4 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              >
+                Clear
+              </button>
+              <button
+                onClick={onRoutePickerCancel}
+                className="min-h-12 flex-1 px-4 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              >
+                Cancel
+              </button>
+            </div>
             <button
               onClick={onRoutePickerFinish}
               disabled={routePickerVertexCount < 2}
-              className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="w-full min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Finish route
-            </button>
-            <button
-              onClick={onRoutePickerCancel}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Cancel
             </button>
           </div>
         </>
       )}
 
-      {!pinPickerActive && !areaPickerActive && !routePickerActive && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch || statsChip) && (
-        <div className="absolute z-10 left-[3.75rem] top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] w-[min(19rem,calc(100vw-7.75rem))] flex flex-col gap-2 items-start">
-          {(supportsZipSearch || supportsUkPostcodeSearch) && (
+      {!pinPickerActive && !areaPickerActive && !routePickerActive && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
+        <div className="absolute z-10 focus-within:z-30 left-3 right-3 sm:right-auto sm:w-[32rem] top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] flex flex-col gap-2 items-start pointer-events-none [&>*]:pointer-events-auto">
+          <div className="relative z-20 h-11 w-full pl-[3.25rem] pr-[9.25rem] focus-within:pr-0">
+          {(
             <form
               onSubmit={handleGeoSearch}
               className={`flex w-full items-center h-11 pl-4 pr-1 rounded-full bg-zinc-900/90 backdrop-blur-md shadow-elevation-3 ${geoSearchError ? "ring-1 ring-red-500/70" : ""}`}
@@ -5764,24 +5873,15 @@ export default function CampaignMap({
               </svg>
               <input
                 type="text"
-                inputMode={supportsZipSearch && !supportsUkPostcodeSearch ? "numeric" : "text"}
-                maxLength={5}
-                aria-label="Go to location"
-                placeholder={
-                  supportsZipSearch && supportsUkPostcodeSearch
-                    ? "ZIP or postcode"
-                    : supportsZipSearch
-                      ? "Search ZIP code"
-                      : "Search postcode"
-                }
+                aria-label="Search"
+                placeholder="Search"
                 value={geoSearch}
-                onChange={(e) =>
-                  setGeoSearch(
-                    supportsZipSearch && !supportsUkPostcodeSearch
-                      ? e.target.value.replace(/\D/g, "")
-                      : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
-                  )
-                }
+                onChange={(e) => {
+                  setGeoSearch(e.target.value);
+                  setSuggestOpen(true);
+                }}
+                onFocus={() => setSuggestOpen(true)}
+                onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
                 className="min-w-0 flex-1 bg-transparent px-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
               />
               <button
@@ -5793,25 +5893,46 @@ export default function CampaignMap({
               </button>
             </form>
           )}
+          {suggestOpen && suggestions.length > 0 && (
+            <ul className="absolute left-[3.25rem] right-0 top-12 overflow-hidden rounded-2xl bg-zinc-900/95 backdrop-blur-md shadow-elevation-4 ring-1 ring-inset ring-white/5 py-1">
+              {suggestions.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setGeoSearch(f.place_name);
+                      setSuggestOpen(false);
+                      setSuggestions([]);
+                      goToFeature(f);
+                    }}
+                    className="w-full min-h-11 px-4 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 active:bg-zinc-800 truncate touch-manipulation"
+                  >
+                    {f.place_name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          </div>
           {geoSearchError && <p className="text-xs text-red-300 px-3 py-1 rounded-full bg-zinc-900/90 backdrop-blur-md">{geoSearchError}</p>}
           {(statsChip || activeEvents.length > 0) && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full max-w-full flex-nowrap items-center gap-2 pr-14">
               {statsChip}
               {activeEvents.length > 0 && (
                 <button
                   onClick={() => setEventsExpanded((e) => !e)}
                   aria-expanded={eventsExpanded}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-red-950/90 backdrop-blur-md shadow-elevation-3 text-red-200 text-xs font-semibold transition-transform duration-150 active:scale-[0.96] touch-manipulation"
+                  className="inline-flex shrink-0 items-center gap-1.5 h-10 px-3 rounded-full bg-red-950/90 backdrop-blur-md shadow-elevation-3 text-red-200 text-xs font-semibold transition-transform duration-150 active:scale-[0.96] touch-manipulation"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" aria-hidden="true" />
                   {activeEvents.length} hotspot{activeEvents.length > 1 ? "s" : ""}
-                  <span className="text-red-300/70">{eventsExpanded ? "▲" : "▼"}</span>
                 </button>
               )}
             </div>
           )}
           {activeEvents.length > 0 && eventsExpanded && (
-            <div className="flex w-full flex-col gap-2 max-h-[40dvh] overflow-y-auto pr-0.5">
+            <div className="flex w-full flex-col gap-2 max-h-[40dvh] overflow-y-auto pr-14">
               {activeEvents.map((event) => {
                 const primaryId = eventGeoUnitIdsRef.current[event.id]?.[0] ?? event.geo_unit_id ?? "";
                 const centroid = eventCentroidsRef.current[primaryId];
@@ -5850,13 +5971,16 @@ export default function CampaignMap({
         // to overlap each other and the left-side ContributionPanel controls on
         // narrow viewports. Collapsed, this is one small button; expanded, it's a
         // fixed-width panel that grows upward, matching common map-app "Layers" menus.
-        <div className={`absolute bottom-12 z-10 flex flex-col items-end gap-1 sm:gap-1.5 text-xs max-w-[min(88vw,16rem)] ${legendOpen ? "right-14" : "right-4"}`}>
+        <div className={`absolute bottom-12 flex flex-col items-end gap-2 text-xs w-[min(88vw,18rem)] ${legendOpen ? "right-14 z-40" : "right-4 z-10"}`}>
           <button
             onClick={() => setLegendOpen((v) => !v)}
-            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3 text-sm font-medium text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-800/80 active:scale-[0.97] touch-manipulation"
+            className="relative flex items-center gap-2 h-11 pl-3.5 pr-4 bg-zinc-900/90 rounded-full backdrop-blur-md shadow-elevation-3 text-sm font-semibold text-zinc-100 transition-[background-color,transform] duration-150 hover:bg-zinc-800/90 active:scale-[0.96] touch-manipulation"
           >
-            <span>🗺️ Layers</span>
-            <span className="text-zinc-500">{legendOpen ? "▾" : "▸"}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+              <path d="m3 13 9 5 9-5" />
+            </svg>
+            <span>Layers</span>
             {!legendOpen && (showZipStats || showAnyNeighborhoodStats || showBoroughStats || showCityStats) && (
               // At-a-glance indicator of which Geographic Stats layer is active without
               // having to open the panel — one letter is enough since these are
@@ -5875,103 +5999,96 @@ export default function CampaignMap({
             )}
           </button>
           {legendOpen && (
-            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-1 sm:gap-1.5 p-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3">
+            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-0.5 p-2 pt-0 bg-zinc-900/95 ring-1 ring-inset ring-white/5 rounded-[20px] backdrop-blur-md shadow-elevation-4">
+              <div className="sticky top-0 z-10 -mx-2 mb-1 flex items-center justify-between bg-zinc-900 px-4 pt-2.5 pb-2 border-b border-zinc-800">
+                <span className="text-sm font-semibold text-zinc-100">Layers</span>
+                <button
+                  type="button"
+                  onClick={() => setLegendOpen(false)}
+                  aria-label="Close layers"
+                  className="grid place-items-center w-9 h-9 -mr-2 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.92] transition-[background-color,color,transform] duration-150 touch-manipulation"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6 6 18" />
+                  </svg>
+                </button>
+              </div>
               {!isChoropleth && !isHeatmap && !isHexBloom && (
                 <>
-                  <p className="px-1 pt-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Geographic Stats</p>
-                  <div className="flex flex-col gap-1">
-                    {([
-                      { id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes", badges: null },
-                      ...(campaign.slug === "trash-war" ? [
-                        { id: "neighborhood", label: "Neighborhood", badges: ["NYC", "PHL", "CHI", "LA"] },
-                        { id: "borough", label: "Borough", badges: ["NYC"] },
-                        { id: "city", label: "Cities", badges: null },
-                      ] as const : []),
-                    ] as const).map((opt) => {
-                      const active =
-                        opt.id === "zip" ? showZipStats
-                        : opt.id === "neighborhood" ? showAnyNeighborhoodStats
-                        : opt.id === "borough" ? showBoroughStats
-                        : showCityStats;
-                      const setActive =
-                        opt.id === "zip" ? setShowZipStats
-                        : opt.id === "neighborhood" ? setShowAnyNeighborhoodStats
-                        : opt.id === "borough" ? setShowBoroughStats
-                        : setShowCityStats;
-                      return (
-                        <button
-                          key={opt.id}
-                          onClick={() => setActive(!active)}
-                          title={opt.badges ? `Currently only shows data for ${opt.badges.map((b) => (b === "PHL" ? "Philadelphia" : b === "CHI" ? "Chicago" : b === "NYC" ? "New York City" : b === "LA" ? "Los Angeles" : b)).join(", ")}` : undefined}
-                          aria-pressed={active}
-                          className={`group flex items-center justify-between gap-2 px-2.5 py-1.5 font-medium rounded-md border cursor-pointer transition-all active:scale-[0.98] ${
-                            active
-                              ? "bg-emerald-600 border-emerald-400 text-white shadow-sm shadow-emerald-900/40"
-                              : "bg-zinc-800/60 border-zinc-700/70 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 hover:shadow-sm active:text-zinc-100 active:bg-zinc-700/80 active:border-zinc-500 active:scale-[0.97]"
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              className={`flex items-center justify-center w-3.5 h-3.5 rounded-full flex-shrink-0 text-[9px] leading-none transition-colors ${
+                  <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Geographic stats</p>
+                  {([
+                    { caption: null as string | null, badges: null as string[] | null, opts: [{ id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes" }, ...(campaign.slug === "trash-war" ? [{ id: "borough", label: "NYC Boroughs" }] : [])] },
+                    ...(campaign.slug === "trash-war" ? [
+                      { caption: "NYC, Philadelphia, Chicago, LA", badges: ["NYC", "PHL", "CHI", "LA"], opts: [{ id: "neighborhood", label: "Neighborhood" }, { id: "city", label: "Cities" }] },
+                    ] : []),
+                  ]).map((group, gi) => (
+                    <div key={gi} className="px-2 pb-1.5">
+                      {group.caption && <p className="px-1 pb-1 text-[11px] text-zinc-500">{group.caption}</p>}
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.opts.map((opt) => {
+                          const active =
+                            opt.id === "zip" ? showZipStats
+                            : opt.id === "neighborhood" ? showAnyNeighborhoodStats
+                            : opt.id === "borough" ? showBoroughStats
+                            : showCityStats;
+                          const setActive =
+                            opt.id === "zip" ? setShowZipStats
+                            : opt.id === "neighborhood" ? setShowAnyNeighborhoodStats
+                            : opt.id === "borough" ? setShowBoroughStats
+                            : setShowCityStats;
+                          return (
+                            <button
+                              key={opt.id}
+                              onClick={() => {
+                                setActive(!active);
+                                if (!active) setLegendOpen(false);
+                              }}
+                              aria-pressed={active}
+                              className={`inline-flex items-center min-h-9 px-3.5 text-[13px] font-semibold rounded-full cursor-pointer transition-[background-color,color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
                                 active
-                                  ? "bg-white text-emerald-600"
-                                  : "bg-zinc-900/60 text-transparent border border-zinc-600 group-hover:border-zinc-400"
+                                  ? "bg-emerald-400 text-emerald-950"
+                                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
                               }`}
                             >
-                              ✓
-                            </span>
-                            {opt.label}
-                          </span>
-                          {opt.badges && (
-                            <span className="flex flex-wrap justify-end content-start gap-0.5 w-16 flex-shrink-0">
-                              {opt.badges.map((badge) => (
-                                <span
-                                  key={badge}
-                                  className={`w-7 text-center text-[9px] font-semibold py-px rounded ${
-                                    active ? "bg-emerald-800/60 text-emerald-100" : "bg-zinc-700/60 text-zinc-400"
-                                  }`}
-                                >
-                                  {badge}
-                                </span>
-                              ))}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="my-0.5 border-t border-zinc-800" />
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="my-1 mx-2 border-t border-zinc-800" />
                 </>
               )}
               {(isChoropleth ? (
             <>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
                 <span className="text-zinc-300">Democrat lean</span>
               </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-3 rounded-sm bg-red-600/80" />
                 <span className="text-zinc-300">Republican lean</span>
               </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-3 rounded-sm bg-zinc-500/80" />
                 <span className="text-zinc-300">Neutralized</span>
               </div>
             </>
           ) : isHeatmap ? (
             <>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-2 rounded-sm" style={{ background: "linear-gradient(to right, rgba(255,200,0,0.5), rgba(255,80,0,0.8), rgba(150,0,30,1))" }} />
                 <span className="text-zinc-300">Unfollow density</span>
               </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="text-zinc-500">Low → High</span>
               </div>
             </>
           ) : isHexBloom ? (
             <>
               {BLOOM_STAGE_LABELS.slice(1).map((label, i) => (
-                <div key={i + 1} className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <div key={i + 1} className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                   <span className="w-3 h-3 rounded-sm" style={{ background: BLOOM_STAGE_COLORS[i + 1] }} />
                   <span className="text-zinc-300">S{i + 1} {label}</span>
                 </div>
@@ -5979,7 +6096,7 @@ export default function CampaignMap({
             </>
           ) : (
             <>
-              <div className="flex items-center gap-1 px-1 pb-0.5">
+              <div className="flex items-center gap-1.5 px-2 pt-1 pb-1">
                 <button
                   onClick={() => {
                     setShowCleanupDots(true);
@@ -5994,7 +6111,7 @@ export default function CampaignMap({
                     setShowReports(true);
                     setShowPartners(true);
                   }}
-                  className="flex-1 px-2 py-1 rounded-md border border-zinc-700/70 bg-zinc-800/60 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 active:scale-[0.97] transition-all text-[11px] font-medium"
+                  className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
                 >
                   All on
                 </button>
@@ -6015,12 +6132,12 @@ export default function CampaignMap({
                     setShowIndividualTerritory(false);
                     setShowUnclaimedTerritory(false);
                   }}
-                  className="flex-1 px-2 py-1 rounded-md border border-zinc-700/70 bg-zinc-800/60 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 active:scale-[0.97] transition-all text-[11px] font-medium"
+                  className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
                 >
                   All off
                 </button>
               </div>
-              <div className="mb-0.5 border-t border-zinc-800" />
+              <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">On the map</p>
               <LegendToggle checked={showCleanupDots} onChange={setShowCleanupDots}>
                 <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
                 <span className="text-zinc-300">Cleanup logged</span>
@@ -6097,6 +6214,8 @@ export default function CampaignMap({
               {/* De-emphasized (smaller, muted) rather than removed — claiming
                   still works when turned on, but we no longer want to visually encourage
                   it now that the non-competitive Geographic Stats layers exist above. */}
+              <div className="my-1.5 mx-2 border-t border-zinc-800" />
+              <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Leaders</p>
               <LegendToggle
                 checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
                 onChange={(show) => {
@@ -6106,19 +6225,22 @@ export default function CampaignMap({
                 }}
               >
                 <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500/50" />
-                <span className="text-zinc-500 text-[11px]">Claiming</span>
+                <span className="text-zinc-300">Zip code leaders</span>
               </LegendToggle>
+              <p className="px-3 pb-1 text-[11px] leading-snug text-zinc-500">
+                Colors each zip code by who leads there.
+              </p>
               <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" />
-                <span className="text-zinc-500 text-[11px]">Group claims</span>
+                <span className="text-zinc-300">Group leads</span>
               </LegendToggle>
               <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
-                <span className="text-zinc-500 text-[11px]">Individual claims</span>
+                <span className="text-zinc-300">Individual leads</span>
               </LegendToggle>
               <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm border border-[#a1a1aa]/60 bg-transparent" />
-                <span className="text-zinc-500 text-[11px]">Unclaimed</span>
+                <span className="text-zinc-300">No leader yet</span>
               </LegendToggle>
             </>
           ))}
@@ -6129,7 +6251,7 @@ export default function CampaignMap({
 
       {selectedPhoto && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={() => setSelectedPhoto(null)}
         >
           <div className="flex flex-col items-center gap-3 max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
@@ -6204,7 +6326,7 @@ export default function CampaignMap({
 
       {selectedBusiness && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={() => setSelectedBusiness(null)}
         >
           <div
@@ -6309,7 +6431,7 @@ export default function CampaignMap({
 
       {selectedCleanupEvent && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={() => setSelectedCleanupEvent(null)}
         >
           <div
@@ -6374,7 +6496,7 @@ export default function CampaignMap({
             </div>
             {selectedCleanupEvent.is_past && (
               <p className="text-sm text-zinc-400 mb-1.5 flex items-center gap-1.5">
-                <span>🕓</span> This event has ended — check-in is closed.
+                <span>🕓</span> This event has ended. Check-in is closed.
               </p>
             )}
             {selectedCleanupEvent.scheduled_start && (
@@ -6436,7 +6558,7 @@ export default function CampaignMap({
         const infoTextCls = isTimedEvent ? "text-amber-300" : "text-red-300";
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
             onClick={() => setSelectedEvent(null)}
           >
             <div

@@ -2,7 +2,7 @@ import Link from "next/link";
 import TermsContent from "@/components/legal/TermsContent";
 import { CURRENT_TERMS_VERSION, formatLegalVersion } from "@/lib/legal";
 
-export const metadata = { title: "Terms of Service — Frontline" };
+export const metadata = { title: "Terms of Service | Frontline" };
 
 export default function TermsPage() {
   return (

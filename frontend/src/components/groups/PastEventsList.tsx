@@ -63,7 +63,7 @@ export default function PastEventsList({ events }: { events: GroupCleanupEventLi
         <div className="px-5 py-3 border-t border-zinc-800/60">
           <button
             onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-            className="w-full text-center text-xs font-medium text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 touch-manipulation"
+            className="w-full touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Show {Math.min(remaining, PAGE_SIZE)} more
           </button>

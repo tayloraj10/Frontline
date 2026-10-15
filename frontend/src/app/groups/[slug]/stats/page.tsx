@@ -31,23 +31,7 @@ export default async function GroupStatsPage({ params }: Props) {
         .maybeSingle()
     : { data: null };
 
-  const isMember = !!memberRow;
   const isAdmin = memberRow?.role === "admin";
-
-  if (!isMember) {
-    return (
-      <main className="max-w-lg mx-auto px-4 sm:px-6 py-16 w-full text-center">
-        <div className="mb-2 text-left">
-          <BackButton href={`/groups/${slug}`} label={group.name} />
-        </div>
-        <p className="text-5xl mb-4">🔒</p>
-        <h1 className="font-display font-extrabold text-2xl text-zinc-100 mb-2">Members only</h1>
-        <p className="text-zinc-400 text-sm leading-relaxed">
-          This group&apos;s stats dashboard is only visible to {group.name} members.
-        </p>
-      </main>
-    );
-  }
 
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 

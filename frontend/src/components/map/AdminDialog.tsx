@@ -23,7 +23,7 @@ export default function AdminDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onOpenChange(false); }}
     >
       <div className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-4 shadow-2xl">

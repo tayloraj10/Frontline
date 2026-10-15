@@ -117,7 +117,7 @@ export default async function GroupsPage() {
         {canCreateGroup && (
           <Link
             href="/groups/apply"
-            className="shrink-0 inline-flex items-center min-h-11 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 text-sm font-semibold rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+            className="shrink-0 inline-flex items-center min-h-11 px-5 py-2 bg-zinc-100 hover:bg-white text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
           >
             <span className="sm:hidden">+ Add group</span>
             <span className="hidden sm:inline">Add Your Group</span>

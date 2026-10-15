@@ -258,13 +258,13 @@ export default async function GroupProfilePage({ params }: Props) {
             </div>
           )}
 
-          {!isAdmin && isMember && (
+          {!isAdmin && (
             <Link href={`/groups/${slug}/stats`} className="flex items-center justify-between gap-3 rounded-[20px] bg-zinc-900 px-5 py-4 transition-colors hover:bg-zinc-800/70">
               <span className="flex items-center gap-3">
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-400/15 text-emerald-400"><BarChart3 className="h-5 w-5" /></span>
                 <span>
                   <span className="block text-sm font-semibold text-zinc-100">See the group&apos;s impact</span>
-                  <span className="block text-xs text-zinc-500">Bags, cleanups and where your group has been out</span>
+                  <span className="block text-xs text-zinc-500">Bags, cleanups and where the group has been out</span>
                 </span>
               </span>
               <ChevronRight className="h-5 w-5 text-zinc-500" />

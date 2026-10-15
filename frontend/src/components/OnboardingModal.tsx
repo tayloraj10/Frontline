@@ -136,7 +136,7 @@ export default function OnboardingModal({ campaigns }: Props) {
             )}
             <button
               onClick={next}
-              className="flex-1 px-4 py-2.5 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.97] text-emerald-950 text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+              className="flex-1 px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {isLast ? "Browse all campaigns" : "Next"}
             </button>
@@ -144,7 +144,7 @@ export default function OnboardingModal({ campaigns }: Props) {
 
           <button
             onClick={dismiss}
-            className="w-full mt-3 py-1.5 text-xs text-zinc-600 hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150"
+            className="w-full mt-3 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Skip
           </button>

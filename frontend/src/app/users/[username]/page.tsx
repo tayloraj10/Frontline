@@ -13,7 +13,8 @@ import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
 import { PageShell } from "@/components/ui/PageShell";
 import ProgressBar from "@/components/ui/ProgressBar";
 
-const WEEKLY_GOAL = 3;
+const WEEKLY_GOAL = 1;
+const CLEANUP_TYPES = new Set(["cleanup", "cleanup_event_checkin"]);
 
 /** Start of the ISO-ish week (Monday 00:00 UTC) as a day number, used to bucket cleanups into weeks. */
 function weekIndex(d: Date) {
@@ -121,7 +122,7 @@ export default async function UserProfilePage({ params }: Props) {
       .eq("user_id", profile.id),
     supabase
       .from("contributions")
-      .select("campaign_id, value, submitted_at, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
+      .select("campaign_id, value, submitted_at, contribution_type, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)")
       .eq("user_id", profile.id),
     supabase
       .from("territory_claims")
@@ -227,7 +228,7 @@ export default async function UserProfilePage({ params }: Props) {
   const nowWeek = weekIndex(new Date());
   const perWeek = new Map<number, number>();
   for (const c of allContribsData ?? []) {
-    if (!c.submitted_at) continue;
+    if (!c.submitted_at || !CLEANUP_TYPES.has(c.contribution_type)) continue;
     const w = weekIndex(new Date(c.submitted_at));
     perWeek.set(w, (perWeek.get(w) ?? 0) + 1);
   }
@@ -300,8 +301,8 @@ export default async function UserProfilePage({ params }: Props) {
                   <h2 className="font-display text-base font-extrabold tracking-tight text-zinc-100">This week</h2>
                   <p className="mt-0.5 text-sm text-zinc-400">
                     {thisWeek >= WEEKLY_GOAL
-                      ? "Weekly goal reached. Nice work."
-                      : `${WEEKLY_GOAL - thisWeek} more cleanup${WEEKLY_GOAL - thisWeek === 1 ? "" : "s"} to hit your goal.`}
+                      ? "You cleaned up this week. Nice work."
+                      : "Log a cleanup this week to keep your streak going."}
                   </p>
                 </div>
                 <div className="text-right">
@@ -311,7 +312,7 @@ export default async function UserProfilePage({ params }: Props) {
               </div>
               <ProgressBar className="mt-4" value={(thisWeek / WEEKLY_GOAL) * 100} label="Weekly cleanup goal" />
               <div className="mt-2 flex justify-between text-xs text-zinc-500 tabular-nums">
-                <span>{Math.min(thisWeek, WEEKLY_GOAL)} of {WEEKLY_GOAL} cleanups</span>
+                <span>{Math.min(thisWeek, WEEKLY_GOAL)} of {WEEKLY_GOAL} {WEEKLY_GOAL === 1 ? "cleanup" : "cleanups"}</span>
                 <span>Best cleanup: {bestCleanup} bag{bestCleanup === 1 ? "" : "s"}</span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">

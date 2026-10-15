@@ -6,12 +6,8 @@ import { createPublicClient } from "@/lib/supabase/public";
 import CampaignPageClient from "./CampaignPageClient";
 import MapRouteFlag from "@/components/map/MapRouteFlag";
 import type { LeaderboardEntry, ActivityItem } from "./CampaignPageClient";
-import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import type { Database } from "@/types/database";
 import type { MapBusiness, MapBusinessLocation, MapCleanupEvent } from "@/components/map/CampaignMap";
-import CampaignInstructionsModal from "@/components/CampaignInstructionsModal";
-import BackButton from "@/components/ui/BackButton";
-import ShareButton from "@/components/ShareButton";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -428,15 +424,6 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   const currentUserProfile = user?.id ? profilesById.get(user.id) : null;
   const userDisplayName = currentUserProfile ? (currentUserProfile.display_name ?? currentUserProfile.username) : null;
   const userUsername = currentUserProfile?.username ?? null;
-
-  const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type] ?? {
-    icon: "🏁",
-    label: campaign.campaign_type,
-    color: "text-zinc-400",
-    bg: "bg-zinc-800/20",
-    border: "border-zinc-700/50",
-    bar: "bg-zinc-600",
-  };
 
   return (
     <div className="legacy-palette flex flex-col flex-1">

@@ -239,7 +239,7 @@ export function OfferCard({
                 usedAt: redemptions[0]?.used_at ?? null,
               })
             }
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 underline underline-offset-2 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Redeemed{redemptions[0]?.code ? ` - code ${redemptions[0].code}` : ""}
           </button>
@@ -292,7 +292,7 @@ export function OfferCard({
                 usedAt: redemptions[0]?.used_at ?? null,
               })
             }
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 underline underline-offset-2 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Last code: {redemptions[0].code}
           </button>

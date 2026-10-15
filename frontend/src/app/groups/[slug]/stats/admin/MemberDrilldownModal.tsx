@@ -94,7 +94,7 @@ export default function MemberDrilldownModal({
             <Avatar avatarUrl={avatarUrl} name={displayName} username={username} size="sm" />
             <span className="text-sm font-semibold text-zinc-200 truncate">{displayName}</span>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-sm px-2 py-1 -mr-2 touch-manipulation shrink-0">
+          <button onClick={onClose} className="-mr-2 touch-manipulation shrink-0 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
             Close
           </button>
         </div>

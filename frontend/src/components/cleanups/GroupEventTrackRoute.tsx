@@ -136,6 +136,9 @@ export default function GroupEventTrackRoute({
         {disabled && disabledReason && (
           <p className="mt-1.5 text-xs text-zinc-500 text-center">{disabledReason}</p>
         )}
+        <p className="mt-1.5 text-xs text-zinc-500 text-center">
+          Records your GPS path, even with your phone locked (needs &quot;Always&quot; location). Everyone&apos;s routes show on this page afterward.
+        </p>
         {done && (
           <div className="mt-2 flex items-center gap-1.5 px-3 py-2 text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-800/60 rounded-lg">
             <span aria-hidden="true">✅</span>

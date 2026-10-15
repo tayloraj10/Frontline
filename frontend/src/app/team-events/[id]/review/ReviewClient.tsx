@@ -232,7 +232,7 @@ export default function ReviewClient({
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-300">
-                  <span>Value: <span className="text-zinc-100">{s.value ?? "—"}</span></span>
+                  <span>Value: <span className="text-zinc-100">{s.value ?? "-"}</span></span>
                   {s.small_bags != null && <span>Small bags: <span className="text-zinc-100">{s.small_bags}</span></span>}
                   {s.large_bags != null && <span>Large bags: <span className="text-zinc-100">{s.large_bags}</span></span>}
                   {s.pounds != null && <span>Pounds: <span className="text-zinc-100">{s.pounds}</span></span>}
@@ -246,7 +246,7 @@ export default function ReviewClient({
               {(s.route || (s.lat != null && s.lng != null)) && (
                 <button
                   onClick={() => setMapSubmission(s)}
-                  className="text-xs text-zinc-500 hover:text-emerald-400 underline decoration-dotted transition-colors duration-150"
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-emerald-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
                 >
                   {s.route ? "View route" : `Location: ${s.lat!.toFixed(5)}, ${s.lng!.toFixed(5)}`}
                 </button>
@@ -289,7 +289,7 @@ export default function ReviewClient({
               <p className="text-sm font-medium text-zinc-100">{mapSubmission.route ? "Submission route" : "Submission location"}</p>
               <button
                 onClick={() => setMapSubmission(null)}
-                className="text-zinc-500 hover:text-zinc-300 text-sm"
+                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
                 Close
               </button>

@@ -113,7 +113,7 @@ export default function ShareButton({
       <div className={`inline-flex items-center gap-3 ${className}`}>
         <button
           onClick={handleShare}
-          className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+          className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           <ShareGlyph />
           {copied ? "Link copied!" : "Share"}
@@ -121,7 +121,7 @@ export default function ShareButton({
         {showQr && (
           <button
             onClick={() => setQrOpen(true)}
-            className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             <QRGlyph />
             QR code

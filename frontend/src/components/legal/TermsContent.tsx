@@ -6,7 +6,7 @@ export default function TermsContent() {
       <Section title="1. Acceptance">
         <p>
           By accessing or using Frontline ("the App"), you agree to be bound by these Terms. If you
-          don't agree, don't use the App. Frontline is currently in beta — features may change,
+          don't agree, don't use the App. Frontline is currently in beta, features may change,
           break, or be removed without notice.
         </p>
       </Section>

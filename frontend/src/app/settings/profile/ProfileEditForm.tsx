@@ -174,7 +174,7 @@ export default function ProfileEditForm({ userId, username, displayName, bio, av
         <button
           type="button"
           onClick={() => router.push(`/users/${encodeURIComponent(username)}`)}
-          className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-[color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+          className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           Cancel
         </button>

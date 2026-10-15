@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { syncUserPoints, useUserPoints } from "@/lib/userPoints";
 import { formatPoints } from "@/lib/formatPoints";
 import { isNativePlatform } from "@/lib/capacitor";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { version as appVersion } from "../../package.json";
 import type { User } from "@supabase/supabase-js";
@@ -83,7 +84,7 @@ export default function UserNav({
     return (
       <Link
         href={`/login?next=${pathname}`}
-        className="px-4 py-1.5 text-sm font-semibold bg-emerald-400 hover:bg-emerald-300 text-emerald-950 rounded-xl shadow-elevation-2 transition-[background-color,transform] active:scale-[0.97] duration-150"
+        className="px-4 py-1.5 text-sm font-bold bg-zinc-100 hover:bg-white text-zinc-900 rounded-full shadow-elevation-2 transition-[background-color,transform] active:scale-[0.97] duration-150"
       >
         Sign In
       </Link>
@@ -190,6 +191,10 @@ export default function UserNav({
             >
               Account settings
             </Link>
+            <div className="border-t border-zinc-800 my-1" />
+            <div className="px-3 py-1">
+              <ThemeToggle compact />
+            </div>
             <div className="border-t border-zinc-800 my-1" />
             <button
               onClick={handleSignOut}

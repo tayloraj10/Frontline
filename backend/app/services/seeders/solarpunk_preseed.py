@@ -17,17 +17,17 @@ H3_RESOLUTION = 3
 # Total is kept below the 5,000 "First Sparks" milestone (see milestones below) so real
 # player contributions are what crosses it, not preseed data alone.
 PRESEED_LOCATIONS = [
-    (64.13,  -21.91, 600, "Iceland — ~99% renewable energy, geothermal pioneer"),
-    (55.68,   12.57, 200, "Copenhagen — carbon-neutral city target, cycling capital"),
-    ( 9.93,  -84.09, 600, "Costa Rica — 100% renewable electricity, mass reforestation"),
-    (27.47,   89.64, 600, "Bhutan — carbon-negative, 72% forest cover, Gross National Happiness"),
-    (48.00,    7.84, 600, "Freiburg — Solar City, car-free Vauban quarter"),
-    (-34.90, -56.19, 200, "Uruguay — 97% renewable electricity, regional sustainability leader"),
-    (  1.35,  103.82, 200, "Singapore — biophilic city, vertical gardens, urban food production"),
-    (  6.25,  -75.56, 200, "Medellín — cable car transit innovation, urban green corridors"),
-    (-25.43,  -49.27, 200, "Curitiba — world's first BRT, recycling culture, urban forests"),
-    (48.21,   16.37, 200, "Vienna — most livable city, social housing, cycling infrastructure"),
-    (52.37,    4.90, 600, "Amsterdam — circular economy pioneer, cycling utopia, housing co-ops"),
+    (64.13,  -21.91, 600, "Iceland: ~99% renewable energy, geothermal pioneer"),
+    (55.68,   12.57, 200, "Copenhagen: carbon-neutral city target, cycling capital"),
+    ( 9.93,  -84.09, 600, "Costa Rica: 100% renewable electricity, mass reforestation"),
+    (27.47,   89.64, 600, "Bhutan: carbon-negative, 72% forest cover, Gross National Happiness"),
+    (48.00,    7.84, 600, "Freiburg: Solar City, car-free Vauban quarter"),
+    (-34.90, -56.19, 200, "Uruguay: 97% renewable electricity, regional sustainability leader"),
+    (  1.35,  103.82, 200, "Singapore: biophilic city, vertical gardens, urban food production"),
+    (  6.25,  -75.56, 200, "Medellín: cable car transit innovation, urban green corridors"),
+    (-25.43,  -49.27, 200, "Curitiba: world's first BRT, recycling culture, urban forests"),
+    (48.21,   16.37, 200, "Vienna: most livable city, social housing, cycling infrastructure"),
+    (52.37,    4.90, 600, "Amsterdam: circular economy pioneer, cycling utopia, housing co-ops"),
 ]
 
 
@@ -124,7 +124,7 @@ class SolarpunkPreseedSeeder(Seeder):
                 "id": str(uuid.uuid5(_NS, "milestone_15k")),
                 "threshold": 15_000,
                 "label": "Growing Network",
-                "description": "15,000 bloom points reached — the network is spreading. 1.5× multiplier for 72 hours.",
+                "description": "15,000 bloom points reached. The network is spreading. 1.5× multiplier for 72 hours.",
                 "multiplier": 1.5,
                 "duration_hours": 72,
             },
@@ -140,7 +140,7 @@ class SolarpunkPreseedSeeder(Seeder):
                 "id": str(uuid.uuid5(_NS, "milestone_100k")),
                 "threshold": 100_000,
                 "label": "Solarpunk World",
-                "description": "100,000 bloom points — the solarpunk era has arrived. 2× multiplier for 120 hours.",
+                "description": "100,000 bloom points. The solarpunk era has arrived. 2× multiplier for 120 hours.",
                 "multiplier": 2.0,
                 "duration_hours": 120,
             },
@@ -161,11 +161,11 @@ class SolarpunkPreseedSeeder(Seeder):
                 {
                     "id": m["id"],
                     "campaign_id": str(SOLARPUNK_ID),
-                    "name": f"Phase Unlocked — {m['label']}",
+                    "name": f"Phase Unlocked: {m['label']}",
                     "condition_config": json.dumps({
                         "threshold": m["threshold"],
                         "metric": "total_value",
-                        "title": f"Phase Unlocked — {m['label']}!",
+                        "title": f"Phase Unlocked: {m['label']}!",
                         "description": m["description"],
                     }),
                     "effect_config": json.dumps({

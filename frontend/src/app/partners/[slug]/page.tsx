@@ -24,7 +24,7 @@ export async function generateMetadata({
   if (!business) return {};
 
   const title = business.name;
-  const description = business.description ?? `${business.name} — Frontline partner.`;
+  const description = business.description ?? `${business.name}: Frontline partner.`;
 
   return {
     title,

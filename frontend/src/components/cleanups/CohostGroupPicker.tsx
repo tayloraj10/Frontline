@@ -124,7 +124,7 @@ export default function CohostGroupPicker({
             className="w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500"
           />
           {showingTopActiveOnly && (
-            <p className="px-1 text-[11px] text-zinc-600">Showing the most active groups — search to find others.</p>
+            <p className="px-1 text-[11px] text-zinc-600">Showing the most active groups. Search to find others.</p>
           )}
           <div className="max-h-52 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-xl divide-y divide-zinc-800">
             {options.length === 0 && (

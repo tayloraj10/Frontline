@@ -262,14 +262,14 @@ export default function GroupGeoStatsExplorer({
       )}
 
       <div className={`grid grid-cols-3 gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
-        <StatTile label="points" value={data ? formatPoints(data.aggregate.total_value) : "—"} />
+        <StatTile label="points" value={data ? formatPoints(data.aggregate.total_value) : "-"} />
         <StatTile
           label="contributions"
-          value={data ? data.aggregate.contribution_count.toLocaleString() : "—"}
+          value={data ? data.aggregate.contribution_count.toLocaleString() : "-"}
         />
         <StatTile
           label="contributors"
-          value={data ? data.aggregate.unique_contributors.toLocaleString() : "—"}
+          value={data ? data.aggregate.unique_contributors.toLocaleString() : "-"}
         />
       </div>
 

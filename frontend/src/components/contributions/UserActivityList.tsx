@@ -397,7 +397,7 @@ export default function UserActivityList({
         <button
           onClick={handleLoadMore}
           disabled={loadingMore}
-          className="text-xs text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 disabled:opacity-40"
+          className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>

@@ -140,7 +140,7 @@ function DonutChart({
               >
                 <title>
                   {s.label}: {formatPoints(s.value)} {valueLabel} ({Math.round(frac * 100)}%)
-                  {clickable ? " — click to drill in" : ""}
+                  {clickable ? ". Click to drill in" : ""}
                 </title>
               </circle>
             );
@@ -368,7 +368,7 @@ export default function StatDetailModal({
     all: "all-time",
   };
   const titles: Record<StatKind, string> = {
-    pts: `Points — ${intervalLabels[interval]}`,
+    pts: `Points: ${intervalLabels[interval]}`,
     contributions:
       contribView === "geo" && hasGeoBreakdown ? `Contributions by ${levelLabel ?? "area"}` : "Contributions by contributor",
     contributors: "Top individuals by points",
@@ -388,7 +388,7 @@ export default function StatDetailModal({
           <span className="text-sm font-semibold text-zinc-200">{titles[kind]}</span>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 text-sm px-2 py-1 -mr-2 touch-manipulation"
+            className="-mr-2 touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Close
           </button>

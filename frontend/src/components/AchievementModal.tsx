@@ -107,7 +107,7 @@ export default function AchievementModal({ userId }: { userId: string }) {
             <>
               <button
                 onClick={dismiss}
-                className="flex-1 px-4 py-3 text-sm text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
+                className="flex-1 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
                 Later
               </button>
@@ -121,7 +121,7 @@ export default function AchievementModal({ userId }: { userId: string }) {
           ) : (
             <button
               onClick={dismiss}
-              className="flex-1 px-4 py-3 text-sm font-semibold text-amber-400 hover:text-amber-300 active:text-amber-300 transition-colors duration-150"
+              className="flex-1 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-100 hover:bg-white text-sm font-bold text-zinc-900 active:scale-[0.97] transition-[background-color,transform] duration-150"
             >
               Nice!
             </button>

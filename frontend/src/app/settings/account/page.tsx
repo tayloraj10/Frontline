@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import ThemeToggle from "@/components/ThemeToggle";
 import AccountSettingsForm from "./AccountSettingsForm";
 
-export const metadata = { title: "Account Settings — Frontline" };
+export const metadata = { title: "Account Settings | Frontline" };
 
 export default async function AccountSettingsPage() {
   const supabase = await createClient();

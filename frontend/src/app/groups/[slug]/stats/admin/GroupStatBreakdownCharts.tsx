@@ -99,7 +99,7 @@ function DonutChart({
               >
                 <title>
                   {s.label}: {formatPoints(s.value)} {valueLabel} ({Math.round(frac * 100)}%)
-                  {clickable ? " — click to drill in" : ""}
+                  {clickable ? ". Click to drill in" : ""}
                 </title>
               </circle>
             );

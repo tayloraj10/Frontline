@@ -332,22 +332,22 @@ export default function GeoStatsExplorer({
       <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
         <StatTile
           label="points"
-          value={data ? formatPoints(data.aggregate.total_value) : "—"}
+          value={data ? formatPoints(data.aggregate.total_value) : "-"}
           onClick={data ? () => setDetailStat("pts") : undefined}
         />
         <StatTile
           label="contributions"
-          value={data ? data.aggregate.contribution_count.toLocaleString() : "—"}
+          value={data ? data.aggregate.contribution_count.toLocaleString() : "-"}
           onClick={data ? () => setDetailStat("contributions") : undefined}
         />
         <StatTile
           label="contributors"
-          value={data ? data.aggregate.unique_contributors.toLocaleString() : "—"}
+          value={data ? data.aggregate.unique_contributors.toLocaleString() : "-"}
           onClick={data && data.top_users.length > 0 ? () => setDetailStat("contributors") : undefined}
         />
         <StatTile
           label="groups active"
-          value={data ? data.aggregate.unique_groups.toLocaleString() : "—"}
+          value={data ? data.aggregate.unique_groups.toLocaleString() : "-"}
           onClick={data && data.top_groups.length > 0 ? () => setDetailStat("groups") : undefined}
         />
       </div>

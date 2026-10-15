@@ -2,7 +2,7 @@ import Link from "next/link";
 import PrivacyContent from "@/components/legal/PrivacyContent";
 import { CURRENT_PRIVACY_VERSION, formatLegalVersion } from "@/lib/legal";
 
-export const metadata = { title: "Privacy Policy — Frontline" };
+export const metadata = { title: "Privacy Policy | Frontline" };
 
 export default function PrivacyPage() {
   return (

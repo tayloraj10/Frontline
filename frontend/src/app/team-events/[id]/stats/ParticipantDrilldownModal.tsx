@@ -53,7 +53,7 @@ export default function ParticipantDrilldownModal({
           <h3 className="text-lg font-black text-zinc-100 truncate">{label}</h3>
           <button
             type="button"
-            className="touch-manipulation active:scale-[0.95] text-zinc-500 text-sm px-2 py-1"
+            className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
             onClick={onClose}
           >
             Close

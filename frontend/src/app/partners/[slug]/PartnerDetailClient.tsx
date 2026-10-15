@@ -102,7 +102,7 @@ export default function PartnerDetailClient({
 
       <div className="space-y-3">
         {offers.length === 0 ? (
-          <p className="text-sm text-zinc-500">No active offers from {business.name} right now — check back soon.</p>
+          <p className="text-sm text-zinc-500">No active offers from {business.name} right now. Check back soon.</p>
         ) : (
           offers.map((offer) => (
             <OfferCard

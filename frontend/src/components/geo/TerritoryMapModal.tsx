@@ -114,7 +114,7 @@ export default function TerritoryMapModal({
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">{title}</h3>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-sm" aria-label="Close">
+          <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 w-11 px-0 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150" aria-label="Close">
             ✕
           </button>
         </div>

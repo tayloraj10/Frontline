@@ -83,7 +83,7 @@ export default function LegalAcceptForm({
           <div className="shrink-0 px-6 py-5 border-t border-zinc-800 bg-zinc-900">
             <button
               onClick={handleAgree}
-              className="w-full py-4 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.98] text-emerald-950 font-bold text-base rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+              className="w-full py-4 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.98] text-zinc-900 font-bold text-base rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
             >
               {accepted[doc] ? "Accepted ✓" : `I Agree to the ${DOC_LABEL[doc]}`}
             </button>
@@ -132,7 +132,7 @@ export default function LegalAcceptForm({
         <button
           onClick={handleAccept}
           disabled={!allAccepted || loading}
-          className="w-full py-4 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.98] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-bold text-base rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+          className="w-full py-4 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.98] disabled:active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-900 font-bold text-base rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
         >
           {loading ? "Saving…" : "Continue"}
         </button>
