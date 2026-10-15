@@ -1,5 +1,6 @@
 "use client";
 
+import BodyPortal from "@/components/ui/BodyPortal";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface ConfirmModalProps {
@@ -30,13 +31,14 @@ export default function ConfirmModal({
   onCancel,
 }: ConfirmModalProps) {
   return (
+    <BodyPortal>
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-8"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-8"
           onClick={onCancel}
         >
           <motion.div
@@ -73,5 +75,6 @@ export default function ConfirmModal({
         </motion.div>
       )}
     </AnimatePresence>
+    </BodyPortal>
   );
 }

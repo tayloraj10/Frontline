@@ -12,6 +12,7 @@ import { downloadImage, shareImage } from "@/lib/share";
 import { paintCardBackground, CARD_BG_STYLES, type CardBgStyle } from "@/lib/cardBackground";
 import IntervalPicker from "./IntervalPicker";
 import { type StatsWindow, detailedIntervalLabel, statsWindowParams } from "./statsWindow";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 const SNAPSHOT_WIDTH = 720;
@@ -1133,103 +1134,105 @@ export default function GroupStatsView({
         ))}
 
       {shareCamp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-elevation-3">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-semibold text-zinc-300">
-                {shareMode === "map" ? "Map Snapshot" : "Share Card"}
-              </span>
-              <button
-                onClick={() => {
-                  setShareCamp(null);
-                  setMapImageUrl(null);
-                }}
-                className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-              >
-                Close
-              </button>
-            </div>
-
-            {shareMode === "map" && (
-              <div className="mb-3 flex items-center gap-1 flex-wrap justify-center">
-                {(Object.keys(MAP_SNAPSHOT_TYPE_LABELS) as MapSnapshotType[]).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => handleMapTypeChange(t)}
-                    disabled={mapLoading}
-                    className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors touch-manipulation disabled:opacity-50 ${
-                      mapType === t
-                        ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-300"
-                        : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
-                    }`}
-                  >
-                    {MAP_SNAPSHOT_TYPE_LABELS[t]}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {shareMode === "card" && (
-              <div className="mb-3 flex justify-center">
-                <select
-                  value={bgStyle}
-                  onChange={(e) => setBgStyle(e.target.value as CardBgStyle)}
-                  className="rounded-lg border border-zinc-800/40 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
+        <BodyPortal>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4 py-8">
+            <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-elevation-3">
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-sm font-semibold text-zinc-300">
+                  {shareMode === "map" ? "Map Snapshot" : "Share Card"}
+                </span>
+                <button
+                  onClick={() => {
+                    setShareCamp(null);
+                    setMapImageUrl(null);
+                  }}
+                  className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
                 >
-                  {CARD_BG_STYLES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  Close
+                </button>
               </div>
-            )}
 
-            <div className="flex justify-center">
-              {shareMode === "map" ? (
-                <MapSnapshotCard
-                  ref={cardRef}
-                  groupName={groupName}
-                  groupLogoUrl={groupLogoUrl ? proxiedImageUrl(groupLogoUrl) : null}
-                  mapImageUrl={mapImageUrl}
-                  loading={mapLoading}
-                />
-              ) : (
-                <ShareCard
-                  ref={cardRef}
-                  groupName={groupName}
-                  groupLogoUrl={groupLogoUrl ? proxiedImageUrl(groupLogoUrl) : null}
-                  campaignName={shareCamp.campaign_name}
-                  intervalLabel={detailedIntervalLabel(statsWindow)}
-                  totalValue={shareCamp.aggregate.total_value}
-                  contributionCount={shareCamp.aggregate.contribution_count}
-                  uniqueContributors={shareCamp.aggregate.unique_contributors}
-                  smallBags={shareCamp.aggregate.small_bags}
-                  largeBags={shareCamp.aggregate.large_bags}
-                  pounds={shareCamp.aggregate.pounds}
-                  bgStyle={bgStyle}
-                />
+              {shareMode === "map" && (
+                <div className="mb-3 flex items-center gap-1 flex-wrap justify-center">
+                  {(Object.keys(MAP_SNAPSHOT_TYPE_LABELS) as MapSnapshotType[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => handleMapTypeChange(t)}
+                      disabled={mapLoading}
+                      className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors touch-manipulation disabled:opacity-50 ${
+                        mapType === t
+                          ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-300"
+                          : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
+                      }`}
+                    >
+                      {MAP_SNAPSHOT_TYPE_LABELS[t]}
+                    </button>
+                  ))}
+                </div>
               )}
-            </div>
 
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={handleDownloadCard}
-                disabled={shareBusy !== null}
-                className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-xl transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
-              >
-                {shareBusy === "download" ? "Downloading…" : "Download"}
-              </button>
-              <button
-                onClick={handleShareCard}
-                disabled={shareBusy !== null}
-                className="flex-1 px-3 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-lg transition-colors duration-150 hover:bg-emerald-500 disabled:opacity-50 touch-manipulation"
-              >
-                {shareBusy === "share" ? "Sharing…" : "Share"}
-              </button>
+              {shareMode === "card" && (
+                <div className="mb-3 flex justify-center">
+                  <select
+                    value={bgStyle}
+                    onChange={(e) => setBgStyle(e.target.value as CardBgStyle)}
+                    className="rounded-lg border border-zinc-800/40 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
+                  >
+                    {CARD_BG_STYLES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex justify-center">
+                {shareMode === "map" ? (
+                  <MapSnapshotCard
+                    ref={cardRef}
+                    groupName={groupName}
+                    groupLogoUrl={groupLogoUrl ? proxiedImageUrl(groupLogoUrl) : null}
+                    mapImageUrl={mapImageUrl}
+                    loading={mapLoading}
+                  />
+                ) : (
+                  <ShareCard
+                    ref={cardRef}
+                    groupName={groupName}
+                    groupLogoUrl={groupLogoUrl ? proxiedImageUrl(groupLogoUrl) : null}
+                    campaignName={shareCamp.campaign_name}
+                    intervalLabel={detailedIntervalLabel(statsWindow)}
+                    totalValue={shareCamp.aggregate.total_value}
+                    contributionCount={shareCamp.aggregate.contribution_count}
+                    uniqueContributors={shareCamp.aggregate.unique_contributors}
+                    smallBags={shareCamp.aggregate.small_bags}
+                    largeBags={shareCamp.aggregate.large_bags}
+                    pounds={shareCamp.aggregate.pounds}
+                    bgStyle={bgStyle}
+                  />
+                )}
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={handleDownloadCard}
+                  disabled={shareBusy !== null}
+                  className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-xl transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
+                >
+                  {shareBusy === "download" ? "Downloading…" : "Download"}
+                </button>
+                <button
+                  onClick={handleShareCard}
+                  disabled={shareBusy !== null}
+                  className="flex-1 px-3 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-lg transition-colors duration-150 hover:bg-emerald-500 disabled:opacity-50 touch-manipulation"
+                >
+                  {shareBusy === "share" ? "Sharing…" : "Share"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </BodyPortal>
       )}
     </div>
   );

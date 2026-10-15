@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 export default function BlockUserButton({
   blockedUserId,
@@ -85,30 +86,32 @@ export default function BlockUserButton({
       </button>
       {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
       {state === "confirming" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setState("idle")}>
-          <div
-            className="w-full max-w-xs bg-zinc-900 rounded-[20px] shadow-elevation-4 p-4 space-y-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-sm text-zinc-300">
-              Block @{blockedUsername}? You won&apos;t see their activity in feeds and maps anymore.
-            </p>
-            <div className="flex items-center justify-end gap-4">
-              <button
-                onClick={() => setState("idle")}
-                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBlock}
-                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-red-600 hover:bg-red-500 text-sm font-bold text-white active:scale-[0.97] transition-[background-color,transform] duration-150"
-              >
-                Yes, block
-              </button>
+        <BodyPortal>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70" onClick={() => setState("idle")}>
+            <div
+              className="w-full max-w-xs bg-zinc-900 rounded-[20px] shadow-elevation-4 p-4 space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-sm text-zinc-300">
+                Block @{blockedUsername}? You won&apos;t see their activity in feeds and maps anymore.
+              </p>
+              <div className="flex items-center justify-end gap-4">
+                <button
+                  onClick={() => setState("idle")}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBlock}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-red-600 hover:bg-red-500 text-sm font-bold text-white active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Yes, block
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </BodyPortal>
       )}
     </div>
   );

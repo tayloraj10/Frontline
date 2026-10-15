@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export interface FlowStep {
   key: string;
@@ -47,9 +48,12 @@ export default function FlowSheet({
 
   const ring = glow === "blue" ? "ring-2 ring-sky-500/50" : glow === "orange" ? "ring-2 ring-orange-500/50" : "ring-1 ring-white/10";
 
-  return (
+  // Portaled to body so no parent stacking context can put the bottom tab bar (z-40) over the footer.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm sm:px-4"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm sm:px-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-modal="true"
@@ -117,7 +121,8 @@ export default function FlowSheet({
         )}
         {!footer && <div className="shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]" />}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

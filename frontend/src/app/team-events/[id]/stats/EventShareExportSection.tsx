@@ -7,6 +7,7 @@ import { canReviewTeamEvent, getTeamEventAdminSummary, type StatsInterval, type 
 import { resolveTeamColor } from "@/lib/teamColors";
 import { paintCardBackground, CARD_BG_STYLES, type CardBgStyle } from "@/lib/cardBackground";
 import ShareCard from "@/components/team-events/ShareCard";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const INTERVALS: { value: StatsInterval; label: string }[] = [
   { value: "today", label: "Today" },
@@ -350,64 +351,66 @@ export default function EventShareExportSection({ teamEventId, eventTitle, event
           )}
 
           {previewOpen && selectedTeam && selectedTeamStats && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
-              <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-elevation-3">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-zinc-300">Share Card</span>
-                  <button
-                    onClick={() => setPreviewOpen(false)}
-                    className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-                  >
-                    Close
-                  </button>
-                </div>
+            <BodyPortal>
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4 py-8">
+                <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-elevation-3">
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-zinc-300">Share Card</span>
+                    <button
+                      onClick={() => setPreviewOpen(false)}
+                      className="touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                    >
+                      Close
+                    </button>
+                  </div>
 
-                <div className="mb-3 flex justify-center">
-                  <select
-                    value={bgStyle}
-                    onChange={(e) => setBgStyle(e.target.value as CardBgStyle)}
-                    className="rounded-lg border border-zinc-800/40 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
-                  >
-                    {CARD_BG_STYLES.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <div className="mb-3 flex justify-center">
+                    <select
+                      value={bgStyle}
+                      onChange={(e) => setBgStyle(e.target.value as CardBgStyle)}
+                      className="rounded-lg border border-zinc-800/40 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 touch-manipulation"
+                    >
+                      {CARD_BG_STYLES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div className="flex justify-center">
-                  <ShareCard
-                    eventTitle={eventTitle}
-                    eventLogoUrl={eventLogoUrl ? proxiedImageUrl(eventLogoUrl) : null}
-                    teamName={selectedTeam.name}
-                    teamLogoUrl={selectedTeam.logo_url ? proxiedImageUrl(selectedTeam.logo_url) : null}
-                    teamColor={selectedTeam.color ? resolveTeamColor(selectedTeam.color) : "#065f46"}
-                    intervalLabel={intervalLabel}
-                    totalValue={selectedTeamStats.total_value}
-                    submissionCount={selectedTeamStats.submission_count}
-                    bgStyle={bgStyle}
-                  />
-                </div>
+                  <div className="flex justify-center">
+                    <ShareCard
+                      eventTitle={eventTitle}
+                      eventLogoUrl={eventLogoUrl ? proxiedImageUrl(eventLogoUrl) : null}
+                      teamName={selectedTeam.name}
+                      teamLogoUrl={selectedTeam.logo_url ? proxiedImageUrl(selectedTeam.logo_url) : null}
+                      teamColor={selectedTeam.color ? resolveTeamColor(selectedTeam.color) : "#065f46"}
+                      intervalLabel={intervalLabel}
+                      totalValue={selectedTeamStats.total_value}
+                      submissionCount={selectedTeamStats.submission_count}
+                      bgStyle={bgStyle}
+                    />
+                  </div>
 
-                <div className="mt-4 flex gap-2">
-                  <button
-                    onClick={handleDownloadCard}
-                    disabled={shareBusy !== null}
-                    className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-xl transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
-                  >
-                    {shareBusy === "download" ? "Downloading…" : "Download"}
-                  </button>
-                  <button
-                    onClick={handleShareCard}
-                    disabled={shareBusy !== null}
-                    className="flex-1 px-3 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-lg transition-colors duration-150 hover:bg-emerald-500 disabled:opacity-50 touch-manipulation"
-                  >
-                    {shareBusy === "share" ? "Sharing…" : "Share"}
-                  </button>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={handleDownloadCard}
+                      disabled={shareBusy !== null}
+                      className="flex-1 px-3 py-2 text-xs font-medium border border-zinc-700 text-zinc-300 rounded-xl transition-[background-color,border-color] duration-150 hover:border-zinc-500 disabled:opacity-50 touch-manipulation"
+                    >
+                      {shareBusy === "download" ? "Downloading…" : "Download"}
+                    </button>
+                    <button
+                      onClick={handleShareCard}
+                      disabled={shareBusy !== null}
+                      className="flex-1 px-3 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-lg transition-colors duration-150 hover:bg-emerald-500 disabled:opacity-50 touch-manipulation"
+                    >
+                      {shareBusy === "share" ? "Sharing…" : "Share"}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </BodyPortal>
           )}
 
           {canManage && (

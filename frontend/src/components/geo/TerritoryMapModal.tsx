@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -107,39 +108,41 @@ export default function TerritoryMapModal({
   }, [areas]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div
-        className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 w-full max-w-lg space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">{title}</h3>
-          <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 w-11 px-0 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150" aria-label="Close">
-            ✕
-          </button>
-        </div>
-        <div className="relative w-full h-[320px] rounded-lg overflow-hidden border border-zinc-700/50">
-          <div ref={containerRef} className="w-full h-full" />
-          {loading && !error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 text-sm text-zinc-400">
-              Loading map...
-            </div>
-          )}
-          {error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 text-sm text-red-400 px-4 text-center">
-              {error}
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {areas.map((a) => (
-            <span key={a.geoUnitId} className="flex items-center gap-1.5 text-xs text-zinc-400">
-              <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: a.color }} />
-              {a.displayName}
-            </span>
-          ))}
+    <BodyPortal>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+        <div
+          className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 w-full max-w-lg space-y-3"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">{title}</h3>
+            <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 w-11 px-0 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150" aria-label="Close">
+              ✕
+            </button>
+          </div>
+          <div className="relative w-full h-[320px] rounded-lg overflow-hidden border border-zinc-700/50">
+            <div ref={containerRef} className="w-full h-full" />
+            {loading && !error && (
+              <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 text-sm text-zinc-400">
+                Loading map...
+              </div>
+            )}
+            {error && (
+              <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 text-sm text-red-400 px-4 text-center">
+                {error}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {areas.map((a) => (
+              <span key={a.geoUnitId} className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: a.color }} />
+                {a.displayName}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </BodyPortal>
   );
 }

@@ -10,6 +10,7 @@ import {
   type TeamEventSubmission,
   type TeamEventTeam,
 } from "@/lib/teamEvents";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const MiniMapPreview = dynamic(() => import("@/components/map/MiniMapPreview"), {
   ssr: false,
@@ -277,40 +278,42 @@ export default function ReviewClient({
       )}
 
       {mapSubmission && (mapSubmission.route || (mapSubmission.lat != null && mapSubmission.lng != null)) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setMapSubmission(null)}
-        >
+        <BodyPortal>
           <div
-            className="bg-zinc-900 rounded-[20px] p-4 w-full max-w-md space-y-3"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+            onClick={() => setMapSubmission(null)}
           >
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-zinc-100">{mapSubmission.route ? "Submission route" : "Submission location"}</p>
-              <button
-                onClick={() => setMapSubmission(null)}
-                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-              >
-                Close
-              </button>
+            <div
+              className="bg-zinc-900 rounded-[20px] p-4 w-full max-w-md space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-zinc-100">{mapSubmission.route ? "Submission route" : "Submission location"}</p>
+                <button
+                  onClick={() => setMapSubmission(null)}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Close
+                </button>
+              </div>
+              {mapSubmission.route ? (
+                <RoutePreviewMap
+                  coordinates={mapSubmission.route.coordinates}
+                  photos={mapSubmission.route_photos}
+                  heightClassName="h-[280px]"
+                  interactive
+                />
+              ) : (
+                <>
+                  <MiniMapPreview lat={mapSubmission.lat!} lng={mapSubmission.lng!} heightClassName="h-[280px]" interactive />
+                  <p className="text-xs text-zinc-500">
+                    {mapSubmission.lat!.toFixed(5)}, {mapSubmission.lng!.toFixed(5)}
+                  </p>
+                </>
+              )}
             </div>
-            {mapSubmission.route ? (
-              <RoutePreviewMap
-                coordinates={mapSubmission.route.coordinates}
-                photos={mapSubmission.route_photos}
-                heightClassName="h-[280px]"
-                interactive
-              />
-            ) : (
-              <>
-                <MiniMapPreview lat={mapSubmission.lat!} lng={mapSubmission.lng!} heightClassName="h-[280px]" interactive />
-                <p className="text-xs text-zinc-500">
-                  {mapSubmission.lat!.toFixed(5)}, {mapSubmission.lng!.toFixed(5)}
-                </p>
-              </>
-            )}
           </div>
-        </div>
+        </BodyPortal>
       )}
     </div>
   );

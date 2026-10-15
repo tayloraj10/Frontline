@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatPoints } from "@/lib/formatPoints";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 export type StatKind = "pts" | "contributions" | "contributors" | "groups";
 
@@ -376,111 +377,113 @@ export default function StatDetailModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
-      onClick={onClose}
-    >
+    <BodyPortal>
       <div
-        className="w-full sm:max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl shadow-elevation-3 max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
+        onClick={onClose}
       >
-        <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-950">
-          <span className="text-sm font-semibold text-zinc-200">{titles[kind]}</span>
-          <button
-            onClick={onClose}
-            className="-mr-2 touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-          >
-            Close
-          </button>
-        </div>
-        <div className="px-5 py-5">
-          {kind === "pts" &&
-            (trendLoading ? (
-              <div className="text-center text-zinc-600 text-sm py-8">Loading…</div>
-            ) : (
-              <TrendChart buckets={trend ?? []} granularity={trendGranularity} rangeStart={trendRangeStart} />
-            ))}
-
-          {kind === "contributions" && (
-            <>
-              {hasGeoBreakdown && hasPeopleBreakdown && (
-                <div className="flex items-center gap-1 mb-4">
-                  <button
-                    onClick={() => setContribView("geo")}
-                    className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors touch-manipulation ${
-                      contribView === "geo"
-                        ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-300"
-                        : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
-                    }`}
-                  >
-                    By {levelLabel ?? "area"}
-                  </button>
-                  <button
-                    onClick={() => setContribView("people")}
-                    className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors touch-manipulation ${
-                      contribView === "people"
-                        ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-300"
-                        : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
-                    }`}
-                  >
-                    By contributor
-                  </button>
-                </div>
-              )}
-
-              {contribView === "geo" && hasGeoBreakdown ? (
-                <DonutChart
-                  rows={childUnits!
-                    .slice(0, 10)
-                    .map((c) => ({ key: c.geo_unit_id, label: c.display_name ?? "Unknown", value: c.contribution_count }))}
-                  valueLabel="logs"
-                  onSegmentClick={
-                    onDrill
-                      ? (key) => {
-                          const child = childUnits!.find((c) => c.geo_unit_id === key);
-                          if (child) {
-                            onDrill(child);
-                            onClose();
-                          }
-                        }
-                      : undefined
-                  }
-                />
+        <div
+          className="w-full sm:max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl shadow-elevation-3 max-h-[85vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-950">
+            <span className="text-sm font-semibold text-zinc-200">{titles[kind]}</span>
+            <button
+              onClick={onClose}
+              className="-mr-2 touch-manipulation inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+            >
+              Close
+            </button>
+          </div>
+          <div className="px-5 py-5">
+            {kind === "pts" &&
+              (trendLoading ? (
+                <div className="text-center text-zinc-600 text-sm py-8">Loading…</div>
               ) : (
-                <DonutChart
-                  rows={[...topUsers, ...topGroups]
-                    .sort((a, b) => b.contribution_count - a.contribution_count)
-                    .slice(0, 10)
-                    .map((r) => ({
-                      key: "user_id" in r ? r.user_id : r.group_id,
-                      label: "username" in r ? r.display_name ?? r.username ?? "Unknown" : r.name ?? "Unknown Group",
-                      value: r.contribution_count,
-                    }))}
-                  valueLabel="logs"
-                />
-              )}
-            </>
-          )}
+                <TrendChart buckets={trend ?? []} granularity={trendGranularity} rangeStart={trendRangeStart} />
+              ))}
 
-          {kind === "contributors" && (
-            <HorizontalBarList
-              rows={topUsers
-                .slice(0, 10)
-                .map((u) => ({ key: u.user_id, label: u.display_name ?? u.username ?? "Unknown", value: u.total_value }))}
-              valueLabel={unit}
-            />
-          )}
+            {kind === "contributions" && (
+              <>
+                {hasGeoBreakdown && hasPeopleBreakdown && (
+                  <div className="flex items-center gap-1 mb-4">
+                    <button
+                      onClick={() => setContribView("geo")}
+                      className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors touch-manipulation ${
+                        contribView === "geo"
+                          ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-300"
+                          : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
+                      }`}
+                    >
+                      By {levelLabel ?? "area"}
+                    </button>
+                    <button
+                      onClick={() => setContribView("people")}
+                      className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors touch-manipulation ${
+                        contribView === "people"
+                          ? "bg-emerald-900/40 border-emerald-700/60 text-emerald-300"
+                          : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
+                      }`}
+                    >
+                      By contributor
+                    </button>
+                  </div>
+                )}
 
-          {kind === "groups" && (
-            <HorizontalBarList
-              rows={topGroups
-                .slice(0, 10)
-                .map((g) => ({ key: g.group_id, label: g.name ?? "Unknown Group", value: g.total_value }))}
-              valueLabel={unit}
-            />
-          )}
+                {contribView === "geo" && hasGeoBreakdown ? (
+                  <DonutChart
+                    rows={childUnits!
+                      .slice(0, 10)
+                      .map((c) => ({ key: c.geo_unit_id, label: c.display_name ?? "Unknown", value: c.contribution_count }))}
+                    valueLabel="logs"
+                    onSegmentClick={
+                      onDrill
+                        ? (key) => {
+                            const child = childUnits!.find((c) => c.geo_unit_id === key);
+                            if (child) {
+                              onDrill(child);
+                              onClose();
+                            }
+                          }
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <DonutChart
+                    rows={[...topUsers, ...topGroups]
+                      .sort((a, b) => b.contribution_count - a.contribution_count)
+                      .slice(0, 10)
+                      .map((r) => ({
+                        key: "user_id" in r ? r.user_id : r.group_id,
+                        label: "username" in r ? r.display_name ?? r.username ?? "Unknown" : r.name ?? "Unknown Group",
+                        value: r.contribution_count,
+                      }))}
+                    valueLabel="logs"
+                  />
+                )}
+              </>
+            )}
+
+            {kind === "contributors" && (
+              <HorizontalBarList
+                rows={topUsers
+                  .slice(0, 10)
+                  .map((u) => ({ key: u.user_id, label: u.display_name ?? u.username ?? "Unknown", value: u.total_value }))}
+                valueLabel={unit}
+              />
+            )}
+
+            {kind === "groups" && (
+              <HorizontalBarList
+                rows={topGroups
+                  .slice(0, 10)
+                  .map((g) => ({ key: g.group_id, label: g.name ?? "Unknown Group", value: g.total_value }))}
+                valueLabel={unit}
+              />
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </BodyPortal>
   );
 }

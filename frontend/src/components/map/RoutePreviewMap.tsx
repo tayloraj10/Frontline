@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import IconButton from "@/components/ui/IconButton";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -493,38 +494,40 @@ export default function RoutePreviewMap({
         </button>
       )}
       {expanded && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 gap-3">
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="absolute top-4 right-4 text-white text-2xl leading-none hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
-            aria-label="Close"
-          >
-            ×
-          </button>
-          <div className="w-full max-w-2xl">
-            <RouteMap
-              coordinates={coordinates ?? []}
-              bufferCoordinates={bufferCoordinates}
-              point={point}
-              pointRadiusMeters={pointRadiusMeters}
-              activeMapStyle={activeMapStyle}
-              onStyleChange={setActiveMapStyle}
-              interactive
-              heightClassName="h-[70vh]"
-              groupLogoUrl={groupLogoUrl}
-              cohostLogoUrls={cohostLogoUrls}
-              isEvent={isEvent}
-              showBuffer={showBuffer}
-              onToggleBuffer={() => setShowBuffer((v) => !v)}
-              logoOffset={logoOffset}
-              onLogoOffsetChange={setLogoOffset}
-              photos={photos}
-              onPhotoSelect={onPhotoSelect}
-            />
+        <BodyPortal>
+          <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center p-4 gap-3">
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="absolute top-4 right-4 text-white text-2xl leading-none hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="w-full max-w-2xl">
+              <RouteMap
+                coordinates={coordinates ?? []}
+                bufferCoordinates={bufferCoordinates}
+                point={point}
+                pointRadiusMeters={pointRadiusMeters}
+                activeMapStyle={activeMapStyle}
+                onStyleChange={setActiveMapStyle}
+                interactive
+                heightClassName="h-[70vh]"
+                groupLogoUrl={groupLogoUrl}
+                cohostLogoUrls={cohostLogoUrls}
+                isEvent={isEvent}
+                showBuffer={showBuffer}
+                onToggleBuffer={() => setShowBuffer((v) => !v)}
+                logoOffset={logoOffset}
+                onLogoOffsetChange={setLogoOffset}
+                photos={photos}
+                onPhotoSelect={onPhotoSelect}
+              />
+            </div>
+            <p className="text-xs text-zinc-400">Screenshot this view to share on social media</p>
           </div>
-          <p className="text-xs text-zinc-400">Screenshot this view to share on social media</p>
-        </div>
+        </BodyPortal>
       )}
     </div>
   );

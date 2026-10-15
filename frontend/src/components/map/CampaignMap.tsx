@@ -19,6 +19,7 @@ import { saveMapPosition } from "@/lib/mapPosition";
 import IconButton from "@/components/ui/IconButton";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -1431,30 +1432,32 @@ function TerritoryPanel({
       </div>
     </div>
     {showPointsInfo && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
-        onClick={() => setShowPointsInfo(false)}
-      >
+      <BodyPortal>
         <div
-          className="w-full max-w-xs rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-white/5 p-5 shadow-elevation-4"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
+          onClick={() => setShowPointsInfo(false)}
         >
-          <h2 className="text-base font-bold text-zinc-100">What are points?</h2>
-          <p className="mt-2 text-sm text-zinc-400">Points are how we rank cleanups. Bigger hauls earn more.</p>
-          <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">
-            <li className="flex justify-between"><span>Small bag</span><span className="tabular-nums"><SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> pt{pointValues.small_bag_value !== 1 ? "s" : ""}</span></li>
-            <li className="flex justify-between"><span>Large bag</span><span className="tabular-nums"><SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> pts</span></li>
-            <li className="flex justify-between"><span>Per pound</span><span className="tabular-nums"><SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> pts</span></li>
-          </ul>
-          <button
-            type="button"
-            onClick={() => setShowPointsInfo(false)}
-            className="mt-5 w-full min-h-11 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,transform] duration-150 touch-manipulation"
+          <div
+            className="w-full max-w-xs rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-white/5 p-5 shadow-elevation-4"
+            onClick={(e) => e.stopPropagation()}
           >
-            Got it
-          </button>
+            <h2 className="text-base font-bold text-zinc-100">What are points?</h2>
+            <p className="mt-2 text-sm text-zinc-400">Points are how we rank cleanups. Bigger hauls earn more.</p>
+            <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">
+              <li className="flex justify-between"><span>Small bag</span><span className="tabular-nums"><SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> pt{pointValues.small_bag_value !== 1 ? "s" : ""}</span></li>
+              <li className="flex justify-between"><span>Large bag</span><span className="tabular-nums"><SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> pts</span></li>
+              <li className="flex justify-between"><span>Per pound</span><span className="tabular-nums"><SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> pts</span></li>
+            </ul>
+            <button
+              type="button"
+              onClick={() => setShowPointsInfo(false)}
+              className="mt-5 w-full min-h-11 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              Got it
+            </button>
+          </div>
         </div>
-      </div>
+      </BodyPortal>
     )}
     </>
   );
@@ -6250,299 +6253,305 @@ export default function CampaignMap({
       )}
 
       {selectedPhoto && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          onClick={() => setSelectedPhoto(null)}
-        >
-          <div className="flex flex-col items-center gap-3 max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="relative w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={selectedPhoto.url}
-                alt="Contribution photo"
-                className="w-full max-h-[74vh] object-contain rounded-xl shadow-2xl"
-              />
+        <BodyPortal>
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <div className="flex flex-col items-center gap-3 max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
+              <div className="relative w-full">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selectedPhoto.url}
+                  alt="Contribution photo"
+                  className="w-full max-h-[74vh] object-contain rounded-xl shadow-2xl"
+                />
+                <IconButton
+                  onClick={() => setSelectedPhoto(null)}
+                  className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 active:bg-black/80 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </IconButton>
+                {selectedPhoto.gallery && selectedPhoto.gallery.length > 1 && selectedPhoto.galleryIndex != null && (
+                  <>
+                    <IconButton
+                      onClick={() => {
+                        const gallery = selectedPhoto.gallery!;
+                        const i = (selectedPhoto.galleryIndex! - 1 + gallery.length) % gallery.length;
+                        setSelectedPhoto({
+                          url: gallery[i].url,
+                          contentType: "cleanup_log_photo",
+                          contentId: gallery[i].contentId,
+                          gallery,
+                          galleryIndex: i,
+                        });
+                      }}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+                      aria-label="Previous photo"
+                    >
+                      &#8249;
+                    </IconButton>
+                    <IconButton
+                      onClick={() => {
+                        const gallery = selectedPhoto.gallery!;
+                        const i = (selectedPhoto.galleryIndex! + 1) % gallery.length;
+                        setSelectedPhoto({
+                          url: gallery[i].url,
+                          contentType: "cleanup_log_photo",
+                          contentId: gallery[i].contentId,
+                          gallery,
+                          galleryIndex: i,
+                        });
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+                      aria-label="Next photo"
+                    >
+                      &#8250;
+                    </IconButton>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-zinc-300 text-xs tabular-nums bg-black/50 px-2 py-0.5 rounded-full">
+                      {selectedPhoto.galleryIndex + 1} / {selectedPhoto.gallery.length}
+                    </div>
+                  </>
+                )}
+              </div>
+              {selectedPhoto.contentType && selectedPhoto.contentId && (
+                <ReportPhotoButton
+                  contentType={selectedPhoto.contentType}
+                  contentId={selectedPhoto.contentId}
+                  photoUrl={selectedPhoto.url}
+                  userId={userId ?? null}
+                  onHidden={() => setSelectedPhoto(null)}
+                />
+              )}
+            </div>
+          </div>
+        </BodyPortal>
+      )}
+
+      {selectedBusiness && (
+        <BodyPortal>
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setSelectedBusiness(null)}
+          >
+            <div
+              className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-[20px] p-5 pr-14 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <IconButton
-                onClick={() => setSelectedPhoto(null)}
-                className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 active:bg-black/80 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                onClick={() => setSelectedBusiness(null)}
+                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
                 aria-label="Close"
               >
                 ×
               </IconButton>
-              {selectedPhoto.gallery && selectedPhoto.gallery.length > 1 && selectedPhoto.galleryIndex != null && (
-                <>
-                  <IconButton
-                    onClick={() => {
-                      const gallery = selectedPhoto.gallery!;
-                      const i = (selectedPhoto.galleryIndex! - 1 + gallery.length) % gallery.length;
-                      setSelectedPhoto({
-                        url: gallery[i].url,
-                        contentType: "cleanup_log_photo",
-                        contentId: gallery[i].contentId,
-                        gallery,
-                        galleryIndex: i,
-                      });
-                    }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
-                    aria-label="Previous photo"
-                  >
-                    &#8249;
-                  </IconButton>
-                  <IconButton
-                    onClick={() => {
-                      const gallery = selectedPhoto.gallery!;
-                      const i = (selectedPhoto.galleryIndex! + 1) % gallery.length;
-                      setSelectedPhoto({
-                        url: gallery[i].url,
-                        contentType: "cleanup_log_photo",
-                        contentId: gallery[i].contentId,
-                        gallery,
-                        galleryIndex: i,
-                      });
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
-                    aria-label="Next photo"
-                  >
-                    &#8250;
-                  </IconButton>
-                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-zinc-300 text-xs tabular-nums bg-black/50 px-2 py-0.5 rounded-full">
-                    {selectedPhoto.galleryIndex + 1} / {selectedPhoto.gallery.length}
+              <div className="flex items-center gap-3 mb-3">
+                {selectedBusiness.business.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedBusiness.business.logo_url}
+                    alt={selectedBusiness.business.name}
+                    className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center text-xl">
+                    🏪
                   </div>
-                </>
+                )}
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                    {selectedBusiness.business.name}
+                    {selectedBusiness.business.adults_only && <AdultsOnlyBadge />}
+                  </h3>
+                  {selectedBusiness.location.label && (
+                    <p className="text-xs text-zinc-500">{selectedBusiness.location.label}</p>
+                  )}
+                </div>
+              </div>
+              {selectedBusiness.business.adults_only && (
+                <p className="text-xs text-red-400 mb-3">
+                  🔞 This business can only serve customers who are 21 or older. Please bring valid ID.
+                </p>
               )}
-            </div>
-            {selectedPhoto.contentType && selectedPhoto.contentId && (
-              <ReportPhotoButton
-                contentType={selectedPhoto.contentType}
-                contentId={selectedPhoto.contentId}
-                photoUrl={selectedPhoto.url}
-                userId={userId ?? null}
-                onHidden={() => setSelectedPhoto(null)}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {selectedBusiness && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          onClick={() => setSelectedBusiness(null)}
-        >
-          <div
-            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-[20px] p-5 pr-14 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <IconButton
-              onClick={() => setSelectedBusiness(null)}
-              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
-              aria-label="Close"
-            >
-              ×
-            </IconButton>
-            <div className="flex items-center gap-3 mb-3">
-              {selectedBusiness.business.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={selectedBusiness.business.logo_url}
-                  alt={selectedBusiness.business.name}
-                  className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center text-xl">
-                  🏪
+              {selectedBusiness.business.description && (
+                <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.business.description}</p>
+              )}
+              {selectedBusiness.location.affordableOfferTitle ? (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/70 shadow-[0_0_10px_rgba(251,191,36,0.35)] flex items-center gap-2">
+                  <span className="text-base leading-none animate-pulse">🎁</span>
+                  <p className="text-sm text-amber-100">
+                    <span className="font-semibold">You have enough points!</span> Redeem {selectedBusiness.location.affordableOfferTitle} now.
+                  </p>
+                </div>
+              ) : selectedBusiness.location.activeOfferTitle && (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50 flex items-center gap-2">
+                  <span className="text-base leading-none">🎁</span>
+                  <p className="text-sm text-amber-200">
+                    <span className="font-semibold">Active offer:</span> {selectedBusiness.location.activeOfferTitle}
+                  </p>
                 </div>
               )}
-              <div className="min-w-0">
-                <h3 className="text-lg font-semibold text-white flex items-center gap-1.5 flex-wrap">
-                  {selectedBusiness.business.name}
-                  {selectedBusiness.business.adults_only && <AdultsOnlyBadge />}
-                </h3>
-                {selectedBusiness.location.label && (
-                  <p className="text-xs text-zinc-500">{selectedBusiness.location.label}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedBusiness.business.website_url && (
+                  <a
+                    href={selectedBusiness.business.website_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
+                  >
+                    <span aria-hidden="true">🌐</span>
+                    Website
+                  </a>
                 )}
-              </div>
-            </div>
-            {selectedBusiness.business.adults_only && (
-              <p className="text-xs text-red-400 mb-3">
-                🔞 This business can only serve customers who are 21 or older. Please bring valid ID.
-              </p>
-            )}
-            {selectedBusiness.business.description && (
-              <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.business.description}</p>
-            )}
-            {selectedBusiness.location.affordableOfferTitle ? (
-              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/70 shadow-[0_0_10px_rgba(251,191,36,0.35)] flex items-center gap-2">
-                <span className="text-base leading-none animate-pulse">🎁</span>
-                <p className="text-sm text-amber-100">
-                  <span className="font-semibold">You have enough points!</span> Redeem {selectedBusiness.location.affordableOfferTitle} now.
-                </p>
-              </div>
-            ) : selectedBusiness.location.activeOfferTitle && (
-              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50 flex items-center gap-2">
-                <span className="text-base leading-none">🎁</span>
-                <p className="text-sm text-amber-200">
-                  <span className="font-semibold">Active offer:</span> {selectedBusiness.location.activeOfferTitle}
-                </p>
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              {selectedBusiness.business.website_url && (
+                {selectedBusiness.location.google_maps_url && (
+                  <a
+                    href={selectedBusiness.location.google_maps_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
+                  >
+                    <span aria-hidden="true">📍</span>
+                    Google Maps
+                  </a>
+                )}
                 <a
-                  href={selectedBusiness.business.website_url}
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.location.lat},${selectedBusiness.location.lng}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
                 >
-                  <span aria-hidden="true">🌐</span>
-                  Website
+                  <span aria-hidden="true">🧭</span>
+                  Directions
                 </a>
-              )}
-              {selectedBusiness.location.google_maps_url && (
-                <a
-                  href={selectedBusiness.location.google_maps_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
-                >
-                  <span aria-hidden="true">📍</span>
-                  Google Maps
-                </a>
-              )}
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.location.lat},${selectedBusiness.location.lng}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
+              </div>
+              <Link
+                href={`/partners/${selectedBusiness.business.slug}`}
+                className="mt-4 flex items-center justify-center gap-1.5 w-full min-h-12 px-4 rounded-full bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold transition-[background-color,transform] duration-150 touch-manipulation"
               >
-                <span aria-hidden="true">🧭</span>
-                Directions
-              </a>
+                View offer & redeem
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
             </div>
-            <Link
-              href={`/partners/${selectedBusiness.business.slug}`}
-              className="mt-4 flex items-center justify-center gap-1.5 w-full min-h-12 px-4 rounded-full bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              View offer & redeem
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
           </div>
-        </div>
+        </BodyPortal>
       )}
 
       {selectedCleanupEvent && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          onClick={() => setSelectedCleanupEvent(null)}
-        >
+        <BodyPortal>
           <div
-            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setSelectedCleanupEvent(null)}
           >
-            <IconButton
-              onClick={() => setSelectedCleanupEvent(null)}
-              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
-              aria-label="Close"
+            <div
+              className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             >
-              <span className="-translate-y-[2px]">×</span>
-            </IconButton>
-            <div className="flex items-center gap-3 mb-3">
-              {(selectedCleanupEvent.group_logo_url || selectedCleanupEvent.cohost_groups?.some((g) => g.group_logo_url)) && (
-                <div className="flex items-center -space-x-2 shrink-0">
-                  {selectedCleanupEvent.group_logo_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selectedCleanupEvent.group_logo_url}
-                      alt={selectedCleanupEvent.group_name}
-                      className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
-                    />
-                  )}
-                  {selectedCleanupEvent.cohost_groups?.map((g) => (
-                    g.group_logo_url && (
+              <IconButton
+                onClick={() => setSelectedCleanupEvent(null)}
+                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                aria-label="Close"
+              >
+                <span className="-translate-y-[2px]">×</span>
+              </IconButton>
+              <div className="flex items-center gap-3 mb-3">
+                {(selectedCleanupEvent.group_logo_url || selectedCleanupEvent.cohost_groups?.some((g) => g.group_logo_url)) && (
+                  <div className="flex items-center -space-x-2 shrink-0">
+                    {selectedCleanupEvent.group_logo_url && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        key={g.group_id}
-                        src={g.group_logo_url}
-                        alt={g.group_name}
+                        src={selectedCleanupEvent.group_logo_url}
+                        alt={selectedCleanupEvent.group_name}
                         className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
                       />
-                    )
-                  ))}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-white">{selectedCleanupEvent.title}</h3>
-                </div>
-                <Link
-                  href={`/groups/${selectedCleanupEvent.group_slug}`}
-                  className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
-                >
-                  {selectedCleanupEvent.group_name}
-                </Link>
-                {selectedCleanupEvent.cohost_groups && selectedCleanupEvent.cohost_groups.length > 0 && (
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    in partnership with{" "}
-                    {selectedCleanupEvent.cohost_groups.map((g, i) => (
-                      <span key={g.group_id}>
-                        {i > 0 && ", "}
-                        <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
-                          {g.group_name}
-                        </Link>
-                      </span>
+                    )}
+                    {selectedCleanupEvent.cohost_groups?.map((g) => (
+                      g.group_logo_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={g.group_id}
+                          src={g.group_logo_url}
+                          alt={g.group_name}
+                          className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
+                        />
+                      )
                     ))}
-                  </p>
+                  </div>
                 )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-white">{selectedCleanupEvent.title}</h3>
+                  </div>
+                  <Link
+                    href={`/groups/${selectedCleanupEvent.group_slug}`}
+                    className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
+                  >
+                    {selectedCleanupEvent.group_name}
+                  </Link>
+                  {selectedCleanupEvent.cohost_groups && selectedCleanupEvent.cohost_groups.length > 0 && (
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      in partnership with{" "}
+                      {selectedCleanupEvent.cohost_groups.map((g, i) => (
+                        <span key={g.group_id}>
+                          {i > 0 && ", "}
+                          <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
+                            {g.group_name}
+                          </Link>
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-            {selectedCleanupEvent.is_past && (
-              <p className="text-sm text-zinc-400 mb-1.5 flex items-center gap-1.5">
-                <span>🕓</span> This event has ended. Check-in is closed.
-              </p>
-            )}
-            {selectedCleanupEvent.scheduled_start && (
-              <p className="text-sm text-zinc-300 mb-1.5">
-                {new Date(selectedCleanupEvent.scheduled_start).toLocaleString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-                {selectedCleanupEvent.scheduled_end &&
-                  ` – ${new Date(selectedCleanupEvent.scheduled_end).toLocaleString(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}`}
-              </p>
-            )}
-            {selectedCleanupEvent.description && (
-              <p className="text-sm text-zinc-300 mb-3">{selectedCleanupEvent.description}</p>
-            )}
-            {!!(
-              (selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)
-            ) && (
-                <p className="text-sm text-emerald-400 mb-3 flex items-center gap-1.5">
-                  <span>🗑️</span>
-                  {(selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)} bags logged so far
+              {selectedCleanupEvent.is_past && (
+                <p className="text-sm text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                  <span>🕓</span> This event has ended. Check-in is closed.
                 </p>
               )}
-            <Link
-              href={`/cleanup-events/${selectedCleanupEvent.id}`}
-              className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${selectedCleanupEvent.is_past
-                  ? "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] text-zinc-200"
-                  : "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950"
-                }`}
-            >
-              {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
+              {selectedCleanupEvent.scheduled_start && (
+                <p className="text-sm text-zinc-300 mb-1.5">
+                  {new Date(selectedCleanupEvent.scheduled_start).toLocaleString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                  {selectedCleanupEvent.scheduled_end &&
+                    ` – ${new Date(selectedCleanupEvent.scheduled_end).toLocaleString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}`}
+                </p>
+              )}
+              {selectedCleanupEvent.description && (
+                <p className="text-sm text-zinc-300 mb-3">{selectedCleanupEvent.description}</p>
+              )}
+              {!!(
+                (selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)
+              ) && (
+                  <p className="text-sm text-emerald-400 mb-3 flex items-center gap-1.5">
+                    <span>🗑️</span>
+                    {(selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)} bags logged so far
+                  </p>
+                )}
+              <Link
+                href={`/cleanup-events/${selectedCleanupEvent.id}`}
+                className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${selectedCleanupEvent.is_past
+                    ? "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] text-zinc-200"
+                    : "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950"
+                  }`}
+              >
+                {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
           </div>
-        </div>
+        </BodyPortal>
       )}
 
       {selectedEvent && (() => {
@@ -6560,54 +6569,56 @@ export default function CampaignMap({
         const badgeBgCls = isTimedEvent ? "bg-amber-950/60 border-amber-700/50" : "bg-red-950/60 border-red-700/50";
         const infoTextCls = isTimedEvent ? "text-amber-300" : "text-red-300";
         return (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-            onClick={() => setSelectedEvent(null)}
-          >
+          <BodyPortal>
             <div
-              className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
-              onClick={(e) => e.stopPropagation()}
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+              onClick={() => setSelectedEvent(null)}
             >
-              <IconButton
-                onClick={() => setSelectedEvent(null)}
-                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
-                aria-label="Close"
+              <div
+                className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
+                onClick={(e) => e.stopPropagation()}
               >
-                ×
-              </IconButton>
-              <div className="flex items-center gap-3 mb-3">
-                {selectedEvent.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={selectedEvent.image_url}
-                    alt={selectedEvent.title}
-                    className={`w-12 h-12 rounded-full object-cover border ${badgeImgBorderCls}`}
-                  />
-                ) : (
-                  <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-xl ${badgeBgCls}`}>
-                    {badgeEmoji}
-                  </div>
+                <IconButton
+                  onClick={() => setSelectedEvent(null)}
+                  className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </IconButton>
+                <div className="flex items-center gap-3 mb-3">
+                  {selectedEvent.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={selectedEvent.image_url}
+                      alt={selectedEvent.title}
+                      className={`w-12 h-12 rounded-full object-cover border ${badgeImgBorderCls}`}
+                    />
+                  ) : (
+                    <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-xl ${badgeBgCls}`}>
+                      {badgeEmoji}
+                    </div>
+                  )}
+                  <h3 className="text-lg font-semibold text-white">{selectedEvent.title}</h3>
+                </div>
+                {selectedEvent.description && (
+                  <p className="text-sm text-zinc-300 mb-3">{selectedEvent.description}</p>
                 )}
-                <h3 className="text-lg font-semibold text-white">{selectedEvent.title}</h3>
-              </div>
-              {selectedEvent.description && (
-                <p className="text-sm text-zinc-300 mb-3">{selectedEvent.description}</p>
-              )}
-              <div className={`flex flex-col gap-1.5 text-sm ${infoTextCls}`}>
-                {typeof multiplier === "number" && (
-                  <p>{badgeEmoji} {multiplier}× score multiplier</p>
-                )}
-                <p>
-                  {selectedEvent.ends_at
-                    ? `Ends ${new Date(selectedEvent.ends_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
-                    : "No end date"}
-                </p>
-                {areaCount > 0 && (
-                  <p>Applies to {areaCount} area{areaCount > 1 ? "s" : ""}</p>
-                )}
+                <div className={`flex flex-col gap-1.5 text-sm ${infoTextCls}`}>
+                  {typeof multiplier === "number" && (
+                    <p>{badgeEmoji} {multiplier}× score multiplier</p>
+                  )}
+                  <p>
+                    {selectedEvent.ends_at
+                      ? `Ends ${new Date(selectedEvent.ends_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                      : "No end date"}
+                  </p>
+                  {areaCount > 0 && (
+                    <p>Applies to {areaCount} area{areaCount > 1 ? "s" : ""}</p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          </BodyPortal>
         );
       })()}
     </div>

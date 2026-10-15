@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 export type RedemptionProof = {
   redemptionId: string;
@@ -73,11 +74,52 @@ export default function RedemptionConfirmationModal({
 
   if (proof.usedAt) {
     return (
+      <BodyPortal>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 8 }}
+            transition={{ type: "spring", stiffness: 400, damping: 32 }}
+            className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center space-y-4 shadow-elevation-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 mx-auto rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+              <svg className="w-7 h-7 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Already used</p>
+              <h2 className="text-lg font-bold text-zinc-100 mt-1">{proof.offerTitle}</h2>
+              <p className="text-sm text-zinc-500">{proof.businessName}</p>
+            </div>
+            <p className="text-xs text-zinc-500">Honored {formatTimestamp(proof.usedAt)}</p>
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
+            >
+              Close
+            </button>
+          </motion.div>
+        </motion.div>
+      </BodyPortal>
+    );
+  }
+
+  return (
+    <BodyPortal>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
         onClick={onClose}
       >
         <motion.div
@@ -88,90 +130,53 @@ export default function RedemptionConfirmationModal({
           className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center space-y-4 shadow-elevation-4"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-14 h-14 mx-auto rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-            <svg className="w-7 h-7 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          <div className="w-14 h-14 mx-auto rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center">
+            <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
+
           <div>
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Already used</p>
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Redeemed {formatRelative(proof.redeemedAt)}</p>
             <h2 className="text-lg font-bold text-zinc-100 mt-1">{proof.offerTitle}</h2>
             <p className="text-sm text-zinc-500">{proof.businessName}</p>
           </div>
-          <p className="text-xs text-zinc-500">Honored {formatTimestamp(proof.usedAt)}</p>
+
+          {proof.code && (
+            <button
+              onClick={handleCopy}
+              className="w-full py-3 rounded-xl bg-zinc-950 border border-zinc-700 shadow-elevation-1 transition-[border-color,transform] duration-150 hover:border-zinc-500 active:scale-[0.97] touch-manipulation"
+            >
+              <span className="block text-xl font-mono font-bold tracking-wider text-zinc-100">{proof.code}</span>
+              <span className="block text-[10px] text-zinc-500 mt-1">{copied ? "Copied!" : "Tap to copy"}</span>
+            </button>
+          )}
+
+          <div className="text-xs text-zinc-500 space-y-0.5">
+            {proof.pointsSpent > 0 && <p>{proof.pointsSpent} points spent</p>}
+            {formatTimestamp(proof.redeemedAt) && <p>Redeemed {formatTimestamp(proof.redeemedAt)}</p>}
+          </div>
+
+          <div className="border-t border-zinc-800 pt-4 space-y-2">
+            <p className="text-[11px] text-zinc-600">For the merchant: tap below once this offer has been honored.</p>
+            <button
+              onClick={handleMarkUsed}
+              disabled={marking}
+              className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:active:scale-100 text-zinc-200 text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
+            >
+              {marking ? "Marking…" : "Mark as used"}
+            </button>
+            {markError && <p className="text-red-400 text-xs">{markError}</p>}
+          </div>
+
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
+            className="w-full px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
           >
-            Close
+            Done
           </button>
         </motion.div>
       </motion.div>
-    );
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.94, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.94, y: 8 }}
-        transition={{ type: "spring", stiffness: 400, damping: 32 }}
-        className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center space-y-4 shadow-elevation-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-14 h-14 mx-auto rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center">
-          <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Redeemed {formatRelative(proof.redeemedAt)}</p>
-          <h2 className="text-lg font-bold text-zinc-100 mt-1">{proof.offerTitle}</h2>
-          <p className="text-sm text-zinc-500">{proof.businessName}</p>
-        </div>
-
-        {proof.code && (
-          <button
-            onClick={handleCopy}
-            className="w-full py-3 rounded-xl bg-zinc-950 border border-zinc-700 shadow-elevation-1 transition-[border-color,transform] duration-150 hover:border-zinc-500 active:scale-[0.97] touch-manipulation"
-          >
-            <span className="block text-xl font-mono font-bold tracking-wider text-zinc-100">{proof.code}</span>
-            <span className="block text-[10px] text-zinc-500 mt-1">{copied ? "Copied!" : "Tap to copy"}</span>
-          </button>
-        )}
-
-        <div className="text-xs text-zinc-500 space-y-0.5">
-          {proof.pointsSpent > 0 && <p>{proof.pointsSpent} points spent</p>}
-          {formatTimestamp(proof.redeemedAt) && <p>Redeemed {formatTimestamp(proof.redeemedAt)}</p>}
-        </div>
-
-        <div className="border-t border-zinc-800 pt-4 space-y-2">
-          <p className="text-[11px] text-zinc-600">For the merchant: tap below once this offer has been honored.</p>
-          <button
-            onClick={handleMarkUsed}
-            disabled={marking}
-            className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:active:scale-100 text-zinc-200 text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
-          >
-            {marking ? "Marking…" : "Mark as used"}
-          </button>
-          {markError && <p className="text-red-400 text-xs">{markError}</p>}
-        </div>
-
-        <button
-          onClick={onClose}
-          className="w-full px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-sm rounded-lg font-medium shadow-elevation-1 transition-[background-color,transform] duration-150 active:scale-[0.97] touch-manipulation"
-        >
-          Done
-        </button>
-      </motion.div>
-    </motion.div>
+    </BodyPortal>
   );
 }

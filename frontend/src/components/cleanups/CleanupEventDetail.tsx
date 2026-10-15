@@ -40,6 +40,7 @@ import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -1916,117 +1917,119 @@ function OrganizerLogButton({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setOpen(false)}>
-      <div
-        className="relative max-w-xs w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h4 className="text-sm font-semibold text-zinc-100 mb-3">Log contribution for {attendeeName}</h4>
-        <div className="grid grid-cols-3 gap-x-3 gap-y-0 mb-3">
-          <label className="text-[11px] text-zinc-600">Small bags</label>
-          <label className="text-[11px] text-zinc-600">Large bags</label>
-          <label className="text-[11px] text-zinc-600">Pounds</label>
-          <p className="text-[11px] text-zinc-700 mb-1">(grocery bag)</p>
-          <p className="text-[11px] text-zinc-700 mb-1">(kitchen trash bag)</p>
-          <p className="text-[11px] text-zinc-700 mb-1">(if weighed)</p>
-          <input
-            type="number"
-            min={0}
-            value={smallBags}
-            onChange={(e) => {
-              const v = e.target.value.replace(/^0+(?=\d)/, "");
-              setSmallBags(v);
-              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
-            }}
-            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
-          />
-          <input
-            type="number"
-            min={0}
-            value={largeBags}
-            onChange={(e) => {
-              const v = e.target.value.replace(/^0+(?=\d)/, "");
-              setLargeBags(v);
-              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
-            }}
-            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
-          />
-          <input
-            type="number"
-            min={0}
-            value={pounds}
-            onChange={(e) => {
-              const v = e.target.value.replace(/^0+(?=\d)/, "");
-              setPounds(v);
-              if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
-            }}
-            className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
-          />
-        </div>
-        {scoringMismatch && (
-          <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 rounded-lg px-2.5 py-2 mb-3">
-            ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is
-            selected below. This will score 0 points unless you switch it.
-          </p>
-        )}
-        <div className="rounded-[20px] bg-zinc-900 p-3 space-y-2 mb-3 shadow-elevation-1">
-          <p className="text-[11px] text-zinc-600">
-            Bags and pounds are two ways of estimating the same haul. Pick which one determines points.
-            Both are still saved for the event&apos;s record.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
+    <BodyPortal>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setOpen(false)}>
+        <div
+          className="relative max-w-xs w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h4 className="text-sm font-semibold text-zinc-100 mb-3">Log contribution for {attendeeName}</h4>
+          <div className="grid grid-cols-3 gap-x-3 gap-y-0 mb-3">
+            <label className="text-[11px] text-zinc-600">Small bags</label>
+            <label className="text-[11px] text-zinc-600">Large bags</label>
+            <label className="text-[11px] text-zinc-600">Pounds</label>
+            <p className="text-[11px] text-zinc-700 mb-1">(grocery bag)</p>
+            <p className="text-[11px] text-zinc-700 mb-1">(kitchen trash bag)</p>
+            <p className="text-[11px] text-zinc-700 mb-1">(if weighed)</p>
+            <input
+              type="number"
+              min={0}
+              value={smallBags}
+              onChange={(e) => {
+                const v = e.target.value.replace(/^0+(?=\d)/, "");
+                setSmallBags(v);
+                if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+              }}
+              className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
+            />
+            <input
+              type="number"
+              min={0}
+              value={largeBags}
+              onChange={(e) => {
+                const v = e.target.value.replace(/^0+(?=\d)/, "");
+                setLargeBags(v);
+                if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+              }}
+              className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
+            />
+            <input
+              type="number"
+              min={0}
+              value={pounds}
+              onChange={(e) => {
+                const v = e.target.value.replace(/^0+(?=\d)/, "");
+                setPounds(v);
+                if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
+              }}
+              className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
+            />
+          </div>
+          {scoringMismatch && (
+            <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 rounded-lg px-2.5 py-2 mb-3">
+              ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is
+              selected below. This will score 0 points unless you switch it.
+            </p>
+          )}
+          <div className="rounded-[20px] bg-zinc-900 p-3 space-y-2 mb-3 shadow-elevation-1">
+            <p className="text-[11px] text-zinc-600">
+              Bags and pounds are two ways of estimating the same haul. Pick which one determines points.
+              Both are still saved for the event&apos;s record.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setScoringMethod("bags")}
+                className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+                  scoringMethod === "bags"
+                    ? "border-emerald-600 bg-emerald-900/20"
+                    : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
+                }`}
+              >
+                <p className="text-xs font-semibold text-zinc-200">By bags</p>
+                <p className="text-[10px] text-zinc-500">
+                  {smallBags || 0}×<SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> + {largeBags || 0}×<SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} />
+                </p>
+                <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                  {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "- pts"}
+                </p>
+              </button>
+              <button
+                onClick={() => setScoringMethod("pounds")}
+                className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+                  scoringMethod === "pounds"
+                    ? "border-emerald-600 bg-emerald-900/20"
+                    : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
+                }`}
+              >
+                <p className="text-xs font-semibold text-zinc-200">By pounds</p>
+                <p className="text-[10px] text-zinc-500">
+                  {pounds || 0}×<SettingValue value={pointValues.pound_value} loading={pointValuesLoading} />
+                </p>
+                <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                  {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "- pts"}
+                </p>
+              </button>
+            </div>
+          </div>
+          {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setScoringMethod("bags")}
-              className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
-                scoringMethod === "bags"
-                  ? "border-emerald-600 bg-emerald-900/20"
-                  : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
-              }`}
+              onClick={submit}
+              disabled={loading || hasNegative || scoringMismatch}
+              className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
             >
-              <p className="text-xs font-semibold text-zinc-200">By bags</p>
-              <p className="text-[10px] text-zinc-500">
-                {smallBags || 0}×<SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> + {largeBags || 0}×<SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} />
-              </p>
-              <p className="text-sm font-bold text-emerald-400 mt-0.5">
-                {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "- pts"}
-              </p>
+              {loading ? "Logging…" : "Log contribution"}
             </button>
             <button
-              onClick={() => setScoringMethod("pounds")}
-              className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
-                scoringMethod === "pounds"
-                  ? "border-emerald-600 bg-emerald-900/20"
-                  : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
-              }`}
+              onClick={() => setOpen(false)}
+              className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
             >
-              <p className="text-xs font-semibold text-zinc-200">By pounds</p>
-              <p className="text-[10px] text-zinc-500">
-                {pounds || 0}×<SettingValue value={pointValues.pound_value} loading={pointValuesLoading} />
-              </p>
-              <p className="text-sm font-bold text-emerald-400 mt-0.5">
-                {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "- pts"}
-              </p>
+              Cancel
             </button>
           </div>
         </div>
-        {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={submit}
-            disabled={loading || hasNegative || scoringMismatch}
-            className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            {loading ? "Logging…" : "Log contribution"}
-          </button>
-          <button
-            onClick={() => setOpen(false)}
-            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-          >
-            Cancel
-          </button>
-        </div>
       </div>
-    </div>
+    </BodyPortal>
   );
 }
 
@@ -2149,83 +2152,85 @@ function SendAttendeeReminderButton({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={close}>
-      <div
-        className="relative max-w-md w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h4 className="text-sm font-semibold text-zinc-100">Send reminder to attendees</h4>
+    <BodyPortal>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={close}>
+        <div
+          className="relative max-w-md w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl space-y-3"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h4 className="text-sm font-semibold text-zinc-100">Send reminder to attendees</h4>
 
-        {result ? (
-          <>
-            {result.sent ? (
-              <p className="text-sm text-emerald-400">Sent to {result.recipient_count} attendee{result.recipient_count === 1 ? "" : "s"}.</p>
-            ) : (
-              <p className="text-sm text-amber-400">Not sent{result.reason ? `: ${result.reason}` : "."}</p>
-            )}
-            <button
-              onClick={close}
-              className="w-full inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-            >
-              Close
-            </button>
-          </>
-        ) : preview ? (
-          <>
-            <p className="text-xs text-zinc-500">
-              Preview: will send to {preview.recipient_count} attendee{preview.recipient_count === 1 ? "" : "s"} marked &ldquo;going&rdquo;.
-            </p>
-            <div className="rounded-lg border border-zinc-800 bg-white text-black p-3 max-h-64 overflow-y-auto text-sm">
-              <p className="font-semibold mb-2">{preview.subject}</p>
-              <div dangerouslySetInnerHTML={{ __html: preview.html }} />
-            </div>
-            {error && <p className="text-red-400 text-xs">{error}</p>}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={send}
-                disabled={loading || preview.recipient_count === 0}
-                className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                {loading ? "Sending…" : "Send"}
-              </button>
-              <button
-                onClick={() => setPreview(null)}
-                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
-              >
-                Back
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Optional custom note to include (e.g. meeting spot, what to bring)…"
-              maxLength={2000}
-              rows={4}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500"
-            />
-            {error && <p className="text-red-400 text-xs">{error}</p>}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadPreview}
-                disabled={loading}
-                className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                {loading ? "Loading…" : "Preview"}
-              </button>
+          {result ? (
+            <>
+              {result.sent ? (
+                <p className="text-sm text-emerald-400">Sent to {result.recipient_count} attendee{result.recipient_count === 1 ? "" : "s"}.</p>
+              ) : (
+                <p className="text-sm text-amber-400">Not sent{result.reason ? `: ${result.reason}` : "."}</p>
+              )}
               <button
                 onClick={close}
-                className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                className="w-full inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
-                Cancel
+                Close
               </button>
-            </div>
-          </>
-        )}
+            </>
+          ) : preview ? (
+            <>
+              <p className="text-xs text-zinc-500">
+                Preview: will send to {preview.recipient_count} attendee{preview.recipient_count === 1 ? "" : "s"} marked &ldquo;going&rdquo;.
+              </p>
+              <div className="rounded-lg border border-zinc-800 bg-white text-black p-3 max-h-64 overflow-y-auto text-sm">
+                <p className="font-semibold mb-2">{preview.subject}</p>
+                <div dangerouslySetInnerHTML={{ __html: preview.html }} />
+              </div>
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={send}
+                  disabled={loading || preview.recipient_count === 0}
+                  className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  {loading ? "Sending…" : "Send"}
+                </button>
+                <button
+                  onClick={() => setPreview(null)}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Back
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Optional custom note to include (e.g. meeting spot, what to bring)…"
+                maxLength={2000}
+                rows={4}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500"
+              />
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadPreview}
+                  disabled={loading}
+                  className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  {loading ? "Loading…" : "Preview"}
+                </button>
+                <button
+                  onClick={close}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </BodyPortal>
   );
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import BodyPortal from "@/components/ui/BodyPortal";
 import { useEffect, useRef, useState } from "react";
 import { Camera } from "@capacitor/camera";
 import type { MediaResult } from "@capacitor/camera";
@@ -91,35 +92,37 @@ export function CameraModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-4 p-4">
-      {error ? (
-        <>
-          <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
-          <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
-            Close
-          </button>
-        </>
-      ) : (
-        <>
-          <video ref={videoRef} playsInline muted className="w-full max-w-md rounded-lg bg-black" />
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              Cancel
+    <BodyPortal>
+      <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-4 p-4">
+        {error ? (
+          <>
+            <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
+            <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
+              Close
             </button>
-            <button
-              onClick={capture}
-              disabled={!ready}
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              📸 Capture
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+          </>
+        ) : (
+          <>
+            <video ref={videoRef} playsInline muted className="w-full max-w-md rounded-lg bg-black" />
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm hover:bg-zinc-800 active:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={capture}
+                disabled={!ready}
+                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                📸 Capture
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </BodyPortal>
   );
 }
 

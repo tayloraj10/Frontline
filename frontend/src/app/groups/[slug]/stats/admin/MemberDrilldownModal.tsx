@@ -5,6 +5,7 @@ import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
 import GroupTrendChart, { type TrendBucket } from "./GroupTrendChart";
 import { type StatsWindow, statsWindowParams } from "../statsWindow";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 interface ActivityRow {
   id: string;
@@ -84,62 +85,64 @@ export default function MemberDrilldownModal({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8" onClick={onClose}>
-      <div
-        className="w-full sm:max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl shadow-elevation-3 max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between gap-2 sticky top-0 bg-zinc-950">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Avatar avatarUrl={avatarUrl} name={displayName} username={username} size="sm" />
-            <span className="text-sm font-semibold text-zinc-200 truncate">{displayName}</span>
+    <BodyPortal>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4 py-8" onClick={onClose}>
+        <div
+          className="w-full sm:max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl shadow-elevation-3 max-h-[85vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between gap-2 sticky top-0 bg-zinc-950">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Avatar avatarUrl={avatarUrl} name={displayName} username={username} size="sm" />
+              <span className="text-sm font-semibold text-zinc-200 truncate">{displayName}</span>
+            </div>
+            <button onClick={onClose} className="-mr-2 touch-manipulation shrink-0 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
+              Close
+            </button>
           </div>
-          <button onClick={onClose} className="-mr-2 touch-manipulation shrink-0 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
-            Close
-          </button>
-        </div>
 
-        <div className="px-5 py-5">
-          <GroupTrendChart buckets={trend ?? []} granularity={granularity} rangeStart={rangeStart} loading={trendLoading} />
+          <div className="px-5 py-5">
+            <GroupTrendChart buckets={trend ?? []} granularity={granularity} rangeStart={rangeStart} loading={trendLoading} />
 
-          <div className="mt-6">
-            <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Recent activity</div>
-            {activityLoading ? (
-              <div className="text-center text-zinc-600 text-sm py-6">Loading…</div>
-            ) : !activity || activity.length === 0 ? (
-              <div className="text-center text-zinc-600 text-sm py-6">No logs in this period.</div>
-            ) : (
-              <ul className="divide-y divide-zinc-800/50">
-                {activity.map((row) => (
-                  <li key={row.id} className="py-2.5 flex items-center gap-3">
-                    {row.photo_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={row.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover border border-zinc-800 shrink-0" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-lg bg-zinc-900 border border-zinc-800 shrink-0" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs text-zinc-300">
-                        {new Date(row.submitted_at).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                      </div>
-                      {(row.small_bags + row.large_bags > 0 || row.pounds > 0) && (
-                        <div className="text-[11px] text-zinc-600">
-                          {row.small_bags + row.large_bags > 0 ? `${row.small_bags + row.large_bags} bags (${row.small_bags}S / ${row.large_bags}L)` : ""}
-                          {row.pounds > 0 ? `${row.small_bags + row.large_bags > 0 ? " · " : ""}${Math.round(row.pounds)} lbs` : ""}
-                        </div>
+            <div className="mt-6">
+              <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Recent activity</div>
+              {activityLoading ? (
+                <div className="text-center text-zinc-600 text-sm py-6">Loading…</div>
+              ) : !activity || activity.length === 0 ? (
+                <div className="text-center text-zinc-600 text-sm py-6">No logs in this period.</div>
+              ) : (
+                <ul className="divide-y divide-zinc-800/50">
+                  {activity.map((row) => (
+                    <li key={row.id} className="py-2.5 flex items-center gap-3">
+                      {row.photo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={row.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover border border-zinc-800 shrink-0" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-lg bg-zinc-900 border border-zinc-800 shrink-0" />
                       )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-xs font-semibold text-zinc-300 tabular-nums">{formatPoints(row.value)}</div>
-                      <div className="text-[10px] text-zinc-600">pts</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-zinc-300">
+                          {new Date(row.submitted_at).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </div>
+                        {(row.small_bags + row.large_bags > 0 || row.pounds > 0) && (
+                          <div className="text-[11px] text-zinc-600">
+                            {row.small_bags + row.large_bags > 0 ? `${row.small_bags + row.large_bags} bags (${row.small_bags}S / ${row.large_bags}L)` : ""}
+                            {row.pounds > 0 ? `${row.small_bags + row.large_bags > 0 ? " · " : ""}${Math.round(row.pounds)} lbs` : ""}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-xs font-semibold text-zinc-300 tabular-nums">{formatPoints(row.value)}</div>
+                        <div className="text-[10px] text-zinc-600">pts</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </BodyPortal>
   );
 }

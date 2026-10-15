@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, useRef, useState, type ReactNode } from "react";
 import IconButton from "@/components/ui/IconButton";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -164,75 +165,77 @@ export default function Lightbox({
   if (!current) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <IconButton
-        onClick={onClose}
-        className="absolute top-3 right-3 text-zinc-300 hover:text-white active:text-white text-2xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
-        aria-label="Close"
-      >
-        &times;
-      </IconButton>
-
-      {images.length > 1 && !zoomed && (
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            goPrev();
-          }}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white active:text-white text-3xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
-          aria-label="Previous image"
-        >
-          &#8249;
-        </IconButton>
-      )}
-
+    <BodyPortal>
       <div
-        className="flex flex-col items-center gap-3 max-h-[90vh] max-w-[90vw] overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+        onClick={onClose}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={current}
-          alt=""
-          draggable={false}
-          onWheel={handleWheel}
-          onDoubleClick={handleDoubleClick}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endPointer}
-          onPointerCancel={endPointer}
-          onPointerLeave={endPointer}
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-            transition: isInteracting ? "none" : "transform 150ms ease-out",
-            touchAction: "none",
-            cursor: zoomed ? "grab" : "zoom-in",
-          }}
-          className={`block max-h-[78vh] max-w-[90vw] object-contain rounded-lg select-none ${upscale ? "w-[min(90vw,78vh)] h-[min(90vw,78vh)]" : ""}`}
-        />
-        {renderActions && !zoomed && <div className="flex justify-center">{renderActions(current, index)}</div>}
+        <IconButton
+          onClick={onClose}
+          className="absolute top-3 right-3 text-zinc-300 hover:text-white active:text-white text-2xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+          aria-label="Close"
+        >
+          &times;
+        </IconButton>
+
         {images.length > 1 && !zoomed && (
-          <div className="text-zinc-400 text-sm tabular-nums">
-            {index + 1} / {images.length}
-          </div>
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              goPrev();
+            }}
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white active:text-white text-3xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+            aria-label="Previous image"
+          >
+            &#8249;
+          </IconButton>
+        )}
+
+        <div
+          className="flex flex-col items-center gap-3 max-h-[90vh] max-w-[90vw] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={current}
+            alt=""
+            draggable={false}
+            onWheel={handleWheel}
+            onDoubleClick={handleDoubleClick}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={endPointer}
+            onPointerCancel={endPointer}
+            onPointerLeave={endPointer}
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+              transition: isInteracting ? "none" : "transform 150ms ease-out",
+              touchAction: "none",
+              cursor: zoomed ? "grab" : "zoom-in",
+            }}
+            className={`block max-h-[78vh] max-w-[90vw] object-contain rounded-lg select-none ${upscale ? "w-[min(90vw,78vh)] h-[min(90vw,78vh)]" : ""}`}
+          />
+          {renderActions && !zoomed && <div className="flex justify-center">{renderActions(current, index)}</div>}
+          {images.length > 1 && !zoomed && (
+            <div className="text-zinc-400 text-sm tabular-nums">
+              {index + 1} / {images.length}
+            </div>
+          )}
+        </div>
+
+        {images.length > 1 && !zoomed && (
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              goNext();
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white active:text-white text-3xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+            aria-label="Next image"
+          >
+            &#8250;
+          </IconButton>
         )}
       </div>
-
-      {images.length > 1 && !zoomed && (
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            goNext();
-          }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-white active:text-white text-3xl leading-none bg-black/40 hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
-          aria-label="Next image"
-        >
-          &#8250;
-        </IconButton>
-      )}
-    </div>
+    </BodyPortal>
   );
 }

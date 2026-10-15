@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import TrashWarWalkthrough from "./TrashWarWalkthrough";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 interface Feature {
   icon: string;
@@ -164,24 +165,26 @@ export default function CampaignInstructionsModal({
           i
         </button>}
         {open && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setOpen(false)}>
-            <div
-              className="relative w-full max-w-md modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
-                <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
-              </div>
-              <div className="px-6 pb-5 shrink-0">
-                <button
-                  onClick={() => setOpen(false)}
-                  className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
-                >
-                  Got it
-                </button>
+          <BodyPortal>
+            <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setOpen(false)}>
+              <div
+                className="relative w-full max-w-md modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
+                  <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
+                </div>
+                <div className="px-6 pb-5 shrink-0">
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
+                  >
+                    Got it
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </BodyPortal>
         )}
       </>
     );
@@ -221,83 +224,87 @@ export default function CampaignInstructionsModal({
       </div>}
 
       {description && descOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setDescOpen(false)}>
-          <div
-            className="relative w-full max-w-md modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
-              <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
-            </div>
-            <div className="px-6 pb-5 shrink-0">
-              <button
-                onClick={() => setDescOpen(false)}
-                className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                Got it
-              </button>
+        <BodyPortal>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto" onClick={() => setDescOpen(false)}>
+            <div
+              className="relative w-full max-w-md modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-5 overflow-y-auto min-h-0 flex-1">
+                <p className="text-zinc-300 text-sm leading-relaxed">{description}</p>
+              </div>
+              <div className="px-6 pb-5 shrink-0">
+                <button
+                  onClick={() => setDescOpen(false)}
+                  className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  Got it
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </BodyPortal>
       )}
 
       {open && slug === "trash-war" && <TrashWarWalkthrough onClose={close} />}
 
       {open && slug !== "trash-war" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto">
-          <div className="relative w-full max-w-md sm:max-w-2xl modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto">
-            <div className="px-6 pt-5 pb-3 shrink-0 border-b border-zinc-800/60">
-              <div className="text-3xl mb-2 text-center">{instructions.icon}</div>
-              <h2 className="text-lg font-black text-zinc-100 text-center mb-1 tracking-tight">
-                {instructions.title}
-              </h2>
-              <p className="text-zinc-400 text-xs text-center leading-relaxed">{instructions.intro}</p>
-              {hideTriggers && description && (
-                <p className="mt-2 text-zinc-500 text-xs text-center leading-relaxed">{description}</p>
-              )}
-            </div>
+        <BodyPortal>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 pt-[max(1rem,calc(var(--top-header-h)+1.25rem))] pb-[max(1rem,calc(var(--bottom-nav-h)+1.25rem))] bg-black/70 backdrop-blur-sm overflow-y-auto">
+            <div className="relative w-full max-w-md sm:max-w-2xl modal-max-h-85 flex flex-col bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden my-auto">
+              <div className="px-6 pt-5 pb-3 shrink-0 border-b border-zinc-800/60">
+                <div className="text-3xl mb-2 text-center">{instructions.icon}</div>
+                <h2 className="text-lg font-black text-zinc-100 text-center mb-1 tracking-tight">
+                  {instructions.title}
+                </h2>
+                <p className="text-zinc-400 text-xs text-center leading-relaxed">{instructions.intro}</p>
+                {hideTriggers && description && (
+                  <p className="mt-2 text-zinc-500 text-xs text-center leading-relaxed">{description}</p>
+                )}
+              </div>
 
-            <div className="px-3 py-3 sm:px-5 sm:py-4 overflow-y-auto min-h-0 flex-1">
-              <ul className="grid grid-cols-2 gap-2 sm:gap-2.5">
-                {instructions.features.map((f) => (
-                  <li
-                    key={f.title}
-                    className="flex flex-col gap-1 rounded-xl border border-zinc-800/70 bg-zinc-800/30 px-2.5 py-2 sm:px-3 sm:py-2.5 min-w-0"
-                  >
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-sm sm:text-base shrink-0">{f.icon}</span>
-                      <p className="text-[11px] sm:text-[13px] font-semibold text-zinc-100 leading-tight">{f.title}</p>
-                      {f.beta && (
-                        <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded px-1 py-0.5 leading-none">
-                          Beta
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[9.5px] sm:text-[11px] text-zinc-400 leading-snug">{f.body}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <div className="px-3 py-3 sm:px-5 sm:py-4 overflow-y-auto min-h-0 flex-1">
+                <ul className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                  {instructions.features.map((f) => (
+                    <li
+                      key={f.title}
+                      className="flex flex-col gap-1 rounded-xl border border-zinc-800/70 bg-zinc-800/30 px-2.5 py-2 sm:px-3 sm:py-2.5 min-w-0"
+                    >
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-sm sm:text-base shrink-0">{f.icon}</span>
+                        <p className="text-[11px] sm:text-[13px] font-semibold text-zinc-100 leading-tight">{f.title}</p>
+                        {f.beta && (
+                          <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded px-1 py-0.5 leading-none">
+                            Beta
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[9.5px] sm:text-[11px] text-zinc-400 leading-snug">{f.body}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
-            <div className="px-6 pt-3 pb-5 shrink-0 border-t border-zinc-800/60">
-              <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={dontShowAgain}
-                  onChange={(e) => setDontShowAgain(e.target.checked)}
-                  className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-emerald-600 focus:ring-0 focus:ring-offset-0"
-                />
-                <span className="text-xs text-zinc-500">Don't show this again</span>
-              </label>
-              <button
-                onClick={close}
-                className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                Got it
-              </button>
+              <div className="px-6 pt-3 pb-5 shrink-0 border-t border-zinc-800/60">
+                <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={dontShowAgain}
+                    onChange={(e) => setDontShowAgain(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-emerald-600 focus:ring-0 focus:ring-offset-0"
+                  />
+                  <span className="text-xs text-zinc-500">Don't show this again</span>
+                </label>
+                <button
+                  onClick={close}
+                  className="w-full px-4 py-2.5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  Got it
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </BodyPortal>
       )}
     </>
   );
