@@ -265,7 +265,17 @@ export default function UserActivityList({
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   if (items.length === 0) {
-    return <div className="px-5 py-8 text-center text-zinc-600 text-sm">No contributions yet.</div>;
+    return isOwn ? (
+      <div className="px-5 py-8 text-center space-y-3">
+        <p className="text-sm font-semibold text-zinc-300">Nothing logged yet</p>
+        <p className="text-sm text-zinc-500">Pick up some litter, log it on the map, and it shows up here with your points.</p>
+        <Link href="/campaigns/trash-war" className="inline-flex min-h-11 items-center px-5 rounded-full bg-emerald-400 text-emerald-950 text-sm font-bold active:scale-[0.97] transition-transform touch-manipulation">
+          Open the map
+        </Link>
+      </div>
+    ) : (
+      <div className="px-5 py-8 text-center text-zinc-600 text-sm">No contributions yet.</div>
+    );
   }
 
   return (

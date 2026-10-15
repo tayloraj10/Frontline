@@ -31,6 +31,9 @@ As you rack up points, you can redeem them for real perks at partner businesses 
 ### Your profile and the leaderboard
 Anyone can view your public profile and your activity history, and there's a global leaderboard showing top contributors.
 
+### Built-in guides
+Step-by-step guides walk you through each campaign, attending a cleanup event, running a group, and managing a partner business. Reopen them any time from the "?" or "How it works" links. The app also explains why it wants notification access before asking, and tells you how to fix things if location access was denied.
+
 ---
 
 ## For Group Organizers

@@ -50,7 +50,7 @@ export default async function HomePage() {
           <span className="text-emerald-400">Earn rewards for it.</span>
         </h1>
         <p className="text-zinc-400 text-base sm:text-lg max-w-md leading-relaxed">
-          Join cleanup events or head out on your own. Log what you pick up, earn points, and spend them at local partner shops. Groups get tools to run events and show their impact.
+          Frontline is for people who want to make the world better and get rewarded for it. Join cleanup events or head out on your own, log what you do, earn points, and spend them at local partner shops. Groups get tools to run events and show their impact.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 max-w-md">
           <Link
@@ -100,6 +100,32 @@ export default async function HomePage() {
           <LegalModalLink doc="points" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">How points work</LegalModalLink>
           <LegalModalLink doc="terms" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Terms</LegalModalLink>
           <LegalModalLink doc="privacy" className="hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">Privacy</LegalModalLink>
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="mission"
+        className="relative overflow-hidden rounded-3xl bg-zinc-900 p-6 sm:p-9 ring-1 ring-inset ring-emerald-400/20 lg:col-span-2"
+      >
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ backgroundImage: "radial-gradient(120% 120% at 0% 0%, rgb(52 211 153 / 0.16), transparent 60%)" }}
+        />
+        <span className="pointer-events-none absolute -right-4 -bottom-10 select-none text-[11rem] leading-none text-emerald-400/10">
+          ⚑
+        </span>
+        <div className="relative flex flex-col gap-3 max-w-2xl">
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-emerald-400">Our mission</span>
+          <h2
+            id="mission"
+            className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight text-zinc-50 text-balance"
+          >
+            Get on the frontline of <span className="text-emerald-400">social change.</span>
+          </h2>
+          <p className="text-zinc-400 text-base leading-relaxed">
+            Real change starts with people who show up. Every cleanup, every bag, every neighbor you bring along makes
+            the world a little better, and you get rewarded for it.
+          </p>
         </div>
       </section>
     </main>

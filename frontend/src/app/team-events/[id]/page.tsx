@@ -20,7 +20,10 @@ export default async function TeamEventPage({ params }: Props) {
 
   let viewerTeamId: string | null = null;
   let viewerRepresentingGroupId: string | null = null;
+  let isSiteAdmin = false;
   if (user) {
+    const { data: profile } = await supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single();
+    isSiteAdmin = profile?.is_admin ?? false;
     const { data: participant } = await supabase
       .from("team_event_participants")
       .select("team_id, representing_group_id")
@@ -38,6 +41,7 @@ export default async function TeamEventPage({ params }: Props) {
         userId={user?.id ?? null}
         initialViewerTeamId={viewerTeamId}
         initialViewerRepresentingGroupId={viewerRepresentingGroupId}
+        isSiteAdmin={isSiteAdmin}
       />
     </main>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import InlineTip from "@/components/walkthrough/InlineTip";
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import Link from "next/link";
 import maplibregl from "maplibre-gl";
@@ -3846,6 +3847,8 @@ export default function CampaignMap({
               is_group_event: loc.is_group_event ?? false,
               cleanup_event_id: loc.cleanup_event_id ?? "",
               contributor_name: loc.contributor_name ?? "",
+              id: loc.id,
+              photo_url: loc.photo_url ?? "",
             },
           }));
           contributionFeaturesRef.current = features;
@@ -4568,6 +4571,7 @@ export default function CampaignMap({
           submitted_at?: string;
           cleanup_event_id?: string;
           contributor_name?: string;
+          photo_url?: string;
         };
         const date = props.submitted_at
           ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -4592,7 +4596,8 @@ export default function CampaignMap({
           `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}${props.cleanup_event_id ? " total" : ""}</span>` +
           (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
           `</div>` +
-          `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>`;
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>` +
+          (props.photo_url ? `<div style="color:#71717a;font-size:10px;margin-top:4px">📷 Click for photo</div>` : "");
       });
       map.current.on("mouseleave", "contribution-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
@@ -4609,40 +4614,73 @@ export default function CampaignMap({
           submitted_at?: string;
           cleanup_event_id?: string;
           contributor_name?: string;
+          photo_url?: string;
+          id?: string;
         };
         if (!map.current) return;
         contributionPopupRef.current?.remove();
         const coords = (e.features[0].geometry as GeoJSON.Point).coordinates.slice() as [number, number];
+        // Tappable thumbnail that opens the shared photo lightbox (same one the photo markers use).
+        const buildPhotoThumb = (): HTMLElement | null => {
+          if (!props.photo_url) return null;
+          const url = props.photo_url;
+          const contentId = props.id;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.setAttribute("aria-label", "Enlarge photo");
+          btn.style.cssText =
+            "display:block;width:100%;margin-top:6px;padding:0;border:0;background:none;cursor:zoom-in;position:relative;touch-action:manipulation;";
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "Cleanup photo";
+          img.loading = "lazy";
+          img.style.cssText = "display:block;width:100%;height:110px;object-fit:cover;border-radius:8px;";
+          const hint = document.createElement("span");
+          hint.textContent = "Tap to enlarge";
+          hint.style.cssText =
+            "position:absolute;right:4px;bottom:4px;padding:1px 6px;border-radius:999px;background:rgba(0,0,0,0.65);color:#f4f4f5;font-size:10px;";
+          btn.append(img, hint);
+          btn.onclick = () => {
+            contributionPopupRef.current?.remove();
+            setSelectedPhoto(contentId ? { url, contentType: "contribution_photo", contentId } : { url });
+          };
+          return btn;
+        };
         if (props.cleanup_event_id) {
+          const box = document.createElement("div");
+          box.style.cssText = "font-family:inherit;font-size:12px;";
+          box.innerHTML =
+            `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
+            `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>`;
+          const thumb = buildPhotoThumb();
+          if (thumb) box.appendChild(thumb);
           contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
             .setLngLat(coords)
-            .setHTML(
-              `<div style="font-family:inherit;font-size:12px;">` +
-                `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
-                `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>` +
-                `</div>`,
-            )
+            .setDOMContent(box)
             .addTo(map.current);
           return;
         }
-        if (!isTouchViewport()) return;
+        // Desktop already gets a hover tooltip, so only open a popup there when there is a photo to show.
+        if (!isTouchViewport() && !props.photo_url) return;
         const date = props.submitted_at
           ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
           : "";
         const name = props.contributor_name || "Anonymous";
         const displayValue = props.value ?? 1;
+        const box = document.createElement("div");
+        box.style.cssText = "font-family:inherit;font-size:12px;";
+        box.innerHTML =
+          `<div>` +
+          `<span style="font-size:13px">🗑️</span>` +
+          `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}</span>` +
+          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
+          `</div>` +
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>`;
+        const thumb = buildPhotoThumb();
+        if (thumb) box.appendChild(thumb);
         contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "200px" })
           .setLngLat(coords)
-          .setHTML(
-            `<div style="font-family:inherit;font-size:12px;">` +
-              `<div>` +
-              `<span style="font-size:13px">🗑️</span>` +
-              `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}</span>` +
-              (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
-              `</div>` +
-              `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>` +
-              `</div>`,
-          )
+          .setDOMContent(box)
           .addTo(map.current);
       });
 
@@ -5423,6 +5461,7 @@ export default function CampaignMap({
         value: newContribution.value,
         submitted_at: new Date().toISOString(),
         is_group_event: newContribution.isGroupEvent ?? false,
+        photo_url: newContribution.photoUrl ?? "",
       },
     };
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
@@ -5863,8 +5902,8 @@ export default function CampaignMap({
       )}
 
       {!pinPickerActive && !areaPickerActive && !routePickerActive && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
-        <div className="absolute z-10 focus-within:z-30 left-3 right-3 sm:right-auto sm:w-[32rem] top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] flex flex-col gap-2 items-start pointer-events-none [&>*]:pointer-events-auto">
-          <div className="relative z-20 h-11 w-full pl-[3.25rem] pr-[9.25rem] focus-within:pr-0">
+        <div className="absolute z-10 focus-within:z-30 left-3 right-3 sm:right-auto sm:w-auto sm:max-w-[calc(100%-4.5rem)] sm:flex-row sm:flex-wrap top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] flex flex-col gap-2 items-start pointer-events-none [&>*]:pointer-events-auto">
+          <div className="relative z-20 h-11 w-full sm:w-[32rem] pl-[3.25rem] pr-[9.25rem] focus-within:pr-0">
           {(
             <form
               onSubmit={handleGeoSearch}
@@ -5918,9 +5957,9 @@ export default function CampaignMap({
             </ul>
           )}
           </div>
-          {geoSearchError && <p className="text-xs text-red-300 px-3 py-1 rounded-full bg-zinc-900/90 backdrop-blur-md">{geoSearchError}</p>}
+          {geoSearchError && <p className="sm:basis-full text-xs text-red-300 px-3 py-1 rounded-full bg-zinc-900/90 backdrop-blur-md">{geoSearchError}</p>}
           {(statsChip || activeEvents.length > 0) && (
-            <div className="flex w-full max-w-full flex-nowrap items-center gap-2 pr-14">
+            <div className="flex w-full max-w-full flex-nowrap items-center gap-2 pr-14 sm:w-auto sm:pr-0">
               {statsChip}
               {activeEvents.length > 0 && (
                 <button
@@ -5935,7 +5974,7 @@ export default function CampaignMap({
             </div>
           )}
           {activeEvents.length > 0 && eventsExpanded && (
-            <div className="flex w-full flex-col gap-2 max-h-[40dvh] overflow-y-auto pr-14">
+            <div className="flex w-full flex-col gap-2 max-h-[40dvh] overflow-y-auto pr-14 sm:basis-full sm:max-w-[32rem] sm:pr-0">
               {activeEvents.map((event) => {
                 const primaryId = eventGeoUnitIdsRef.current[event.id]?.[0] ?? event.geo_unit_id ?? "";
                 const centroid = eventCentroidsRef.current[primaryId];
@@ -6018,7 +6057,13 @@ export default function CampaignMap({
               </div>
               {!isChoropleth && !isHeatmap && !isHexBloom && (
                 <>
-                  <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Geographic stats</p>
+                  <div className="flex items-center justify-between gap-2 pr-2">
+                    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Geographic stats</p>
+                    <InlineTip title="Geographic stats">
+                      <p>Shade the map by how much has been cleaned in each area. Pick one area type at a time.</p>
+                      <p>Tap an area on the map to see its totals. Tap the same button again to turn the shading off.</p>
+                    </InlineTip>
+                  </div>
                   {([
                     { caption: null as string | null, badges: null as string[] | null, opts: [{ id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes" }, ...(campaign.slug === "trash-war" ? [{ id: "borough", label: "NYC Boroughs" }] : [])] },
                     ...(campaign.slug === "trash-war" ? [
@@ -6218,7 +6263,13 @@ export default function CampaignMap({
                   still works when turned on, but we no longer want to visually encourage
                   it now that the non-competitive Geographic Stats layers exist above. */}
               <div className="my-1.5 mx-2 border-t border-zinc-800" />
-              <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Leaders</p>
+              <div className="flex items-center justify-between gap-2 pr-2">
+                <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Leaders</p>
+                <InlineTip title="Zip code leaders">
+                  <p>Colors each zip code by who leads there. Green areas are led by a group, blue by an individual, and outlined areas have no leader yet.</p>
+                  <p>Use the toggles under it to show or hide each kind. This is separate from Geographic stats above.</p>
+                </InlineTip>
+              </div>
               <LegendToggle
                 checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
                 onChange={(show) => {

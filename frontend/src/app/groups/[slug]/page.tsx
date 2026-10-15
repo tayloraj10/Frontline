@@ -1,9 +1,11 @@
+import TodoBadge from "./TodoBadge";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { BarChart3, CalendarPlus, ClipboardList, Pencil, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
 import Avatar from "@/components/ui/Avatar";
@@ -235,7 +237,10 @@ export default async function GroupProfilePage({ params }: Props) {
         <div className="min-w-0 space-y-6">
           {isAdmin && (
             <div className="rounded-[20px] bg-zinc-900 p-5">
-              <h2 className="font-display text-base font-extrabold tracking-tight text-zinc-100">Organizer tools</h2>
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="font-display text-base font-extrabold tracking-tight text-zinc-100">Organizer tools</h2>
+                <FlowGuide id="organizer" autoOpen variant="link" label="How it works" />
+              </div>
               <p className="mt-0.5 mb-4 text-sm text-zinc-400">
                 {nextEvent
                   ? `Next up: ${nextEvent.title}, ${formatEventDate(nextEvent.scheduled_start)}.`
@@ -247,6 +252,9 @@ export default async function GroupProfilePage({ params }: Props) {
                 </Link>
                 <Link href={`/groups/${slug}/organizer`} className={`${chip} bg-zinc-800 text-zinc-100 hover:bg-zinc-700`}>
                   <ClipboardList className="h-4 w-4" /> To-do list
+                  {user && (
+                    <TodoBadge groupId={group.id} viewerUserId={user.id} fastapiUrl={process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000"} />
+                  )}
                 </Link>
                 <Link href={`/groups/${slug}/stats`} className={`${chip} bg-zinc-800 text-zinc-100 hover:bg-zinc-700`}>
                   <BarChart3 className="h-4 w-4" /> Impact stats

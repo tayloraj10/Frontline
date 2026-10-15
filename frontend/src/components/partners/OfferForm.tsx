@@ -3,6 +3,8 @@
 import { useState } from "react";
 import FlowSheet, { FlowFooter, type FlowStep as GuidedStep } from "@/components/ui/FlowSheet";
 import { Select } from "@/components/ui/fields";
+import InlineTip from "@/components/walkthrough/InlineTip";
+import { usePointRates, fmt, pointsLabel } from "@/lib/pointRates";
 
 const inputCls = "w-full min-h-12 rounded-2xl bg-zinc-800 px-4 py-3 text-base sm:text-sm text-zinc-100 placeholder:text-zinc-500 ring-1 ring-inset ring-white/5 focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-shadow";
 
@@ -83,6 +85,7 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
   onCancel?: () => void;
   submitLabel: string;
 }) {
+  const rates = usePointRates();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [redemptionMode, setRedemptionMode] = useState<"spend" | "threshold" | "event_only">(initial?.redemption_mode ?? "spend");
@@ -209,7 +212,14 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
         </span>
       </label>
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-zinc-200">Redemption mode</label>
+        <div className="flex items-center justify-between gap-2">
+          <label className="block text-sm font-semibold text-zinc-200">Redemption mode</label>
+          <InlineTip title="Redemption mode">
+            <p><span className="font-semibold text-zinc-200">Spend:</span> the points cost is deducted from the customer&apos;s balance.</p>
+            <p><span className="font-semibold text-zinc-200">Threshold:</span> they only need to have earned enough points. Nothing is deducted.</p>
+            <p><span className="font-semibold text-zinc-200">Event only:</span> for people checked in at a cleanup event, never costs points.</p>
+          </InlineTip>
+        </div>
         <Select value={redemptionMode} onChange={e => setRedemptionMode(e.target.value as "spend" | "threshold" | "event_only")}>
           <option value="spend">spend (deducts points)</option>
           <option value="threshold">threshold (unlocks at balance)</option>
@@ -243,10 +253,12 @@ export default function OfferForm({ initial, locations, onSubmit, onCancel, subm
             <div>
               <p className="font-semibold text-zinc-200 mb-1">How people earn points</p>
               <ul className="space-y-0.5">
-                <li>Small bag: 1 point</li>
-                <li>Large bag: 3 points (contractor bag: 4)</li>
-                <li>Weighed trash: 0.5 points per pound</li>
-                <li>Cigarette butts: 1 point per 20</li>
+                <li>Small bag: {pointsLabel(rates.small)}</li>
+                <li>Large bag: {pointsLabel(rates.large)}{rates.contractor !== undefined && ` (contractor bag: ${fmt(rates.contractor)})`}</li>
+                <li>Weighed trash: {fmt(rates.pound)} points per pound</li>
+                {rates.cigarette && (
+                  <li>Cigarette butts: {fmt(rates.cigarette.points_per_unit)} {rates.cigarette.points_per_unit === 1 ? "point" : "points"} per {rates.cigarette.unit_count}</li>
+                )}
               </ul>
             </div>
             <div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import BusinessForm, { type BusinessFormInitial, type BusinessFormPayload } from "@/components/partners/BusinessForm";
 
 const STORAGE_KEY = "frontline:pendingBusinessSubmission";
@@ -117,6 +118,9 @@ export default function PartnerApplyPage() {
           <p className="text-zinc-400 text-sm">
             Submit your business to appear on Frontline campaign maps. An admin will review it before it goes live.
           </p>
+          <div className="pt-2 flex justify-center">
+            <FlowGuide id="partner" variant="link" label="What happens after I apply?" />
+          </div>
         </div>
 
         {restoredPayload && (

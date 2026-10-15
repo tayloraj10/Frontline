@@ -1,8 +1,6 @@
-const EARN = [
-  { action: "Small trash bag", points: "1" },
-  { action: "Large trash bag", points: "3" },
-  { action: "Trash report", points: "1" },
-];
+"use client";
+
+import { usePointRates, fmt } from "@/lib/pointRates";
 
 const SECTIONS = [
   {
@@ -16,6 +14,12 @@ const SECTIONS = [
 ];
 
 export default function HowPointsContent() {
+  const rates = usePointRates();
+  const EARN = [
+    { action: "Small trash bag", points: fmt(rates.small) },
+    { action: "Large trash bag", points: fmt(rates.large) },
+    { action: "Trash report", points: fmt(rates.report) },
+  ];
   return (
     <div className="flex flex-col gap-4">
       <section aria-labelledby="earn" className="rounded-[20px] bg-zinc-800/60 p-4 flex flex-col gap-2">

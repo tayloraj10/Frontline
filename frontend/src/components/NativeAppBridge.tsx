@@ -5,6 +5,8 @@ import { isNativePlatform } from "@/lib/capacitor";
 import { createClient } from "@/lib/supabase/client";
 import { registerDeviceToken } from "@/lib/pushNotifications";
 import { installNativeGeolocationPolyfill } from "@/lib/nativeGeolocationPolyfill";
+import { askNotificationPrimer } from "@/lib/permissionPrimer";
+import NotificationPrimer from "@/components/NotificationPrimer";
 
 // Mounted once in the root layout. No-ops entirely on web — everything here
 // only matters inside the Capacitor-wrapped iOS/Android build.
@@ -113,6 +115,7 @@ export default function NativeAppBridge() {
         const perms = await PushNotifications.checkPermissions();
         let status = perms.receive;
         if (status === "prompt" || status === "prompt-with-rationale") {
+          if (!(await askNotificationPrimer())) return;
           status = (await PushNotifications.requestPermissions()).receive;
         }
         if (status !== "granted") return;
@@ -141,5 +144,5 @@ export default function NativeAppBridge() {
     };
   }, []);
 
-  return null;
+  return <NotificationPrimer />;
 }

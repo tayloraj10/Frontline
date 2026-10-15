@@ -16,6 +16,7 @@ import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { updateEvent } from "@/lib/events";
@@ -3948,8 +3949,13 @@ export default function AdminPanel({
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6">
         <BackButton href="/" label="Back to app" className="sm:hidden mb-1 text-xs" />
-        <h1 className="font-display font-extrabold text-2xl text-zinc-100">Admin Panel</h1>
-        <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display font-extrabold text-2xl text-zinc-100">Admin Panel</h1>
+            <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
+          </div>
+          <FlowGuide id="admin" variant="link" label="Admin guide" />
+        </div>
       </div>
 
       <div className="hidden sm:flex items-center gap-1 mb-6 border-b border-zinc-800">

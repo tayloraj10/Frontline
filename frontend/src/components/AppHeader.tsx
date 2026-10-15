@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LogoLink from "@/components/nav/LogoLink";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
@@ -112,8 +113,7 @@ export default async function AppHeader() {
     <header className="pt-safe bg-zinc-950/85 backdrop-blur-md sticky top-0 z-50 shadow-[0_1px_0_0_var(--ink-800)]">
       <div className="max-w-[100rem] mx-auto px-3 sm:px-6 lg:px-8 h-14 lg:h-16 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
-          <Link
-            href="/"
+          <LogoLink
             className="flex items-center gap-2 font-display font-extrabold text-lg tracking-tight min-w-0 active:scale-[0.97] transition-transform duration-150"
           >
             <span className="grid place-items-center w-7 h-7 rounded-[10px] bg-emerald-400 text-emerald-950 text-sm shrink-0">⚑</span>
@@ -126,7 +126,7 @@ export default async function AppHeader() {
                 DEV
               </span>
             )}
-          </Link>
+          </LogoLink>
           {/* Full inline nav only once there's real room for it (laptop-and-under falls back to the hamburger below). */}
           <nav className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => (

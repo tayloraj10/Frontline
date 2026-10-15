@@ -1,5 +1,7 @@
 "use client";
 
+import InlineTip from "@/components/walkthrough/InlineTip";
+import PermissionHelp from "@/components/PermissionHelp";
 import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
@@ -491,6 +493,7 @@ function GpsIndicator({
           <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
           <span className="text-red-400">{msg}</span>
         </div>
+        {errorCode === 1 && <PermissionHelp kind="location" />}
         <button onClick={onRetry} className="self-start inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
           Try again
         </button>
@@ -1353,7 +1356,14 @@ function ContributeModal({
       {/* Point / Route toggle — cleanup only */}
       {isCleanup && (
         <div>
-          <p className="text-xs text-zinc-500 mb-1.5">How are you logging this?</p>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <p className="text-xs text-zinc-500">How are you logging this?</p>
+            <InlineTip title="Point, route or track">
+              <p><span className="font-semibold text-zinc-200">Point:</span> one spot. Use your location or place a pin on the map.</p>
+              <p><span className="font-semibold text-zinc-200">Route:</span> draw the stretch you cleaned on the map.</p>
+              <p><span className="font-semibold text-zinc-200">Track (beta):</span> record your route with GPS while you clean.</p>
+            </InlineTip>
+          </div>
           <div className="flex items-center gap-1 p-1 bg-zinc-800/60 border border-zinc-700 rounded-lg w-fit">
             <button
               type="button"
@@ -1593,7 +1603,16 @@ function ContributeModal({
       )}
       {isCleanup && !isDecorativeTeamTrack && (
         <div>
-          <label className="block text-xs text-zinc-500 mb-1.5">How do you want to log this?</label>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <label className="block text-xs text-zinc-500">How do you want to log this?</label>
+            <InlineTip title="How to log">
+              <p><span className="font-semibold text-zinc-200">Small/Large bags:</span> count the bags you filled. Fastest option.</p>
+              <p><span className="font-semibold text-zinc-200">Bag type breakdown:</span> count each kind of bag separately.</p>
+              <p><span className="font-semibold text-zinc-200">Pounds:</span> enter the weight of your haul.</p>
+              <p><span className="font-semibold text-zinc-200">{pointsBasisOptions?.countable_item_types[0]?.label ?? "Countable item"}:</span> count small items like these one by one instead of bagging them.</p>
+              <p>Every option except small/large bags needs a photo.</p>
+            </InlineTip>
+          </div>
           <div className="grid grid-cols-2 gap-2 mb-3">
             {(
               [
@@ -1750,6 +1769,7 @@ function ContributeModal({
                     >
                       {formatPoints(displayValue)}
                     </span>
+                    <span>{displayValue === 1 ? "point" : "points"}</span>
                     {combinedMultiplier > 1 ? (
                       <span className="ml-1 text-orange-400/80">
                         ({combinedMultiplier}× {challengeMultiplier >= (effectiveMultiplier?.multiplier ?? 1) ? "challenge" : effectiveMultiplier && "kind" in effectiveMultiplier && effectiveMultiplier.kind === "bonus_spot" ? "bonus spot" : "hotspot"} multiplier applied)
@@ -1764,6 +1784,7 @@ function ContributeModal({
               <p className="mt-3 flex flex-wrap items-center gap-x-2 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/30 px-4 py-3 text-sm font-semibold text-zinc-300" key="points-preview">
                 You'll earn{" "}
                 <span className="text-2xl font-extrabold text-emerald-400">{formatPoints(displayValue)}</span>
+                <span>{displayValue === 1 ? "point" : "points"}</span>
               </p>
             );
             const bonusNote = firstCleanupBonusPreview ? (
@@ -2210,7 +2231,7 @@ function ReportModal({
               ) : (
                 <span className="text-base font-bold text-emerald-400">{formatPoints(gameSettings.trash_report_value)}</span>
               )}{" "}
-              for reporting.
+              {gameSettings.trash_report_value === 1 ? "point" : "points"} for reporting.
             </p>
             {error && <p className="text-red-400 text-xs">{error}</p>}
           </>
@@ -3456,7 +3477,14 @@ function HostEventModal({
       </div>
 
       <div>
-        <label className="block text-xs text-zinc-500 mb-1.5">How should cleanups get logged?</label>
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <label className="block text-xs text-zinc-500">How should cleanups get logged?</label>
+          <InlineTip title="Logging mode">
+            <p><span className="font-semibold text-zinc-200">Organizer logs team total:</span> you enter the combined haul once. Points are split across eligible attendees.</p>
+            <p><span className="font-semibold text-zinc-200">Attendees log themselves:</span> each person logs from the map near the event.</p>
+            <p>Re-entering a team total wipes the earlier split and re-splits the full new total.</p>
+          </InlineTip>
+        </div>
         <select
           value={loggingMode}
           onChange={(e) => setLoggingMode(e.target.value as "organizer_total" | "individual")}
@@ -3531,11 +3559,17 @@ function HostEventModal({
           </button>
         ))}
       </div>
-      <p className="text-xs text-zinc-400 -mt-1">
-        {locationKind === "route"
-          ? "Jump to the area first, then draw the route on the map. The start of the route is the meetup point."
-          : "Search for an address, or move the pin on the map."}
-      </p>
+      <div className="flex items-start justify-between gap-2 -mt-1">
+        <p className="text-xs text-zinc-400">
+          {locationKind === "route"
+            ? "Jump to the area first, then draw the route on the map. The start of the route is the meetup point."
+            : "Search for an address, or move the pin on the map."}
+        </p>
+        <InlineTip title="Spot or route">
+          <p><span className="font-semibold text-zinc-200">One spot:</span> everyone meets at a single address or pin.</p>
+          <p><span className="font-semibold text-zinc-200">A route:</span> you draw a stretch of street or trail to clean along. Pick a meetup point where people gather first.</p>
+        </InlineTip>
+      </div>
 
       {!route && (
         <div className="space-y-2">
@@ -4617,7 +4651,7 @@ export default function ContributionPanel({
                         >
                           {modernActions && campaignContributionType === "cleanup" ? (
                             <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5" />
+                              <path d="M6 8h12l-1 12H7L6 8ZM9 8V6a3 3 0 0 1 6 0v2M9.5 14l2 2 3-3.5" />
                             </svg>
                           ) : (
                             <span className="text-base leading-none">{btn.icon}</span>

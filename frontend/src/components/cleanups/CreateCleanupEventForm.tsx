@@ -1,5 +1,7 @@
 "use client";
 
+import InlineTip from "@/components/walkthrough/InlineTip";
+import PermissionHelp from "@/components/PermissionHelp";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
@@ -108,6 +110,7 @@ export default function CreateCleanupEventForm({
   const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">(initialValues?.loggingMode ?? "organizer_total");
   const [guidedStep, setGuidedStep] = useState(0);
   const [locating, setLocating] = useState(false);
+  const [locationDenied, setLocationDenied] = useState(false);
   const [showAddressDetails, setShowAddressDetails] = useState(false);
   const { partners: nearbyPartners } = useNearbyPartners(lat, lng, undefined, undefined, route?.coordinates);
   const hasNearbyPartners = nearbyPartners.length > 0;
@@ -272,7 +275,14 @@ export default function CreateCleanupEventForm({
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-zinc-200">How should cleanups get logged?</label>
+        <div className="flex items-center justify-between gap-2">
+          <label className="block text-sm font-semibold text-zinc-200">How should cleanups get logged?</label>
+          <InlineTip title="Logging mode">
+            <p><span className="font-semibold text-zinc-200">Organizer logs team total:</span> you enter the combined haul once. Points are split across eligible attendees.</p>
+            <p><span className="font-semibold text-zinc-200">Attendees log themselves:</span> each person logs from the map near the event.</p>
+            <p>Re-entering a team total wipes the earlier split and re-splits the full new total.</p>
+          </InlineTip>
+        </div>
         <div className="relative">
           <select
             className={`${inputCls} appearance-none pr-11 truncate`}
@@ -323,13 +333,17 @@ export default function CreateCleanupEventForm({
   const useMyLocation = () => {
     if (!navigator.geolocation) return;
     setLocating(true);
+    setLocationDenied(false);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(pos.coords.latitude);
         setLng(pos.coords.longitude);
         setLocating(false);
       },
-      () => setLocating(false),
+      (err) => {
+        setLocating(false);
+        if (err.code === 1) setLocationDenied(true);
+      },
       { enableHighAccuracy: true, timeout: 10000 },
     );
   };
@@ -358,11 +372,17 @@ export default function CreateCleanupEventForm({
           </button>
         ))}
       </div>
-      <p className="text-xs text-zinc-400 -mt-1">
-        {showRoutePicker
-          ? "Jump to the area first, then tap the map to draw the route. The spot you searched is the meetup point."
-          : "Search for an address, or tap the map to drop the pin."}
-      </p>
+      <div className="flex items-start justify-between gap-2 -mt-1">
+        <p className="text-xs text-zinc-400">
+          {showRoutePicker
+            ? "Jump to the area first, then tap the map to draw the route. The spot you searched is the meetup point."
+            : "Search for an address, or tap the map to drop the pin."}
+        </p>
+        <InlineTip title="Spot or route">
+          <p><span className="font-semibold text-zinc-200">One spot:</span> everyone meets at a single address or pin.</p>
+          <p><span className="font-semibold text-zinc-200">A route:</span> you draw a stretch of street or trail to clean along. Pick a meetup point where people gather first.</p>
+        </InlineTip>
+      </div>
 
       <div className="space-y-2">
         <label className="block text-sm font-semibold text-zinc-200">{showRoutePicker ? "Where is the route?" : "Find the spot"}</label>
@@ -389,6 +409,7 @@ export default function CreateCleanupEventForm({
           {locating ? "Locating..." : "📍 Use my location"}
         </button>
       </div>
+      {locationDenied && <PermissionHelp kind="location" alternative="You can type an address instead." />}
 
       {showRoutePicker ? (
         lat !== null && lng !== null ? (

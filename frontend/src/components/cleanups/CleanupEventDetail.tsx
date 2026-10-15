@@ -38,6 +38,8 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
+import PermissionHelp from "@/components/PermissionHelp";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import BodyPortal from "@/components/ui/BodyPortal";
@@ -141,6 +143,7 @@ export default function CleanupEventDetail({
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [showJoinCodeField, setShowJoinCodeField] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
   const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
   const [locationStatus, setLocationStatus] = useState<"checking" | "resolved" | "unavailable">("checking");
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -253,6 +256,7 @@ export default function CleanupEventDetail({
   const handleCheckInWithLocation = () => {
     if (!userId) return;
     setError(null);
+    setLocationDenied(false);
     setCheckInLoading(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -275,7 +279,8 @@ export default function CleanupEventDetail({
           setCheckInLoading(false);
         }
       },
-      () => {
+      (geoErr) => {
+        setLocationDenied(geoErr.code === 1);
         setError("Couldn't get your location. Try the join code instead.");
         setCheckInLoading(false);
       }
@@ -482,6 +487,8 @@ export default function CleanupEventDetail({
           </div>
           <div className="flex items-center gap-2 shrink-0 sm:pt-1">
             <ShareButton variant="icon" content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
+            {!effectiveIsOrganizer && <FlowGuide id="attendee" autoOpen variant="icon" size="md" />}
+            {effectiveIsOrganizer && <FlowGuide id="event-organizer" autoOpen variant="icon" size="md" label="Organizer guide" />}
             {effectiveIsOrganizer && (
               <>
                 <Link
@@ -744,6 +751,7 @@ export default function CleanupEventDetail({
       )}
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
+      {locationDenied && <PermissionHelp kind="location" alternative="You can also check in with the join code from the organizer." />}
 
       {(() => {
         const checkinSection = isCancelled ? null : !userId ? (

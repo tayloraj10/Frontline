@@ -16,8 +16,7 @@ function apply(choice: Choice) {
   if (choice === "system") delete root.dataset.theme;
   else root.dataset.theme = choice;
   try {
-    if (choice === "system") localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, choice);
+    localStorage.setItem(KEY, choice);
   } catch {
     // storage blocked: the choice still applies for this visit
   }

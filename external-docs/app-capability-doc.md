@@ -79,6 +79,10 @@ Last updated: 2026-09-13.
 
 ---
 
+## Guided walkthroughs (all roles)
+
+Stepped, mobile-first guides (`components/walkthrough/`, registry `src/walkthroughs/index.tsx`) cover Trash War, Touch Grass, Solarpunk, the partner dashboard, group organizer tools, event attendees and the admin panel. Most auto-open once (seen state in localStorage) and can be reopened from a "?" or link. Other help: a notification primer before the OS push prompt, a location-denied recovery card on event check-in, empty-state prompts on activity and My Groups, and "?" tips on logging mode and offer redemption mode.
+
 ## 3. Partner Business User (`partner_business_admins` linkage)
 
 - Self-service dashboard at `/partners/dashboard`.
@@ -103,6 +107,8 @@ Last updated: 2026-09-13.
 On the campaign map: an "Admin controls" dialog to create timed campaign events by picking an area directly on the map, toggle an NYC-neighborhoods overlay (trash-war only), and dismiss timed events.
 
 Prod-write paths (`admin_prod.py` — points recompute, spendable-points toggle, cleanup-event wipe, user search) are gated by a shared secret (`ADMIN_API_SECRET`) and are only reachable through the six Next.js proxy routes under `frontend/src/app/api/admin/**`, which **do independently re-verify `is_admin` server-side before forwarding the secret** (confirmed by reading the proxy route source, not just inferred from the backend docstring).
+
+An "Admin guide" link in the panel header opens a triggerable, tab-by-tab walkthrough (`walkthroughs/admin.tsx`).
 
 Site admins implicitly inherit every group-admin and business-admin capability above (checks for `is_admin` short-circuit several of those gates, e.g. the business campaign-linkage restriction).
 

@@ -6,6 +6,7 @@ import { Camera } from "@capacitor/camera";
 import type { MediaResult } from "@capacitor/camera";
 import { Filesystem } from "@capacitor/filesystem";
 import { isNativePlatform } from "@/lib/capacitor";
+import PermissionHelp from "@/components/PermissionHelp";
 
 // Native camera/gallery results come back as a native file uri (and a
 // capacitor://localhost webPath alias of it), but uploadToR2 needs a real
@@ -41,6 +42,7 @@ export function CameraModal({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [ready, setReady] = useState(false);
+  const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(() =>
     typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia
       ? "Camera not supported on this browser, use gallery instead."
@@ -64,7 +66,10 @@ export function CameraModal({
         }
         setReady(true);
       })
-      .catch(() => setError("Camera unavailable, check permissions or use gallery instead."));
+      .catch((err) => {
+        if (err?.name === "NotAllowedError") setDenied(true);
+        setError("Camera unavailable, check permissions or use gallery instead.");
+      });
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -96,7 +101,13 @@ export function CameraModal({
       <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-4 p-4">
         {error ? (
           <>
-            <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
+            {denied ? (
+              <div className="max-w-xs">
+                <PermissionHelp kind="camera" alternative="You can pick a photo from your gallery instead." />
+              </div>
+            ) : (
+              <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
+            )}
             <button onClick={onClose} className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
               Close
             </button>
@@ -145,6 +156,7 @@ export function PhotoCaptureInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [cameraDenied, setCameraDenied] = useState(false);
 
   // On native iOS/Android, use the Capacitor plugin for a real native camera
   // and gallery picker. The getUserMedia/<input type=file> paths below are
@@ -157,13 +169,16 @@ export function PhotoCaptureInput({
       return;
     }
     setCaptureError(null);
+    setCameraDenied(false);
     try {
       const result = await Camera.takePhoto({ quality: 90 });
       onFilesSelected([await mediaResultToFile(result)]);
     } catch (err) {
       if (!isUserCancellation(err)) {
         console.error("Camera.takePhoto failed", err);
-        setCaptureError("Couldn't add that photo, please try again.");
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/denied|permission/i.test(msg)) setCameraDenied(true);
+        else setCaptureError("Couldn't add that photo, please try again.");
       }
     }
   };
@@ -208,6 +223,11 @@ export function PhotoCaptureInput({
         </button>
       </div>
       {captureError && <p className="text-red-400 text-xs mt-1.5">{captureError}</p>}
+      {cameraDenied && (
+        <div className="mt-2">
+          <PermissionHelp kind="camera" alternative="You can choose a photo from your gallery instead." />
+        </div>
+      )}
       <input
         ref={fileInputRef}
         type="file"

@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { FlowFooter } from "@/components/ui/FlowSheet";
 import { Field, TextInput, TextArea } from "@/components/ui/fields";
 
@@ -132,6 +133,9 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
         <p className="text-zinc-500 mt-2 text-sm">
           Already running a crew? Add it here. A site admin will review it before it is listed.
         </p>
+        <div className="mt-2">
+          <FlowGuide id="organizer" variant="link" label="How running a group works" />
+        </div>
       </div>
 
       <div className="rounded-3xl bg-zinc-900 ring-1 ring-white/10 p-5 space-y-5">

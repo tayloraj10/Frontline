@@ -4,9 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS, CAMPAIGN_SLUG_ORDER } from "@/config/campaigns";
 import type { Database } from "@/types/database";
-import OnboardingModalClient from "@/components/OnboardingModalClient";
+import WelcomeTour from "@/components/WelcomeTour";
 import OtherCampaignRow from "@/components/OtherCampaignRow";
 import AppPromoCard from "@/components/AppPromoCard";
+import EarnChips from "@/components/EarnChips";
 import ShareButton from "@/components/ShareButton";
 import { PageShell, PageHeader, Section, EmptyState } from "@/components/ui/PageShell";
 
@@ -156,11 +157,6 @@ function CampaignCard({ campaign, featured = false }: { campaign: Campaign; feat
 
 function FeaturedCampaignCard({ campaign }: { campaign: Campaign }) {
   const cfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type];
-  const earn = [
-    { v: 1, l: "Small bag" },
-    { v: 3, l: "Large bag" },
-    { v: 1, l: "Trash report" },
-  ];
   return (
     <div className="group relative overflow-hidden rounded-[24px] bg-zinc-900 p-5 sm:p-7 ring-1 ring-inset ring-emerald-400/20 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:ring-emerald-400/45 active:scale-[0.99]">
       <Link href={`/campaigns/${campaign.slug}`} className="absolute inset-0 z-0 touch-manipulation" aria-label={campaign.title} />
@@ -198,14 +194,7 @@ function FeaturedCampaignCard({ campaign }: { campaign: Campaign }) {
         </div>
 
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex gap-2">
-            {earn.map((e) => (
-              <div key={e.l} className="rounded-2xl bg-zinc-950/50 px-3.5 py-2.5">
-                <div className="font-display text-lg font-extrabold leading-none text-amber-400 tabular-nums">+{e.v}</div>
-                <div className="mt-1 text-[11px] font-medium text-zinc-500">{e.l}</div>
-              </div>
-            ))}
-          </div>
+          <EarnChips />
           <span className="inline-flex items-center gap-2 rounded-2xl bg-emerald-400 px-5 py-3 text-sm font-bold text-emerald-950 transition-transform duration-150 group-hover:translate-x-0.5">
             Open the map <span aria-hidden="true">→</span>
           </span>
@@ -243,9 +232,9 @@ export default async function CampaignsPage() {
 
   return (
     <PageShell>
-      {user && <OnboardingModalClient campaigns={campaigns} />}
       <PageHeader
         eyebrow="Campaigns"
+        action={user ? <WelcomeTour /> : undefined}
         title="Pick a campaign"
         subtitle="Each campaign is a shared goal. Open one, log what you do, and your points count toward its leaderboard and your group's total."
       />

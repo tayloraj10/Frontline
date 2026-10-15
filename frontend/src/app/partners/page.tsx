@@ -1,3 +1,4 @@
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import { createClient } from "@/lib/supabase/server";
 import PartnersBrowseClient, { type BrowseBusiness, type BrowseOffer } from "./PartnersBrowseClient";
@@ -79,6 +80,7 @@ export default async function PartnersPage() {
         eyebrow="Rewards"
         title="Partner perks"
         subtitle="Spend the points you earn from cleanups on discounts at local businesses."
+        action={<FlowGuide id="rewards" autoOpen variant="link" label="How rewards work" />}
       />
 
       <BusinessApplyPrompt />

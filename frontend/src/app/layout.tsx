@@ -61,8 +61,9 @@ export async function generateViewport(): Promise<Viewport> {
   };
 }
 
-// Applies a saved light/dark choice before first paint. No saved choice = follow the system.
-const THEME_INIT = `try{var t=localStorage.getItem("frontline:theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+// Applies a saved light/dark choice before first paint. Saved "system" (Auto) = follow the device.
+// No saved choice: signed-out visitors (no Supabase auth cookie) get dark; signed-in users follow the device.
+const THEME_INIT = `try{var t=localStorage.getItem("frontline:theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;else if(t!=="system"&&!/(^|; )sb-[^=]*-auth-token/.test(document.cookie))document.documentElement.dataset.theme="dark"}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

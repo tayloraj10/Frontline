@@ -65,6 +65,18 @@ export default function GroupsListClient({
                     <p className="font-semibold text-zinc-500">
             {mineOnly ? "You're not in any groups yet." : "No groups match your search."}
           </p>
+          {mineOnly && (
+            <div className="mt-3 space-y-3">
+              <p className="text-sm">Join a group to get event reminders and count toward its leaderboard.</p>
+              <button
+                type="button"
+                onClick={() => setMineOnly(false)}
+                className="inline-flex min-h-11 items-center px-5 rounded-full bg-emerald-400 text-emerald-950 text-sm font-bold active:scale-[0.97] transition-transform touch-manipulation"
+              >
+                Browse all groups
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

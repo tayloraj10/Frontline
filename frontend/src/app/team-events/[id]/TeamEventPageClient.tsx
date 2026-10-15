@@ -1,5 +1,6 @@
 "use client";
 
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -50,11 +51,13 @@ export default function TeamEventPageClient({
   userId,
   initialViewerTeamId,
   initialViewerRepresentingGroupId,
+  isSiteAdmin = false,
 }: {
   initialEvent: TeamEventDetail;
   userId: string | null;
   initialViewerTeamId: string | null;
   initialViewerRepresentingGroupId: string | null;
+  isSiteAdmin?: boolean;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const [viewerTeamId, setViewerTeamId] = useState(initialViewerTeamId);
@@ -204,6 +207,12 @@ export default function TeamEventPageClient({
       <div>
         <div className="flex items-center gap-2 flex-wrap">
           <h1 className="font-display font-extrabold text-2xl text-zinc-100 leading-tight break-words">{event.title}</h1>
+          <FlowGuide
+            id="team-events"
+            autoOpen
+            variant="icon"
+            roles={[...(canReview ? ["reviewer"] : []), ...(isSiteAdmin ? ["admin"] : [])]}
+          />
           {isCancelled && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-red-800/60 bg-red-950/30 px-2.5 py-1 text-xs font-semibold text-red-400">
               Cancelled
