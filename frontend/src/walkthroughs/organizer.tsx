@@ -131,5 +131,22 @@ export const organizer: WalkthroughDef = {
         </Stage>
       ),
     },
+    {
+      title: "See your impact",
+      label: "Stats",
+      body: "Open Impact stats on your group page to see what your crew has done. Anyone can view it. Admins also get the Deep Dive.",
+      how: [
+        "Tap Impact stats under Organizer tools, then pick a time range",
+        "Tap Deep Dive (admins only) for trends, an activity map and a per-member drill-in",
+        "Use Export CSV or Export Excel to take the numbers with you",
+      ],
+      visual: (
+        <Stage>
+          <Chip>Impact stats</Chip>
+          <Arrow />
+          <Chip on>Deep Dive</Chip>
+        </Stage>
+      ),
+    },
   ],
 };
