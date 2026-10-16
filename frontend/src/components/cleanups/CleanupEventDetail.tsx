@@ -487,8 +487,8 @@ export default function CleanupEventDetail({
           </div>
           <div className="flex items-center gap-2 shrink-0 sm:pt-1">
             <ShareButton variant="icon" content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
-            {!effectiveIsOrganizer && <FlowGuide id="attendee" autoOpen variant="icon" size="md" />}
-            {effectiveIsOrganizer && <FlowGuide id="event-organizer" autoOpen variant="icon" size="md" label="Organizer guide" />}
+            {!effectiveIsOrganizer && <FlowGuide id="attendee" autoOpen variant="icon" size="md" label="How does this work?" />}
+            {effectiveIsOrganizer && <FlowGuide id="event-organizer" autoOpen variant="icon" size="md" label="How do I run this event?" />}
             {effectiveIsOrganizer && (
               <>
                 <Link

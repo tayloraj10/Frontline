@@ -239,7 +239,7 @@ export default async function GroupProfilePage({ params }: Props) {
             <div className="rounded-[20px] bg-zinc-900 p-5">
               <div className="flex items-start justify-between gap-3">
                 <h2 className="font-display text-base font-extrabold tracking-tight text-zinc-100">Organizer tools</h2>
-                <FlowGuide id="organizer" autoOpen variant="link" label="How it works" />
+                <FlowGuide id="organizer" autoOpen variant="link" label="How does this work?" />
               </div>
               <p className="mt-0.5 mb-4 text-sm text-zinc-400">
                 {nextEvent

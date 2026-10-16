@@ -54,7 +54,7 @@ export function MapOverflowMenu({
       <CampaignInstructionsModal slug={slug} description={description} hideTriggers helpSignal={helpSignal} />
       {!hidden && (
         <>
-          <button type="button" onClick={() => setHelpSignal((n) => n + 1)} aria-label="How it works" className={`absolute z-20 right-[6.75rem] sm:right-auto sm:left-[24rem] ${TOP} ${ROUND} font-display text-base font-extrabold`}>
+          <button type="button" onClick={() => setHelpSignal((n) => n + 1)} aria-label="How does the map work?" className={`absolute z-20 right-[6.75rem] sm:right-auto sm:left-[24rem] ${TOP} ${ROUND} font-display text-base font-extrabold`}>
             ?
           </button>
           <button type="button" onClick={share} aria-label="Share" className={`absolute z-20 right-[3.75rem] sm:right-auto sm:left-[27rem] ${TOP} ${ROUND}`}>

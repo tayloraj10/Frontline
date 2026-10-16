@@ -134,7 +134,7 @@ export default function ApplyGroupForm({ userId }: { userId: string }) {
           Already running a crew? Add it here. A site admin will review it before it is listed.
         </p>
         <div className="mt-2">
-          <FlowGuide id="organizer" variant="link" label="How running a group works" />
+          <FlowGuide id="organizer" variant="link" label="How does running a group work?" />
         </div>
       </div>
 

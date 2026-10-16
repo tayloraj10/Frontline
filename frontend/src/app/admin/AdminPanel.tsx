@@ -3954,7 +3954,7 @@ export default function AdminPanel({
             <h1 className="font-display font-extrabold text-2xl text-zinc-100">Admin Panel</h1>
             <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
           </div>
-          <FlowGuide id="admin" variant="link" label="Admin guide" />
+          <FlowGuide id="admin" variant="link" label="How does the admin panel work?" />
         </div>
       </div>
 

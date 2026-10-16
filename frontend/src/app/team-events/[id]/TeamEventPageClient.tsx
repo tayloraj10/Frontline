@@ -211,6 +211,7 @@ export default function TeamEventPageClient({
             id="team-events"
             autoOpen
             variant="icon"
+            label="How does this work?"
             roles={[...(canReview ? ["reviewer"] : []), ...(isSiteAdmin ? ["admin"] : [])]}
           />
           {isCancelled && (
