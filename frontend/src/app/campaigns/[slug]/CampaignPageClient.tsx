@@ -20,6 +20,7 @@ import { listTeamEvents, getTeamEvent, type TeamEventDetail } from "@/lib/teamEv
 import { useGameSettings } from "@/lib/gameSettings";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
+import PlusFlair from "@/components/billing/PlusFlair";
 import RankBadge from "@/components/ui/RankBadge";
 import { computeRanks } from "@/lib/ranking";
 import { cn } from "@/lib/cn";
@@ -328,6 +329,7 @@ export interface LeaderboardEntry {
   pounds?: number;
   username?: string | null;
   avatar_url?: string | null;
+  is_plus?: boolean;
 }
 
 export interface ActivityItem {
@@ -446,9 +448,13 @@ function LeaderboardRow({
       {variant === "user" && entry.username ? (
         <Link href={`/users/${encodeURIComponent(entry.username)}`} className="flex-1 min-w-0 text-xs text-zinc-200 break-words hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
           {entry.name}
+          <PlusFlair isPlus={entry.is_plus} />
         </Link>
       ) : (
-        <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
+        <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">
+          {entry.name}
+          {variant === "group" && <PlusFlair isPlus={entry.is_plus} />}
+        </span>
       )}
       <div className="text-right shrink-0">
         <div className="text-xs font-semibold text-zinc-300 tabular-nums">

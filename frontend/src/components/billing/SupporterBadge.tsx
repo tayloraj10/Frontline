@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Badge from "@/components/ui/Badge";
 
 type OwnerType = "user" | "group";
 
@@ -33,11 +34,8 @@ export default function SupporterBadge({ ownerType, ownerId }: { ownerType: Owne
   if (!hasPremium) return null;
 
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-800/60 text-[10px] font-semibold text-emerald-400 align-middle"
-      title="Supports Frontline with an active premium subscription"
-    >
-      ⭐ Supporter
-    </span>
+    <Badge variant="success" className="align-middle text-[10px] font-semibold" title="Supports Frontline with an active Frontline Plus subscription">
+      Supporter
+    </Badge>
   );
 }

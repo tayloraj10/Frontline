@@ -21,6 +21,7 @@ import IconButton from "@/components/ui/IconButton";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BodyPortal from "@/components/ui/BodyPortal";
+import { useSponsoredMapLayer } from "./useSponsoredMapLayer";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -1954,6 +1955,9 @@ export default function CampaignMap({
   const [showMapEvents, setShowMapEvents] = useState(() => storedToggle("showMapEvents"));
   const [showPartners, setShowPartners] = useState(() => storedToggle("showPartners"));
   const [showBonusSpots, setShowBonusSpots] = useState(() => storedToggle("showBonusSpots"));
+  // Payments v2 sponsored areas: on by default, only offered when the viewer can see payments.
+  const [showSponsored, setShowSponsored] = useState(true);
+  const sponsoredLayer = useSponsoredMapLayer(map, showSponsored);
   // Drives the "Zip"/"Postcode" segmented-control label — reflects whichever region
   // (US vs UK) the map is currently centered over, not the campaign's static geo_unit
   // config, so a campaign spanning both regions relabels as the user pans around.
@@ -6158,6 +6162,7 @@ export default function CampaignMap({
                     setShowAdhocRoutes(true);
                     setShowReports(true);
                     setShowPartners(true);
+                    setShowSponsored(true);
                   }}
                   className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
                 >
@@ -6176,6 +6181,7 @@ export default function CampaignMap({
                     setShowAdhocRoutes(false);
                     setShowReports(false);
                     setShowPartners(false);
+                    setShowSponsored(false);
                     setShowGroupTerritory(false);
                     setShowIndividualTerritory(false);
                     setShowUnclaimedTerritory(false);
@@ -6219,6 +6225,12 @@ export default function CampaignMap({
                 </span>
                 <span className="text-zinc-300">Bonus spot</span>
               </LegendToggle>
+              {sponsoredLayer.available && (
+                <LegendToggle checked={showSponsored} onChange={setShowSponsored}>
+                  <span className="w-3 h-3 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/10 flex-shrink-0" />
+                  <span className="text-zinc-300">Sponsored areas{showSponsored && sponsoredLayer.count > 0 ? ` (${sponsoredLayer.count})` : ""}</span>
+                </LegendToggle>
+              )}
               <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>
                 <span className="w-3 h-3 rounded-full border border-sky-400 bg-sky-400/10 flex-shrink-0" />
                 <span className="text-zinc-300">Event check-in radius</span>

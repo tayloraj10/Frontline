@@ -15,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.services.game_settings import get_game_settings
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,45 @@ async def has_premium(db: AsyncSession, owner_type: OwnerType, owner_id: UUID) -
         )
     ).fetchone()
     return row is not None
+
+
+async def get_subscription_summary(db: AsyncSession, owner_type: OwnerType, owner_id: UUID) -> dict:
+    """What the Plus card needs to show: whether Plus is active, since when, and when it
+    renews or ends. `mock` rows come from the local test seeder, not Stripe."""
+    row = (
+        await db.execute(
+            text("""
+                SELECT created_at, current_period_end, cancel_at_period_end,
+                       stripe_subscription_id LIKE 'mock\\_%' AS is_mock
+                FROM subscriptions
+                WHERE owner_type = :owner_type AND owner_id = :owner_id
+                  AND status IN ('active', 'trialing')
+                ORDER BY created_at DESC
+                LIMIT 1
+            """),
+            {"owner_type": owner_type, "owner_id": str(owner_id)},
+        )
+    ).fetchone()
+    game_settings = await get_game_settings(db)
+    multiplier = max(1.0, float(game_settings.get("plus_earning_cap_multiplier", 2)))
+    early_hours = max(0, int(game_settings.get("plus_early_access_hours", 48)))
+    if row is None:
+        return {
+            "has_premium": False,
+            "early_access": False,
+            "earning_cap_multiplier": multiplier,
+            "early_access_hours": early_hours,
+        }
+    return {
+        "has_premium": True,
+        "earning_cap_multiplier": multiplier,
+        "early_access_hours": early_hours,
+        "since": row.created_at.isoformat(),
+        "current_period_end": row.current_period_end.isoformat() if row.current_period_end else None,
+        "cancel_at_period_end": bool(row.cancel_at_period_end),
+        "is_mock": bool(row.is_mock),
+        "early_access": True,
+    }
 
 
 async def upsert_subscription_from_stripe(db: AsyncSession, subscription: dict) -> None:

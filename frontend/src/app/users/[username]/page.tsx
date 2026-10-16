@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
-import { getPaymentsEnabled } from "@/lib/gameSettings.server";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { paymentsVisible } from "@/lib/paymentsVisibility";
 import { formatPoints } from "@/lib/formatPoints";
 import type { Database } from "@/types/database";
 import UserActivityList from "@/components/contributions/UserActivityList";
@@ -11,8 +12,9 @@ import ReportPhotoButton from "@/components/ReportPhotoButton";
 import ShareButton from "@/components/ShareButton";
 import BlockUserButton from "@/components/BlockUserButton";
 import SubscriptionWidget from "@/components/billing/SubscriptionWidget";
-import SupporterBadge from "@/components/billing/SupporterBadge";
-import PersonalInsightsCard from "./PersonalInsightsCard";
+import PlusBadge from "@/components/billing/PlusBadge";
+import { getPlusEntitlement } from "@/lib/plus.server";
+import PlusImpactCard from "./PlusImpactCard";
 import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
 import { PageShell } from "@/components/ui/PageShell";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -96,14 +98,15 @@ export default async function UserProfilePage({ params }: Props) {
 
   // Not scoped to isOwn: a site admin viewing someone else's profile still needs this
   // (e.g. to see that profile's supporter badge), not just an admin viewing their own.
-  const [{ data: viewerAdminCheck }, paymentsEnabled] = await Promise.all([
+  const [{ data: viewerAdminCheck }, paymentsGate] = await Promise.all([
     currentUser
       ? supabase.from("profiles").select("is_admin").eq("id", currentUser.id).single()
       : Promise.resolve({ data: null as { is_admin: boolean } | null }),
-    getPaymentsEnabled(),
+    getPaymentsGate(),
   ]);
   const isSiteAdmin = !!viewerAdminCheck?.is_admin;
-  const canSeePayments = isSiteAdmin || paymentsEnabled;
+  const canSeePayments = paymentsVisible(paymentsGate, isSiteAdmin);
+  const isPlus = canSeePayments ? (await getPlusEntitlement("user", profile.id)).has_premium : false;
 
   const { data: existingBlock } =
     !isOwn && currentUser
@@ -223,8 +226,6 @@ export default async function UserProfilePage({ params }: Props) {
   });
   const totalTractsCount = tractsData?.length ?? 0;
 
-  const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
-
   const joinedDate = new Date(profile.created_at).toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
@@ -250,6 +251,16 @@ export default async function UserProfilePage({ params }: Props) {
     perWeek.set(w, (perWeek.get(w) ?? 0) + 1);
   }
   const thisWeek = perWeek.get(nowWeek) ?? 0;
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  let monthBags = 0;
+  let monthCleanups = 0;
+  (allContribsData ?? []).forEach((c, i) => {
+    if (!c.submitted_at || new Date(c.submitted_at) < monthStart) return;
+    monthBags += bagsPerContrib[i];
+    if (CLEANUP_TYPES.has(c.contribution_type)) monthCleanups++;
+  });
   let streak = 0;
   for (let w = perWeek.has(nowWeek) ? nowWeek : nowWeek - 1; perWeek.has(w); w--) streak++;
   const displayName = profile.display_name ?? profile.username;
@@ -263,7 +274,7 @@ export default async function UserProfilePage({ params }: Props) {
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
           <div className="shrink-0">
-            <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-[20px] bg-zinc-800 overflow-hidden flex items-center justify-center">
+            <div className={`w-16 h-16 lg:w-20 lg:h-20 rounded-[20px] bg-zinc-800 overflow-hidden flex items-center justify-center ${isPlus ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-zinc-950" : ""}`}>
               {profile.avatar_url ? (
                 <GroupAvatarLightbox imageUrl={profile.avatar_url} name={displayName} />
               ) : (
@@ -275,9 +286,9 @@ export default async function UserProfilePage({ params }: Props) {
             )}
           </div>
           <div className="min-w-0">
-            <h1 className="font-display font-extrabold text-2xl lg:text-3xl tracking-tight text-zinc-50 leading-tight">{displayName}</h1>
+            <h1 className={`font-display font-extrabold text-2xl lg:text-3xl tracking-tight leading-tight ${isPlus ? "bg-gradient-to-r from-amber-200 to-amber-400 bg-clip-text text-transparent" : "text-zinc-50"}`}>{displayName}</h1>
             <p className="text-sm text-zinc-500">@{profile.username} · Member since {joinedDate}</p>
-            {canSeePayments && <SupporterBadge ownerType="user" ownerId={profile.id} />}
+            {isPlus && <PlusBadge />}
             {profile.bio && <p className="mt-1.5 max-w-prose text-sm text-zinc-400 leading-relaxed">{profile.bio}</p>}
           </div>
         </div>
@@ -294,9 +305,25 @@ export default async function UserProfilePage({ params }: Props) {
         </div>
       </div>
 
-      {isOwn && canSeePayments && <SubscriptionWidget ownerType="user" ownerId={profile.id} />}
-      {isOwn && canSeePayments && currentUser && (
-        <PersonalInsightsCard userId={profile.id} viewerUserId={currentUser.id} fastapiUrl={fastapiUrl} />
+      {isOwn && canSeePayments && (
+        <SubscriptionWidget ownerType="user" ownerId={profile.id} adminPreview={isSiteAdmin && !paymentsGate.enabled} />
+      )}
+      {isOwn && canSeePayments && (
+        <PlusImpactCard
+          isPlus={isPlus}
+          stats={{
+            displayName,
+            username: profile.username,
+            periodLabel: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+            monthBags,
+            monthCleanups,
+            lifetimeBags,
+            lifetimeCleanups: contribCount ?? 0,
+            streak,
+            areas: totalTractsCount,
+            points: formatPoints(profile.points ?? 0),
+          }}
+        />
       )}
 
       {/* Impact stats */}

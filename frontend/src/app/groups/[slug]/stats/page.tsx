@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getPaymentsEnabled } from "@/lib/gameSettings.server";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { paymentsVisible } from "@/lib/paymentsVisibility";
 import BackButton from "@/components/ui/BackButton";
 import GroupStatsView from "./GroupStatsView";
 import type { Database } from "@/types/database";
@@ -15,10 +16,10 @@ export default async function GroupStatsPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupData }, paymentsEnabled] = await Promise.all([
+  const [{ data: { user } }, { data: groupData }, paymentsGate] = await Promise.all([
     supabase.auth.getUser(),
     supabase.from("groups").select("*").eq("slug", slug).single(),
-    getPaymentsEnabled(),
+    getPaymentsGate(),
   ]);
 
   const group = groupData as Group | null;
@@ -40,7 +41,7 @@ export default async function GroupStatsPage({ params }: Props) {
 
   const isAdmin = memberRow?.role === "admin";
   const isSiteAdmin = !!siteAdminCheck?.is_admin;
-  const canSeePayments = isSiteAdmin || paymentsEnabled;
+  const canSeePayments = paymentsVisible(paymentsGate, isSiteAdmin);
 
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 

@@ -97,7 +97,6 @@ export default function FlowGuide({
             onClick={() => setOpen(true)}
             className={`inline-flex items-center gap-1.5 min-h-9 px-3 rounded-full text-xs font-semibold text-zinc-300 bg-zinc-800/60 ring-1 ring-white/10 hover:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation ${className}`}
           >
-            <span aria-hidden="true" className="font-bold text-zinc-400">?</span>
             {label ?? "How this works"}
           </button>
         ))}

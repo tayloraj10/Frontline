@@ -1,21 +1,18 @@
 import Link from "next/link";
+import { PageHeader, PageShell } from "@/components/ui/PageShell";
 
-export const metadata = { title: "Subscription active — Frontline" };
+export const metadata = { title: "Subscription active - Frontline" };
 
 export default function BillingSuccessPage() {
   return (
-    <main className="max-w-2xl mx-auto px-6 py-16 space-y-8 text-zinc-300 text-center">
-      <div className="space-y-2">
-        <p className="text-xs text-zinc-500 uppercase tracking-widest">Billing</p>
-        <h1 className="text-3xl font-black text-zinc-100">You&apos;re all set</h1>
-        <p className="text-zinc-500 text-sm">
-          Checkout completed. It may take a few seconds for the subscription to show as active.
-        </p>
-      </div>
-
-      <Link href="/" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+    <PageShell width="narrow" className="text-center">
+      <PageHeader eyebrow="Billing" title="You are all set" subtitle="Checkout completed. It may take a few seconds for the subscription to show as active." />
+      <Link
+        href="/"
+        className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-emerald-400 px-5 text-sm font-bold text-emerald-950 hover:bg-emerald-300 active:scale-[0.97] transition-[transform,background-color] duration-150 touch-manipulation"
+      >
         Back to Frontline
       </Link>
-    </main>
+    </PageShell>
   );
 }

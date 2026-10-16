@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getPaymentsEnabled } from "@/lib/gameSettings.server";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { paymentsVisible } from "@/lib/paymentsVisibility";
 
 /**
  * Shared auth gate for the /api/admin/payments and /api/admin/sponsorships proxy
@@ -15,12 +16,12 @@ export async function requireAdminOrPaymentsEnabled() {
   } = await supabase.auth.getUser();
   if (!user) return { error: NextResponse.json({ detail: "Not authenticated" }, { status: 401 }) };
 
-  const [{ data: profile }, paymentsEnabled] = await Promise.all([
+  const [{ data: profile }, paymentsGate] = await Promise.all([
     supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single(),
-    getPaymentsEnabled(),
+    getPaymentsGate(),
   ]);
   const isSiteAdmin = !!profile?.is_admin;
-  if (!isSiteAdmin && !paymentsEnabled) {
+  if (!paymentsVisible(paymentsGate, isSiteAdmin)) {
     return { error: NextResponse.json({ detail: "Forbidden" }, { status: 403 }) };
   }
 

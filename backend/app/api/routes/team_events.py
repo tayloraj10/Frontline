@@ -525,7 +525,7 @@ async def get_team_event_leaderboard(
 
     result = await db.execute(
         text("""
-            SELECT tep.user_id, p.username, p.display_name, p.avatar_url,
+            SELECT tep.user_id, p.username, p.display_name, p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = tep.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                    tep.team_id, t.name AS team_name, t.color AS team_color,
                    COALESCE(SUM(c.value) FILTER (
                        WHERE c.review_status IS DISTINCT FROM 'flagged'
@@ -554,6 +554,7 @@ async def get_team_event_leaderboard(
             "username": r.username,
             "display_name": r.display_name,
             "avatar_url": r.avatar_url,
+            "is_plus": bool(r.is_plus),
             "team_id": str(r.team_id),
             "team_name": r.team_name,
             "team_color": r.team_color,
@@ -905,7 +906,7 @@ async def get_team_event_admin_summary(
 
     top_contributors_result = await db.execute(
         text("""
-            SELECT c.user_id, p.username, p.display_name, p.avatar_url,
+            SELECT c.user_id, p.username, p.display_name, p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = c.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                    COALESCE(SUM(c.value), 0) AS total_value, COUNT(c.id) AS submission_count
             FROM contributions c
             JOIN profiles p ON p.id = c.user_id
@@ -945,6 +946,7 @@ async def get_team_event_admin_summary(
                 "username": r.username,
                 "display_name": r.display_name,
                 "avatar_url": r.avatar_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": float(r.total_value),
                 "submission_count": r.submission_count,
             }

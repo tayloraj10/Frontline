@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCleanupEvent } from "@/lib/cleanupEvents";
-import { getPaymentsEnabled } from "@/lib/gameSettings.server";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { paymentsVisible } from "@/lib/paymentsVisibility";
 import CleanupEventDetail from "@/components/cleanups/CleanupEventDetail";
 import BackToCampaignButton from "@/components/ui/BackToCampaignButton";
 import SponsorshipWidget from "@/components/billing/SponsorshipWidget";
@@ -18,12 +19,12 @@ export default async function CleanupEventPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [event, { data: adminProfile }, paymentsEnabled] = await Promise.all([
+  const [event, { data: adminProfile }, paymentsGate] = await Promise.all([
     getCleanupEvent(id, user?.id ?? null).catch(() => null),
     user
       ? supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single()
       : Promise.resolve({ data: null as { is_admin: boolean } | null }),
-    getPaymentsEnabled(),
+    getPaymentsGate(),
   ]);
   if (!event) notFound();
   const isSiteAdmin = adminProfile?.is_admin ?? false;
@@ -34,9 +35,9 @@ export default async function CleanupEventPage({ params }: Props) {
         <BackToCampaignButton campaignSlug={event.campaign_slug} />
       </div>
       <div className="mt-6">
-        <CleanupEventDetail initialEvent={event} userId={user?.id ?? null} isSiteAdmin={isSiteAdmin} />
+        <CleanupEventDetail initialEvent={event} userId={user?.id ?? null} isSiteAdmin={isSiteAdmin} showSponsored={paymentsVisible(paymentsGate, isSiteAdmin)} />
       </div>
-      {(isSiteAdmin || paymentsEnabled) && user && (
+      {paymentsVisible(paymentsGate, isSiteAdmin) && user && (
         <div className="mt-6">
           <SponsorshipWidget
             targetType="cleanup_event"

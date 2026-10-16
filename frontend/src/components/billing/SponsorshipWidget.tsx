@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Button from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ChoiceChips, Field, Note, Select, TextInput } from "@/components/ui/fields";
 
 type TargetType = "cleanup_event" | "geo_unit";
 
@@ -82,80 +85,70 @@ export default function SponsorshipWidget({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950">
-      <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
-        <span className="text-sm font-semibold text-zinc-300">Sponsor this {targetType === "cleanup_event" ? "cleanup" : "area"}</span>
-        <span className="text-[10px] uppercase tracking-wider text-zinc-600">Admin-only · Stripe test mode</span>
+    <Card padding="lg" className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-display text-lg font-extrabold tracking-tight text-zinc-100">
+          Sponsor this {targetType === "cleanup_event" ? "cleanup" : "area"}
+        </h3>
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-emerald-400">Admin preview</span>
       </div>
-      <div className="px-5 py-4 space-y-3">
-        <p className="text-xs text-zinc-500">
-          Not visible to regular users yet -- funding only, no payout yet. &quot;{targetLabel}&quot;
-        </p>
+      <p className="text-sm text-zinc-400">
+        Funds a cleanup program for &quot;{targetLabel}&quot;. Test mode, funding only, no payouts yet.
+      </p>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <Note tone="warn">{error}</Note>}
 
-        <div className="flex gap-2">
-          <button
-            className={`min-h-9 px-3 rounded-lg text-xs font-semibold transition-colors duration-150 ${
-              sponsorMode === "user" ? "bg-emerald-700 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-            }`}
-            onClick={() => setSponsorMode("user")}
-          >
-            As myself
-          </button>
-          <button
-            className={`min-h-9 px-3 rounded-lg text-xs font-semibold transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${
-              sponsorMode === "business" ? "bg-emerald-700 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-            }`}
-            onClick={() => setSponsorMode("business")}
-            disabled={businesses.length === 0}
-          >
-            As a business
-          </button>
-        </div>
+      <ChoiceChips
+        value={sponsorMode}
+        onChange={(v) => {
+          if (v === "business" && businesses.length === 0) return;
+          setSponsorMode(v);
+        }}
+        options={[
+          { value: "user", label: "As myself" },
+          {
+            value: "business",
+            label: "As a business",
+            idleClass: businesses.length === 0 ? "bg-zinc-800 text-zinc-600" : undefined,
+          },
+        ]}
+      />
 
-        {sponsorMode === "business" && (
-          <select
-            className="w-full min-h-9 px-3 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 text-sm"
-            value={businessId}
-            onChange={(e) => setBusinessId(e.target.value)}
-          >
+      {sponsorMode === "business" && (
+        <Field label="Business">
+          <Select value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
             {businesses.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
               </option>
             ))}
-          </select>
-        )}
+          </Select>
+        </Field>
+      )}
 
-        <div className="flex items-center gap-2">
-          <span className="text-zinc-500 text-sm">$</span>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            className="w-24 min-h-9 px-3 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 text-sm"
-            value={amountDollars}
-            onChange={(e) => setAmountDollars(e.target.value)}
-          />
-        </div>
+      <Field label="Amount (USD)">
+        <TextInput
+          type="number"
+          inputMode="decimal"
+          min="1"
+          step="1"
+          value={amountDollars}
+          onChange={(e) => setAmountDollars(e.target.value)}
+        />
+      </Field>
 
-        <input
+      <Field label="Message" optional>
+        <TextInput
           type="text"
-          placeholder="Optional message"
-          className="w-full min-h-9 px-3 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 text-sm"
+          placeholder="Say why you are sponsoring"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
         />
+      </Field>
 
-        <button
-          className="min-h-9 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={loading}
-          onClick={handleCheckout}
-        >
-          Start test checkout
-        </button>
-      </div>
-    </div>
+      <Button className="w-full" loading={loading} onClick={handleCheckout}>
+        Start test checkout
+      </Button>
+    </Card>
   );
 }

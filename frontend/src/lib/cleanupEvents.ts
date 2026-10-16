@@ -1,5 +1,6 @@
 import { uploadEventImage } from "@/lib/events";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
+import type { PayoutRule } from "@/app/sponsorships/SponsoredSites";
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api${path}`, {
@@ -28,6 +29,7 @@ export type CleanupEventRsvp = {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  is_plus?: boolean;
   status: "going" | "maybe" | "cancelled";
   checked_in_at: string | null;
   is_organizer: boolean;
@@ -99,6 +101,15 @@ export type CleanupEventDetailData = {
   logging_mode: "organizer_total" | "individual";
   event_offers: CleanupEventOffer[];
   event_offer_redemption_open: boolean;
+  /** Sponsored area attached to this event (payments v2); null when none. */
+  sponsored: {
+    area_name: string | null;
+    message: string | null;
+    payout_rule: PayoutRule;
+    pending_cents: number;
+    paid_cents: number;
+    has_allocation: boolean;
+  } | null;
 };
 
 export type CleanupEventOffer = {
@@ -196,6 +207,7 @@ export async function createCleanupEvent({
   route,
   cohostGroupIds,
   loggingMode = "organizer_total",
+  sponsorshipId,
 }: {
   campaignId: string;
   groupId: string;
@@ -217,6 +229,7 @@ export async function createCleanupEvent({
   route?: RouteLineString | null;
   cohostGroupIds?: string[];
   loggingMode?: "organizer_total" | "individual";
+  sponsorshipId?: string | null;
 }): Promise<CreatedCleanupEvent> {
   let imageUrl: string | null = null;
   if (imageFile) imageUrl = await uploadEventImage(imageFile);
@@ -242,6 +255,7 @@ export async function createCleanupEvent({
     route: route ?? null,
     cohost_group_ids: cohostGroupIds ?? [],
     logging_mode: loggingMode,
+    sponsorship_id: sponsorshipId ?? null,
   });
 }
 

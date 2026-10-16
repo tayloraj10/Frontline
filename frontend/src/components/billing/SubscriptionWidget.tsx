@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Button from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Note } from "@/components/ui/fields";
+import DonateCard from "./DonateCard";
+import { PLUS_PRICE_LABEL, plusPerks, type PlusEntitlement } from "@/lib/plus";
 
 type OwnerType = "user" | "group";
 
@@ -15,123 +20,168 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   return err.message || fallback;
 }
 
+function formatDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
 /**
- * Subscribe/manage-billing widget for a single owner (a user's own profile, or a group they
- * admin). Only ever rendered for site admins right now -- see callers -- since there's no
- * premium feature decided to gate yet and this is still a Stripe test-mode harness.
+ * Frontline Plus card for one owner (a user's own profile, or a group they admin).
+ * Not subscribed: a pitch, the perks and one subscribe button. Subscribed: a status line
+ * with the member-since and renewal dates, the perks they have, and one manage button.
+ * `adminPreview` adds the test-mode labelling that only site admins should see.
  */
-export default function SubscriptionWidget({ ownerType, ownerId }: { ownerType: OwnerType; ownerId: string }) {
-  const [hasPremium, setHasPremium] = useState<boolean | null>(null);
+export default function SubscriptionWidget({
+  ownerType,
+  ownerId,
+  adminPreview = false,
+}: {
+  ownerType: OwnerType;
+  ownerId: string;
+  adminPreview?: boolean;
+}) {
+  const [ent, setEnt] = useState<PlusEntitlement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshEntitlement = useCallback(async () => {
-    setError(null);
+  const loadEntitlement = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/payments/entitlement?owner_type=${ownerType}&owner_id=${ownerId}`);
       if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      setHasPremium(data.has_premium);
+      setEnt(await res.json());
     } catch (err) {
-      setError(extractErrorMessage(err, "Failed to load entitlement"));
-      setHasPremium(null);
+      setError(extractErrorMessage(err, "Could not load your subscription."));
     }
   }, [ownerType, ownerId]);
 
   useEffect(() => {
-    refreshEntitlement();
-  }, [refreshEntitlement]);
+    loadEntitlement();
+  }, [loadEntitlement]);
 
-  const handleCheckout = async () => {
+  // Returning from Stripe in the same tab (or a restored tab) should show the new state.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadEntitlement();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadEntitlement]);
+
+  const redirectTo = async (path: string, body: Record<string, unknown>, failure: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/payments/checkout-session", {
+      const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          owner_type: ownerType,
-          owner_id: ownerId,
-          success_url: `${window.location.origin}/billing/success`,
-          cancel_url: `${window.location.origin}/billing/cancel`,
-        }),
+        body: JSON.stringify({ owner_type: ownerType, owner_id: ownerId, ...body }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      window.location.assign(data.url);
     } catch (err) {
-      setError(extractErrorMessage(err, "Failed to start checkout"));
-    } finally {
+      setError(extractErrorMessage(err, failure));
       setLoading(false);
     }
   };
 
-  const handlePortal = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/admin/payments/portal-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ owner_type: ownerType, owner_id: ownerId, return_url: window.location.href }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      setError(extractErrorMessage(err, "Failed to open billing portal"));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const subscribe = () =>
+    redirectTo(
+      "/api/admin/payments/checkout-session",
+      {
+        success_url: `${window.location.origin}/billing/success`,
+        cancel_url: `${window.location.origin}/billing/cancel`,
+      },
+      "Could not start checkout.",
+    );
+
+  const manage = () =>
+    redirectTo("/api/admin/payments/portal-session", { return_url: window.location.href }, "Could not open billing.");
+
+  const perks = plusPerks(ownerType, ent?.earning_cap_multiplier, ent?.early_access_hours);
+  const since = formatDate(ent?.since);
+  const renews = formatDate(ent?.current_period_end);
+  const active = ent?.has_premium === true;
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-2 bg-zinc-950 mb-6">
-      <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
-        <span className="text-sm font-semibold text-zinc-300">Subscription</span>
-        <span className="text-[10px] uppercase tracking-wider text-zinc-600">Admin-only · Stripe test mode</span>
+    <Card padding="lg" className="mb-6 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-display text-lg font-extrabold tracking-tight text-zinc-100">Frontline Plus</h3>
+        {adminPreview && (
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
+            Admin preview
+          </span>
+        )}
       </div>
-      <div className="px-5 py-4 space-y-3">
-        <p className="text-xs text-zinc-500">
-          Not visible to regular users yet -- this is a test harness until premium is ready to launch.
-        </p>
 
-        <div className="text-sm text-zinc-300">
-          {hasPremium === null ? (
-            <span className="text-zinc-600">Loading entitlement...</span>
-          ) : hasPremium ? (
-            <span className="text-emerald-400 font-semibold">Premium active</span>
+      {ent === null && !error && <p className="text-sm text-zinc-500">Loading...</p>}
+
+      {ent !== null && !active && (
+        <>
+          <p className="text-sm text-zinc-300">
+            {ownerType === "group"
+              ? "Plus keeps your group's tools running and funds new cleanup features for everyone."
+              : "Plus is how members keep Frontline running and free for every cleanup crew. You get a few extras for it."}
+          </p>
+          <ul className="space-y-2">
+            {perks.map((p) => (
+              <li key={p} className="flex gap-2 text-sm text-zinc-300">
+                <span aria-hidden className="mt-0.5 text-amber-300">
+                  ✦
+                </span>
+                {p}
+              </li>
+            ))}
+          </ul>
+          <Button className="w-full sm:w-auto" loading={loading} onClick={subscribe}>
+            Get Plus, {PLUS_PRICE_LABEL}
+          </Button>
+          <p className="text-xs text-zinc-500">Cancel any time from the billing page.</p>
+        </>
+      )}
+
+      {active && (
+        <>
+          <div>
+            <p className="text-sm font-semibold text-amber-300">
+              Plus member{since ? ` since ${since}` : ""}
+            </p>
+            <p className="mt-1 text-sm text-zinc-400">
+              {ent?.cancel_at_period_end
+                ? `Ends ${renews ?? "at the end of this period"}. You keep Plus until then.`
+                : renews
+                  ? `Renews ${renews}.`
+                  : "Active."}{" "}
+              Thank you for backing the mission.
+            </p>
+          </div>
+          <ul className="space-y-2">
+            {perks.map((p) => (
+              <li key={p} className="flex gap-2 text-sm text-zinc-300">
+                <span aria-hidden className="mt-0.5 text-amber-300">
+                  ✦
+                </span>
+                {p}
+              </li>
+            ))}
+          </ul>
+          {ent?.is_mock ? (
+            adminPreview && <Note tone="info">Test subscription from the mock seeder. Billing management is not available for it.</Note>
           ) : (
-            <span className="text-zinc-500">No active subscription</span>
+            <Button variant="secondary" className="w-full sm:w-auto" loading={loading} onClick={manage}>
+              Manage subscription
+            </Button>
           )}
-        </div>
+        </>
+      )}
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="min-h-9 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading}
-            onClick={handleCheckout}
-          >
-            Start test checkout
-          </button>
-          <button
-            className="min-h-9 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading}
-            onClick={handlePortal}
-          >
-            Open billing portal
-          </button>
-          <button
-            className="min-h-9 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading}
-            onClick={refreshEntitlement}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-    </div>
+      {error && <Note tone="warn">{error}</Note>}
+      {ownerType === "user" && ent !== null && <DonateCard userId={ownerId} />}
+      {adminPreview && !active && ent !== null && (
+        <p className="text-xs text-zinc-600">Test mode: visible to site admins only until payments are enabled.</p>
+      )}
+    </Card>
   );
 }

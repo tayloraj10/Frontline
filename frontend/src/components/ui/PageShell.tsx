@@ -27,7 +27,7 @@ export function PageHeader({ title, subtitle, eyebrow, action }: { title: ReactN
 }
 
 /** Titled content section. */
-export function Section({ title, action, children, className }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
+export function Section({ title, description, action, children, className }: { title?: ReactNode; description?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn("mb-8", className)}>
       {(title || action) && (
@@ -36,6 +36,7 @@ export function Section({ title, action, children, className }: { title?: ReactN
           {action}
         </div>
       )}
+      {description && <p className="-mt-2 mb-3 text-sm text-zinc-400">{description}</p>}
       {children}
     </section>
   );

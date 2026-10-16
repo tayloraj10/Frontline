@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui/Card";
 
 interface DayOfWeekBucket {
   dow: number;
@@ -67,34 +68,32 @@ export default function PremiumInsightsCard({
 
   if (state === "locked") {
     return (
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1 bg-zinc-950 mb-5 px-5 py-4">
-        <p className="text-sm font-semibold text-zinc-300 mb-1">Premium Insights 🔒</p>
-        <p className="text-xs text-zinc-500">
+      <Card padding="lg" className="mb-5">
+        <p className="font-display text-base font-extrabold text-zinc-100 mb-1">Premium Insights</p>
+        <p className="text-sm text-zinc-400">
           Day-of-week activity trends and top contributors are available with an active group subscription.
         </p>
-      </div>
+      </Card>
     );
   }
 
   const maxValue = Math.max(1, ...(insights?.day_of_week ?? []).map((d) => d.total_value));
 
   return (
-    <div className="border border-emerald-800/50 rounded-xl overflow-hidden shadow-elevation-1 bg-zinc-950 mb-5">
-      <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-        <span className="text-sm font-semibold text-emerald-400">Premium Insights</span>
-      </div>
-      <div className="px-5 py-4 space-y-4">
+    <Card padding="lg" className="mb-5 space-y-5">
+      <h3 className="font-display text-lg font-extrabold tracking-tight text-emerald-400">Premium Insights</h3>
+      <div className="space-y-5">
         <div>
-          <p className="text-xs text-zinc-500 mb-2">Activity by day of week</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Activity by day of week</p>
           <div className="flex items-end gap-1.5 h-20">
             {insights?.day_of_week.map((d) => (
               <div key={d.dow} className="flex-1 flex flex-col items-center gap-1">
                 <div
-                  className="w-full bg-emerald-700 rounded-t"
+                  className="w-full bg-emerald-400 rounded-t"
                   style={{ height: `${Math.max(4, (d.total_value / maxValue) * 64)}px` }}
                   title={`${d.total_value} points, ${d.contribution_count} logs`}
                 />
-                <span className="text-[10px] text-zinc-600">{d.label}</span>
+                <span className="text-[10px] text-zinc-500">{d.label}</span>
               </div>
             ))}
           </div>
@@ -102,7 +101,7 @@ export default function PremiumInsightsCard({
 
         {insights && insights.top_contributors_30d.length > 0 && (
           <div>
-            <p className="text-xs text-zinc-500 mb-2">Top contributors (last 30 days)</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Top contributors (last 30 days)</p>
             <ul className="space-y-1">
               {insights.top_contributors_30d.map((c) => (
                 <li key={c.user_id} className="flex items-center justify-between text-sm text-zinc-300">
@@ -114,6 +113,6 @@ export default function PremiumInsightsCard({
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

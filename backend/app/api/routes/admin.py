@@ -16,6 +16,7 @@ from app.services import geo
 from app.services.game_settings import get_game_settings as get_game_balance_settings
 from app.services.seeders import GEO_UNIT_SEEDERS, REGISTRY, GeoUnitType, StatesSeeder
 from app.services.seeders.cleanup_rsvps import CleanupTestAttendeesSeeder
+from app.services.seeders.payments_mock import PaymentsMockSeeder
 from app.services.seeders.demo_data import DemoDataSeeder, _uid as _demo_uid
 from app.services.seeders.global_hexes import GlobalHexSeeder
 from app.services.seeders.solarpunk_preseed import SolarpunkPreseedSeeder
@@ -371,6 +372,30 @@ async def seed_cleanup_attendees(cleanup_id: str, db: AsyncSession = Depends(get
         result = await CleanupTestAttendeesSeeder().run(db, {"cleanup_id": cleanup_id})
     except Exception as exc:
         raise HTTPException(500, f"Cleanup attendees seeder failed: {exc}")
+    return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
+
+
+@router.post("/seed/payments-mock")
+async def seed_payments_mock(
+    username: str | None = None,
+    group_slug: str | None = None,
+    sponsor_username: str | None = None,
+    site_lat: float | None = None,
+    site_lon: float | None = None,
+    geo_unit_id: str | None = None,
+    create_free_user: bool = False,
+    remove: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """Local payments v2 testing: mark one user and one group as Frontline Plus (mock subscriptions) and optionally
+    create funded mock sponsorships (a site at site_lat/site_lon, a group area on geo_unit_id). create_free_user=true adds a
+    non-Plus login freeuser / password. remove=true deletes it all."""
+    params = {"username": username, "group_slug": group_slug, "sponsor_username": sponsor_username,
+              "site_lat": site_lat, "site_lon": site_lon, "geo_unit_id": geo_unit_id, "create_free_user": create_free_user, "remove": remove}
+    try:
+        result = await PaymentsMockSeeder().run(db, params)
+    except Exception as exc:
+        raise HTTPException(500, f"Payments mock seeder failed: {exc}")
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}
 
 

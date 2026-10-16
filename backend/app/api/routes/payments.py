@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
+from app.services import impact as impact_service
 from app.services import payments as payments_service
 from app.services import sponsorships as sponsorships_service
 
@@ -112,7 +113,31 @@ async def get_entitlement(
     db: AsyncSession = Depends(get_db),
 ):
     _check_secret(x_admin_api_secret)
-    return {"has_premium": await payments_service.has_premium(db, owner_type, owner_id)}
+    return await payments_service.get_subscription_summary(db, owner_type, owner_id)
+
+
+@router.get("/plus-groups")
+async def get_plus_groups(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ids of groups with an active Plus subscription, for list-page flair."""
+    _check_secret(x_admin_api_secret)
+    rows = await db.execute(
+        text("SELECT owner_id::text AS id FROM subscriptions WHERE owner_type = 'group' AND status IN ('active', 'trialing')")
+    )
+    return {"group_ids": [r.id for r in rows]}
+
+
+@router.get("/impact-summary")
+async def get_impact_summary(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate-only data for the Impact & Funding page. Admin-gated for now, like the
+    rest of this file; the Next.js route enforces the payments visibility toggle."""
+    _check_secret(x_admin_api_secret)
+    return await impact_service.get_impact_summary(db)
 
 
 @router.post("/webhooks/stripe")

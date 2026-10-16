@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdminOrPaymentsEnabled } from "@/lib/paymentsAuth";
+import { getSponsorBusinesses } from "@/lib/sponsorBusinesses";
 
 async function requireSiteAdmin() {
   const supabase = await createClient();
@@ -46,6 +47,18 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
+  // The sponsor is always the signed-in user, or a business they belong to. Never trust the body.
+  if (body.sponsor_type === "business") {
+    const supabase = await createClient();
+    const mine = await getSponsorBusinesses(supabase, auth.userId);
+    if (!mine.some((b) => b.id === body.sponsor_business_id)) {
+      return NextResponse.json({ detail: "You can only sponsor as a business you belong to." }, { status: 403 });
+    }
+    body.sponsor_user_id = null;
+  } else {
+    body.sponsor_user_id = auth.userId;
+    body.sponsor_business_id = null;
+  }
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/sponsorships/checkout-session`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Admin-Api-Secret": secret },

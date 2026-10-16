@@ -20,6 +20,7 @@ from app.services.event_permissions import (
     can_manage_event as _can_manage_event,
 )
 from app.services.game_settings import get_game_settings
+from app.services import sponsored_cleanups
 
 router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
 
@@ -65,6 +66,7 @@ class CreateCleanupEventRequest(BaseModel):
     route: dict | None = None
     cohost_group_ids: list[UUID] = []
     logging_mode: Literal["organizer_total", "individual"] = "organizer_total"
+    sponsorship_id: UUID | None = None
 
     @field_validator("max_attendees")
     @classmethod
@@ -624,7 +626,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
 
     rsvp_result = await db.execute(
         text("""
-            SELECT r.user_id, p.username, p.display_name, p.avatar_url, r.status, r.checked_in_at, r.is_organizer
+            SELECT r.user_id, p.username, p.display_name, p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = r.user_id AND sb.status IN ('active', 'trialing')) AS is_plus, r.status, r.checked_in_at, r.is_organizer
             FROM cleanup_rsvps r
             JOIN profiles p ON p.id = r.user_id
             WHERE r.cleanup_id = :id
@@ -727,6 +729,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "username": r.username,
             "display_name": r.display_name,
             "avatar_url": r.avatar_url,
+            "is_plus": bool(r.is_plus),
             "status": r.status,
             "checked_in_at": r.checked_in_at.isoformat() if r.checked_in_at else None,
             "is_organizer": r.is_organizer,
@@ -852,6 +855,41 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         for r in event_offers_result.fetchall()
     ]
 
+    # Sponsored area attached at create (payments v2). The caller decides whether to show it.
+    sponsored = None
+    sp_row = (
+        await db.execute(
+            text("""
+                SELECT s.id, s.area_name, s.message, s.payout_rule
+                FROM cleanups c
+                JOIN sponsorships s ON s.id = c.sponsorship_id
+                WHERE c.id = :id
+            """),
+            {"id": str(cleanup_id)},
+        )
+    ).fetchone()
+    if sp_row:
+        alloc = (
+            await db.execute(
+                text("""
+                    SELECT COALESCE(SUM(amount_cents) FILTER (WHERE status IN ('queued', 'approved')), 0) AS pending_cents,
+                           COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid_out'), 0) AS paid_cents,
+                           COUNT(*) AS n
+                    FROM sponsorship_allocations
+                    WHERE cleanup_id = :id AND group_id IS NOT NULL
+                """),
+                {"id": str(cleanup_id)},
+            )
+        ).fetchone()
+        sponsored = {
+            "area_name": sp_row.area_name,
+            "message": sp_row.message,
+            "payout_rule": sp_row.payout_rule,
+            "pending_cents": int(alloc.pending_cents),
+            "paid_cents": int(alloc.paid_cents),
+            "has_allocation": alloc.n > 0,
+        }
+
     # Mirrors the effective-end/window logic in partners.redeem_offer so the UI can decide
     # whether to show the redemption surface at all, without duplicating the math client-side.
     effective_end = row.scheduled_end or (row.scheduled_start + EVENT_CHECKIN_DEFAULT_DURATION if row.scheduled_start else None)
@@ -921,6 +959,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "check_in_window_end": check_in_window_end.isoformat() if check_in_window_end else None,
         "check_in_radius_meters": settings.get("cleanup_event_proximity_meters", 150.0),
         "event_offers": event_offers,
+        "sponsored": sponsored,
         "event_offer_redemption_open": event_offer_redemption_open,
     }
 
@@ -940,6 +979,14 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
     if camp_row[0] != "active":
         raise HTTPException(status_code=403, detail="Campaign is not accepting new events")
 
+    if payload.sponsorship_id is not None:
+        try:
+            await sponsored_cleanups.validate_event_pool(
+                db, payload.sponsorship_id, payload.group_id, payload.latitude, payload.longitude
+            )
+        except sponsored_cleanups.SponsoredError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+
     geo_unit_id = await _resolve_geo_unit_id(db, payload.campaign_id, payload.latitude, payload.longitude)
     join_code = await _generate_join_code(db)
 
@@ -950,7 +997,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
                  title, description, location,
                  address_line1, city, state, postal_code, country,
                  route, scheduled_start, scheduled_end,
-                 status, image_urls, submitted_by_user_id, max_attendees, external_link, logging_mode)
+                 status, image_urls, submitted_by_user_id, max_attendees, external_link, logging_mode, sponsorship_id)
             VALUES
                 (:campaign_id, :geo_unit_id, :group_id, true, :join_code,
                  :title, :description,
@@ -960,7 +1007,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
                       THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
                       ELSE NULL END,
                  :scheduled_start, :scheduled_end,
-                 'scheduled', :image_urls, :organizer_user_id, :max_attendees, :external_link, :logging_mode)
+                 'scheduled', :image_urls, :organizer_user_id, :max_attendees, :external_link, :logging_mode, :sponsorship_id)
             RETURNING id, join_code
         """),
         {
@@ -985,6 +1032,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             "max_attendees": payload.max_attendees,
             "external_link": payload.external_link,
             "logging_mode": payload.logging_mode,
+            "sponsorship_id": str(payload.sponsorship_id) if payload.sponsorship_id else None,
         },
     )
     row = result.fetchone()
@@ -1751,6 +1799,8 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
             "credited_count": len(pool),
         },
     )
+
+    await sponsored_cleanups.queue_group_allocation(db, cleanup_id, len(pool))
 
     await db.commit()
 

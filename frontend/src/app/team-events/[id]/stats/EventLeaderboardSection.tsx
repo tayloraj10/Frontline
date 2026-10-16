@@ -11,6 +11,7 @@ import { resolveTeamColor } from "@/lib/teamColors";
 import { computeRanks } from "@/lib/ranking";
 import RankBadge from "@/components/ui/RankBadge";
 import Avatar from "@/components/ui/Avatar";
+import PlusFlair from "@/components/billing/PlusFlair";
 import ParticipantDrilldownModal from "./ParticipantDrilldownModal";
 
 const INTERVALS: { value: StatsInterval; label: string }[] = [
@@ -127,6 +128,7 @@ export default function EventLeaderboardSection({ teamEventId }: { teamEventId: 
                   <Avatar avatarUrl={row.avatar_url} name={row.display_name ?? row.username} size="sm" />
                   <span className="flex-1 min-w-0 truncate text-sm text-zinc-200">
                     {row.display_name ?? row.username}
+                    <PlusFlair isPlus={row.is_plus} />
                   </span>
                   <span className="flex items-center gap-1 text-xs text-zinc-500 shrink-0">
                     <TeamDot color={row.team_color} />

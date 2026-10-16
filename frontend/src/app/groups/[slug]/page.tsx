@@ -5,7 +5,8 @@ import type { Metadata } from "next";
 import { BarChart3, CalendarPlus, ClipboardList, Pencil, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
-import { getPaymentsEnabled } from "@/lib/gameSettings.server";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { paymentsVisible } from "@/lib/paymentsVisibility";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
@@ -16,6 +17,9 @@ import PastEventsList from "@/components/groups/PastEventsList";
 import { listGroupCleanupEvents } from "@/lib/cleanupEvents";
 import BackButton from "@/components/ui/BackButton";
 import SubscriptionWidget from "@/components/billing/SubscriptionWidget";
+import PlusBadge from "@/components/billing/PlusBadge";
+import GroupSponsorCard from "@/components/billing/GroupSponsorCard";
+import { getPlusEntitlement } from "@/lib/plus.server";
 import { PageShell } from "@/components/ui/PageShell";
 import type { Database } from "@/types/database";
 
@@ -120,13 +124,14 @@ export default async function GroupProfilePage({ params }: Props) {
   const adminCount = members.filter((m) => m.role === "admin").length;
   const isOnlyAdmin = isAdmin && adminCount === 1;
 
-  const [{ data: siteAdminCheck }, paymentsEnabled] = await Promise.all([
+  const [{ data: siteAdminCheck }, paymentsGate] = await Promise.all([
     isAdmin && user
       ? supabase.from("profiles").select("is_admin").eq("id", user.id).single()
       : Promise.resolve({ data: null as { is_admin: boolean } | null }),
-    getPaymentsEnabled(),
+    getPaymentsGate(),
   ]);
   const isSiteAdmin = !!siteAdminCheck?.is_admin;
+  const isPlusGroup = paymentsVisible(paymentsGate, isSiteAdmin) ? (await getPlusEntitlement("group", group.id)).has_premium : false;
 
   const { data: groupTeamEventsData } = await supabase
     .from("team_event_group_participants")
@@ -175,7 +180,7 @@ export default async function GroupProfilePage({ params }: Props) {
 
       <div className="mt-4 mb-6 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
-          <div className="flex h-16 w-16 lg:h-20 lg:w-20 shrink-0 items-center justify-center overflow-hidden rounded-[20px] bg-zinc-800">
+          <div className={`flex h-16 w-16 lg:h-20 lg:w-20 shrink-0 items-center justify-center overflow-hidden rounded-[20px] bg-zinc-800 ${isPlusGroup ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-zinc-950" : ""}`}>
             {group.image_url ? (
               <GroupAvatarLightbox imageUrl={group.image_url} name={group.name} />
             ) : (
@@ -184,7 +189,10 @@ export default async function GroupProfilePage({ params }: Props) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-zinc-50 leading-tight">{group.name}</h1>
+              <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-zinc-50 leading-tight">
+                <span className={isPlusGroup ? "bg-gradient-to-r from-amber-200 to-amber-400 bg-clip-text text-transparent" : ""}>{group.name}</span>
+                {isPlusGroup && <PlusBadge className="ml-2" />}
+              </h1>
               {group.verified && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">✓ Verified</span>
               )}
@@ -228,7 +236,32 @@ export default async function GroupProfilePage({ params }: Props) {
         </div>
       </div>
 
-      {isAdmin && (isSiteAdmin || paymentsEnabled) && <SubscriptionWidget ownerType="group" ownerId={group.id} />}
+      {isPlusGroup && group.open_to_sponsors && (
+        <GroupSponsorCard
+          groupId={group.id}
+          groupName={group.name}
+          groupSlug={slug}
+          pitch={group.sponsor_pitch ?? null}
+          userId={user?.id ?? null}
+        />
+      )}
+
+      {isAdmin && isPlusGroup && !group.open_to_sponsors && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/30 bg-amber-300/5 p-4">
+          <p className="min-w-0 flex-1 text-sm text-zinc-300">
+            <span className="font-semibold text-amber-300">✦ Plus perk to turn on.</span> Let anyone sponsor {group.name}{" "}
+            directly. It is off until you enable it.
+          </p>
+          <Link
+            href={`/groups/${slug}/edit`}
+            className="inline-flex min-h-11 items-center rounded-full bg-amber-300 px-5 text-sm font-bold text-amber-950 hover:bg-amber-200"
+          >
+            Open to sponsors
+          </Link>
+        </div>
+      )}
+
+      {isAdmin && paymentsVisible(paymentsGate, isSiteAdmin) && <SubscriptionWidget ownerType="group" ownerId={group.id} adminPreview={isSiteAdmin && !paymentsGate.enabled} />}
 
       {/* Group impact at a glance */}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
