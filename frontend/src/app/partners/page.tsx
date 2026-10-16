@@ -80,7 +80,7 @@ export default async function PartnersPage() {
         eyebrow="Rewards"
         title="Partner perks"
         subtitle="Spend the points you earn from cleanups on discounts at local businesses."
-        action={<FlowGuide id="rewards" autoOpen variant="link" label="How rewards work" />}
+        action={<FlowGuide id="rewards" autoOpen variant="link" label="How do rewards work?" />}
       />
 
       <BusinessApplyPrompt />
