@@ -35,12 +35,12 @@ export default async function GroupStatsAdminPage({ params }: Props) {
 
   if (!isAdmin) {
     return (
-      <main className="max-w-lg mx-auto px-6 py-16 w-full text-center">
+      <main className="max-w-lg mx-auto px-4 sm:px-6 py-16 w-full text-center">
         <div className="mb-2 text-left">
           <BackButton href={`/groups/${slug}/stats`} label={group.name} />
         </div>
         <p className="text-5xl mb-4">🔒</p>
-        <h1 className="text-2xl font-black text-zinc-100 mb-2">Admins only</h1>
+        <h1 className="font-display font-extrabold text-2xl text-zinc-100 mb-2">Admins only</h1>
         <p className="text-zinc-400 text-sm leading-relaxed">
           The deep-dive dashboard is only visible to {group.name} admins.
         </p>
@@ -51,11 +51,11 @@ export default async function GroupStatsAdminPage({ params }: Props) {
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-2">
         <BackButton href={`/groups/${slug}/stats`} label={group.name} />
       </div>
-      <h1 className="text-2xl font-black text-zinc-100 mb-1 mt-6">{group.name} Deep Dive</h1>
+      <h1 className="font-display font-extrabold text-2xl text-zinc-100 mb-1 mt-6">{group.name} Deep Dive</h1>
       <p className="text-sm text-zinc-500 mb-6">
         Trends, activity map, and per-member drill-in for {group.name}.
       </p>

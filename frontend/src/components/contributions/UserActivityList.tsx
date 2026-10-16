@@ -7,6 +7,10 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const PAGE_SIZE = 15;
 
+function humanizeMetricKey(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
 interface Contribution {
   id: string;
   campaign_id: string | null;
@@ -16,6 +20,11 @@ interface Contribution {
   submitted_at: string;
   small_bags?: number | null;
   large_bags?: number | null;
+  metrics_detail?: {
+    basis?: string;
+    bag_types?: Record<string, number>;
+    countable_items?: Record<string, number>;
+  } | null;
 }
 
 interface ProblemReport {
@@ -143,7 +152,7 @@ export default function UserActivityList({
           ? supabase
               .from("contributions")
               .select(
-                "id, campaign_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)",
+                "id, campaign_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags, metrics_detail)",
               )
               .eq("user_id", profileId)
               .order("submitted_at", { ascending: false })
@@ -160,7 +169,11 @@ export default function UserActivityList({
       ]);
 
       const newContribs = (moreContribs ?? []).map((c) => {
-        const cleanup = c.cleanups as unknown as { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+        const cleanup = c.cleanups as unknown as {
+          metrics_small_bags: number | null;
+          metrics_large_bags: number | null;
+          metrics_detail: Contribution["metrics_detail"];
+        } | null;
         return {
           id: c.id,
           campaign_id: c.campaign_id,
@@ -170,6 +183,7 @@ export default function UserActivityList({
           submitted_at: c.submitted_at,
           small_bags: cleanup?.metrics_small_bags ?? null,
           large_bags: cleanup?.metrics_large_bags ?? null,
+          metrics_detail: cleanup?.metrics_detail ?? null,
         };
       });
       const newReports = moreReports ?? [];
@@ -251,7 +265,17 @@ export default function UserActivityList({
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   if (items.length === 0) {
-    return <div className="px-5 py-8 text-center text-zinc-600 text-sm">No contributions yet.</div>;
+    return isOwn ? (
+      <div className="px-5 py-8 text-center space-y-3">
+        <p className="text-sm font-semibold text-zinc-300">Nothing logged yet</p>
+        <p className="text-sm text-zinc-500">Pick up some litter, log it on the map, and it shows up here with your points.</p>
+        <Link href="/campaigns/trash-war" className="inline-flex min-h-11 items-center px-5 rounded-full bg-emerald-400 text-emerald-950 text-sm font-bold active:scale-[0.97] transition-transform touch-manipulation">
+          Open the map
+        </Link>
+      </div>
+    ) : (
+      <div className="px-5 py-8 text-center text-zinc-600 text-sm">No contributions yet.</div>
+    );
   }
 
   return (
@@ -346,6 +370,17 @@ export default function UserActivityList({
                 )}
               </div>
               <p className="mt-0.5 text-[11px] text-zinc-600">{label}</p>
+              {(item.metrics_detail?.bag_types || item.metrics_detail?.countable_items) && (
+                <p className="mt-0.5 text-[11px] text-zinc-600">
+                  {[
+                    ...Object.entries(item.metrics_detail.bag_types ?? {}),
+                    ...Object.entries(item.metrics_detail.countable_items ?? {}),
+                  ]
+                    .filter(([, count]) => (count ?? 0) > 0)
+                    .map(([key, count]) => `${count} ${humanizeMetricKey(key)}`)
+                    .join(", ")}
+                </p>
+              )}
               {item.notes && (
                 <p className="mt-0.5 text-xs text-zinc-600 line-clamp-1">{item.notes}</p>
               )}
@@ -372,7 +407,7 @@ export default function UserActivityList({
         <button
           onClick={handleLoadMore}
           disabled={loadingMore}
-          className="text-xs text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 disabled:opacity-40"
+          className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>

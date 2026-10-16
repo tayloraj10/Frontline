@@ -262,14 +262,14 @@ export default function GroupGeoStatsExplorer({
       )}
 
       <div className={`grid grid-cols-3 gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
-        <StatTile label="points" value={data ? formatPoints(data.aggregate.total_value) : "—"} />
+        <StatTile label="points" value={data ? formatPoints(data.aggregate.total_value) : "-"} />
         <StatTile
           label="contributions"
-          value={data ? data.aggregate.contribution_count.toLocaleString() : "—"}
+          value={data ? data.aggregate.contribution_count.toLocaleString() : "-"}
         />
         <StatTile
           label="contributors"
-          value={data ? data.aggregate.unique_contributors.toLocaleString() : "—"}
+          value={data ? data.aggregate.unique_contributors.toLocaleString() : "-"}
         />
       </div>
 
@@ -301,7 +301,7 @@ export default function GroupGeoStatsExplorer({
       )}
 
       {level && data?.children && dataMatchesRequest && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">{LEVEL_LABELS[level]} breakdown</span>
           </div>
@@ -356,7 +356,7 @@ export default function GroupGeoStatsExplorer({
         </div>
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+      <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Members</span>
         </div>

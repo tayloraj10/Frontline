@@ -9,6 +9,8 @@ import ContributionPanel from "@/components/contributions/ContributionPanel";
 import CreateTimedEventButton from "@/components/events/CreateTimedEventButton";
 import AdminDialog from "@/components/map/AdminDialog";
 import BottomSheet from "@/components/ui/BottomSheet";
+import { MapBackButton, MapOverflowMenu } from "@/components/map/MapChrome";
+import { CAMPAIGN_TYPE_CONFIG } from "@/config/campaigns";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import { createClient } from "@/lib/supabase/client";
@@ -26,6 +28,9 @@ type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
 type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 type Contribution = Database["public"]["Tables"]["contributions"]["Row"];
+
+// Admin gear button on the map is redundant for now; the dialog stays mounted.
+const SHOW_ADMIN_GEAR = false;
 
 function displayStatValue(n: number): string {
   return n.toLocaleString();
@@ -62,7 +67,11 @@ export function CampaignStatBar({
   initialSmallBags,
   initialLargeBags,
   initialPounds,
+  variant = "bar",
+  onChipClick,
 }: {
+  variant?: "bar" | "chip";
+  onChipClick?: () => void;
   campaignId: string;
   campaignType: string | null;
   eventsCount: number;
@@ -143,6 +152,39 @@ export function CampaignStatBar({
   const isTerritory =
     campaignType !== "collage" && campaignType !== "choropleth" && campaignType !== "heatmap" && campaignType !== "hex_bloom";
   const totalBagCount = smallBags + largeBags;
+
+  if (variant === "chip") {
+    const stats: [string, string][] =
+      campaignType === "collage" ? [[displayStatValue(contributionCount), "photos"]]
+      : campaignType === "choropleth" ? [[displayStatValue(totalBags), "registrations"], [String(tractsCount), "states"]]
+      : campaignType === "heatmap" ? [[displayStatValue(contributionCount), "unfollows"]]
+      : campaignType === "hex_bloom" ? [[displayStatValue(totalBags), "bloom"], [String(tractsCount), "hexes"]]
+      : [
+          [displayStatValue(totalBagCount), "bags"],
+          ...(pounds > 0 ? [[displayStatValue(Math.round(pounds)), "lb"] as [string, string]] : []),
+          [displayStatValue(contributionCount), "cleanups"],
+        ];
+    return (
+      <button
+        type="button"
+        onClick={onChipClick}
+        aria-label="Open stats"
+        className="inline-flex shrink-0 items-center gap-4 sm:gap-7 h-10 sm:h-12 pl-3.5 sm:pl-5 pr-1.5 sm:pr-2 rounded-full bg-zinc-900/90 backdrop-blur-md shadow-elevation-3 ring-1 ring-inset ring-emerald-400/40 hover:bg-zinc-800/90 text-zinc-100 tabular-nums transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+      >
+        {stats.map(([value, label]) => (
+          <span key={label} className="flex flex-col items-center leading-none">
+            <span className="text-[13px] sm:text-base font-bold">{value}</span>
+            <span className="mt-0.5 text-[9px] sm:text-[10px] font-medium uppercase tracking-wide text-zinc-400">{label}</span>
+          </span>
+        ))}
+        <span className="grid place-items-center w-6 h-6 rounded-full bg-emerald-400 text-emerald-950" aria-hidden="true">
+          <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+            <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div className="border-b border-zinc-800/60 bg-zinc-950/60 shadow-elevation-1">
@@ -225,6 +267,7 @@ export interface ProblemReportMapData {
   claim_before_deadline_at: string | null;
   claim_after_deadline_at: string | null;
   flag_count: number;
+  reported_by_name: string | null;
 }
 
 export interface ProblemReports {
@@ -312,7 +355,7 @@ interface Props {
   userDisplayName: string | null;
   userUsername: string | null;
   userGroups: { id: string; name: string; image_url?: string | null }[];
-  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[]; uniqueContributors: number };
   activity: ActivityItem[];
   unit: string;
   problemReports?: ProblemReports | null;
@@ -323,6 +366,8 @@ interface Props {
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   bagMetrics?: { small: number; large: number; pounds: number };
   contributionCount?: number;
+  totalBags?: number;
+  tractsCount?: number;
 }
 
 interface NewContribution {
@@ -505,7 +550,7 @@ function StatsPanel({
   bagMetrics,
 }: {
   claims: TerritoryClaim[];
-  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[]; uniqueContributors: number };
   campaignType: string;
   unit: string;
   eventCount: number;
@@ -517,10 +562,10 @@ function StatsPanel({
   const totalValue = claims.reduce((s, c) => s + (c.total_value ?? 0), 0);
   const claimedLabel =
     campaignType === "territory" ? "Zip codes cleaned" :
-    campaignType === "choropleth" ? "States claimed" :
-    campaignType === "hex_bloom" ? "Hexes claimed" :
-    "Areas claimed";
-  const contributorCount = leaderboard.users.length + leaderboard.groups.length;
+    campaignType === "choropleth" ? "States active" :
+    campaignType === "hex_bloom" ? "Hexes bloomed" :
+    "Areas led";
+  const contributorCount = leaderboard.uniqueContributors;
   const topUser = leaderboard.users[0];
   const topGroup = leaderboard.groups[0];
   const daysRunning = startsAt ? daysSince(startsAt) : null;
@@ -729,13 +774,13 @@ function PanelTabs({
   onClose?: () => void;
 }) {
   const tabs: { key: PanelKey; label: string }[] = [
+    { key: "stats", label: "Stats" },
     { key: "leaderboard", label: "Leaderboard" },
     { key: "activity", label: "Activity" },
     ...(userId ? [{ key: "mine" as const, label: "Mine" }] : []),
-    { key: "stats", label: "Stats" },
   ];
   return (
-    <div className="flex items-center border-b border-zinc-800 shrink-0 px-2 pt-2 pb-0 gap-1">
+    <div className="flex items-center border-b border-zinc-800 shrink-0 pl-2 pr-2 pt-2.5 pb-0 gap-0">
       {tabs.map((tab) => {
         const active = openPanel === tab.key;
         const isMine = tab.key === "mine";
@@ -744,7 +789,7 @@ function PanelTabs({
             key={tab.key}
             onClick={() => onSelect(tab.key)}
             className={cn(
-              "relative flex-1 py-2 text-xs font-semibold rounded-t-md transition-colors active:scale-[0.97] duration-150 touch-manipulation",
+              "relative shrink-0 px-2.5 py-2 text-xs font-semibold rounded-t-md transition-colors active:scale-[0.97] duration-150 touch-manipulation",
               active ? (isMine ? "text-emerald-300" : "text-zinc-100") : "text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
             )}
           >
@@ -752,7 +797,7 @@ function PanelTabs({
             {active && (
               <motion.span
                 layoutId="campaign-panel-tab"
-                className={cn("absolute left-2 right-2 -bottom-px h-0.5 rounded-full", isMine ? "bg-emerald-400" : "bg-zinc-300")}
+                className={cn("absolute left-2.5 right-2.5 -bottom-px h-0.5 rounded-full", isMine ? "bg-emerald-400" : "bg-zinc-300")}
                 transition={{ type: "spring", stiffness: 500, damping: 40 }}
               />
             )}
@@ -763,7 +808,7 @@ function PanelTabs({
         <button
           onClick={onClose}
           aria-label="Close panel"
-          className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-zinc-300 active:scale-90 transition-transform shrink-0 mb-0.5 touch-manipulation"
+          className="ml-auto mb-1 w-7 h-7 rounded-full flex items-center justify-center text-lg leading-none text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 active:scale-90 transition-[color,background-color,transform] shrink-0 touch-manipulation"
         >
           ×
         </button>
@@ -789,7 +834,7 @@ function PanelContent({
   deletingContributionId,
 }: {
   openPanel: PanelKey;
-  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[] };
+  leaderboard: { users: LeaderboardEntry[]; groups: LeaderboardEntry[]; uniqueContributors: number };
   campaignType: string;
   unit: string;
   activityItems: ActivityItem[];
@@ -881,6 +926,8 @@ export default function CampaignPageClient({
   focusCoords,
   bagMetrics = { small: 0, large: 0, pounds: 0 },
   contributionCount = 0,
+  totalBags = 0,
+  tractsCount = 0,
 }: Props) {
   const [hexEventsExpanded, setHexEventsExpanded] = useState(false);
   const [pinPickerActive, setPinPickerActive] = useState(false);
@@ -920,6 +967,7 @@ export default function CampaignPageClient({
   const [areaPickerActive, setAreaPickerActive] = useState(false);
   const [pickedAreas, setPickedAreas] = useState<SelectedArea[]>([]);
   const [routePickerActive, setRoutePickerActive] = useState(false);
+  const [routePickerStartCoords, setRoutePickerStartCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [liveRouteVertices, setLiveRouteVertices] = useState<[number, number][]>([]);
   // Live coords from an in-progress Track Route session, shown on the main map while
   // ContributionPanel's own Log Cleanup modal is closed.
@@ -1026,11 +1074,6 @@ export default function CampaignPageClient({
   // reachable for admins via the admin dialog (gear button) instead.
   const nycNeighborhoodsAvailable = !!isAdmin && campaign.slug === "trash-war";
   const [showAdminDialog, setShowAdminDialog] = useState(false);
-  // "Hide until next page refresh" (triggered from inside AdminDialog) — mirrors
-  // CreateTimedEventButton's own dismiss pattern. Lets an admin clear the gear
-  // button out of screenshots/recordings without needing to remember anything;
-  // it comes back on the next page load.
-  const [adminControlsHidden, setAdminControlsHidden] = useState(false);
 
   const [cleanupRoutesList, setCleanupRoutesList] = useState<CampaignCleanupRoute[]>([]);
 
@@ -1215,7 +1258,8 @@ export default function CampaignPageClient({
     setPinPickerActive(false);
   };
 
-  const handleEnterRoutePicker = () => {
+  const handleEnterRoutePicker = (startCoords?: { latitude: number; longitude: number }) => {
+    setRoutePickerStartCoords(startCoords ?? null);
     setPlacedRouteVertices(null);
     setLiveRouteVertices([]);
     setRoutePickerActive(true);
@@ -1258,6 +1302,7 @@ export default function CampaignPageClient({
     setShowTimedEventModal(true);
   };
 
+  const typeCfg = CAMPAIGN_TYPE_CONFIG[campaign.campaign_type];
   const isHexBloom = campaign.campaign_type === "hex_bloom";
   const showEventsChip = activeEventsList.length > 0 && !isHexBloom;
   const statsButtonActive = !openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive;
@@ -1290,6 +1335,7 @@ export default function CampaignPageClient({
         onAreaPickerConfirm={handleAreaPickerConfirm}
         onAreaPickerCancel={handleAreaPickerCancel}
         routePickerActive={routePickerActive}
+        routePickerStartCoords={routePickerStartCoords}
         onRoutePickerChange={setLiveRouteVertices}
         onRoutePickerFinish={handleRoutePickerFinish}
         onRoutePickerCancel={handleRoutePickerCancel}
@@ -1316,16 +1362,28 @@ export default function CampaignPageClient({
         }}
         onUserLocationError={setLocationError}
         onGeolocateTrigger={(trigger) => { triggerGeolocateRef.current = trigger; }}
-        onMobileStatsClick={
-          statsButtonActive && (showEventsChip || (campaign.geo_unit?.includes("zip") ?? false))
-            ? () => togglePanel("stats")
-            : undefined
+        statsChip={
+          statsButtonActive ? (
+            <CampaignStatBar
+              variant="chip"
+              onChipClick={() => togglePanel("stats")}
+              campaignId={campaign.id}
+              campaignType={campaign.campaign_type}
+              eventsCount={activeEventsList.length}
+              initialTotalBags={totalBags ?? 0}
+              initialTractsCount={tractsCount ?? 0}
+              initialContributionCount={contributionCount}
+              initialSmallBags={bagMetrics.small}
+              initialLargeBags={bagMetrics.large}
+              initialPounds={bagMetrics.pounds}
+            />
+          ) : undefined
         }
       />
 
       {/* Side panel — desktop: fixed right column. */}
       {openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive && (
-        <div className="hidden sm:flex absolute inset-y-0 right-0 sm:w-72 bg-zinc-950/95 backdrop-blur-sm border-l border-zinc-800 flex-col z-20 overflow-hidden shadow-elevation-4">
+        <div className="hidden sm:flex absolute right-3 top-[calc(var(--map-top,0px)+4.25rem)] bottom-3 sm:w-80 bg-zinc-950/95 backdrop-blur-md rounded-[20px] flex-col z-20 overflow-hidden shadow-elevation-4">
           <PanelTabs openPanel={openPanel} onSelect={setOpenPanel} userId={userId} onClose={() => setOpenPanel(null)} />
           <div className="flex-1 overflow-y-auto">
             <PanelContent
@@ -1382,37 +1440,20 @@ export default function CampaignPageClient({
         </BottomSheet>
       </div>
 
-      {/* Activity button — opens the Leaderboard/Activity/Mine panel. Hidden when panel open. */}
-      {statsButtonActive && (
-        <>
-          {/* Desktop: always top-right, clear of native map controls */}
-          <div className="hidden sm:block absolute top-3 right-[3.25rem] z-20">
-            <button
-              onClick={() => togglePanel("stats")}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-elevation-2 bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.97] touch-manipulation"
-            >
-              📊 Stats
-            </button>
-          </div>
-          {/* Mobile: next to the Events chip if it's showing (handled inside CampaignMap), otherwise
-              upper-left — stacked above the World Bloom widget for hex_bloom campaigns via the
-              shared flex column below, so it never overlaps it. */}
-          {!showEventsChip && !isHexBloom && !(campaign.geo_unit?.includes("zip") ?? false) && (
-            <div className="sm:hidden absolute left-4 z-20 top-4">
-              <button
-                onClick={() => togglePanel("stats")}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.97] touch-manipulation"
-              >
-                📊 Stats
-              </button>
-            </div>
-          )}
-        </>
-      )}
+      <MapBackButton hidden={pinPickerActive || areaPickerActive || routePickerActive} />
+      <MapOverflowMenu
+        slug={campaign.slug}
+        title={campaign.title}
+        description={campaign.description}
+        typeLabel={typeCfg?.label}
+        typeIcon={typeCfg?.icon}
+        hidden={pinPickerActive || areaPickerActive || routePickerActive}
+      />
 
       {isAdmin && !pinPickerActive && (
         <>
-          {!adminControlsHidden && !openPanel && (
+          {/* Gear button hidden (redundant now) — flip SHOW_ADMIN_GEAR to restore. */}
+          {SHOW_ADMIN_GEAR && !openPanel && (
             <button
               onClick={() => setShowAdminDialog(true)}
               title="Admin controls"
@@ -1431,10 +1472,7 @@ export default function CampaignPageClient({
             showNycToggle={nycNeighborhoodsAvailable}
             nycNeighborhoodsVisible={nycNeighborhoodsVisible}
             onNycNeighborhoodsVisibleChange={setNycNeighborhoodsVisible}
-            onHideControls={() => {
-              setAdminControlsHidden(true);
-              setShowAdminDialog(false);
-            }}
+            onHideControls={() => setShowAdminDialog(false)}
           />
           <CreateTimedEventButton
             campaignId={campaign.id}
@@ -1474,7 +1512,7 @@ export default function CampaignPageClient({
       )}
 
       {isHexBloom && !pinPickerActive && !areaPickerActive && (
-        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+        <div className="absolute left-[3.75rem] top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] z-10 flex flex-col gap-2">
           {activeEventsList.length > 0 && (
             <button
               onClick={() => setHexEventsExpanded((e) => !e)}
@@ -1524,13 +1562,17 @@ export default function CampaignPageClient({
               </div>
             </div>
             {statsButtonActive && (
-              <div className="sm:hidden z-20 shrink-0">
-                <button
-                  onClick={() => togglePanel("stats")}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-[background-color,color,transform] duration-150 backdrop-blur-sm shadow-md bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:text-zinc-200 active:bg-zinc-800 active:scale-[0.97] touch-manipulation"
-                >
-                  📊 Stats
-                </button>
+              <div className="z-20 shrink-0">
+                <CampaignStatBar
+                  variant="chip"
+                  onChipClick={() => togglePanel("stats")}
+                  campaignId={campaign.id}
+                  campaignType={campaign.campaign_type}
+                  eventsCount={activeEventsList.length}
+                  initialTotalBags={totalBags ?? 0}
+                  initialTractsCount={tractsCount ?? 0}
+                  initialContributionCount={contributionCount}
+                />
               </div>
             )}
           </div>
@@ -1538,7 +1580,7 @@ export default function CampaignPageClient({
       )}
 
       {!pinPickerActive && !areaPickerActive && nearbyCleanupEvent && (
-        <div className="absolute top-4 left-4 right-16 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm flex flex-col gap-2">
+        <div className="absolute top-[4.5rem] left-3 right-3 sm:top-auto sm:right-auto sm:inset-x-auto sm:bottom-24 sm:left-1/2 sm:-translate-x-1/2 z-20 sm:w-[calc(100%-2rem)] sm:max-w-sm flex flex-col gap-2">
           {nearbyCleanupEvent && (
             <motion.div
               initial={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -1551,11 +1593,11 @@ export default function CampaignPageClient({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sky-300 text-xs font-semibold truncate">{nearbyCleanupEvent.title}</p>
-                <p className="text-sky-500 text-xs">You&apos;re at this cleanup — log your contribution</p>
+                <p className="text-sky-500 text-xs">You&apos;re at this cleanup. Log your contribution</p>
               </div>
               <button
                 onClick={() => setDismissedCleanupEventIds((prev) => new Set(prev).add(nearbyCleanupEvent.id))}
-                className="shrink-0 text-sky-500 hover:text-sky-300 active:scale-90 transition-transform text-sm px-1 touch-manipulation"
+                className="shrink-0 touch-manipulation inline-flex items-center justify-center min-h-11 w-11 px-0 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
                 aria-label="Dismiss"
               >
                 ✕
@@ -1593,6 +1635,7 @@ export default function CampaignPageClient({
         requestLocation={() => triggerGeolocateRef.current?.() ?? false}
         activeMapStyle={activeMapStyle}
         onStyleChange={setActiveMapStyle}
+        modernActions={campaign.slug === "trash-war"}
         pendingCleanupEventId={pendingCleanupEventId}
         onPendingCleanupEventConsumed={() => setPendingCleanupEventId(null)}
         nearbyCleanupEvent={forcedTrackCleanupEvent ?? nearbyCleanupEventRaw}

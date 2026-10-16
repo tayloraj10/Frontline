@@ -69,6 +69,10 @@ class ContributionRequest(BaseModel):
     small_bags: int | None = None
     large_bags: int | None = None
     pounds: float | None = None
+    points_basis: str | None = None
+    bag_type_counts: dict[str, int] | None = None
+    countable_item_key: str | None = None
+    countable_item_count: int | None = None
     resolve_report_id: UUID | None = None
     claimed_report_id: UUID | None = None
     cleanup_event_id: UUID | None = None
@@ -81,6 +85,38 @@ class ContributionRequest(BaseModel):
     @field_validator("small_bags", "large_bags", "pounds")
     @classmethod
     def _non_negative(cls, v: float | None) -> float | None:
+        if v is not None and v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
+    @field_validator("pounds")
+    @classmethod
+    def _round_pounds(cls, v: float | None) -> float | None:
+        # Rounding to a whole number before binding avoids asyncpg encoding a
+        # non-terminating binary float into the NUMERIC metrics_pounds column
+        # (e.g. 123.8 becomes 123.79999999999999715782905695999926515502929688).
+        return round(v) if v is not None else None
+
+    @field_validator("points_basis")
+    @classmethod
+    def _valid_basis(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("bags", "granular_bags", "pounds", "countable_item"):
+            raise ValueError("points_basis must be one of: bags, granular_bags, pounds, countable_item")
+        return v
+
+    @field_validator("bag_type_counts")
+    @classmethod
+    def _valid_bag_type_counts(cls, v: dict[str, int] | None) -> dict[str, int] | None:
+        if v is None:
+            return v
+        for count in v.values():
+            if count < 0:
+                raise ValueError("bag_type_counts values must be non-negative")
+        return v
+
+    @field_validator("countable_item_count")
+    @classmethod
+    def _valid_countable_item_count(cls, v: int | None) -> int | None:
         if v is not None and v < 0:
             raise ValueError("must be non-negative")
         return v
@@ -108,6 +144,36 @@ class ContributionRequest(BaseModel):
             if not isinstance(p.get("lat"), (int, float)) or not isinstance(p.get("lng"), (int, float)):
                 raise ValueError("each route photo needs numeric lat/lng")
         return v
+
+
+@router.get("/points-basis-options")
+async def get_points_basis_options(db: AsyncSession = Depends(get_db)):
+    """Active bag_types + countable_item_types, for the self-log points-basis picker.
+
+    See dev-docs/granular-bag-tracking-scoping-2026-09-02.md §3/§6.
+    """
+    bag_types_result = await db.execute(
+        text("""
+            SELECT key, label, size_class, point_value
+            FROM bag_types WHERE active ORDER BY sort_order
+        """)
+    )
+    countable_items_result = await db.execute(
+        text("""
+            SELECT key, label, unit_count, points_per_unit
+            FROM countable_item_types WHERE active ORDER BY sort_order
+        """)
+    )
+    return {
+        "bag_types": [
+            {"key": r.key, "label": r.label, "size_class": r.size_class, "point_value": float(r.point_value)}
+            for r in bag_types_result.fetchall()
+        ],
+        "countable_item_types": [
+            {"key": r.key, "label": r.label, "unit_count": r.unit_count, "points_per_unit": float(r.points_per_unit)}
+            for r in countable_items_result.fetchall()
+        ],
+    }
 
 
 @router.get("/nearby-hotspot")
@@ -197,7 +263,12 @@ async def submit_contribution(
     point-in-polygon. Called directly from the frontend.
     """
     from app.api.routes.events import _evaluate_triggers
-    from app.services.contribution_scoring import claim_first_cleanup_bonus, record_contribution
+    from app.services.contribution_scoring import (
+        claim_first_cleanup_bonus,
+        record_contribution,
+        resolve_bag_types,
+        rollup_bag_types_to_legacy_counts,
+    )
 
     settings = await get_game_settings(db)
     has_location = payload.latitude is not None and payload.longitude is not None
@@ -216,16 +287,19 @@ async def submit_contribution(
         raise HTTPException(status_code=403, detail="Campaign is not accepting contributions")
     campaign_geo_unit = camp_row[0]
 
+    event_logging_mode = None
     if payload.cleanup_event_id:
         event_result = await db.execute(
             text("""
-                SELECT 1 FROM cleanups
+                SELECT logging_mode FROM cleanups
                 WHERE id = :id AND campaign_id = :campaign_id AND is_group_event = true
             """),
             {"id": str(payload.cleanup_event_id), "campaign_id": str(payload.campaign_id)},
         )
-        if not event_result.fetchone():
+        event_row = event_result.fetchone()
+        if not event_row:
             raise HTTPException(status_code=404, detail="Cleanup event not found")
+        event_logging_mode = event_row.logging_mode
 
     team_event_team_id = None
     effective_team_event_id = payload.team_event_id
@@ -344,13 +418,46 @@ async def submit_contribution(
     primary_photo_url = payload.photo_url or (payload.photo_urls[0] if payload.photo_urls else None)
     cleanup_image_urls = payload.photo_urls if payload.photo_urls else ([payload.photo_url] if payload.photo_url else [])
 
+    # Points-basis choice (individual self-log only): "bags" is today's default and
+    # keeps its no-photo-required behavior; the other 3 bases are opt-in detail that
+    # requires a photo, since they're harder to spot-check than a plain bag count.
+    # See dev-docs/granular-bag-tracking-scoping-2026-09-02.md §3.
+    basis = payload.points_basis or "bags"
+    if (
+        payload.contribution_type == "cleanup"
+        and basis != "bags"
+        and not (payload.photo_url or payload.photo_urls)
+    ):
+        raise HTTPException(status_code=400, detail="A photo is required for this points basis")
+
+    metrics_small_bags = payload.small_bags
+    metrics_large_bags = payload.large_bags
+    metrics_detail: dict | None = None
+    if basis == "granular_bags":
+        if not payload.bag_type_counts:
+            raise HTTPException(status_code=400, detail="bag_type_counts is required for the granular_bags basis")
+        bag_type_lookup = await resolve_bag_types(db, list(payload.bag_type_counts.keys()))
+        metrics_small_bags, metrics_large_bags = rollup_bag_types_to_legacy_counts(payload.bag_type_counts, bag_type_lookup)
+        metrics_detail = {"basis": basis, "bag_types": payload.bag_type_counts}
+    elif basis == "pounds":
+        if payload.pounds is None:
+            raise HTTPException(status_code=400, detail="pounds is required for the pounds basis")
+        metrics_detail = {"basis": basis, "pounds": payload.pounds}
+    elif basis == "countable_item":
+        if not payload.countable_item_key or payload.countable_item_count is None:
+            raise HTTPException(
+                status_code=400, detail="countable_item_key and countable_item_count are required for the countable_item basis"
+            )
+        metrics_detail = {"basis": basis, "countable_items": {payload.countable_item_key: payload.countable_item_count}}
+
     cleanup_id = None
     if payload.contribution_type == "cleanup":
         cleanup_result = await db.execute(
             text("""
                 INSERT INTO cleanups
                     (campaign_id, geo_unit_id, location, route, route_photos, status, image_urls,
-                     metrics_small_bags, metrics_large_bags, metrics_pounds, submitted_by_user_id, attended_user_ids)
+                     metrics_small_bags, metrics_large_bags, metrics_pounds, metrics_detail,
+                     submitted_by_user_id, attended_user_ids)
                 VALUES
                     (:campaign_id, :geo_unit_id,
                      CASE WHEN CAST(:lon AS double precision) IS NOT NULL AND CAST(:lat AS double precision) IS NOT NULL
@@ -362,7 +469,11 @@ async def submit_contribution(
                      CASE WHEN CAST(:route_photos AS text) IS NOT NULL
                           THEN CAST(:route_photos AS jsonb)
                           ELSE NULL END,
-                     'completed', :image_urls, :metrics_small_bags, :metrics_large_bags, :metrics_pounds, :user_id, ARRAY[:user_id]::uuid[])
+                     'completed', :image_urls, :metrics_small_bags, :metrics_large_bags, :metrics_pounds,
+                     CASE WHEN CAST(:metrics_detail AS text) IS NOT NULL
+                          THEN CAST(:metrics_detail AS jsonb)
+                          ELSE NULL END,
+                     :user_id, ARRAY[:user_id]::uuid[])
                 RETURNING id
             """),
             {
@@ -373,9 +484,10 @@ async def submit_contribution(
                 "route": json.dumps(payload.route) if payload.route else None,
                 "route_photos": json.dumps(payload.route_photos) if payload.route_photos else None,
                 "image_urls": cleanup_image_urls,
-                "metrics_small_bags": payload.small_bags,
-                "metrics_large_bags": payload.large_bags,
+                "metrics_small_bags": metrics_small_bags,
+                "metrics_large_bags": metrics_large_bags,
                 "metrics_pounds": payload.pounds,
+                "metrics_detail": json.dumps(metrics_detail) if metrics_detail else None,
                 "user_id": str(payload.user_id),
             },
         )
@@ -499,8 +611,9 @@ async def submit_contribution(
         cleanup_id=cleanup_id,
         contribution_type=payload.contribution_type,
         value=payload.value,
-        small_bags=payload.small_bags,
-        large_bags=payload.large_bags,
+        small_bags=metrics_small_bags,
+        large_bags=metrics_large_bags,
+        metrics_detail=metrics_detail,
         photo_url=primary_photo_url,
         latitude=payload.latitude,
         longitude=payload.longitude,
@@ -530,19 +643,32 @@ async def submit_contribution(
     if payload.cleanup_event_id:
         # Self-log attendance: an RSVP row is "attended" once it has a linked
         # contribution, regardless of whether the user RSVP'd or checked in first.
+        #
+        # For an organizer_total (team-log) event, attendees aren't expected to log their
+        # own bags/pounds — the only individual submission they'd make here is a tracked
+        # route (optionally with photos), carrying no metrics. That shouldn't claim
+        # contribution_id: log_team_total's eligible-pool query treats a non-NULL
+        # contribution_id as "already credited by team total, skip on next split," and its
+        # wipe step only clears rows it created itself (cleanup_id IS NULL). A metrics-free
+        # route submission would set a non-NULL contribution_id the wipe never reaches,
+        # permanently excluding that attendee from every future team-total split.
+        has_metrics = bool(payload.small_bags or payload.large_bags or payload.pounds)
+        claims_contribution_id = event_logging_mode != "organizer_total" or has_metrics
         await db.execute(
             text("""
                 INSERT INTO cleanup_rsvps (cleanup_id, user_id, status, checked_in_at, contribution_id)
                 VALUES (:cleanup_id, :user_id, 'going', NOW(), :contribution_id)
                 ON CONFLICT (cleanup_id, user_id) DO UPDATE SET
                     checked_in_at = COALESCE(cleanup_rsvps.checked_in_at, EXCLUDED.checked_in_at),
-                    contribution_id = EXCLUDED.contribution_id,
+                    contribution_id = CASE WHEN :claims_contribution_id
+                        THEN EXCLUDED.contribution_id ELSE cleanup_rsvps.contribution_id END,
                     updated_at = NOW()
             """),
             {
                 "cleanup_id": str(payload.cleanup_event_id),
                 "user_id": str(payload.user_id),
-                "contribution_id": recorded.contribution_id,
+                "contribution_id": recorded.contribution_id if claims_contribution_id else None,
+                "claims_contribution_id": claims_contribution_id,
             },
         )
 
@@ -690,19 +816,21 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
     result = await db.execute(
         text("""
             SELECT
-                id::text,
-                user_id::text,
-                value,
-                photo_url,
-                submitted_at,
-                cleanup_event_id::text,
-                cleanup_event_id IS NOT NULL AS is_group_event,
-                ST_Y(location::geometry) AS latitude,
-                ST_X(location::geometry) AS longitude
-            FROM contributions
-            WHERE campaign_id = :campaign_id
-              AND location IS NOT NULL
-            ORDER BY submitted_at DESC
+                c.id::text,
+                c.user_id::text,
+                c.value,
+                c.photo_url,
+                c.submitted_at,
+                c.cleanup_event_id::text,
+                c.cleanup_event_id IS NOT NULL AS is_group_event,
+                ST_Y(c.location::geometry) AS latitude,
+                ST_X(c.location::geometry) AS longitude,
+                COALESCE(p.display_name, p.username) AS contributor_name
+            FROM contributions c
+            LEFT JOIN profiles p ON p.id = c.user_id
+            WHERE c.campaign_id = :campaign_id
+              AND c.location IS NOT NULL
+            ORDER BY c.submitted_at DESC
             LIMIT 1000
         """),
         {"campaign_id": str(campaign_id)},
@@ -719,6 +847,7 @@ async def get_contribution_locations(campaign_id: UUID, db: AsyncSession = Depen
             "cleanup_event_id": row.cleanup_event_id,
             "latitude": float(row.latitude),
             "longitude": float(row.longitude),
+            "contributor_name": row.contributor_name,
         }
         for row in rows
         if row.latitude is not None and row.longitude is not None

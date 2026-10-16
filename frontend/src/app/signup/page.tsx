@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useRef } from "react";
+import LegalModalLink from "@/components/legal/LegalModalLink";
+import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isNativePlatform, isAndroidNative } from "@/lib/capacitor";
 import { acceptLegal } from "@/app/legal/actions";
 import { applyAppleProfileName } from "@/lib/applyAppleProfileName";
 import { Card } from "@/components/ui/Card";
 
-export default function SignupPage() {
-  const router = useRouter();
+function SignupForm() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -40,7 +42,13 @@ export default function SignupPage() {
     } else if (data.session) {
       // Email confirmation disabled — user is immediately logged in
       await acceptLegal({ terms: true, privacy: true });
-      window.location.href = "/campaigns";
+      const isNewSignup =
+        !!data.session.user.last_sign_in_at &&
+        Math.abs(new Date(data.session.user.last_sign_in_at).getTime() - new Date(data.session.user.created_at).getTime()) < 10000;
+      if (next === "/partners/apply" && isNewSignup) {
+        await supabase.schema("public").from("profiles").update({ is_business_only: true }).eq("id", data.session.user.id);
+      }
+      window.location.href = next && next.startsWith("/") ? next : "/campaigns";
     } else {
       // Email confirmation required — show check-your-email state
       setEmailSent(true);
@@ -51,9 +59,11 @@ export default function SignupPage() {
   async function handleGoogleSignup() {
     setGoogleLoading(true);
     const supabase = createClient();
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (next) callbackUrl.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: callbackUrl.toString() },
     });
   }
 
@@ -106,6 +116,16 @@ export default function SignupPage() {
         if (signInData.user && profile) {
           await applyAppleProfileName(supabase, signInData.user.id, profile);
         }
+        // signInWithIdToken doesn't distinguish signup from login — an existing
+        // user tapping "Continue with Apple" here just logs in. Only flag brand
+        // new accounts as business-only, matching the OAuth callback's check.
+        const signedUpUser = signInData.user;
+        const isNewSignup =
+          !!signedUpUser?.last_sign_in_at &&
+          Math.abs(new Date(signedUpUser.last_sign_in_at).getTime() - new Date(signedUpUser.created_at).getTime()) < 10000;
+        if (next === "/partners/apply" && signedUpUser && isNewSignup) {
+          await supabase.schema("public").from("profiles").update({ is_business_only: true }).eq("id", signedUpUser.id);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Apple sign-in failed.");
         return;
@@ -114,13 +134,15 @@ export default function SignupPage() {
         setAppleLoading(false);
       }
 
-      window.location.href = "/campaigns";
+      window.location.href = next && next.startsWith("/") ? next : "/campaigns";
       return;
     }
 
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (next) callbackUrl.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "apple",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: callbackUrl.toString() },
     });
   }
 
@@ -129,13 +151,13 @@ export default function SignupPage() {
       <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
         <Card elevation={2} padding="lg" className="w-full max-w-sm space-y-4 text-center">
           <div className="text-4xl">📬</div>
-          <h1 className="text-2xl font-bold">Check your email</h1>
+          <h1 className="font-display text-2xl font-bold">Check your email</h1>
           <p className="text-zinc-400 text-sm">
             We sent a confirmation link to <span className="text-zinc-200">{email}</span>. Click it to activate your account.
           </p>
           <p className="text-zinc-500 text-xs">
             Already confirmed?{" "}
-            <Link href="/login" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+            <Link href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
               Sign in
             </Link>
           </p>
@@ -148,7 +170,7 @@ export default function SignupPage() {
     <main className="flex flex-col items-center justify-center flex-1 px-6 py-16">
       <Card elevation={2} padding="lg" className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold">Join Frontline</h1>
+          <h1 className="font-display text-2xl font-bold">Join Frontline</h1>
           <p className="text-zinc-400 text-sm">Start making an impact</p>
         </div>
 
@@ -198,7 +220,7 @@ export default function SignupPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="trashslayer99"
             />
           </div>
@@ -211,7 +233,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="you@example.com"
             />
           </div>
@@ -225,7 +247,7 @@ export default function SignupPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -242,9 +264,9 @@ export default function SignupPage() {
             />
             <span>
               I agree to the{" "}
-              <Link href="/legal/terms" target="_blank" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Terms</Link>
+              <LegalModalLink doc="terms" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Terms</LegalModalLink>
               {" "}and{" "}
-              <Link href="/legal/privacy" target="_blank" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Privacy Policy</Link>
+              <LegalModalLink doc="privacy" className="hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150 underline">Privacy Policy</LegalModalLink>
               .
             </span>
           </label>
@@ -252,7 +274,7 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading || !agreedToLegal}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
+            className="w-full py-3 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-medium rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
           >
             {loading ? "Creating account…" : "Create account"}
           </button>
@@ -260,11 +282,19 @@ export default function SignupPage() {
 
         <p className="text-center text-zinc-400 text-sm">
           Already have an account?{" "}
-          <Link href="/login" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+          <Link href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
             Sign in
           </Link>
         </p>
       </Card>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
   );
 }

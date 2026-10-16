@@ -24,7 +24,9 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
             text("""
                 SELECT
                     COALESCE(SUM(value), 0)::float AS total_value,
-                    COUNT(*)::int                   AS contribution_count
+                    COUNT(*)::int                   AS contribution_count,
+                    COUNT(DISTINCT user_id)::int    AS unique_contributors,
+                    COUNT(DISTINCT group_id)::int   AS unique_groups
                 FROM contributions
                 WHERE campaign_id = :cid
             """),
@@ -188,6 +190,10 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
     return {
         "total_value": totals_row.total_value,
         "contribution_count": totals_row.contribution_count,
+        # users/groups below are capped at the top 20, so their lengths are not counts;
+        # these are the real distinct totals.
+        "unique_contributors": totals_row.unique_contributors,
+        "unique_groups": totals_row.unique_groups,
         "users": [
             {
                 "entity_id": r.user_id,
@@ -307,6 +313,7 @@ async def get_user_contributions_range(
                     cl.metrics_small_bags,
                     cl.metrics_large_bags,
                     cl.metrics_pounds,
+                    cl.metrics_detail,
                     cl.status
                 FROM contributions c
                 LEFT JOIN cleanups cl ON cl.id = c.cleanup_id
@@ -331,6 +338,7 @@ async def get_user_contributions_range(
             "metrics_small_bags": r.metrics_small_bags,
             "metrics_large_bags": r.metrics_large_bags,
             "metrics_pounds": r.metrics_pounds,
+            "metrics_detail": r.metrics_detail,
             "status": r.status,
         }
         for r in rows
@@ -495,7 +503,7 @@ async def get_campaign_geo_stats(
     top_groups = (
         await db.execute(
             text(f"""
-                SELECT c.group_id::text, g.name,
+                SELECT c.group_id::text, g.name, g.image_url AS logo_url,
                        COALESCE(SUM(c.value), 0)::float AS total_value,
                        COUNT(*)::int                     AS contribution_count
                 FROM contributions c
@@ -503,7 +511,7 @@ async def get_campaign_geo_stats(
                 WHERE c.campaign_id = :cid AND c.group_id IS NOT NULL
                   AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
                   {scope_filter}
-                GROUP BY c.group_id, g.name
+                GROUP BY c.group_id, g.name, g.image_url
                 ORDER BY total_value DESC, contribution_count DESC
                 LIMIT 10
             """),
@@ -711,6 +719,7 @@ async def get_campaign_geo_stats(
             {
                 "group_id": r.group_id,
                 "name": r.name,
+                "logo_url": r.logo_url,
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "small_bags": group_bag_totals.get(r.group_id, {}).get("small_bags", 0),

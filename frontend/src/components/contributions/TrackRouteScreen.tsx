@@ -228,16 +228,20 @@ export default function TrackRouteScreen({
 
         {permissionError && (
           <div className="w-full max-w-xs px-3 py-2.5 rounded-lg border border-orange-800/60 bg-orange-950/30 text-xs text-orange-300">
-            {permissionError === "whenInUseOnly"
+            {permissionError === "unsupported"
+              ? "Track Route needs a newer version of the app. Update Frontline from the App Store to use it."
+              : permissionError === "whenInUseOnly"
               ? "You granted \"While Using\" access, but background tracking needs \"Always\". Open Settings and change Location to Always."
               : "Location access is off for Frontline. Open Settings and allow Always location access to use Track Route."}
-            <button
-              type="button"
-              onClick={() => openLocationSettings()}
-              className="mt-2 w-full py-1.5 rounded-md bg-orange-900/60 hover:bg-orange-900 text-orange-200 text-xs font-medium transition-colors"
-            >
-              Open Settings
-            </button>
+            {permissionError !== "unsupported" && (
+              <button
+                type="button"
+                onClick={() => openLocationSettings()}
+                className="mt-2 w-full py-1.5 rounded-md bg-orange-900/60 hover:bg-orange-900 text-orange-200 text-xs font-medium transition-colors"
+              >
+                Open Settings
+              </button>
+            )}
           </div>
         )}
 
@@ -252,14 +256,16 @@ export default function TrackRouteScreen({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={() => session.beginTracking(currentCoords ?? undefined)}
-            disabled={requesting}
-            className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 active:bg-red-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 text-white text-sm font-medium shadow-elevation-3 transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            {requesting ? "Requesting…" : permissionError ? "Try Again" : "Start Tracking"}
-          </button>
+          {permissionError !== "unsupported" && (
+            <button
+              type="button"
+              onClick={() => session.beginTracking(currentCoords ?? undefined)}
+              disabled={requesting}
+              className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 active:bg-red-500 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 text-white text-sm font-medium shadow-elevation-3 transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              {requesting ? "Requesting…" : permissionError ? "Try Again" : "Start Tracking"}
+            </button>
+          )}
         </div>
 
         {isDevTool && (

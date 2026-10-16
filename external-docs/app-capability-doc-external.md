@@ -1,7 +1,7 @@
 # Frontline — What You Can Do in the App
 
 *A plain-language guide for three kinds of users: everyday participants, partner businesses, and admins.*
-*Updated August 3, 2026*
+*Updated September 13, 2026*
 
 ---
 
@@ -12,6 +12,8 @@ You can create an account with email and password, or sign in instantly with Goo
 
 ### Joining the action
 Every campaign — like our flagship Trash War — plays out on a live map. You can browse the map and jump in by logging a contribution: drop a pin, log the bags or pounds you collected, snap a photo, and it's added to the board. If you're part of a group, you can claim territory on the group's behalf instead of your own — territory claiming is an optional layer you switch on from the map legend, not something shown by default. If you'd rather just see activity without any claiming/competition angle, you can instead switch on a stats view (by zip code, neighborhood, or borough) showing points, cleanup counts, and recent activity for that area.
+
+When logging your own cleanup, you can also choose exactly how you want to count it: the usual small/large bag count, a detailed breakdown by specific bag type (including a bonus for the biggest contractor-sized bags), pounds collected, or a count of small items like cigarette butts. The three detailed options just need a photo along with them so it stays honest.
 
 You can also report a problem you spot — trash that needs cleaning up — by dropping a pin with a photo. Other users can then "claim" that report as a personal challenge: submit a before photo, do the cleanup, submit an after photo, and it automatically turns into a logged contribution.
 
@@ -28,6 +30,9 @@ As you rack up points, you can redeem them for real perks at partner businesses 
 
 ### Your profile and the leaderboard
 Anyone can view your public profile and your activity history, and there's a global leaderboard showing top contributors.
+
+### Built-in guides
+Step-by-step guides walk you through each campaign, attending a cleanup event, running a group, and managing a partner business. Reopen them any time from the "?" or "How it works" links. The app also explains why it wants notification access before asking, and tells you how to fix things if location access was denied.
 
 ---
 

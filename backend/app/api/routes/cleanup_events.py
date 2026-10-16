@@ -210,6 +210,14 @@ class LogForAttendeeRequest(BaseModel):
             raise ValueError("must be non-negative")
         return v
 
+    @field_validator("pounds")
+    @classmethod
+    def _round_pounds(cls, v: float | None) -> float | None:
+        # Whole-number input, and rounding here also avoids binding a non-terminating
+        # binary float to the NUMERIC column (asyncpg encodes floats via Decimal(v)
+        # without going through str(), so e.g. 123.8 becomes 123.7999999999999971578...).
+        return round(v) if v is not None else None
+
 
 class LogTeamTotalRequest(BaseModel):
     organizer_user_id: UUID
@@ -229,6 +237,13 @@ class LogTeamTotalRequest(BaseModel):
         if v is not None and v < 0:
             raise ValueError("must be non-negative")
         return v
+
+    @field_validator("pounds")
+    @classmethod
+    def _round_pounds(cls, v: float | None) -> float | None:
+        # See LogForAttendeeRequest._round_pounds: avoids binding a non-terminating
+        # binary float to the NUMERIC metrics_pounds column.
+        return round(v) if v is not None else None
 
     @field_validator("overrides")
     @classmethod
@@ -1575,12 +1590,31 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
                 {"campaign_id": str(event.campaign_id), "geo_unit_id": event.geo_unit_id, "v": prior_value_sum},
             )
 
+    # An attendee is "already credited" (and so sits out this round's split) when their
+    # cleanup_rsvps.contribution_id points at a real individual haul (nonzero value, or
+    # bags/pounds metrics on the linked cleanups row). A metrics-free, zero-value link —
+    # e.g. just a tracked route or photos, with no bags/pounds attached — doesn't count:
+    # it never represented scoring credit, so it shouldn't permanently exclude that
+    # attendee from every future team-total split just because it happened to claim the
+    # contribution_id slot first.
     pool_query = """
-        SELECT user_id, checked_in_at FROM cleanup_rsvps
-        WHERE cleanup_id = :cleanup_id AND status = 'going' AND contribution_id IS NULL
+        SELECT cr.user_id, cr.checked_in_at
+        FROM cleanup_rsvps cr
+        LEFT JOIN contributions co ON co.id = cr.contribution_id
+        LEFT JOIN cleanups cl ON cl.id = co.cleanup_id
+        WHERE cr.cleanup_id = :cleanup_id AND cr.status = 'going'
+          AND (
+            cr.contribution_id IS NULL
+            OR (
+                COALESCE(co.value, 0) = 0
+                AND COALESCE(cl.metrics_small_bags, 0) = 0
+                AND COALESCE(cl.metrics_large_bags, 0) = 0
+                AND COALESCE(cl.metrics_pounds, 0) = 0
+            )
+          )
     """
     if payload.attendee_pool == "checked_in":
-        pool_query += " AND checked_in_at IS NOT NULL"
+        pool_query += " AND cr.checked_in_at IS NOT NULL"
     pool_result = await db.execute(text(pool_query), {"cleanup_id": str(cleanup_id)})
     pool_rows = pool_result.fetchall()
     pool = [str(r.user_id) for r in pool_rows]
@@ -1958,6 +1992,158 @@ async def run_organizer_reminders(db: AsyncSession = Depends(get_db)):
     return {"checked_count": len(due_events), "sent_count": sent_count}
 
 
+@router.post("/organizer-followups/run")
+async def run_organizer_followups(db: AsyncSession = Depends(get_db)):
+    """Post-event follow-up to each event's organizer(s), sent once the check-in window
+    has closed: a stats summary if metrics were logged, or a nudge to log them if not.
+    Also drops a user_notifications row for every admin of the hosting group. Intended
+    to be called once a day by a Railway cron (see scripts/run_organizer_followups.py),
+    same pattern as organizer-reminders/run. Gated by the
+    email_organizer_followup_enabled killswitch (defaults off) and by
+    cleanups.organizer_followup_sent_at, which this marks per-event so re-running the
+    same day never double-sends."""
+    game_settings = await get_game_settings(db)
+    if not game_settings.get("email_organizer_followup_enabled"):
+        return {"sent_count": 0, "reason": "Organizer follow-up emails are disabled"}
+
+    grace_after = game_settings.get("cleanup_event_grace_minutes_after", CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALLBACK)
+
+    due_events = (
+        await db.execute(
+            text("""
+                SELECT c.id, c.title, c.scheduled_start, c.scheduled_end, c.group_id,
+                       c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
+                       g.name AS group_name, g.slug AS group_slug, g.image_url AS group_logo_url
+                FROM cleanups c
+                JOIN groups g ON g.id = c.group_id
+                WHERE c.is_group_event = true
+                  AND c.organizer_followup_sent_at IS NULL
+                  AND COALESCE(c.scheduled_end, c.scheduled_start) + (:grace_after * INTERVAL '1 minute') < NOW()
+            """),
+            {"grace_after": grace_after},
+        )
+    ).fetchall()
+
+    sent_count = 0
+    for event in due_events:
+        contrib_row = (
+            await db.execute(
+                text("""
+                    SELECT COALESCE(SUM(value), 0) AS total_value
+                    FROM contributions WHERE cleanup_event_id = :id
+                """),
+                {"id": str(event.id)},
+            )
+        ).fetchone()
+        rsvp_contrib_row = (
+            await db.execute(
+                text("""
+                    SELECT 1 FROM cleanup_rsvps WHERE cleanup_id = :id AND contribution_id IS NOT NULL LIMIT 1
+                """),
+                {"id": str(event.id)},
+            )
+        ).fetchone()
+        attendee_count_row = (
+            await db.execute(
+                text("""
+                    SELECT COUNT(*) AS attendee_count FROM cleanup_rsvps
+                    WHERE cleanup_id = :id AND checked_in_at IS NOT NULL
+                """),
+                {"id": str(event.id)},
+            )
+        ).fetchone()
+        attendee_count = attendee_count_row.attendee_count if attendee_count_row else 0
+        points_earned = int(contrib_row.total_value) if contrib_row and contrib_row.total_value else 0
+
+        has_metrics = bool(
+            (event.metrics_small_bags or 0) > 0
+            or (event.metrics_large_bags or 0) > 0
+            or (event.metrics_pounds or 0) > 0
+            or (contrib_row and contrib_row.total_value)
+            or rsvp_contrib_row
+        )
+
+        organizer_rows = (
+            await db.execute(
+                text("""
+                    SELECT u.email FROM cleanup_rsvps r
+                    JOIN auth.users u ON u.id = r.user_id
+                    WHERE r.cleanup_id = :id AND r.is_organizer = true
+                """),
+                {"id": str(event.id)},
+            )
+        ).fetchall()
+        organizer_emails = [r.email for r in organizer_rows if r.email]
+
+        when_line = format_event_datetime(event.scheduled_start)
+        event_link = f"{app_settings.frontend_url}/cleanup-events/{event.id}"
+        logo_html = render_group_logo(event.group_logo_url, event.group_name)
+
+        if organizer_emails:
+            if has_metrics:
+                subject = f"Wrap-up: {event.title}"
+                body_html = f"""
+                    <p>Your event has wrapped up:</p>
+                    <p><strong>{event.title}</strong><br>{when_line}</p>
+                    <table role="presentation" style="border-collapse: collapse; margin: 16px 0;">
+                        <tr><td style="padding:4px 12px 4px 0; color:#71717a;">Small bags</td><td style="padding:4px 0; font-weight:bold;">{event.metrics_small_bags or 0}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0; color:#71717a;">Large bags</td><td style="padding:4px 0; font-weight:bold;">{event.metrics_large_bags or 0}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0; color:#71717a;">Pounds</td><td style="padding:4px 0; font-weight:bold;">{round(event.metrics_pounds) if event.metrics_pounds else 0}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0; color:#71717a;">Attendees</td><td style="padding:4px 0; font-weight:bold;">{attendee_count}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0; color:#71717a;">Points earned</td><td style="padding:4px 0; font-weight:bold;">{points_earned}</td></tr>
+                    </table>
+                    <p style="margin-top:24px;">{render_cta_button(event_link, "View event")}</p>
+                """
+            else:
+                subject = f"Don't forget to log your metrics: {event.title}"
+                body_html = f"""
+                    <p>Your event's check-in window has closed, but no cleanup metrics have been logged yet:</p>
+                    <p><strong>{event.title}</strong><br>{when_line}</p>
+                    <p>Log your team's totals so attendees get credit and your group's stats stay up to date.</p>
+                    <p style="margin-top:24px;">{render_cta_button(event_link, "Log metrics")}</p>
+                """
+            html = wrap_email_html(logo_html + body_html)
+            sent = await send_email(
+                db,
+                to=organizer_emails,
+                subject=subject,
+                html=html,
+                kind="organizer_followup",
+                related_id=event.id,
+            )
+            if sent:
+                sent_count += 1
+
+        if not has_metrics:
+            admin_rows = (
+                await db.execute(
+                    text("SELECT user_id FROM group_members WHERE group_id = :group_id AND role = 'admin'"),
+                    {"group_id": str(event.group_id)},
+                )
+            ).fetchall()
+            for admin in admin_rows:
+                await db.execute(
+                    text("""
+                        INSERT INTO user_notifications (user_id, type, title, body, link_url)
+                        VALUES (:user_id, 'organizer_action_needed', :title, :body, :link_url)
+                    """),
+                    {
+                        "user_id": str(admin.user_id),
+                        "title": "Metrics needed for a past event",
+                        "body": f'"{event.title}" has ended but no metrics have been logged yet.',
+                        "link_url": f"/groups/{event.group_slug}/organizer",
+                    },
+                )
+
+        await db.execute(
+            text("UPDATE cleanups SET organizer_followup_sent_at = NOW() WHERE id = :id"),
+            {"id": str(event.id)},
+        )
+        await db.commit()
+
+    return {"checked_count": len(due_events), "sent_count": sent_count}
+
+
 @router.get("/{cleanup_id}/nearby-reports")
 async def get_nearby_reports(cleanup_id: UUID, organizer_user_id: UUID, db: AsyncSession = Depends(get_db)):
     """Open trash reports within check-in range of this event, previewed on the event
@@ -2156,7 +2342,7 @@ async def get_cleanup_route(cleanup_id: UUID, db: AsyncSession = Depends(get_db)
         text("""
             SELECT
                 c.id, c.campaign_id, c.group_id, c.status, c.image_urls,
-                c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
+                c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds, c.metrics_detail,
                 c.created_at, c.submitted_by_user_id,
                 ST_AsGeoJSON(c.route)::json AS route,
                 ST_Length(c.route::geography) AS route_distance_meters,
@@ -2192,6 +2378,7 @@ async def get_cleanup_route(cleanup_id: UUID, db: AsyncSession = Depends(get_db)
         "metrics_small_bags": row.metrics_small_bags,
         "metrics_large_bags": row.metrics_large_bags,
         "metrics_pounds": float(row.metrics_pounds) if row.metrics_pounds is not None else None,
+        "metrics_detail": row.metrics_detail,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "route": row.route,
         "route_distance_meters": round(row.route_distance_meters, 1) if row.route_distance_meters is not None else None,

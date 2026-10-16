@@ -18,7 +18,7 @@ export default function LeaderboardViewSwitch({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 border border-zinc-800 rounded-lg p-1 w-fit">
+      <div className="flex items-center gap-1 bg-zinc-900 rounded-xl p-1 w-fit">
         <button
           onClick={() => setView("leaderboard")}
           className={`px-3 py-1 text-xs font-medium rounded-md transition-colors touch-manipulation ${

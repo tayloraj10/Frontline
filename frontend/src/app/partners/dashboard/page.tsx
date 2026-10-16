@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import PartnerDashboardClient, { type DashboardBusiness, type DashboardOffer, type DashboardLocation } from "./PartnerDashboardClient";
 
 export default async function PartnerDashboardPage() {
@@ -22,7 +23,7 @@ export default async function PartnerDashboardPage() {
     .schema("public")
     .from("partner_business_admins")
     .select(
-      "business_id, partner_businesses(id, name, slug, description, logo_url, website_url, social_links, status, created_at)"
+      "business_id, partner_businesses(id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at)"
     )
     .eq("user_id", user.id);
 
@@ -30,7 +31,27 @@ export default async function PartnerDashboardPage() {
     .map((row) => row.partner_businesses as unknown as DashboardBusiness | null)
     .filter((b): b is DashboardBusiness => !!b));
 
-  const businessIds = businesses.map((b) => b.id);
+  const linkedBusinessIds = new Set(businesses.map((b) => b.id));
+
+  // Businesses the user submitted via /partners/apply that haven't been admin-approved
+  // yet -- no partner_business_admins row exists for these, so they're invisible above.
+  // Only readable here because of the partner_businesses_select_own RLS policy.
+  const { data: ownPending } = await supabase
+    .schema("public")
+    .from("partner_businesses")
+    .select("id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at")
+    .eq("created_by", user.id)
+    .eq("status", "pending");
+
+  const pendingBusinesses: DashboardBusiness[] = ((ownPending ?? []) as DashboardBusiness[])
+    .filter((b) => !linkedBusinessIds.has(b.id));
+  const pendingBusinessIds = pendingBusinesses.map((b) => b.id);
+
+  // Pending businesses get the full management UI too (105 grants their creator the
+  // same edit/insert rights as a business admin while status = 'pending'), so they need
+  // locations/offers/campaign links fetched alongside the admin-linked businesses.
+  const allBusinesses = [...businesses, ...pendingBusinesses];
+  const businessIds = allBusinesses.map((b) => b.id);
 
   const { data: businessLocations } = businessIds.length > 0
     ? await supabase
@@ -85,16 +106,20 @@ export default async function PartnerDashboardPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-6 pt-10 pb-24 sm:pb-10 w-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-zinc-100">Partner Dashboard</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Manage your business listing and offers.
-        </p>
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-10 pb-24 sm:pb-10 w-full">
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display font-extrabold text-2xl text-zinc-100">Partner Dashboard</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Manage your business listing and offers.
+          </p>
+        </div>
+        <FlowGuide id="partner" autoOpen variant="link" label="How it works" />
       </div>
 
       <PartnerDashboardClient
-        initialBusinesses={businesses}
+        initialBusinesses={allBusinesses}
+        pendingBusinessIds={pendingBusinessIds}
         initialOffers={(offers ?? []) as DashboardOffer[]}
         initialLocations={(businessLocations ?? []) as DashboardLocation[]}
         redemptionCounts={redemptionCounts}

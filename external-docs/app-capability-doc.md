@@ -6,7 +6,7 @@ Companion: a human-facing version of this doc (for onboarding/stakeholders, not 
 
 Status legend: no tag = fully working · **(Beta)** = shipped but flagged as still being tested in prod · *(stub)* = record/UI exists but the effect isn't implemented yet.
 
-Last updated: 2026-08-03.
+Last updated: 2026-09-13.
 
 ---
 
@@ -25,6 +25,7 @@ Last updated: 2026-08-03.
 ### Campaigns & Territory Gameplay
 - Browse the campaign map (`/campaigns/[slug]`): territory claims, active campaign events ("hotspots"), stats bar, individual + group leaderboard tabs, live activity feed, personal "Mine" tab.
 - Log a contribution: pin placement (GPS or manual), bag counts (small/large) and/or pounds and/or route-based cleanup, optional photo. Campaign type (territory / choropleth / heatmap / collage / hex_bloom) determines the specific stat units and form shown.
+  - Self-log cleanups (individual only, not organizer team-total/attendee logging) can instead pick one of 4 points-bases: default small/large bag count (no photo required), a granular bag-type breakdown across 7 admin-editable bag types (rolled up to legacy small/large for existing dashboards, with a bonus point folded into the contractor-bag tier's value), pounds (same `pound_value` conversion organizer paths use), or a countable-item count (cigarette butts seeded live at 1pt/20; five more candidate item types seeded inactive, admin-editable). Bases 2-4 all require at least one photo as an anti-abuse check; the default bag-count basis keeps today's optional-photo behavior. Selected detail (`metrics_detail`) surfaces on feed/profile activity rows and in the admin content-flags moderation view.
 - Claim territory for self or for a group they belong to (group selector in the contribution flow). **Territory claiming's map layer (claimed/contested/unclaimed outlines) is opt-in and off by default** — a separate, single-select "Geographic Stats" toggle group (Zip/Postcode, and on `trash-war` also Neighborhood/Borough) shows the same underlying activity metrics (points, bag counts, recent activity, photos) with no ownership/claimed-by/group-battle info, via `GET /api/geo-units/{geo_unit_id}/stats`. Claiming itself still works unchanged when the territory layer is manually toggled on.
 - **Route mode (Beta)** — trace an actual walked route on the map as a contribution; distinct from a hosted event's purely decorative planned route.
 - Report a trash "problem": pin, severity, optional photo.
@@ -51,7 +52,7 @@ Last updated: 2026-08-03.
 ### Partners (Businesses)
 - Browse partner businesses (`/partners`) and view detail pages (`/partners/[slug]`) — linked campaign, map location(s), active offers. A business can have any number of physical locations (`partner_business_locations`), each shown as its own map marker.
 - Redeem offers: "spend" mode deducts `points_cost` from `spendable_points`; "threshold" mode just requires reaching cumulative `points_threshold` without spending; `max_redemptions_per_user` enforced. Offers can optionally be restricted to one location; if not, and the business has multiple locations, the redeemer picks which one they're at. Redemption yields a unique code with tap-to-copy; used redemptions show a crossed-out state once a merchant marks them used.
-- Apply to become a partner business (`/partners/apply`) — public form, goes to admin review.
+- Apply to become a partner business (`/partners/apply`) — fill out the form as a guest, but sign-in is required to actually submit; an unauthenticated submitter is redirected to `/login?next=/partners/apply` with their filled-out form preserved and restored on return. The application is attributed to the signer's account (`partner_businesses.created_by`) so that, on admin approval, that account is automatically granted business-admin access to the listing (inserted into `partner_business_admins`), with no manual admin lookup required.
 
 ### Legal
 - View Terms of Service and Privacy Policy (`/legal/terms`, `/legal/privacy`).
@@ -74,8 +75,13 @@ Last updated: 2026-08-03.
 - Promote/demote attendees to co-organizer.
 - "Log for them" — log an individual attendee's contribution on their behalf (by bag count or weight).
 - "Log team total" (organizer-total events only) — enter the whole event's haul once; auto-splits points equally across an eligible pool (checked-in-only or everyone-going), excluding anyone already credited individually. **Re-submitting wipes and re-splits from scratch** (cumulative total each time, not a delta) — explicit warning banner. Supports an advanced per-attendee override table and shows log history (current vs. superseded).
+- Organizer Dashboard (`/groups/[slug]/organizer`, admin-only, soft-locked for non-admins) — action-focused nudges: schedule a new event once the group has gone 7+ days without one, and log metrics for any event whose check-in window has closed with nothing ever recorded. Surfaced via a pulsing dot on the `/groups` nav link and a bell notification once the daily follow-up cron runs.
 
 ---
+
+## Guided walkthroughs (all roles)
+
+Stepped, mobile-first guides (`components/walkthrough/`, registry `src/walkthroughs/index.tsx`) cover Trash War, Touch Grass, Solarpunk, the partner dashboard, group organizer tools, event attendees and the admin panel. Most auto-open once (seen state in localStorage) and can be reopened from a "?" or link. Other help: a notification primer before the OS push prompt, a location-denied recovery card on event check-in, empty-state prompts on activity and My Groups, and "?" tips on logging mode and offer redemption mode.
 
 ## 3. Partner Business User (`partner_business_admins` linkage)
 
@@ -94,13 +100,15 @@ Last updated: 2026-08-03.
 - **Users** — management/search.
 - **Campaigns** — CRUD, plus the "Spendable points" per-campaign toggle (`counts_toward_spendable_points`) with a dry-run impact preview before committing, and "Recompute all balances" (re-sums `points`/`spendable_points` for every user from current contribution/report/redemption data, previewed before committing, flags any resulting negative balance in red, sends `points_adjusted` notifications to affected users).
 - **Campaign Events/Triggers** — documented implemented-vs-stub split (see below).
-- **Partner Businesses & Offers** — approve/reject applications (kept as records, not deleted), manage offers via the same `OfferRow` businesses use.
+- **Partner Businesses & Offers** — approve/reject applications (kept as records, not deleted; approve also grants the submitter a `partner_business_admins` row), manage offers via the same `OfferRow` businesses use.
 - **Groups** — approval queue (approve grants `group_members` admin row + flips status; reject keeps the record), plus the same delete capability as a group admin (site admin alone can delete pending/rejected applications, which have no `group_members` row yet).
 - **Leaderboard / verification** — per-campaign, per-user prize-verification detail view (`admin/leaderboard/[campaignId]/[userId]`).
 
 On the campaign map: an "Admin controls" dialog to create timed campaign events by picking an area directly on the map, toggle an NYC-neighborhoods overlay (trash-war only), and dismiss timed events.
 
 Prod-write paths (`admin_prod.py` — points recompute, spendable-points toggle, cleanup-event wipe, user search) are gated by a shared secret (`ADMIN_API_SECRET`) and are only reachable through the six Next.js proxy routes under `frontend/src/app/api/admin/**`, which **do independently re-verify `is_admin` server-side before forwarding the secret** (confirmed by reading the proxy route source, not just inferred from the backend docstring).
+
+An "Admin guide" link in the panel header opens a triggerable, tab-by-tab walkthrough (`walkthroughs/admin.tsx`).
 
 Site admins implicitly inherit every group-admin and business-admin capability above (checks for `is_admin` short-circuit several of those gates, e.g. the business campaign-linkage restriction).
 

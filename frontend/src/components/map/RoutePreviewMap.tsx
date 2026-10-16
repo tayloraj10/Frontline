@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import IconButton from "@/components/ui/IconButton";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -259,6 +260,14 @@ function RouteMap({
     if (!containerRef.current || mapRef.current) return;
     if (!isPointMode && coordinates.length < 2) return;
 
+    // Fixed 70px padding on a short container (e.g. the 140px-tall form preview) leaves no
+    // room for the route, so fitBounds gives up and the map stays at the world view. Scale
+    // the padding down to fit the container.
+    const fitPadding = Math.max(
+      10,
+      Math.min(70, Math.floor(Math.min(containerRef.current.clientWidth, containerRef.current.clientHeight || 140) / 5)),
+    );
+
     const m = new maplibregl.Map(
       isPointMode
         ? {
@@ -278,7 +287,7 @@ function RouteMap({
             (b, c) => b.extend(c as [number, number]),
             new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
           ),
-          fitBoundsOptions: { padding: 70 },
+          fitBoundsOptions: { padding: fitPadding },
         },
     );
     mapRef.current = m;
@@ -302,9 +311,30 @@ function RouteMap({
       updateLogoScale();
       mapReadyRef.current = true;
     });
+    // If the container was still animating in / zero-sized at construction (e.g. inside a
+    // sliding sheet), the initial fit used the wrong size. Refit once real dimensions arrive.
+    let refitDone = false;
+    const ro = new ResizeObserver(() => {
+      if (isPointMode || refitDone || !containerRef.current) return;
+      const { clientWidth, clientHeight } = containerRef.current;
+      if (!clientWidth || !clientHeight) return;
+      refitDone = true;
+      m.resize();
+      const b = coordinates.reduce(
+        (acc, c) => acc.extend(c as [number, number]),
+        new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
+      );
+      m.fitBounds(b, {
+        padding: Math.max(10, Math.min(70, Math.floor(Math.min(clientWidth, clientHeight) / 5))),
+        animate: false,
+      });
+      baseZoomRef.current = null;
+    });
+    ro.observe(containerRef.current);
     m.on("zoom", updateLogoScale);
 
     return () => {
+      ro.disconnect();
       m.remove();
       mapRef.current = null;
     };
@@ -493,38 +523,40 @@ export default function RoutePreviewMap({
         </button>
       )}
       {expanded && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 gap-3">
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="absolute top-4 right-4 text-white text-2xl leading-none hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
-            aria-label="Close"
-          >
-            ×
-          </button>
-          <div className="w-full max-w-2xl">
-            <RouteMap
-              coordinates={coordinates ?? []}
-              bufferCoordinates={bufferCoordinates}
-              point={point}
-              pointRadiusMeters={pointRadiusMeters}
-              activeMapStyle={activeMapStyle}
-              onStyleChange={setActiveMapStyle}
-              interactive
-              heightClassName="h-[70vh]"
-              groupLogoUrl={groupLogoUrl}
-              cohostLogoUrls={cohostLogoUrls}
-              isEvent={isEvent}
-              showBuffer={showBuffer}
-              onToggleBuffer={() => setShowBuffer((v) => !v)}
-              logoOffset={logoOffset}
-              onLogoOffsetChange={setLogoOffset}
-              photos={photos}
-              onPhotoSelect={onPhotoSelect}
-            />
+        <BodyPortal>
+          <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center p-4 gap-3">
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="absolute top-4 right-4 text-white text-2xl leading-none hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="w-full max-w-2xl">
+              <RouteMap
+                coordinates={coordinates ?? []}
+                bufferCoordinates={bufferCoordinates}
+                point={point}
+                pointRadiusMeters={pointRadiusMeters}
+                activeMapStyle={activeMapStyle}
+                onStyleChange={setActiveMapStyle}
+                interactive
+                heightClassName="h-[70vh]"
+                groupLogoUrl={groupLogoUrl}
+                cohostLogoUrls={cohostLogoUrls}
+                isEvent={isEvent}
+                showBuffer={showBuffer}
+                onToggleBuffer={() => setShowBuffer((v) => !v)}
+                logoOffset={logoOffset}
+                onLogoOffsetChange={setLogoOffset}
+                photos={photos}
+                onPhotoSelect={onPhotoSelect}
+              />
+            </div>
+            <p className="text-xs text-zinc-400">Screenshot this view to share on social media</p>
           </div>
-          <p className="text-xs text-zinc-400">Screenshot this view to share on social media</p>
-        </div>
+        </BodyPortal>
       )}
     </div>
   );

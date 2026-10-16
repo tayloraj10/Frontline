@@ -13,8 +13,10 @@ import AddressAutocomplete from "./AddressAutocomplete";
 import TimedEventForm from "@/components/events/TimedEventForm";
 import BonusSpotForm from "@/components/events/BonusSpotForm";
 import BusinessForm, { type BusinessSocialLinks, type BusinessFormPayload } from "@/components/partners/BusinessForm";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import OfferForm, { type OfferFormPayload, type OfferFormLocation } from "@/components/partners/OfferForm";
 import BackButton from "@/components/ui/BackButton";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { updateEvent } from "@/lib/events";
@@ -73,8 +75,10 @@ export type PartnerBusiness = {
   logo_url: string | null;
   website_url: string | null;
   social_links: BusinessSocialLinks | null;
+  adults_only: boolean;
   status: string;
   created_at: string;
+  created_by: string | null;
 };
 
 export type PartnerBusinessLocation = {
@@ -466,7 +470,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
+        <form onSubmit={handleCreate} className="rounded-[20px] bg-zinc-900 p-5 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Campaign</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-1">
@@ -535,7 +539,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
         <>
           <div className="sm:hidden space-y-2">
             {campaigns.map(c => (
-              <div key={c.id} className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
+              <div key={c.id} className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <Link href={`/campaigns/${c.slug}`} className="text-zinc-200 hover:text-zinc-100 active:text-zinc-300 font-medium transition-colors duration-150">
@@ -575,7 +579,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+          <div className="hidden sm:block rounded-[20px] bg-zinc-900 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/40">
@@ -636,7 +640,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {(spendableLoading || spendableImpact || spendableError) && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 max-w-lg w-full max-h-[80vh] overflow-y-auto space-y-4 shadow-elevation-4">
             {spendableLoading && <p className="text-sm text-zinc-400">Loading impact preview…</p>}
             {spendableError && (
@@ -728,7 +732,7 @@ function CampaignsTab({ campaigns, setCampaigns }: {
       )}
 
       {(recomputeLoading || recomputeImpact || recomputeError) && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-elevation-4">
             {recomputeLoading && (
               <p className="text-sm text-zinc-400">Checking affected users…</p>
@@ -964,7 +968,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
       </div>
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
+        <form onSubmit={handleCreate} className="rounded-[20px] bg-zinc-900 p-5 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Trigger</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-1">
@@ -1034,7 +1038,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
         <>
           <div className="sm:hidden space-y-2">
             {triggers.map(t => (
-              <div key={t.id} className="border border-zinc-800 rounded-xl p-4 space-y-1.5 shadow-elevation-1">
+              <div key={t.id} className="rounded-[20px] bg-zinc-900 p-4 space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-zinc-300 font-medium text-sm">{t.name}</p>
                   <button
@@ -1054,7 +1058,7 @@ function TriggersTab({ campaigns, triggers, setTriggers, hotspotMultiplier }: {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+          <div className="hidden sm:block rounded-[20px] bg-zinc-900 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/40">
@@ -1323,7 +1327,7 @@ function EventsTab({ campaigns, events, setEvents, currentUserId }: {
       </div>
 
       {showCreate && (
-        <div className="border border-zinc-700 rounded-xl p-5 bg-zinc-900/40 space-y-4 shadow-elevation-2">
+        <div className="rounded-[20px] bg-zinc-900 p-5 space-y-4">
           <p className="text-sm font-semibold text-zinc-300">Create Event</p>
           <div className="space-y-1">
             <label className="text-xs text-zinc-500">Event type</label>
@@ -1483,7 +1487,7 @@ function EventsTab({ campaigns, events, setEvents, currentUserId }: {
       )}
 
       {events.length === 0 ? (
-        <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
           No active events.
         </div>
       ) : (
@@ -1676,7 +1680,7 @@ function CleanupEventWipeTool() {
       if (!res.ok) throw new Error(data.detail ?? "Failed");
       setResult(
         `✓ Deleted ${data.contributions_deleted} contribution(s), ` +
-        `${data.territory_claims_deleted} zip claim(s) removed, ` +
+        `${data.territory_claims_deleted} zip leader record(s) removed, ` +
         `${data.territory_claims_updated} recomputed, ` +
         `${data.team_total_logs_deleted} group-log record(s) removed.`
       );
@@ -1694,7 +1698,7 @@ function CleanupEventWipeTool() {
       <p className="text-xs text-zinc-500 leading-relaxed">
         Use this to undo bad logging on a cleanup event — e.g. an individual log made before
         "log group total" existed, followed by a group-total run that didn't cover everyone.
-        Wipes all contributions, the zip claim, and group-log history for the event so
+        Wipes all contributions, the zip leader record, and group-log history for the event so
         it can be re-logged from scratch. Does not delete the event itself or its RSVPs.
       </p>
       <div className="flex items-center gap-2">
@@ -1717,7 +1721,7 @@ function CleanupEventWipeTool() {
       <ConfirmModal
         open={confirmingWipe}
         title="Wipe event data?"
-        message="This deletes every contribution logged for this cleanup event (individual and group-total), removes/recomputes the zip claim, deletes its group-log audit history, and resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone."
+        message="This deletes every contribution logged for this cleanup event (individual and group-total), removes/recomputes the zip leader, deletes its group-log audit history, and resets its bag/pound totals to 0. Affected users' points update automatically. This can't be undone."
         confirmLabel="Wipe data"
         onConfirm={handleWipe}
         onCancel={() => setConfirmingWipe(false)}
@@ -2115,27 +2119,10 @@ function BusinessCard({
   const isRejected = business.status === "rejected";
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [confirmingReject, setConfirmingReject] = useState(false);
 
   const businessOffers = offers.filter(o => o.business_id === business.id);
-
-  const handleCreateOffer = async (payload: OfferFormPayload): Promise<string | null> => {
-    const supabase = createClient();
-    const { data, error: insertErr } = await supabase
-      .schema("public")
-      .from("partner_offers")
-      .insert({ ...payload, business_id: business.id, status: "active" })
-      .select("id, business_id, title, description, redemption_mode, points_cost, points_threshold, max_redemptions_per_user, max_total_redemptions, event_redemption_limit, code, status, starts_at, ends_at, created_at, location_id, event_eligible")
-      .single();
-
-    if (insertErr) return insertErr.message;
-
-    setOffers([...offers, data as PartnerOffer]);
-    setShowCreateOffer(false);
-    return null;
-  };
 
   const businessCampaignIds = businessCampaignLinks.filter(l => l.business_id === business.id).map(l => l.campaign_id);
   const businessLocationRows = businessLocations.filter(l => l.business_id === business.id);
@@ -2149,7 +2136,7 @@ function BusinessCard({
       .update({ ...rest, status: isPending ? "active" : business.status })
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at, created_by"
       )
       .single();
 
@@ -2157,6 +2144,16 @@ function BusinessCard({
 
     const updated = data as PartnerBusiness;
     setBusinesses(businesses.map(b => (b.id === updated.id ? updated : b)));
+
+    if (isPending && updated.created_by) {
+      const { error: adminErr } = await supabase
+        .schema("public")
+        .from("partner_business_admins")
+        .insert({ business_id: business.id, user_id: updated.created_by });
+      if (adminErr && adminErr.code !== "23505") {
+        return `Business approved, but failed to assign its submitter as business admin: ${adminErr.message}`;
+      }
+    }
 
     const locationsResult = await reconcileBusinessLocations<PartnerBusinessLocation>(
       supabase,
@@ -2212,7 +2209,7 @@ function BusinessCard({
       .update({ status: "rejected" })
       .eq("id", business.id)
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at, created_by"
       )
       .single();
     setRejecting(false);
@@ -2240,7 +2237,10 @@ function BusinessCard({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-200 truncate">{business.name}</p>
+            <p className="text-sm font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+              {business.name}
+              {business.adults_only && <AdultsOnlyBadge />}
+            </p>
             <p className="text-xs text-zinc-600">{businessOffers.length} offer{businessOffers.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
@@ -2255,14 +2255,16 @@ function BusinessCard({
               {rejecting ? "Rejecting…" : "Reject"}
             </span>
           )}
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors duration-150 px-2 py-1"
-          >
-            {editing ? "Cancel edit" : "Edit"}
-          </span>
+          {!isPending && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
+              className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors duration-150 px-2 py-1"
+            >
+              {editing ? "Cancel edit" : "Edit"}
+            </span>
+          )}
           <StatusBadge status={business.status} />
         </div>
       </button>
@@ -2276,7 +2278,7 @@ function BusinessCard({
           {isRejected && (
             <p className="text-xs text-red-400">This application was rejected and kept as a record.</p>
           )}
-          {editing && (
+          {(editing || isPending) && (
             <BusinessForm
               initial={{
                 ...business,
@@ -2294,7 +2296,11 @@ function BusinessCard({
                   google_maps_url: l.google_maps_url,
                 })),
               }}
-              initialCampaignIds={businessCampaignIds}
+              initialCampaignIds={
+                businessCampaignIds.length > 0
+                  ? businessCampaignIds
+                  : [campaigns.find(c => c.slug === "trash-war")?.id ?? campaigns[0]?.id].filter((id): id is string => !!id)
+              }
               campaigns={campaigns}
               onSubmit={handleEditSubmit}
               onCancel={() => setEditing(false)}
@@ -2311,18 +2317,12 @@ function BusinessCard({
               onCancelled={(id) => setOffers(offers.map(existing => existing.id === id ? { ...existing, status: "cancelled" } : existing))}
             />
           ))}
-          {businessOffers.length === 0 && !showCreateOffer && (
+          {businessOffers.length === 0 && (
             <p className="text-xs text-zinc-600">No offers yet.</p>
           )}
-          <button
-            onClick={() => setShowCreateOffer(!showCreateOffer)}
-            className="px-3 py-1.5 min-h-9 text-xs bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white rounded-lg font-medium transition-[background-color,transform] duration-150 active:scale-95 touch-manipulation shadow-elevation-1"
-          >
-            {showCreateOffer ? "Cancel" : "+ New Offer"}
-          </button>
-          {showCreateOffer && (
-            <OfferForm onSubmit={handleCreateOffer} locations={businessLocationRows} onCancel={() => setShowCreateOffer(false)} submitLabel="Create offer" />
-          )}
+          <p className="text-xs text-zinc-600">
+            Offers are managed from the business&apos;s own Partner Dashboard.
+          </p>
           {!isPending && <BusinessAdminsManager businessId={business.id} />}
         </div>
       )}
@@ -2375,7 +2375,7 @@ function PartnersTab({
       .from("partner_businesses")
       .insert({ ...rest, status: "active" })
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, status, created_at"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, status, created_at, created_by"
       )
       .single();
 
@@ -2511,7 +2511,7 @@ function PartnersTab({
 
       <div className="space-y-2">
         {businesses.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
             No partner businesses.
           </div>
         )}
@@ -2993,7 +2993,7 @@ function GroupsTab({ groups, setGroups, currentUserId }: { groups: AdminGroup[];
 
       <div className="space-y-2">
         {groups.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
             No groups.
           </div>
         )}
@@ -3127,7 +3127,7 @@ function LeaderboardTab({ campaigns }: { campaigns: Campaign[] }) {
         <>
           <div className="sm:hidden space-y-2">
             {entries.map((entry, i) => (
-              <div key={entry.user_id} className="border border-zinc-800 rounded-xl p-4 space-y-2 shadow-elevation-1">
+              <div key={entry.user_id} className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-zinc-500 text-xs tabular-nums shrink-0">#{i + 1}</span>
                   <Link
@@ -3532,6 +3532,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
   "email_attendee_reminder_enabled",
   "email_organizer_stats_reminder_enabled",
   "payments_enabled",
+  "email_organizer_followup_enabled",
 ]);
 
 const METERS_TO_FEET = 3.28084;
@@ -3854,7 +3855,7 @@ function TeamEventsTab({ campaigns, teamEvents, setTeamEvents, currentUserId }: 
 
       <div className="space-y-2">
         {teamEvents.length === 0 && (
-          <div className="border border-zinc-800 rounded-xl px-5 py-12 text-center text-zinc-600 text-sm shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 px-5 py-12 text-center text-zinc-500 text-sm">
             No team events yet.
           </div>
         )}
@@ -3862,7 +3863,7 @@ function TeamEventsTab({ campaigns, teamEvents, setTeamEvents, currentUserId }: 
           <button
             key={e.id}
             onClick={() => openEvent(e.id)}
-            className="w-full text-left flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-elevation-1 px-4 py-3 hover:border-zinc-700 transition-colors duration-150"
+            className="w-full text-left flex items-center justify-between gap-3 rounded-2xl border border-zinc-800/40 bg-zinc-900 shadow-elevation-1 px-4 py-3 hover:border-zinc-700 transition-colors duration-150"
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-zinc-200 truncate">{e.title}</p>
@@ -3950,8 +3951,13 @@ export default function AdminPanel({
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 sm:pb-10 w-full">
       <div className="mb-6">
         <BackButton href="/" label="Back to app" className="sm:hidden mb-1 text-xs" />
-        <h1 className="text-2xl font-black text-zinc-100">Admin Panel</h1>
-        <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display font-extrabold text-2xl text-zinc-100">Admin Panel</h1>
+            <p className="text-sm text-zinc-500 mt-1">Internal campaign management</p>
+          </div>
+          <FlowGuide id="admin" variant="link" label="Admin guide" />
+        </div>
       </div>
 
       <div className="hidden sm:flex items-center gap-1 mb-6 border-b border-zinc-800">

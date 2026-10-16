@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import ProgressBar from "@/components/ui/ProgressBar";
 import ShareButton from "@/components/ShareButton";
 import RedemptionConfirmationModal, { type RedemptionProof } from "./RedemptionConfirmationModal";
 import { haversineMeters } from "@/lib/nearbyPartners";
 import PartnersMap from "@/components/partners/PartnersMap";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 
 export type BrowseLocation = {
   id: string;
@@ -34,6 +36,7 @@ export type BrowseBusiness = {
   website_url: string | null;
   locations: BrowseLocation[];
   social_links: Record<string, string> | null;
+  adults_only: boolean;
   campaigns?: { slug: string; title: string }[];
 };
 
@@ -178,8 +181,8 @@ export function OfferCard({
   return (
     <div
       id={offer.id}
-      className={`border rounded-lg p-4 shadow-elevation-1 scroll-mt-20 ${
-        offer.event_eligible ? "border-amber-800/60 bg-amber-950/10" : "border-zinc-800"
+      className={`rounded-2xl p-4 scroll-mt-20 ${
+        offer.event_eligible ? "bg-amber-950/20 ring-1 ring-inset ring-amber-800/40" : "bg-zinc-800/50"
       }`}
     >
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -236,7 +239,7 @@ export function OfferCard({
                 usedAt: redemptions[0]?.used_at ?? null,
               })
             }
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 underline underline-offset-2 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Redeemed{redemptions[0]?.code ? ` - code ${redemptions[0].code}` : ""}
           </button>
@@ -252,7 +255,7 @@ export function OfferCard({
                     setPickedLocationId(e.target.value);
                     setAutoPicked(false);
                   }}
-                  className="text-xs bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-500 w-full max-w-full min-w-0"
+                  className="text-xs bg-zinc-900 border border-zinc-700 rounded-xl px-2 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-500 w-full max-w-full min-w-0"
                 >
                   <option value="">Choose a location…</option>
                   {locations.map((l) => (
@@ -289,7 +292,7 @@ export function OfferCard({
                 usedAt: redemptions[0]?.used_at ?? null,
               })
             }
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 underline underline-offset-2 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             Last code: {redemptions[0].code}
           </button>
@@ -353,12 +356,24 @@ export default function PartnersBrowseClient({
           businessSlug: business.slug,
           businessName: business.name,
           hasEventOffer,
+          adultsOnly: business.adults_only,
           lat: l.lat,
           lng: l.lng,
         }));
       }),
     [filteredBusinesses, offersByBusiness]
   );
+
+  const nextReward = useMemo(() => {
+    let best: { cost: number; title: string; business: string } | null = null;
+    for (const b of businesses) {
+      for (const o of offersByBusiness[b.id] ?? []) {
+        if (o.redemption_mode !== "spend" || o.points_cost == null || o.points_cost <= (points ?? 0)) continue;
+        if (!best || o.points_cost < best.cost) best = { cost: o.points_cost, title: o.title, business: b.name };
+      }
+    }
+    return best;
+  }, [businesses, offersByBusiness, points]);
 
   if (businesses.length === 0) {
     return <p className="text-sm text-zinc-500">No active partner offers right now -- check back soon.</p>;
@@ -367,8 +382,23 @@ export default function PartnersBrowseClient({
   return (
     <div className="space-y-6">
       {userId && (
-        <div className="text-sm text-zinc-400">
-          Your balance: <span className="font-semibold text-zinc-100">{points ?? 0} pts</span>
+        <div className="rounded-[20px] bg-zinc-900 p-4 sm:p-5">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Your points</p>
+              <p className="font-display text-3xl font-extrabold tracking-tight text-amber-400">{points ?? 0}</p>
+            </div>
+            {nextReward && (
+              <p className="text-right text-xs text-zinc-400">
+                {nextReward.cost - (points ?? 0)} pts to <span className="font-semibold text-zinc-200">{nextReward.title}</span>
+                <span className="block text-zinc-500">{nextReward.business}</span>
+              </p>
+            )}
+            {!nextReward && (points ?? 0) > 0 && <p className="text-xs text-zinc-400">You can afford every offer here.</p>}
+          </div>
+          {nextReward && (
+            <ProgressBar className="mt-3" tone="points" label="Progress to next reward" value={Math.min(100, ((points ?? 0) / nextReward.cost) * 100)} />
+          )}
         </div>
       )}
 
@@ -378,21 +408,21 @@ export default function PartnersBrowseClient({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search businesses or offers…"
-          className="flex-1 min-w-[180px] text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+          className="flex-1 min-w-[180px] text-sm bg-zinc-900 rounded-xl px-4 py-2.5 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
         />
-        <div className="flex shrink-0 rounded-lg border border-zinc-700 overflow-hidden">
+        <div className="flex shrink-0 rounded-xl bg-zinc-900 p-1 gap-1">
           <button
             onClick={() => setView("list")}
-            className={`px-3 py-2 text-xs font-semibold transition-colors duration-150 ${
-              view === "list" ? "bg-emerald-700 text-white" : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150 ${
+              view === "list" ? "bg-emerald-400 text-emerald-950" : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             List
           </button>
           <button
             onClick={() => setView("map")}
-            className={`px-3 py-2 text-xs font-semibold transition-colors duration-150 ${
-              view === "map" ? "bg-emerald-700 text-white" : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150 ${
+              view === "map" ? "bg-emerald-400 text-emerald-950" : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             Map
@@ -412,6 +442,7 @@ export default function PartnersBrowseClient({
         <p className="text-sm text-zinc-500">No businesses or offers match "{query}".</p>
       )}
 
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
       {filteredBusinesses.map((business) => {
         const businessOffers = offersByBusiness[business.id] ?? [];
         const hasEventOffer = businessOffers.some((o) => o.event_eligible);
@@ -419,18 +450,19 @@ export default function PartnersBrowseClient({
         <div
           key={business.id}
           id={`business-${business.slug}`}
-          className={`border rounded-xl overflow-hidden shadow-elevation-2 ${
-            hasEventOffer ? "border-amber-700/60 ring-1 ring-amber-800/30" : "border-zinc-800"
+          className={`rounded-[20px] overflow-hidden bg-zinc-900 ${
+            hasEventOffer ? "ring-1 ring-inset ring-amber-700/50" : ""
           }`}
         >
-          <div className={`w-full px-4 py-3 border-b flex items-center gap-3 ${hasEventOffer ? "border-amber-800/40 bg-amber-950/20" : "border-zinc-800 bg-zinc-900/40"}`}>
+          <div className={`w-full px-4 py-3 flex items-center gap-3 ${hasEventOffer ? "bg-amber-950/20" : ""}`}>
             {business.logo_url && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={business.logo_url} alt={business.name} className="w-8 h-8 rounded object-cover shrink-0" />
+              <img src={business.logo_url} alt={business.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
             )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm font-bold text-zinc-100 break-words">{business.name}</h2>
+                {business.adults_only && <AdultsOnlyBadge />}
                 {hasEventOffer && (
                   <span
                     title="This business has at least one offer that's free to redeem for anyone who checks in to a cleanup event it's attached to -- no points required."
@@ -456,7 +488,7 @@ export default function PartnersBrowseClient({
             />
             <Link
               href={`/partners/${business.slug}`}
-              className="flex items-center gap-1 text-xs font-semibold text-emerald-950 shrink-0 px-3 py-1.5 rounded-lg bg-emerald-400 shadow-elevation-1 hover:bg-emerald-300 active:bg-emerald-500 active:scale-[0.95] transition-[background-color,transform] duration-150 touch-manipulation"
+              className="flex items-center gap-1 text-xs font-semibold text-emerald-950 shrink-0 px-3.5 py-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 active:scale-[0.95] transition-[background-color,transform] duration-150 touch-manipulation"
             >
               Details
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -482,6 +514,7 @@ export default function PartnersBrowseClient({
         </div>
         );
       })}
+      </div>
     </div>
   );
 }

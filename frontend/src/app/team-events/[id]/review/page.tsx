@@ -20,12 +20,12 @@ export default async function TeamEventReviewPage({ params }: Props) {
   if (!event) notFound();
 
   return (
-    <main className="max-w-2xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-6">
         <Link href={`/team-events/${id}`} className="text-xs font-medium text-sky-400 hover:text-sky-300">
           ← Back to event
         </Link>
-        <h1 className="mt-2 text-2xl font-black text-zinc-100 leading-tight">{event.title} submissions</h1>
+        <h1 className="font-display font-extrabold mt-2 text-2xl  text-zinc-100 leading-tight">{event.title} submissions</h1>
       </div>
       <ReviewClient teamEventId={id} userId={user?.id ?? null} teams={event.teams} />
     </main>

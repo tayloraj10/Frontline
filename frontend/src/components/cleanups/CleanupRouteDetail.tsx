@@ -29,7 +29,7 @@ export default function CleanupRouteDetail({ route }: { route: CleanupRouteDetai
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <h1 className="text-xl font-bold text-zinc-100">Cleanup route</h1>
+        <h1 className="font-display text-xl font-bold text-zinc-100">Cleanup route</h1>
         <ShareButton
           variant="icon"
           content={{

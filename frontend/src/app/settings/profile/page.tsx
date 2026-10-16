@@ -17,13 +17,13 @@ export default async function ProfileSettingsPage() {
   if (!profile) redirect("/login");
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full">
+    <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-8">
-        <h1 className="text-xl font-black text-zinc-100">Edit profile</h1>
+        <h1 className="font-display font-extrabold text-xl text-zinc-100">Edit profile</h1>
         <p className="mt-1 text-sm text-zinc-500">@{profile.username}</p>
       </div>
 
-      <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/30 shadow-elevation-2">
+      <div className="rounded-[20px] bg-zinc-900 p-6">
         <ProfileEditForm
           userId={profile.id}
           username={profile.username}

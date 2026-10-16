@@ -34,8 +34,8 @@ export default function EventGeoSection({ teamEventId }: { teamEventId: string }
 
   if (entries.length === 0) {
     return (
-      <div className="border border-zinc-800 rounded-xl p-4 space-y-1 shadow-elevation-1">
-        <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">Territory</h2>
+      <div className="rounded-[20px] bg-zinc-900 p-4 space-y-1">
+        <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">Area cleaned</h2>
         <p className="text-xs text-zinc-600">
           No teams have an assigned area for this event yet. Assign areas from the event&apos;s admin page to see
           per-area point breakdowns here.
@@ -50,9 +50,9 @@ export default function EventGeoSection({ teamEventId }: { teamEventId: string }
   const teamCount = new Set(entries.map((e) => e.team_id)).size;
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+    <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
       <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
-        <span className="text-sm font-semibold text-zinc-300">Territory</span>
+        <span className="text-sm font-semibold text-zinc-300">Area cleaned</span>
       </div>
       <div className="px-5 py-4 space-y-4">
         <div className="grid grid-cols-3 gap-2">

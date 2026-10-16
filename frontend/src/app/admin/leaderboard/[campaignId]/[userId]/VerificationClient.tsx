@@ -67,7 +67,7 @@ export default function VerificationClient({
       <BackButton href="/admin" label="Back to admin" />
 
       <div className="mt-4 mb-6 min-w-0">
-        <h1 className="text-xl sm:text-2xl font-black text-zinc-100 truncate">{displayName}</h1>
+        <h1 className="font-display font-extrabold text-xl sm:text-2xl  text-zinc-100 truncate">{displayName}</h1>
         <p className="text-sm text-zinc-500 mt-1">
           {submissions.length} submission{submissions.length === 1 ? "" : "s"} · {totalValue} total value
           {start && end && (

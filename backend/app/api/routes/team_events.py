@@ -164,6 +164,14 @@ class PatchSubmissionRequest(BaseModel):
     pounds: float | None = None
     value: float | None = None
 
+    @field_validator("pounds")
+    @classmethod
+    def _round_pounds(cls, v: float | None) -> float | None:
+        # Rounding to a whole number before binding avoids asyncpg encoding a
+        # non-terminating binary float into the NUMERIC metrics_pounds column
+        # (e.g. 123.8 becomes 123.79999999999999715782905695999926515502929688).
+        return round(v) if v is not None else None
+
 
 @router.post("")
 async def create_team_event(payload: CreateTeamEventRequest, db: AsyncSession = Depends(get_db)):
@@ -1456,7 +1464,7 @@ async def list_submissions(team_event_id: UUID, requesting_user_id: UUID, db: As
             SELECT c.id, c.user_id, p.username, p.display_name,
                    c.team_event_team_id, t.name AS team_name, t.color AS team_color,
                    c.contribution_type, c.value,
-                   cl.metrics_small_bags, cl.metrics_large_bags, cl.metrics_pounds,
+                   cl.metrics_small_bags, cl.metrics_large_bags, cl.metrics_pounds, cl.metrics_detail,
                    c.photo_url, cl.image_urls, cl.description,
                    c.notes, c.submitted_at,
                    ST_Y(c.location::geometry) AS lat, ST_X(c.location::geometry) AS lng,
@@ -1488,6 +1496,7 @@ async def list_submissions(team_event_id: UUID, requesting_user_id: UUID, db: As
             "small_bags": r.metrics_small_bags,
             "large_bags": r.metrics_large_bags,
             "pounds": float(r.metrics_pounds) if r.metrics_pounds is not None else None,
+            "metrics_detail": r.metrics_detail,
             "photo_url": r.photo_url,
             "image_urls": r.image_urls,
             "description": r.description,

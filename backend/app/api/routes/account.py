@@ -189,7 +189,7 @@ async def export_account_data(
     cleanups = await db.execute(
         text("""
             SELECT id, campaign_id, geo_unit_id, title, description, status, image_urls,
-                   metrics_small_bags, metrics_large_bags, metrics_pounds, created_at
+                   metrics_small_bags, metrics_large_bags, metrics_pounds, metrics_detail, created_at
             FROM cleanups WHERE submitted_by_user_id = :id
         """),
         {"id": uid},

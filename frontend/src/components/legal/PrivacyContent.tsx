@@ -7,19 +7,19 @@ export default function PrivacyContent() {
         <p>When you use Frontline, we collect:</p>
         <ul className="list-disc list-inside space-y-1">
           <li>
-            <strong className="text-zinc-300">Account data</strong> — email address, username, and
+            <strong className="text-zinc-300">Account data</strong>: email address, username, and
             optionally a profile photo.
           </li>
           <li>
-            <strong className="text-zinc-300">Contribution data</strong> — the actions you log
+            <strong className="text-zinc-300">Contribution data</strong>: the actions you log
             (e.g., cleanup reports, photos, location of contributions).
           </li>
           <li>
-            <strong className="text-zinc-300">Usage data</strong> — pages visited, features used,
+            <strong className="text-zinc-300">Usage data</strong>: pages visited, features used,
             approximate IP-derived location.
           </li>
           <li>
-            <strong className="text-zinc-300">OAuth data</strong> — if you sign in with Google, we
+            <strong className="text-zinc-300">OAuth data</strong>: if you sign in with Google, we
             receive your name, email, and profile picture from Google.
           </li>
         </ul>
@@ -27,7 +27,7 @@ export default function PrivacyContent() {
 
       <Section title="2. How We Use It">
         <ul className="list-disc list-inside space-y-1">
-          <li>To operate the App — display your contributions on the map, calculate scores.</li>
+          <li>To operate the App: display your contributions on the map, calculate scores.</li>
           <li>To send you transactional emails (account confirmation, password reset).</li>
           <li>To improve the App during beta (usage analytics).</li>
           <li>We do not sell your data to third parties.</li>
@@ -61,18 +61,18 @@ export default function PrivacyContent() {
       <Section title="6. Third-Party Services">
         <ul className="list-disc list-inside space-y-1">
           <li>
-            <strong className="text-zinc-300">Supabase</strong> — authentication and database
+            <strong className="text-zinc-300">Supabase</strong>: authentication and database
             hosting.
           </li>
           <li>
-            <strong className="text-zinc-300">Google OAuth</strong> — optional sign-in (governed
+            <strong className="text-zinc-300">Google OAuth</strong>: optional sign-in (governed
             by Google's Privacy Policy).
           </li>
           <li>
-            <strong className="text-zinc-300">Cloudflare R2</strong> — image storage.
+            <strong className="text-zinc-300">Cloudflare R2</strong>: image storage.
           </li>
           <li>
-            <strong className="text-zinc-300">MapLibre / map tiles</strong> — map rendering (no
+            <strong className="text-zinc-300">MapLibre / map tiles</strong>: map rendering (no
             personal data sent).
           </li>
         </ul>

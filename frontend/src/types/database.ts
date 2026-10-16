@@ -245,6 +245,7 @@ export interface Database {
           body: string | null;
           campaign_id: string | null;
           campaign_slug: string | null;
+          link_url: string | null;
           read: boolean;
           created_at: string;
           push_eligible: boolean;
@@ -258,6 +259,7 @@ export interface Database {
           body?: string | null;
           campaign_id?: string | null;
           campaign_slug?: string | null;
+          link_url?: string | null;
           read?: boolean;
           created_at?: string;
           push_eligible?: boolean;
@@ -269,6 +271,7 @@ export interface Database {
           body: string | null;
           campaign_id: string | null;
           campaign_slug: string | null;
+          link_url: string | null;
           read: boolean;
           push_eligible: boolean;
           offer_id: string | null;

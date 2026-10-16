@@ -37,6 +37,7 @@ export async function updateSession(request: NextRequest) {
   const isPublicPage = request.nextUrl.pathname === "/" ||
     request.nextUrl.pathname.startsWith("/campaigns") ||
     request.nextUrl.pathname.startsWith("/legal") ||
+    request.nextUrl.pathname.startsWith("/how-points-work") ||
     request.nextUrl.pathname.startsWith("/users") ||
     request.nextUrl.pathname.startsWith("/leaderboard") ||
     request.nextUrl.pathname.startsWith("/groups") ||

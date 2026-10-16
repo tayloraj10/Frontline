@@ -56,7 +56,7 @@ function createEventMarkerEl(event: GroupStatsEvent): HTMLDivElement {
   const cohostSuffix = event.is_cohosted ? " (co-hosted)" : "";
   el.title = event.is_past
     ? `${event.title}${cohostSuffix} (ended)`
-    : `${event.title}${cohostSuffix} — ${event.going_count} going`;
+    : `${event.title}${cohostSuffix}: ${event.going_count} going`;
   return el;
 }
 

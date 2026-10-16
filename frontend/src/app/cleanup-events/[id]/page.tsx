@@ -29,7 +29,7 @@ export default async function CleanupEventPage({ params }: Props) {
   const isSiteAdmin = adminProfile?.is_admin ?? false;
 
   return (
-    <main className="max-w-lg mx-auto px-6 py-10 w-full">
+    <main className="max-w-xl lg:max-w-2xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-2">
         <BackToCampaignButton campaignSlug={event.campaign_slug} />
       </div>

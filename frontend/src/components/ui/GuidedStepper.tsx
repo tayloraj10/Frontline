@@ -37,7 +37,7 @@ export function GuidedStepper({
 
 const STEPPER_ACCENT = {
   sky: "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 text-sky-950",
-  emerald: "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 text-white",
+  emerald: "bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 text-emerald-950",
 } as const;
 
 /**
@@ -70,7 +70,7 @@ export function StepperNav({
           type="button"
           disabled={activeIndex === 0}
           onClick={onPrev}
-          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[border-color,transform] duration-150 touch-manipulation"
+          className="px-3 py-1.5 text-xs font-medium rounded-xl border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[border-color,transform] duration-150 touch-manipulation"
         >
           ← Prev
         </button>
@@ -106,7 +106,7 @@ export function ViewModeToggle({
   onChange: (mode: "guided" | "full") => void;
 }) {
   return (
-    <div className="self-start inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-900 p-0.5 text-xs font-semibold">
+    <div className="self-start inline-flex items-center rounded-xl border border-zinc-700 bg-zinc-900 p-0.5 text-xs font-semibold">
       {(["guided", "full"] as const).map((mode) => (
         <button
           key={mode}

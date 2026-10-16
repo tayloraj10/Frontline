@@ -39,7 +39,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
   let feedQuery = supabase
     .from("contributions")
     .select(
-      "id, user_id, group_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags)",
+      "id, user_id, group_id, value, contribution_type, notes, submitted_at, cleanup_id, cleanups!cleanup_id(metrics_small_bags, metrics_large_bags, metrics_detail)",
       { count: "exact" },
     )
     .eq("campaign_id", campaignData.id)
@@ -52,7 +52,11 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
   const contribs = (contribsData ?? []) as unknown as (Contribution & {
     cleanup_id: string | null;
-    cleanups: { metrics_small_bags: number | null; metrics_large_bags: number | null } | null;
+    cleanups: {
+      metrics_small_bags: number | null;
+      metrics_large_bags: number | null;
+      metrics_detail: { basis?: string; bag_types?: Record<string, number>; countable_items?: Record<string, number> } | null;
+    } | null;
   })[];
   const total = count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -76,7 +80,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
       <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <div className="min-w-0">
-            <h1 className="text-base font-bold text-zinc-100 truncate leading-tight">
+            <h1 className="font-display text-base font-bold text-zinc-100 truncate leading-tight">
               {campaignData.title}
             </h1>
             {campaignData.description && (
@@ -89,7 +93,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
             <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
               <span className="text-sm font-semibold text-zinc-300">
                 Activity{" "}
@@ -108,6 +112,7 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
                 submitted_at: c.submitted_at,
                 small_bags: c.cleanups?.metrics_small_bags ?? null,
                 large_bags: c.cleanups?.metrics_large_bags ?? null,
+                metrics_detail: c.cleanups?.metrics_detail ?? null,
               }))}
               profiles={profilesData ?? []}
               groups={groupsData ?? []}

@@ -31,7 +31,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-zinc-800 rounded-xl overflow-hidden mb-6 shadow-elevation-2 bg-zinc-950">
+    <section className="rounded-[20px] overflow-hidden mb-6 bg-zinc-900">
       <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
         <span className="text-sm font-semibold text-zinc-300">{title}</span>
         {right}
@@ -43,7 +43,7 @@ function Section({
 
 function KpiTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5 shadow-elevation-1">
+    <div className="bg-zinc-900 rounded-[20px] px-3 py-2.5">
       <div className="text-xs text-zinc-500">{label}</div>
       <div className="text-lg font-bold text-zinc-100 tabular-nums">{value}</div>
       {sub && <div className="text-[11px] text-zinc-600">{sub}</div>}

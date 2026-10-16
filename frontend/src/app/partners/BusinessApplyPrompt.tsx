@@ -19,7 +19,7 @@ export default function BusinessApplyPrompt() {
   }
 
   return (
-    <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between shadow-elevation-1">
+    <div className="mb-6 rounded-2xl border border-zinc-800/40 bg-zinc-900 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between shadow-elevation-1">
       <div>
         <p className="text-sm font-semibold text-zinc-200">Own a local business?</p>
         <p className="text-xs text-zinc-500 mt-1 max-w-md">
@@ -29,7 +29,7 @@ export default function BusinessApplyPrompt() {
       </div>
       <Link
         href="/partners/apply"
-        className="shrink-0 px-4 py-2 min-h-9 text-sm text-center border border-zinc-700 hover:border-zinc-500 active:scale-95 text-zinc-200 rounded-lg font-medium transition-[border-color,transform] duration-150 touch-manipulation whitespace-nowrap"
+        className="shrink-0 px-4 py-2 min-h-9 text-sm text-center border border-zinc-700 hover:border-zinc-500 active:scale-95 text-zinc-200 rounded-xl font-medium transition-[border-color,transform] duration-150 touch-manipulation whitespace-nowrap"
       >
         Apply to become a partner
       </Link>

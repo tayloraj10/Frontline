@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { isNativePlatform } from "@/lib/capacitor";
+import { consumeHomeRequest } from "@/lib/homeLanding";
 
 // Module-scoped, not sessionStorage: this needs to reset exactly when the JS
 // context reloads (fresh tab, hard refresh, or a native app cold start) and
@@ -24,8 +26,13 @@ export default function HomeAutoRedirect({ href }: { href: string }) {
   const router = useRouter();
 
   useEffect(() => {
+    // Only the native app opens straight onto the map; on the web "/" is a real page, even on refresh.
+    if (!isNativePlatform()) return;
+    // The logo explicitly asks for the homepage, even when it is the first "/" visit this load.
+    const homeRequested = consumeHomeRequest();
     if (hasLandedThisLoad) return;
     hasLandedThisLoad = true;
+    if (homeRequested) return;
     router.replace(href);
   }, [href, router]);
 

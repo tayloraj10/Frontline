@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -40,12 +40,12 @@ const COLOR_BY_HREF: Record<string, TabColor> = {
 };
 
 const ACTIVE_PILL_CLASSES: Record<TabColor, string> = {
-  emerald: "bg-emerald-500/15 border-emerald-500/30 shadow-glow-emerald",
-  amber: "bg-amber-500/15 border-amber-500/30 shadow-glow-amber",
-  sky: "bg-sky-500/15 border-sky-500/30 shadow-glow-sky",
-  violet: "bg-violet-500/15 border-violet-500/30 shadow-glow-violet",
-  rose: "bg-rose-500/15 border-rose-500/30 shadow-glow-rose",
-  orange: "bg-orange-500/15 border-orange-500/30 shadow-glow-orange",
+  emerald: "bg-emerald-500/15",
+  amber: "bg-amber-500/15",
+  sky: "bg-sky-500/15",
+  violet: "bg-violet-500/15",
+  rose: "bg-rose-500/15",
+  orange: "bg-orange-500/15",
 };
 
 const ACTIVE_TEXT_CLASSES: Record<TabColor, string> = {
@@ -71,6 +71,33 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLElement>(null);
+
+  // Fixed modals (ModalShell, CampaignInstructionsModal) need to keep their bottom
+  // edge clear of this bar, which sits at z-40 but is a real opaque UI element the
+  // modal can't just render above and dim like it does the page content — a taller
+  // stacking-context ancestor elsewhere can also make z-index alone unreliable here.
+  // Measuring the actual rendered height (rather than hardcoding it) keeps this correct
+  // if the tab bar's own height ever changes, and collapses to 0 on desktop/admin
+  // routes where this bar doesn't render at all.
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = barRef.current;
+    if (!el) {
+      root.style.setProperty("--bottom-nav-h", "0px");
+      return;
+    }
+    const update = () => root.style.setProperty("--bottom-nav-h", `${el.getBoundingClientRect().height}px`);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+      root.style.setProperty("--bottom-nav-h", "0px");
+    };
+  });
 
   const resolvedLinks = links.map((link) => ({ ...link, href: link.mobileHref ?? link.href }));
   const primary = resolvedLinks.slice(0, MAX_PRIMARY_TABS);
@@ -104,8 +131,11 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   const overflowActive = overflow.some((link) => isActive(link.href));
 
   return (
-    <nav className="sm:hidden fixed inset-x-0 bottom-0 z-40 px-3 pt-1 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-      <div className="flex items-stretch gap-1.5 p-1.5 rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900/95 backdrop-blur-md shadow-elevation-3">
+    <nav
+      ref={barRef}
+      className="sm:hidden fixed inset-x-0 bottom-0 z-40 px-3 pt-1 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+    >
+      <div className="flex items-stretch gap-1 p-1.5 rounded-[1.75rem] bg-zinc-900/95 backdrop-blur-md shadow-elevation-3 ring-1 ring-zinc-800">
         {primary.map((link) => {
           const active = isActive(link.href);
           const Icon = iconFor(link.href);
@@ -116,13 +146,13 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
               href={link.href}
               className={cn(
                 "relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[52px] rounded-2xl border text-[10.5px] font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.93] touch-manipulation",
-                active ? "border-transparent" : "border-zinc-800/70 bg-zinc-800/30 active:bg-zinc-800/60"
+                active ? "border-transparent" : "border-transparent active:bg-zinc-800/60"
               )}
             >
               {active && (
                 <motion.span
                   layoutId="bottom-tab-pill"
-                  className={cn("absolute inset-0 rounded-2xl border", ACTIVE_PILL_CLASSES[color])}
+                  className={cn("absolute inset-0 rounded-2xl", ACTIVE_PILL_CLASSES[color])}
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
@@ -161,8 +191,8 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
               className={cn(
                 "w-full h-full flex flex-col items-center justify-center gap-0.5 py-2 min-h-[52px] rounded-2xl border text-[10.5px] font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.93] touch-manipulation",
                 moreOpen || overflowActive
-                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                  : "border-zinc-800/70 bg-zinc-800/30 text-zinc-500 active:bg-zinc-800/60"
+                  ? "bg-emerald-400/15 border-transparent text-emerald-400"
+                  : "border-transparent text-zinc-500 active:bg-zinc-800/60"
               )}
             >
               <MoreHorizontal className="w-5 h-5" strokeWidth={2.25} />
@@ -175,7 +205,7 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 4 }}
                   transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                  className="absolute bottom-full right-0 mb-2 w-48 max-w-[calc(100vw-1rem)] bg-zinc-900 border border-zinc-800 rounded-xl shadow-elevation-4 py-1 text-sm origin-bottom-right"
+                  className="absolute bottom-full right-0 mb-2 w-48 max-w-[calc(100vw-1rem)] bg-zinc-900 rounded-[20px] shadow-elevation-4 py-1 text-sm origin-bottom-right"
                 >
                   {overflow.map((link) => {
                     const Icon = iconFor(link.href);

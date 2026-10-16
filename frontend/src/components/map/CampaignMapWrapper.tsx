@@ -42,12 +42,13 @@ interface Props {
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
-  onMobileStatsClick?: () => void;
+  statsChip?: React.ReactNode;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
   onGeolocateTrigger?: (trigger: () => boolean) => void;
   nycNeighborhoodsVisible?: boolean;
   routePickerActive?: boolean;
+  routePickerStartCoords?: { latitude: number; longitude: number } | null;
   onRoutePickerChange?: (vertices: [number, number][]) => void;
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;

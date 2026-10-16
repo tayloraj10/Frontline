@@ -1,5 +1,6 @@
 "use client";
 
+import InlineTip from "@/components/walkthrough/InlineTip";
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import Link from "next/link";
 import maplibregl from "maplibre-gl";
@@ -18,6 +19,8 @@ import { formatPoints } from "@/lib/formatPoints";
 import { saveMapPosition } from "@/lib/mapPosition";
 import IconButton from "@/components/ui/IconButton";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
+import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -140,7 +143,12 @@ function createHostLogoStack(
   isPast: boolean,
 ): HTMLDivElement {
   const wrapper = document.createElement("div");
-  wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;";
+  // Explicit z-index (and the `position` it requires to take effect) so this marker
+  // stays clickable when a partner/business marker lands at the same coordinates --
+  // without it, `position` falls back to the maplibregl-marker class's default and the
+  // z-index is ignored, letting business markers (which do set one) paint on top and
+  // swallow clicks meant for this marker.
+  wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;position:relative;z-index:9;";
 
   // Only groups with an actual logo get a circle here — a group without one is skipped
   // rather than shown as a generic placeholder. If nothing has a logo, fall back to a
@@ -273,6 +281,7 @@ interface ContributionPoint {
   submitted_at: string | null;
   is_group_event?: boolean;
   cleanup_event_id?: string | null;
+  contributor_name?: string | null;
   latitude: number;
   longitude: number;
 }
@@ -391,6 +400,7 @@ export type MapBusiness = {
   description: string | null;
   logo_url: string | null;
   website_url: string | null;
+  adults_only: boolean;
   locations: MapBusinessLocation[];
 };
 
@@ -433,6 +443,7 @@ interface Props {
   onAreaPickerConfirm?: () => void;
   onAreaPickerCancel?: () => void;
   routePickerActive?: boolean;
+  routePickerStartCoords?: { latitude: number; longitude: number } | null;
   onRoutePickerChange?: (coordinates: [number, number][]) => void;
   onRoutePickerFinish?: () => void;
   onRoutePickerCancel?: () => void;
@@ -454,7 +465,8 @@ interface Props {
   eventGeoUnitIds?: Record<string, string[]>;
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
-  onMobileStatsClick?: () => void;
+  /** Compact stats chip rendered in the top-left stack; opens the stats sheet. */
+  statsChip?: React.ReactNode;
   onUserLocationChange?: (coords: { latitude: number; longitude: number } | null) => void;
   onUserLocationError?: (code: number) => void;
   onGeolocateTrigger?: (trigger: () => boolean) => void;
@@ -724,8 +736,10 @@ function applyLayerVisibility(m: maplibregl.Map, t: LayerToggleState): void {
     if (m.getLayer(layerId)) m.setLayoutProperty(layerId, "visibility", vis(show));
   };
   setVis("contribution-dots", t.showCleanupDots);
+  setVis("contribution-dots-hit", t.showCleanupDots);
   setVis("contribution-dots-halo", t.showGroupEventDots);
   setVis("report-dots", t.showReports);
+  setVis("report-dots-hit", t.showReports);
   setVis("report-radius-fill", t.showReports);
   setVis("report-radius-line", t.showReports);
   setVis("cleanup-event-radius-fill", t.showEventRadius && t.showGroupEvents);
@@ -784,17 +798,26 @@ function LegendToggle({
 }) {
   return (
     <label
-      className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded shadow-elevation-1 backdrop-blur-sm cursor-pointer select-none transition-[background-color,transform] duration-150 hover:bg-zinc-800/80 active:scale-[0.97] touch-manipulation ${
-        indent ? "ml-3" : ""
-      } ${checked ? "" : "opacity-50"}`}
+      className={`flex items-center gap-2.5 min-h-10 px-3 rounded-xl cursor-pointer select-none transition-[background-color,transform] duration-150 hover:bg-zinc-800/70 active:bg-zinc-800 active:scale-[0.98] touch-manipulation ${
+        indent ? "ml-4" : ""
+      }`}
     >
+      <span className={`flex flex-1 items-center gap-2.5 min-w-0 text-[13px] ${checked ? "" : "opacity-50"}`}>{children}</span>
       <input
         type="checkbox"
+        role="switch"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-3 h-3 flex-shrink-0 accent-emerald-500"
+        className="peer sr-only"
       />
-      {children}
+      <span
+        aria-hidden="true"
+        className={`relative w-9 h-5 shrink-0 rounded-full transition-colors duration-150 ${checked ? "bg-emerald-400" : "bg-zinc-700"}`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`}
+        />
+      </span>
     </label>
   );
 }
@@ -1154,22 +1177,22 @@ function TerritoryPanel({
         <div className="flex items-start justify-between">
           <div>
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-              {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Claim`}
+              {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Leader`}
             </p>
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">
               {variant === "stats" ? displayName : `${unitLabel} ${displayName}`}
             </p>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            {isClaimed && (
+            {isClaimed && isContested && (
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${isContested
                 ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
                 : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
                 }`}>
-                {isContested ? "Contested" : "Claimed"}
+                Contested
               </span>
             )}
-            <IconButton onClick={onClose} size="sm" className="-mr-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+            <IconButton onClick={onClose} className="-mr-2.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
         </div>
 
@@ -1191,10 +1214,10 @@ function TerritoryPanel({
                     {claimLabel.name}
                   </span>
                 )}
-                <span className="ml-auto text-[10px] text-zinc-600 shrink-0">holds</span>
+                <span className="ml-auto text-[10px] text-zinc-600 shrink-0">leads</span>
               </div>
             ) : (
-              <span className="text-sm text-zinc-600">Unclaimed</span>
+              <span className="text-sm text-zinc-600">No leader yet</span>
             )
           )}
           {hasStats && (
@@ -1285,7 +1308,7 @@ function TerritoryPanel({
                   />
                 </div>
                 {reportCount >= reportThreshold && (
-                  <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached — hotspot active!</p>
+                  <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached. Hotspot active!</p>
                 )}
                 {reportPhotos.length > 0 && (
                   <div className="mt-2 flex gap-1.5 flex-wrap">
@@ -1410,28 +1433,32 @@ function TerritoryPanel({
       </div>
     </div>
     {showPointsInfo && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-        onClick={() => setShowPointsInfo(false)}
-      >
+      <BodyPortal>
         <div
-          className="max-w-xs rounded-xl border border-zinc-700/70 bg-zinc-900 p-4 shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
+          onClick={() => setShowPointsInfo(false)}
         >
-          <div className="flex items-start justify-between mb-2">
-            <p className="text-sm font-semibold text-zinc-100">What are points?</p>
-            <IconButton onClick={() => setShowPointsInfo(false)} size="sm" className="-mr-1.5 -mt-1 text-lg leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <div
+            className="w-full max-w-xs rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-white/5 p-5 shadow-elevation-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-bold text-zinc-100">What are points?</h2>
+            <p className="mt-2 text-sm text-zinc-400">Points are how we rank cleanups. Bigger hauls earn more.</p>
+            <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">
+              <li className="flex justify-between"><span>Small bag</span><span className="tabular-nums"><SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> pt{pointValues.small_bag_value !== 1 ? "s" : ""}</span></li>
+              <li className="flex justify-between"><span>Large bag</span><span className="tabular-nums"><SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> pts</span></li>
+              <li className="flex justify-between"><span>Per pound</span><span className="tabular-nums"><SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> pts</span></li>
+            </ul>
+            <button
+              type="button"
+              onClick={() => setShowPointsInfo(false)}
+              className="mt-5 w-full min-h-11 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,transform] duration-150 touch-manipulation"
+            >
+              Got it
+            </button>
           </div>
-          <p className="text-xs text-zinc-400 leading-relaxed">
-            The ranking total is measured in points, not a literal bag count. Small bags are worth{" "}
-            <SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> point{pointValues.small_bag_value !== 1 ? "s" : ""}, large bags are
-            worth <SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> points, and pound-based cleanups convert at{" "}
-            <SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> points per pound. The &quot;bags picked up&quot; line below it is the
-            actual physical bag count (small + large), the real-world impact this campaign is about, so the
-            two numbers won&apos;t always match.
-          </p>
         </div>
-      </div>
+      </BodyPortal>
     )}
     </>
   );
@@ -1466,7 +1493,7 @@ function StatePanel({
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
             <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1563,7 +1590,7 @@ function HexPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
             <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
           </div>
-          <IconButton onClick={onClose} size="sm" className="ml-2 -mr-1.5 -mt-1 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1620,6 +1647,15 @@ function HexPanel({
 
 // ─── Fit-to-extent control ────────────────────────────────────────────────────
 
+// maplibre's GeolocateControl only drops its ACTIVE_LOCK camera-follow when a movestart
+// arrives while !map.isZooming(), and programmatic fitBounds() zooms — so the zoom-to
+// buttons below never broke the lock and every later watchPosition fix yanked the camera
+// back to the user. Each button calls this before moving the camera.
+const geolocateLockReleasers = new WeakMap<maplibregl.Map, () => void>();
+const releaseGeolocateLock = (map: maplibregl.Map | null) => {
+  if (map) geolocateLockReleasers.get(map)?.();
+};
+
 class FitExtentControl implements maplibregl.IControl {
   private _map: maplibregl.Map | null = null;
   private _container: HTMLDivElement | null = null;
@@ -1644,6 +1680,7 @@ class FitExtentControl implements maplibregl.IControl {
     btn.onclick = () => {
       const bounds = this._getBounds();
       if (bounds && this._map) {
+        releaseGeolocateLock(this._map);
         this._map.fitBounds(bounds as maplibregl.LngLatBoundsLike, {
           padding: 60,
           maxZoom: 12,
@@ -1738,6 +1775,7 @@ class MultiCityZoomControl implements maplibregl.IControl {
         `<span style="font-size:8px;line-height:1;color:#3f3f46">${city.label}</span>`;
       b.onclick = (e) => {
         e.stopPropagation();
+        releaseGeolocateLock(this._map);
         this._map?.fitBounds(city.bounds, {
           padding: 60,
           duration: 800,
@@ -1807,6 +1845,7 @@ class ZoomToRegionControl implements maplibregl.IControl {
       "background:none;border:none;cursor:pointer;padding:0";
     btn.innerHTML = this._flagSvg;
     btn.onclick = () => {
+      releaseGeolocateLock(this._map);
       this._map?.fitBounds(this._bounds, { padding: 40, duration: 800 });
     };
     const container = document.createElement("div");
@@ -1843,6 +1882,7 @@ export default function CampaignMap({
   onAreaPickerConfirm,
   onAreaPickerCancel,
   routePickerActive = false,
+  routePickerStartCoords = null,
   onRoutePickerChange,
   onRoutePickerFinish,
   onRoutePickerCancel,
@@ -1862,7 +1902,7 @@ export default function CampaignMap({
   eventGeoUnitIds,
   partnerBusinesses,
   cleanupEvents,
-  onMobileStatsClick,
+  statsChip,
   onUserLocationChange,
   onUserLocationError,
   onGeolocateTrigger,
@@ -1880,6 +1920,8 @@ export default function CampaignMap({
   const [selectedZip, setSelectedZip] = useState<SelectedZip | null>(null);
   const [geoSearch, setGeoSearch] = useState("");
   const [geoSearchError, setGeoSearchError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<{ id: string; place_name: string; center: [number, number]; bbox?: number[] }[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const geoSearchErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedHex, setSelectedHex] = useState<HexBloomEntry | null>(null);
   const [hexPhotoVersion, setHexPhotoVersion] = useState(0);
@@ -2133,6 +2175,16 @@ export default function CampaignMap({
       src?.setData({ type: "FeatureCollection", features: [] });
     }
   }, [routePickerActive]);
+  // Entering the route picker from a host-event form with an address already set: start
+  // the camera there rather than wherever the map happened to be (often the user's GPS fix).
+  useEffect(() => {
+    if (!routePickerActive || !routePickerStartCoords || !map.current) return;
+    map.current.flyTo({
+      center: [routePickerStartCoords.longitude, routePickerStartCoords.latitude],
+      zoom: 16,
+      duration: 700,
+    });
+  }, [routePickerActive, routePickerStartCoords]);
   useEffect(() => { pinPickerConstrainedRef.current = pinPickerConstrained; }, [pinPickerConstrained]);
   useEffect(() => { areaPickerActiveRef.current = areaPickerActive; }, [areaPickerActive]);
   useEffect(() => { areaPickerUnitTypeRef.current = areaPickerUnitType; }, [areaPickerUnitType]);
@@ -2342,12 +2394,13 @@ export default function CampaignMap({
         businessMarkerScaleElsRef.current.push(scaleWrapper);
 
         const innerEl = document.createElement("div");
+        const adultsRing = business.adults_only ? ",0 0 0 2px #ef4444" : "";
         innerEl.style.cssText = hasOffer
           ? `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-          `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6);` +
+          `border:2px solid #fbbf24;box-shadow:0 0 ${affordable ? "12px rgba(251,191,36,0.9)" : "8px rgba(251,191,36,0.7)"},0 1px 4px rgba(0,0,0,0.6)${adultsRing};` +
           "display:flex;align-items:center;justify-content:center;background:rgba(120,53,15,0.9);transform-origin:center"
           : `width:100%;height:100%;border-radius:50%;overflow:hidden;` +
-          "border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6);" +
+          `border:1.5px solid #22c55e;box-shadow:0 0 4px rgba(34,197,94,0.35),0 1px 4px rgba(0,0,0,0.6)${adultsRing};` +
           "display:flex;align-items:center;justify-content:center;background:rgba(20,83,45,0.9)";
         scaleWrapper.appendChild(innerEl);
         if (affordable) {
@@ -2365,11 +2418,12 @@ export default function CampaignMap({
           innerEl.style.fontSize = hasOffer ? "15px" : "13px";
         }
         const locationSuffix = location.label ? ` (${location.label})` : "";
+        const adultsSuffix = business.adults_only ? " (21+ only)" : "";
         el.title = affordable
-          ? `${business.name}${locationSuffix} — you have enough points for ${location.affordableOfferTitle}!`
+          ? `${business.name}${locationSuffix}: you have enough points for ${location.affordableOfferTitle}!${adultsSuffix}`
           : hasOffer
-            ? `${business.name}${locationSuffix} — ${location.activeOfferTitle}`
-            : `${business.name}${locationSuffix}`;
+            ? `${business.name}${locationSuffix}: ${location.activeOfferTitle}${adultsSuffix}`
+            : `${business.name}${locationSuffix}${adultsSuffix}`;
 
         if (!layerToggleRef.current.showPartners) {
           el.style.display = "none";
@@ -2408,7 +2462,7 @@ export default function CampaignMap({
 
       const cohostNames = cohostGroups.map((g) => g.group_name).join(", ");
       const hostLabel = cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name;
-      wrapper.title = event.is_past ? `${event.title} — ${hostLabel} (ended)` : `${event.title} — ${hostLabel}`;
+      wrapper.title = event.is_past ? `${event.title}: ${hostLabel} (ended)` : `${event.title}: ${hostLabel}`;
 
       if (!layerToggleRef.current.showGroupEvents) {
         wrapper.style.display = "none";
@@ -2485,6 +2539,7 @@ export default function CampaignMap({
             claim_after_deadline_at: report.claim_after_deadline_at,
             flag_count: report.flag_count,
             unit_type: report.unit_type,
+            reported_by_name: report.reported_by_name,
           },
         })),
       });
@@ -2565,7 +2620,7 @@ export default function CampaignMap({
       el.appendChild(countdownEl);
       bonusSpotCountdownRef.current.push({ el: countdownEl, endsAt: spot.ends_at });
 
-      const titleSuffix = spot.title ? `${spot.title} — ` : "";
+      const titleSuffix = spot.title ? `${spot.title}: ` : "";
       el.title = `${titleSuffix}${spot.multiplier}x bonus spot`;
 
       el.addEventListener("click", (e) => {
@@ -2840,7 +2895,7 @@ export default function CampaignMap({
 
         const cohostNames = (event?.cohost_groups ?? []).map((g) => g.group_name).join(", ");
         const hostLabel = event ? (cohostNames ? `${event.group_name} + ${cohostNames}` : event.group_name) : "";
-        wrapper.title = event ? `${event.title} — ${hostLabel}${isPast ? " (ended)" : ""}` : "View this cleanup route";
+        wrapper.title = event ? `${event.title}: ${hostLabel}${isPast ? " (ended)" : ""}` : "View this cleanup route";
 
         const routeVisible = event ? layerToggleRef.current.showGroupEvents : layerToggleRef.current.showAdhocRoutes;
         if (!routeVisible) {
@@ -3755,6 +3810,19 @@ export default function CampaignMap({
           "circle-stroke-opacity": 0.7,
         },
       });
+      // Invisible, larger-radius layer stacked on top purely for hit testing — MapLibre's
+      // circle hit test is exact against circle-radius, and the 6px visual dot above is far
+      // below a usable mobile tap target. Event listeners bind to this layer, not the visual
+      // one, so taps near a dot (not just dead-on) still register.
+      m.addLayer({
+        id: "contribution-dots-hit",
+        type: "circle",
+        source: "contribution-pts",
+        paint: {
+          "circle-radius": 16,
+          "circle-opacity": 0,
+        },
+      });
     };
 
     if (contributionFeaturesRef.current.length > 0) {
@@ -3778,6 +3846,9 @@ export default function CampaignMap({
               submitted_at: loc.submitted_at ?? "",
               is_group_event: loc.is_group_event ?? false,
               cleanup_event_id: loc.cleanup_event_id ?? "",
+              contributor_name: loc.contributor_name ?? "",
+              id: loc.id,
+              photo_url: loc.photo_url ?? "",
             },
           }));
           contributionFeaturesRef.current = features;
@@ -3917,6 +3988,16 @@ export default function CampaignMap({
         "circle-opacity": 0.9,
         "circle-stroke-width": 1.5,
         "circle-stroke-color": ["match", ["get", "status"], ["scheduled", "in_progress"], "#9333ea", "#ea580c"],
+      },
+    });
+    // See contribution-dots-hit above — same enlarged invisible hit target for mobile tapping.
+    m.addLayer({
+      id: "report-dots-hit",
+      type: "circle",
+      source: "report-points",
+      paint: {
+        "circle-radius": 16,
+        "circle-opacity": 0,
       },
     });
 
@@ -4348,6 +4429,14 @@ export default function CampaignMap({
         onUserLocationErrorRef.current?.(err.code);
       });
       map.current.addControl(control, "top-right");
+      const geoMap = map.current;
+      geolocateLockReleasers.set(geoMap, () => {
+        const c = control as unknown as { _watchState: string; _geolocateButton?: HTMLElement };
+        if (c._watchState !== "ACTIVE_LOCK") return;
+        c._watchState = "BACKGROUND";
+        c._geolocateButton?.classList.remove("maplibregl-ctrl-geolocate-active");
+        c._geolocateButton?.classList.add("maplibregl-ctrl-geolocate-background");
+      });
       // trigger() toggles tracking on/off, so every caller that wants tracking
       // *started* (as opposed to explicitly re-clicked) must funnel through this
       // single startedRef-guarded helper. Without it, our own auto-locate-on-mount
@@ -4469,15 +4558,25 @@ export default function CampaignMap({
       await setupCustomLayers();
 
       // Event listeners are registered once here and persist through style swaps.
-      map.current.on("mouseenter", "contribution-dots", () => {
+      map.current.on("mouseenter", "contribution-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
-      map.current.on("mousemove", "contribution-dots", (e) => {
-        if (pinPickerActiveRef.current || !e.features?.[0]) return;
-        const props = e.features[0].properties as { value?: number; submitted_at?: string; cleanup_event_id?: string };
+      map.current.on("mousemove", "contribution-dots-hit", (e) => {
+        // Touch taps synthesize a mousemove without a matching mouseleave, so this tooltip
+        // would stick open on top of whatever the tap's click handler opens (see the
+        // territory-fill hover handler below for the same issue).
+        if (isTouchViewport() || pinPickerActiveRef.current || !e.features?.[0]) return;
+        const props = e.features[0].properties as {
+          value?: number;
+          submitted_at?: string;
+          cleanup_event_id?: string;
+          contributor_name?: string;
+          photo_url?: string;
+        };
         const date = props.submitted_at
           ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
           : "";
+        const name = props.contributor_name || "Anonymous";
         // A group event's total gets split into one contribution row per participant, each
         // logged at the same event, so a single dot's own value is just that person's share.
         // Sum every dot sharing this cleanup_event_id (already loaded, no extra lookup) to
@@ -4492,39 +4591,106 @@ export default function CampaignMap({
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
+          `<div>` +
           `<span style="font-size:13px">🗑️</span>` +
           `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}${props.cleanup_event_id ? " total" : ""}</span>` +
-          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "");
+          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
+          `</div>` +
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>` +
+          (props.photo_url ? `<div style="color:#71717a;font-size:10px;margin-top:4px">📷 Click for photo</div>` : "");
       });
-      map.current.on("mouseleave", "contribution-dots", () => {
+      map.current.on("mouseleave", "contribution-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
       // A dot for a contribution logged against a group event (halo ring) links back
       // to that event's page — plain ad-hoc/individual cleanups have nowhere to link to.
-      map.current.on("click", "contribution-dots", (e) => {
+      // On touch, mousemove never fires (see the guard above), so tapping any dot needs
+      // to fall back to a real tap-to-open popup instead of relying on hover at all.
+      map.current.on("click", "contribution-dots-hit", (e) => {
         if (pinPickerActiveRef.current || !e.features?.[0]) return;
-        const props = e.features[0].properties as { cleanup_event_id?: string };
-        if (!props.cleanup_event_id) return;
+        const props = e.features[0].properties as {
+          value?: number;
+          submitted_at?: string;
+          cleanup_event_id?: string;
+          contributor_name?: string;
+          photo_url?: string;
+          id?: string;
+        };
         if (!map.current) return;
         contributionPopupRef.current?.remove();
         const coords = (e.features[0].geometry as GeoJSON.Point).coordinates.slice() as [number, number];
-        contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
+        // Tappable thumbnail that opens the shared photo lightbox (same one the photo markers use).
+        const buildPhotoThumb = (): HTMLElement | null => {
+          if (!props.photo_url) return null;
+          const url = props.photo_url;
+          const contentId = props.id;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.setAttribute("aria-label", "Enlarge photo");
+          btn.style.cssText =
+            "display:block;width:100%;margin-top:6px;padding:0;border:0;background:none;cursor:zoom-in;position:relative;touch-action:manipulation;";
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "Cleanup photo";
+          img.loading = "lazy";
+          img.style.cssText = "display:block;width:100%;height:110px;object-fit:cover;border-radius:8px;";
+          const hint = document.createElement("span");
+          hint.textContent = "Tap to enlarge";
+          hint.style.cssText =
+            "position:absolute;right:4px;bottom:4px;padding:1px 6px;border-radius:999px;background:rgba(0,0,0,0.65);color:#f4f4f5;font-size:10px;";
+          btn.append(img, hint);
+          btn.onclick = () => {
+            contributionPopupRef.current?.remove();
+            setSelectedPhoto(contentId ? { url, contentType: "contribution_photo", contentId } : { url });
+          };
+          return btn;
+        };
+        if (props.cleanup_event_id) {
+          const box = document.createElement("div");
+          box.style.cssText = "font-family:inherit;font-size:12px;";
+          box.innerHTML =
+            `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
+            `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>`;
+          const thumb = buildPhotoThumb();
+          if (thumb) box.appendChild(thumb);
+          contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "220px" })
+            .setLngLat(coords)
+            .setDOMContent(box)
+            .addTo(map.current);
+          return;
+        }
+        // Desktop already gets a hover tooltip, so only open a popup there when there is a photo to show.
+        if (!isTouchViewport() && !props.photo_url) return;
+        const date = props.submitted_at
+          ? new Date(props.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
+        const name = props.contributor_name || "Anonymous";
+        const displayValue = props.value ?? 1;
+        const box = document.createElement("div");
+        box.style.cssText = "font-family:inherit;font-size:12px;";
+        box.innerHTML =
+          `<div>` +
+          `<span style="font-size:13px">🗑️</span>` +
+          `<span style="font-weight:600;font-size:12px;color:#f4f4f5;margin-left:6px">${displayValue} pt${displayValue !== 1 ? "s" : ""}</span>` +
+          (date ? `<span style="color:#71717a;font-size:11px;margin-left:6px">${date}</span>` : "") +
+          `</div>` +
+          `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">by ${name}</div>`;
+        const thumb = buildPhotoThumb();
+        if (thumb) box.appendChild(thumb);
+        contributionPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "200px" })
           .setLngLat(coords)
-          .setHTML(
-            `<div style="font-family:inherit;font-size:12px;">` +
-              `<div style="color:#e4e4e7;font-weight:600;margin-bottom:4px;">Logged for a group event</div>` +
-              `<a href="/cleanup-events/${props.cleanup_event_id}" style="color:#38bdf8;text-decoration:underline;">View event page ↗</a>` +
-              `</div>`,
-          )
+          .setDOMContent(box)
           .addTo(map.current);
       });
 
-      map.current.on("mouseenter", "report-dots", () => {
+      map.current.on("mouseenter", "report-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "pointer";
       });
-      map.current.on("mousemove", "report-dots", (e) => {
-        if (pinPickerActiveRef.current || !e.features?.[0]) return;
+      map.current.on("mousemove", "report-dots-hit", (e) => {
+        // Same touch-tap issue as contribution-dots above: without this guard the tooltip
+        // sticks open over the Claim This Report modal the tap's click handler opens.
+        if (isTouchViewport() || pinPickerActiveRef.current || !e.features?.[0]) return;
         const props = e.features[0].properties as { severity?: string; reported_at?: string };
         const date = props.reported_at
           ? new Date(props.reported_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -4539,11 +4705,11 @@ export default function CampaignMap({
           (date ? `<div style="color:#a1a1aa;font-size:11px;margin-top:2px">Reported ${date}</div>` : "") +
           `<div style="color:#71717a;font-size:10px;margin-top:4px">Clean up within the shaded radius to resolve it</div>`;
       });
-      map.current.on("mouseleave", "report-dots", () => {
+      map.current.on("mouseleave", "report-dots-hit", () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
         hoverDiv.style.display = "none";
       });
-      map.current.on("click", "report-dots", (e) => {
+      map.current.on("click", "report-dots-hit", (e) => {
         if (pinPickerActiveRef.current || routePickerActiveRef.current || !e.features?.[0]) return;
         const props = e.features[0].properties as {
           id?: string;
@@ -4556,6 +4722,7 @@ export default function CampaignMap({
           claim_after_deadline_at?: string | null;
           flag_count?: number;
           unit_type?: string | null;
+          reported_by_name?: string | null;
         };
         if (!props.id) return;
         const geometry = e.features[0].geometry;
@@ -4575,6 +4742,7 @@ export default function CampaignMap({
           flag_count: props.flag_count ?? 0,
           claim_before_deadline_at: props.claim_before_deadline_at ?? null,
           claim_after_deadline_at: props.claim_after_deadline_at ?? null,
+          reported_by_name: props.reported_by_name ?? null,
         });
       });
 
@@ -4585,7 +4753,7 @@ export default function CampaignMap({
         // territory-fill covers the whole map (see the opacity-vs-interactivity note above), so
         // its mousemove fires under report/contribution dots too and would otherwise clobber the
         // pointer cursor those layers' own handlers just set — defer to them when a dot is present.
-        if (map.current.queryRenderedFeatures(e.point, { layers: ["report-dots", "contribution-dots"] }).length > 0) {
+        if (map.current.queryRenderedFeatures(e.point, { layers: ["report-dots-hit", "contribution-dots-hit"] }).length > 0) {
           return;
         }
         const hoverState = e.features[0].state as { claim_owned?: boolean; claim_is_group?: boolean };
@@ -4631,7 +4799,7 @@ export default function CampaignMap({
             claimed_label?: string | null;
             claim_is_group?: boolean;
           };
-          const displayName = props.display_name ?? "—";
+          const displayName = props.display_name ?? "-";
           const featureUnitLabel = props.unit_type === "uk_postcode_district" ? "Postcode" : "ZIP";
           const totalVal = featureState.total_value ?? 0;
           if (isChoropleth) {
@@ -4914,7 +5082,7 @@ export default function CampaignMap({
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
-          `<div style="font-weight:700;font-size:12px;color:${color}">Stage ${stage} — ${label}</div>` +
+          `<div style="font-weight:700;font-size:12px;color:${color}">Stage ${stage}: ${label}</div>` +
           `<div style="color:#a1a1aa;font-size:11px;margin-top:3px">${formatPoints(score)} bloom pts</div>` +
           (props.seed_source ? `<div style="color:#52525b;font-size:10px;margin-top:2px">🌍 pre-seeded</div>` : "");
       };
@@ -4957,7 +5125,7 @@ export default function CampaignMap({
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
         hoverDiv.style.top = `${e.originalEvent.clientY - 10}px`;
         hoverDiv.innerHTML =
-          `<div style="font-weight:700;font-size:12px;color:#f4f4f5">${props.display_name ?? "—"}</div>`;
+          `<div style="font-weight:700;font-size:12px;color:#f4f4f5">${props.display_name ?? "-"}</div>`;
       };
       const hideNycNeighborhoodTooltip = () => {
         if (map.current) map.current.getCanvas().style.cursor = "";
@@ -5129,8 +5297,7 @@ export default function CampaignMap({
       .then((d: { geo_unit_id: string | null }) => { userGeoUnitId = d.geo_unit_id; })
       .catch(() => { userGeoUnitId = null; });
 
-    marker.on("dragend", () => {
-      const pos = marker.getLngLat();
+    const placePin = (pos: { lng: number; lat: number }) => {
       if (!pinPickerConstrainedRef.current || userGeoUnitId === undefined || userGeoUnitId === null) {
         lastValidLng = pos.lng;
         lastValidLat = pos.lat;
@@ -5155,9 +5322,34 @@ export default function CampaignMap({
           lastValidLng = pos.lng;
           lastValidLat = pos.lat;
         });
-    });
+    };
+
+    marker.on("dragend", () => placePin(marker.getLngLat()));
+    // Tapping the map moves the pin too. Out-of-zone taps revert via placePin.
+    const m = map.current;
+    const onMapClick = (e: maplibregl.MapMouseEvent) => {
+      marker.setLngLat(e.lngLat);
+      placePin(e.lngLat);
+    };
+    m.on("click", onMapClick);
+
+    // Out-of-zone pins are rejected, so show the zone boundary while picking
+    // even if the user has the ZIP layer toggled off.
+    const zipLayers = ["zip-stats-fill", "zip-stats-outline"];
+    const forcedZip = pinPickerConstrainedRef.current && !layerToggleRef.current.showZipStats;
+    if (forcedZip) {
+      for (const id of zipLayers) {
+        if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", "visible");
+      }
+    }
 
     return () => {
+      if (forcedZip && m.getStyle()) {
+        for (const id of zipLayers) {
+          if (m.getLayer(id) && !layerToggleRef.current.showZipStats) m.setLayoutProperty(id, "visibility", "none");
+        }
+      }
+      m.off("click", onMapClick);
       marker.remove();
       pinPickerMarkerRef.current = null;
       if (outOfZoneTimerRef.current) clearTimeout(outOfZoneTimerRef.current);
@@ -5269,6 +5461,7 @@ export default function CampaignMap({
         value: newContribution.value,
         submitted_at: new Date().toISOString(),
         is_group_event: newContribution.isGroupEvent ?? false,
+        photo_url: newContribution.photoUrl ?? "",
       },
     };
     contributionFeaturesRef.current = [...contributionFeaturesRef.current, feature];
@@ -5313,6 +5506,7 @@ export default function CampaignMap({
       claim_before_deadline_at: null,
       claim_after_deadline_at: null,
       flag_count: 0,
+      reported_by_name: null,
     };
 
     const nextReports = [...(problemReportsRef.current?.reports ?? []), report];
@@ -5476,29 +5670,98 @@ export default function CampaignMap({
   const supportsZipSearch = campaign.geo_unit?.includes("zip") ?? false;
   const supportsUkPostcodeSearch = campaign.geo_unit?.includes("uk_postcode_district") ?? false;
 
-  const handleGeoSearch = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  const goToFeature = useCallback((feature: { center: [number, number]; bbox?: number[] }) => {
+    if (feature.bbox) {
+      map.current?.fitBounds(
+        [[feature.bbox[0], feature.bbox[1]], [feature.bbox[2], feature.bbox[3]]],
+        { padding: 40, maxZoom: 17 },
+      );
+    } else {
+      map.current?.flyTo({ center: feature.center, zoom: 16, duration: 800 });
+    }
+  }, []);
+
+  // Debounced autocomplete: skip pure ZIP-shaped input, which has its own exact lookup.
+  useEffect(() => {
     const query = geoSearch.trim();
-    if (!query) return;
-    // When a campaign supports both ZIP and UK postcode lookup, route purely
-    // numeric input to the ZIP endpoint and everything else to UK postcodes.
-    const useZip = supportsZipSearch && (/^\d+$/.test(query) || !supportsUkPostcodeSearch);
-    const endpoint = useZip
-      ? `/api/geo-units/zip/${query}/centroid`
-      : `/api/geo-units/uk-postcode/${query}/centroid`;
-    const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}${endpoint}`);
-    if (!res.ok) {
-      setGeoSearchError(useZip ? "ZIP not found" : "Postcode district not found");
-      if (geoSearchErrorTimerRef.current) clearTimeout(geoSearchErrorTimerRef.current);
-      geoSearchErrorTimerRef.current = setTimeout(() => setGeoSearchError(null), 3000);
+    const key = process.env.NEXT_PUBLIC_MAPTILER_KEY;
+    if (!suggestOpen || !key || query.length < 3 || /^\d{1,5}$/.test(query.replace(/\s+/g, ""))) {
+      setSuggestions([]);
       return;
     }
-    const data = await res.json();
-    map.current?.fitBounds(
-      [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]],
-      { padding: 40, maxZoom: 14 },
-    );
-  }, [geoSearch, supportsZipSearch, supportsUkPostcodeSearch]);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const center = map.current?.getCenter();
+        const proximity = center ? `&proximity=${center.lng},${center.lat}` : "";
+        const res = await fetch(
+          `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${key}&limit=5&autocomplete=true${proximity}`,
+        );
+        const data = res.ok ? await res.json() : null;
+        if (!cancelled) setSuggestions(data?.features ?? []);
+      } catch {
+        if (!cancelled) setSuggestions([]);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [geoSearch, suggestOpen]);
+
+  const handleGeoSearch = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSuggestOpen(false);
+    const query = geoSearch.trim();
+    if (!query) return;
+    const fail = (msg: string) => {
+      setGeoSearchError(msg);
+      if (geoSearchErrorTimerRef.current) clearTimeout(geoSearchErrorTimerRef.current);
+      geoSearchErrorTimerRef.current = setTimeout(() => setGeoSearchError(null), 3000);
+    };
+    // Pure 5-digit input is a ZIP and a UK postcode district is its own shape; anything
+    // else is treated as a street address / place and geocoded.
+    const compact = query.replace(/\s+/g, "").toUpperCase();
+    const useZip = supportsZipSearch && /^\d{5}$/.test(compact);
+    const useUk = !useZip && supportsUkPostcodeSearch && /^[A-Z]{1,2}\d[A-Z\d]?$/.test(compact);
+    if (useZip || useUk) {
+      const endpoint = useZip
+        ? `/api/geo-units/zip/${compact}/centroid`
+        : `/api/geo-units/uk-postcode/${compact}/centroid`;
+      const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}${endpoint}`);
+      if (!res.ok) {
+        fail(useZip ? "ZIP not found" : "Postcode district not found");
+        return;
+      }
+      const data = await res.json();
+      map.current?.fitBounds(
+        [[data.bbox[0], data.bbox[1]], [data.bbox[2], data.bbox[3]]],
+        { padding: 40, maxZoom: 14 },
+      );
+      return;
+    }
+    const key = process.env.NEXT_PUBLIC_MAPTILER_KEY;
+    if (!key) {
+      fail("Address search unavailable");
+      return;
+    }
+    try {
+      const center = map.current?.getCenter();
+      const proximity = center ? `&proximity=${center.lng},${center.lat}` : "";
+      const res = await fetch(
+        `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${key}&limit=1${proximity}`,
+      );
+      const data = res.ok ? await res.json() : null;
+      const feature = data?.features?.[0];
+      if (!feature?.center) {
+        fail("Address not found");
+        return;
+      }
+      goToFeature(feature);
+    } catch {
+      fail("Address not found");
+    }
+  }, [geoSearch, supportsZipSearch, supportsUkPostcodeSearch, goToFeature]);
 
   const handleConfirmPin = () => {
     const pos = pinPickerMarkerRef.current?.getLngLat();
@@ -5541,20 +5804,20 @@ export default function CampaignMap({
 
       {areaPickerActive && (
         <>
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200">
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md whitespace-nowrap bg-zinc-900/95 text-zinc-100">
             Click areas on the map to include them in this event.
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-2">
             <button
               onClick={onAreaPickerConfirm}
               disabled={areaPickerCount === 0}
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Confirm ({areaPickerCount})
             </button>
             <button
               onClick={onAreaPickerCancel}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-zinc-900/95 hover:bg-zinc-800 backdrop-blur-md text-zinc-200 text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
             </button>
@@ -5564,9 +5827,9 @@ export default function CampaignMap({
 
       {pinPickerActive && (
         <>
-          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 max-w-[90vw] px-4 py-2 border rounded-lg text-center text-sm shadow-xl transition-colors duration-200 ${outOfZoneWarning
-            ? "leading-snug bg-red-950/95 border-red-700 text-red-300"
-            : "whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200"
+          <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 max-w-[90vw] px-5 py-2.5 rounded-3xl text-center text-sm font-semibold shadow-elevation-3 backdrop-blur-md transition-colors duration-200 ${outOfZoneWarning
+            ? "leading-snug bg-red-950/95 text-red-200"
+            : "whitespace-nowrap bg-zinc-900/95 text-zinc-100"
             }`}>
             {outOfZoneWarning
               ? (
@@ -5578,16 +5841,16 @@ export default function CampaignMap({
               )
               : pinPickerLabel ?? "Drag the pin to your exact cleanup location"}
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-2">
             <button
               onClick={handleConfirmPin}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Confirm location
             </button>
             <button
               onClick={onPinCancelled}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-12 px-6 bg-zinc-900/95 hover:bg-zinc-800 backdrop-blur-md text-zinc-200 text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
             </button>
@@ -5597,67 +5860,121 @@ export default function CampaignMap({
 
       {routePickerActive && (
         <>
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 border rounded-lg text-sm text-center shadow-xl whitespace-nowrap bg-zinc-900/95 border-zinc-700 text-zinc-200 flex items-center gap-2">
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md whitespace-nowrap bg-zinc-900/95 text-zinc-100 flex items-center gap-2">
             <span>
               {routePickerJustClosedLoop
-                ? "Route closed — click Undo to reopen"
+                ? "Route closed. Click Undo to reopen"
                 : `Click the map to draw your cleanup route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
             </span>
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-3">
-            <button
-              onClick={handleUndoRouteVertex}
-              disabled={routePickerVertexCount === 0}
-              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Undo
-            </button>
-            <button
-              onClick={handleClearRouteVertices}
-              disabled={routePickerVertexCount === 0}
-              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Clear
-            </button>
+          <div className="absolute bottom-20 left-3 right-3 sm:left-1/2 sm:right-auto sm:w-[26rem] sm:-translate-x-1/2 z-30 flex flex-col gap-2 p-2.5 rounded-3xl bg-zinc-950/95 backdrop-blur-md shadow-elevation-3 border border-zinc-700/60">
+            <div className="flex gap-2">
+              <button
+                onClick={handleUndoRouteVertex}
+                disabled={routePickerVertexCount === 0}
+                className="min-h-12 flex-1 px-4 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              >
+                Undo
+              </button>
+              <button
+                onClick={handleClearRouteVertices}
+                disabled={routePickerVertexCount === 0}
+                className="min-h-12 flex-1 px-4 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              >
+                Clear
+              </button>
+              <button
+                onClick={onRoutePickerCancel}
+                className="min-h-12 flex-1 px-4 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              >
+                Cancel
+              </button>
+            </div>
             <button
               onClick={onRoutePickerFinish}
               disabled={routePickerVertexCount < 2}
-              className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="w-full min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white text-sm font-bold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Finish route
-            </button>
-            <button
-              onClick={onRoutePickerCancel}
-              className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 text-sm rounded-lg shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Cancel
             </button>
           </div>
         </>
       )}
 
-      {!pinPickerActive && !areaPickerActive && !routePickerActive && (activeEvents.length > 0 || supportsZipSearch || supportsUkPostcodeSearch) && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
-        <div className="absolute top-4 left-4 z-10 max-w-[calc(100vw-2rem)] sm:max-w-xs flex flex-col gap-2">
-          {activeEvents.length > 0 && (
-            <div className="flex items-center gap-1.5 sm:hidden">
+      {!pinPickerActive && !areaPickerActive && !routePickerActive && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
+        <div className="absolute z-10 focus-within:z-30 left-3 right-3 sm:right-auto sm:w-auto sm:max-w-[calc(100%-4.5rem)] sm:flex-row sm:flex-wrap top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] flex flex-col gap-2 items-start pointer-events-none [&>*]:pointer-events-auto">
+          <div className="relative z-20 h-11 w-full sm:w-[32rem] pl-[3.25rem] pr-[9.25rem] focus-within:pr-0">
+          {(
+            <form
+              onSubmit={handleGeoSearch}
+              className={`flex w-full items-center h-11 pl-4 pr-1 rounded-full bg-zinc-900/90 backdrop-blur-md shadow-elevation-3 ${geoSearchError ? "ring-1 ring-red-500/70" : ""}`}
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0 text-zinc-500">
+                <circle cx="7" cy="7" r="4.75" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                aria-label="Search"
+                placeholder="Search"
+                value={geoSearch}
+                onChange={(e) => {
+                  setGeoSearch(e.target.value);
+                  setSuggestOpen(true);
+                }}
+                onFocus={() => setSuggestOpen(true)}
+                onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
+                className="min-w-0 flex-1 bg-transparent px-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
+              />
               <button
-                onClick={() => setEventsExpanded((e) => !e)}
-                className="self-start px-3 py-1.5 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm shadow-glow-amber text-red-300 text-xs font-semibold transition-transform duration-150 active:scale-[0.96] touch-manipulation"
+                type="submit"
+                disabled={!geoSearch}
+                className="h-9 px-4 rounded-full bg-emerald-400 text-emerald-950 text-xs font-bold transition-[opacity,transform] duration-150 active:scale-[0.95] disabled:opacity-0 disabled:pointer-events-none touch-manipulation"
               >
-                ⚡ {activeEvents.length} Event{activeEvents.length > 1 ? "s" : ""} {eventsExpanded ? "▲" : "▼"}
+                Go
               </button>
-              {onMobileStatsClick && (
+            </form>
+          )}
+          {suggestOpen && suggestions.length > 0 && (
+            <ul className="absolute left-[3.25rem] right-0 top-12 overflow-hidden rounded-2xl bg-zinc-900/95 backdrop-blur-md shadow-elevation-4 ring-1 ring-inset ring-white/5 py-1">
+              {suggestions.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setGeoSearch(f.place_name);
+                      setSuggestOpen(false);
+                      setSuggestions([]);
+                      goToFeature(f);
+                    }}
+                    className="w-full min-h-11 px-4 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 active:bg-zinc-800 truncate touch-manipulation"
+                  >
+                    {f.place_name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          </div>
+          {geoSearchError && <p className="sm:basis-full text-xs text-red-300 px-3 py-1 rounded-full bg-zinc-900/90 backdrop-blur-md">{geoSearchError}</p>}
+          {(statsChip || activeEvents.length > 0) && (
+            <div className="flex w-full max-w-full flex-nowrap items-center gap-2 pr-14 sm:w-auto sm:pr-0">
+              {statsChip}
+              {activeEvents.length > 0 && (
                 <button
-                  onClick={onMobileStatsClick}
-                  className="self-start px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-elevation-2 transition-transform duration-150 active:scale-[0.96] touch-manipulation"
+                  onClick={() => setEventsExpanded((e) => !e)}
+                  aria-expanded={eventsExpanded}
+                  className="inline-flex shrink-0 items-center gap-1.5 h-10 px-3 rounded-full bg-red-950/90 backdrop-blur-md shadow-elevation-3 text-red-200 text-xs font-semibold transition-transform duration-150 active:scale-[0.96] touch-manipulation"
                 >
-                  📊 Stats
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" aria-hidden="true" />
+                  {activeEvents.length} hotspot{activeEvents.length > 1 ? "s" : ""}
                 </button>
               )}
             </div>
           )}
-          {activeEvents.length > 0 && (
-            <div className={`${eventsExpanded ? "flex" : "hidden"} sm:flex flex-col gap-2 max-h-64 overflow-y-auto pr-0.5`}>
+          {activeEvents.length > 0 && eventsExpanded && (
+            <div className="flex w-full flex-col gap-2 max-h-[40dvh] overflow-y-auto pr-14 sm:basis-full sm:max-w-[32rem] sm:pr-0">
               {activeEvents.map((event) => {
                 const primaryId = eventGeoUnitIdsRef.current[event.id]?.[0] ?? event.geo_unit_id ?? "";
                 const centroid = eventCentroidsRef.current[primaryId];
@@ -5669,58 +5986,17 @@ export default function CampaignMap({
                         map.current.flyTo({ center: [centroid.lng, centroid.lat], zoom: 13, duration: 800 });
                       }
                     }}
-                    className={`px-3 py-2 bg-red-950/90 border border-red-700 rounded-lg backdrop-blur-sm shadow-elevation-1 transition-[background-color,transform] duration-150${centroid ? " cursor-pointer hover:bg-red-900/90 active:scale-[0.97] touch-manipulation" : ""}`}
+                    className={`px-4 py-2.5 bg-red-950/90 rounded-2xl backdrop-blur-md shadow-elevation-3 transition-[background-color,transform] duration-150${centroid ? " cursor-pointer hover:bg-red-900/90 active:scale-[0.97] touch-manipulation" : ""}`}
                   >
-                    <p className="text-red-300 text-xs font-semibold">{event.title}</p>
+                    <p className="text-red-200 text-xs font-semibold">{event.title}</p>
                     {event.description && (
-                      <p className="text-red-400 text-xs mt-0.5">{event.description}</p>
+                      <p className="text-red-300/80 text-xs mt-0.5">{event.description}</p>
                     )}
                   </div>
                 );
               })}
             </div>
           )}
-          {activeEvents.length === 0 && onMobileStatsClick && (
-            <button
-              onClick={onMobileStatsClick}
-              className="self-start sm:hidden px-3 py-1.5 bg-zinc-900/80 border border-zinc-700/60 rounded-lg backdrop-blur-sm text-zinc-300 text-xs font-semibold shadow-elevation-2 transition-transform duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              📊 Stats
-            </button>
-          )}
-          {(supportsZipSearch || supportsUkPostcodeSearch) && (
-            <form onSubmit={handleGeoSearch} className="flex gap-1">
-              <input
-                type="text"
-                inputMode={supportsZipSearch && !supportsUkPostcodeSearch ? "numeric" : "text"}
-                maxLength={5}
-                placeholder={
-                  supportsZipSearch && supportsUkPostcodeSearch
-                    ? "Go to ZIP or postcode"
-                    : supportsZipSearch
-                      ? "Go to ZIP"
-                      : "Go to postcode"
-                }
-                value={geoSearch}
-                onChange={(e) =>
-                  setGeoSearch(
-                    supportsZipSearch && !supportsUkPostcodeSearch
-                      ? e.target.value.replace(/\D/g, "")
-                      : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
-                  )
-                }
-                className={`w-[8.5rem] px-2 py-1.5 text-xs bg-zinc-900/90 border rounded shadow-elevation-1 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${geoSearchError ? "border-red-600" : "border-zinc-700"}`}
-              />
-              <button
-                type="submit"
-                disabled={!geoSearch}
-                className="px-2.5 py-1.5 text-xs bg-zinc-800/90 border border-zinc-700 rounded shadow-elevation-1 text-zinc-300 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:scale-[0.95] disabled:opacity-40 touch-manipulation"
-              >
-                Go
-              </button>
-            </form>
-          )}
-          {geoSearchError && <p className="text-xs text-red-400 px-1">{geoSearchError}</p>}
         </div>
       )}
 
@@ -5737,13 +6013,16 @@ export default function CampaignMap({
         // to overlap each other and the left-side ContributionPanel controls on
         // narrow viewports. Collapsed, this is one small button; expanded, it's a
         // fixed-width panel that grows upward, matching common map-app "Layers" menus.
-        <div className={`absolute bottom-12 z-10 flex flex-col items-end gap-1 sm:gap-1.5 text-xs max-w-[min(88vw,16rem)] ${legendOpen ? "right-14" : "right-4"}`}>
+        <div className={`absolute bottom-12 flex flex-col items-end gap-2 text-xs w-[min(88vw,18rem)] ${legendOpen ? "right-14 z-40" : "right-4 z-10"}`}>
           <button
             onClick={() => setLegendOpen((v) => !v)}
-            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3 text-sm font-medium text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-800/80 active:scale-[0.97] touch-manipulation"
+            className="relative flex items-center gap-2 h-11 pl-3.5 pr-4 bg-zinc-900/90 rounded-full backdrop-blur-md shadow-elevation-3 text-sm font-semibold text-zinc-100 transition-[background-color,transform] duration-150 hover:bg-zinc-800/90 active:scale-[0.96] touch-manipulation"
           >
-            <span>🗺️ Layers</span>
-            <span className="text-zinc-500">{legendOpen ? "▾" : "▸"}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+              <path d="m3 13 9 5 9-5" />
+            </svg>
+            <span>Layers</span>
             {!legendOpen && (showZipStats || showAnyNeighborhoodStats || showBoroughStats || showCityStats) && (
               // At-a-glance indicator of which Geographic Stats layer is active without
               // having to open the panel — one letter is enough since these are
@@ -5762,103 +6041,102 @@ export default function CampaignMap({
             )}
           </button>
           {legendOpen && (
-            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-1 sm:gap-1.5 p-1.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg backdrop-blur-sm shadow-elevation-3">
+            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-0.5 p-2 pt-0 bg-zinc-900/95 ring-1 ring-inset ring-white/5 rounded-[20px] backdrop-blur-md shadow-elevation-4">
+              <div className="sticky top-0 z-10 -mx-2 mb-1 flex items-center justify-between bg-zinc-900 px-4 pt-2.5 pb-2 border-b border-zinc-800">
+                <span className="text-sm font-semibold text-zinc-100">Layers</span>
+                <button
+                  type="button"
+                  onClick={() => setLegendOpen(false)}
+                  aria-label="Close layers"
+                  className="grid place-items-center w-9 h-9 -mr-2 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.92] transition-[background-color,color,transform] duration-150 touch-manipulation"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6 6 18" />
+                  </svg>
+                </button>
+              </div>
               {!isChoropleth && !isHeatmap && !isHexBloom && (
                 <>
-                  <p className="px-1 pt-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">Geographic Stats</p>
-                  <div className="flex flex-col gap-1">
-                    {([
-                      { id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes", badges: null },
-                      ...(campaign.slug === "trash-war" ? [
-                        { id: "neighborhood", label: "Neighborhood", badges: ["NYC", "PHL", "CHI", "LA"] },
-                        { id: "borough", label: "Borough", badges: ["NYC"] },
-                        { id: "city", label: "Cities", badges: null },
-                      ] as const : []),
-                    ] as const).map((opt) => {
-                      const active =
-                        opt.id === "zip" ? showZipStats
-                        : opt.id === "neighborhood" ? showAnyNeighborhoodStats
-                        : opt.id === "borough" ? showBoroughStats
-                        : showCityStats;
-                      const setActive =
-                        opt.id === "zip" ? setShowZipStats
-                        : opt.id === "neighborhood" ? setShowAnyNeighborhoodStats
-                        : opt.id === "borough" ? setShowBoroughStats
-                        : setShowCityStats;
-                      return (
-                        <button
-                          key={opt.id}
-                          onClick={() => setActive(!active)}
-                          title={opt.badges ? `Currently only shows data for ${opt.badges.map((b) => (b === "PHL" ? "Philadelphia" : b === "CHI" ? "Chicago" : b === "NYC" ? "New York City" : b === "LA" ? "Los Angeles" : b)).join(", ")}` : undefined}
-                          aria-pressed={active}
-                          className={`group flex items-center justify-between gap-2 px-2.5 py-1.5 font-medium rounded-md border cursor-pointer transition-all active:scale-[0.98] ${
-                            active
-                              ? "bg-emerald-600 border-emerald-400 text-white shadow-sm shadow-emerald-900/40"
-                              : "bg-zinc-800/60 border-zinc-700/70 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 hover:shadow-sm active:text-zinc-100 active:bg-zinc-700/80 active:border-zinc-500 active:scale-[0.97]"
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              className={`flex items-center justify-center w-3.5 h-3.5 rounded-full flex-shrink-0 text-[9px] leading-none transition-colors ${
+                  <div className="flex items-center justify-between gap-2 pr-2">
+                    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Geographic stats</p>
+                    <InlineTip title="Geographic stats">
+                      <p>Shade the map by how much has been cleaned in each area. Pick one area type at a time.</p>
+                      <p>Tap an area on the map to see its totals. Tap the same button again to turn the shading off.</p>
+                    </InlineTip>
+                  </div>
+                  {([
+                    { caption: null as string | null, badges: null as string[] | null, opts: [{ id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes" }, ...(campaign.slug === "trash-war" ? [{ id: "borough", label: "NYC Boroughs" }] : [])] },
+                    ...(campaign.slug === "trash-war" ? [
+                      { caption: "NYC, Philadelphia, Chicago, LA", badges: ["NYC", "PHL", "CHI", "LA"], opts: [{ id: "neighborhood", label: "Neighborhood" }, { id: "city", label: "Cities" }] },
+                    ] : []),
+                  ]).map((group, gi) => (
+                    <div key={gi} className="px-2 pb-1.5">
+                      {group.caption && <p className="px-1 pb-1 text-[11px] text-zinc-500">{group.caption}</p>}
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.opts.map((opt) => {
+                          const active =
+                            opt.id === "zip" ? showZipStats
+                            : opt.id === "neighborhood" ? showAnyNeighborhoodStats
+                            : opt.id === "borough" ? showBoroughStats
+                            : showCityStats;
+                          const setActive =
+                            opt.id === "zip" ? setShowZipStats
+                            : opt.id === "neighborhood" ? setShowAnyNeighborhoodStats
+                            : opt.id === "borough" ? setShowBoroughStats
+                            : setShowCityStats;
+                          return (
+                            <button
+                              key={opt.id}
+                              onClick={() => {
+                                setActive(!active);
+                                if (!active) setLegendOpen(false);
+                              }}
+                              aria-pressed={active}
+                              className={`inline-flex items-center min-h-9 px-3.5 text-[13px] font-semibold rounded-full cursor-pointer transition-[background-color,color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
                                 active
-                                  ? "bg-white text-emerald-600"
-                                  : "bg-zinc-900/60 text-transparent border border-zinc-600 group-hover:border-zinc-400"
+                                  ? "bg-emerald-400 text-emerald-950"
+                                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
                               }`}
                             >
-                              ✓
-                            </span>
-                            {opt.label}
-                          </span>
-                          {opt.badges && (
-                            <span className="flex flex-wrap justify-end content-start gap-0.5 w-16 flex-shrink-0">
-                              {opt.badges.map((badge) => (
-                                <span
-                                  key={badge}
-                                  className={`w-7 text-center text-[9px] font-semibold py-px rounded ${
-                                    active ? "bg-emerald-800/60 text-emerald-100" : "bg-zinc-700/60 text-zinc-400"
-                                  }`}
-                                >
-                                  {badge}
-                                </span>
-                              ))}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="my-0.5 border-t border-zinc-800" />
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="my-1 mx-2 border-t border-zinc-800" />
                 </>
               )}
               {(isChoropleth ? (
             <>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
                 <span className="text-zinc-300">Democrat lean</span>
               </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-3 rounded-sm bg-red-600/80" />
                 <span className="text-zinc-300">Republican lean</span>
               </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-3 rounded-sm bg-zinc-500/80" />
                 <span className="text-zinc-300">Neutralized</span>
               </div>
             </>
           ) : isHeatmap ? (
             <>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="w-3 h-2 rounded-sm" style={{ background: "linear-gradient(to right, rgba(255,200,0,0.5), rgba(255,80,0,0.8), rgba(150,0,30,1))" }} />
                 <span className="text-zinc-300">Unfollow density</span>
               </div>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                 <span className="text-zinc-500">Low → High</span>
               </div>
             </>
           ) : isHexBloom ? (
             <>
               {BLOOM_STAGE_LABELS.slice(1).map((label, i) => (
-                <div key={i + 1} className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-zinc-900/80 rounded backdrop-blur-sm">
+                <div key={i + 1} className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
                   <span className="w-3 h-3 rounded-sm" style={{ background: BLOOM_STAGE_COLORS[i + 1] }} />
                   <span className="text-zinc-300">S{i + 1} {label}</span>
                 </div>
@@ -5866,7 +6144,7 @@ export default function CampaignMap({
             </>
           ) : (
             <>
-              <div className="flex items-center gap-1 px-1 pb-0.5">
+              <div className="flex items-center gap-1.5 px-2 pt-1 pb-1">
                 <button
                   onClick={() => {
                     setShowCleanupDots(true);
@@ -5881,7 +6159,7 @@ export default function CampaignMap({
                     setShowReports(true);
                     setShowPartners(true);
                   }}
-                  className="flex-1 px-2 py-1 rounded-md border border-zinc-700/70 bg-zinc-800/60 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 active:scale-[0.97] transition-all text-[11px] font-medium"
+                  className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
                 >
                   All on
                 </button>
@@ -5902,12 +6180,12 @@ export default function CampaignMap({
                     setShowIndividualTerritory(false);
                     setShowUnclaimedTerritory(false);
                   }}
-                  className="flex-1 px-2 py-1 rounded-md border border-zinc-700/70 bg-zinc-800/60 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/80 hover:border-zinc-500 active:scale-[0.97] transition-all text-[11px] font-medium"
+                  className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
                 >
                   All off
                 </button>
               </div>
-              <div className="mb-0.5 border-t border-zinc-800" />
+              <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">On the map</p>
               <LegendToggle checked={showCleanupDots} onChange={setShowCleanupDots}>
                 <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
                 <span className="text-zinc-300">Cleanup logged</span>
@@ -5984,6 +6262,14 @@ export default function CampaignMap({
               {/* De-emphasized (smaller, muted) rather than removed — claiming
                   still works when turned on, but we no longer want to visually encourage
                   it now that the non-competitive Geographic Stats layers exist above. */}
+              <div className="my-1.5 mx-2 border-t border-zinc-800" />
+              <div className="flex items-center justify-between gap-2 pr-2">
+                <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Leaders</p>
+                <InlineTip title="Zip code leaders">
+                  <p>Colors each zip code by who leads there. Green areas are led by a group, blue by an individual, and outlined areas have no leader yet.</p>
+                  <p>Use the toggles under it to show or hide each kind. This is separate from Geographic stats above.</p>
+                </InlineTip>
+              </div>
               <LegendToggle
                 checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
                 onChange={(show) => {
@@ -5993,19 +6279,22 @@ export default function CampaignMap({
                 }}
               >
                 <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500/50" />
-                <span className="text-zinc-500 text-[11px]">Claiming</span>
+                <span className="text-zinc-300">Zip code leaders</span>
               </LegendToggle>
+              <p className="px-3 pb-1 text-[11px] leading-snug text-zinc-500">
+                Colors each zip code by who leads there.
+              </p>
               <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" />
-                <span className="text-zinc-500 text-[11px]">Group claims</span>
+                <span className="text-zinc-300">Group leads</span>
               </LegendToggle>
               <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
-                <span className="text-zinc-500 text-[11px]">Individual claims</span>
+                <span className="text-zinc-300">Individual leads</span>
               </LegendToggle>
               <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
                 <span className="w-2.5 h-2.5 rounded-sm border border-[#a1a1aa]/60 bg-transparent" />
-                <span className="text-zinc-500 text-[11px]">Unclaimed</span>
+                <span className="text-zinc-300">No leader yet</span>
               </LegendToggle>
             </>
           ))}
@@ -6015,288 +6304,305 @@ export default function CampaignMap({
       )}
 
       {selectedPhoto && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-          onClick={() => setSelectedPhoto(null)}
-        >
-          <div className="flex flex-col items-center gap-3 max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="relative w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={selectedPhoto.url}
-                alt="Contribution photo"
-                className="w-full max-h-[74vh] object-contain rounded-xl shadow-2xl"
-              />
+        <BodyPortal>
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <div className="flex flex-col items-center gap-3 max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
+              <div className="relative w-full">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selectedPhoto.url}
+                  alt="Contribution photo"
+                  className="w-full max-h-[74vh] object-contain rounded-xl shadow-2xl"
+                />
+                <IconButton
+                  onClick={() => setSelectedPhoto(null)}
+                  className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 active:bg-black/80 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </IconButton>
+                {selectedPhoto.gallery && selectedPhoto.gallery.length > 1 && selectedPhoto.galleryIndex != null && (
+                  <>
+                    <IconButton
+                      onClick={() => {
+                        const gallery = selectedPhoto.gallery!;
+                        const i = (selectedPhoto.galleryIndex! - 1 + gallery.length) % gallery.length;
+                        setSelectedPhoto({
+                          url: gallery[i].url,
+                          contentType: "cleanup_log_photo",
+                          contentId: gallery[i].contentId,
+                          gallery,
+                          galleryIndex: i,
+                        });
+                      }}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+                      aria-label="Previous photo"
+                    >
+                      &#8249;
+                    </IconButton>
+                    <IconButton
+                      onClick={() => {
+                        const gallery = selectedPhoto.gallery!;
+                        const i = (selectedPhoto.galleryIndex! + 1) % gallery.length;
+                        setSelectedPhoto({
+                          url: gallery[i].url,
+                          contentType: "cleanup_log_photo",
+                          contentId: gallery[i].contentId,
+                          gallery,
+                          galleryIndex: i,
+                        });
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
+                      aria-label="Next photo"
+                    >
+                      &#8250;
+                    </IconButton>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-zinc-300 text-xs tabular-nums bg-black/50 px-2 py-0.5 rounded-full">
+                      {selectedPhoto.galleryIndex + 1} / {selectedPhoto.gallery.length}
+                    </div>
+                  </>
+                )}
+              </div>
+              {selectedPhoto.contentType && selectedPhoto.contentId && (
+                <ReportPhotoButton
+                  contentType={selectedPhoto.contentType}
+                  contentId={selectedPhoto.contentId}
+                  photoUrl={selectedPhoto.url}
+                  userId={userId ?? null}
+                  onHidden={() => setSelectedPhoto(null)}
+                />
+              )}
+            </div>
+          </div>
+        </BodyPortal>
+      )}
+
+      {selectedBusiness && (
+        <BodyPortal>
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setSelectedBusiness(null)}
+          >
+            <div
+              className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-[20px] p-5 pr-14 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <IconButton
-                onClick={() => setSelectedPhoto(null)}
-                className="absolute top-3 right-3 bg-black/60 text-white hover:bg-black/80 active:bg-black/80 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                onClick={() => setSelectedBusiness(null)}
+                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
                 aria-label="Close"
               >
                 ×
               </IconButton>
-              {selectedPhoto.gallery && selectedPhoto.gallery.length > 1 && selectedPhoto.galleryIndex != null && (
-                <>
-                  <IconButton
-                    onClick={() => {
-                      const gallery = selectedPhoto.gallery!;
-                      const i = (selectedPhoto.galleryIndex! - 1 + gallery.length) % gallery.length;
-                      setSelectedPhoto({
-                        url: gallery[i].url,
-                        contentType: "cleanup_log_photo",
-                        contentId: gallery[i].contentId,
-                        gallery,
-                        galleryIndex: i,
-                      });
-                    }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
-                    aria-label="Previous photo"
-                  >
-                    &#8249;
-                  </IconButton>
-                  <IconButton
-                    onClick={() => {
-                      const gallery = selectedPhoto.gallery!;
-                      const i = (selectedPhoto.galleryIndex! + 1) % gallery.length;
-                      setSelectedPhoto({
-                        url: gallery[i].url,
-                        contentType: "cleanup_log_photo",
-                        contentId: gallery[i].contentId,
-                        gallery,
-                        galleryIndex: i,
-                      });
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-100 hover:text-white active:text-white text-2xl leading-none bg-black/50 hover:bg-black/70 active:bg-black/70 active:scale-[0.92] transition-[background-color,color,transform] duration-150"
-                    aria-label="Next photo"
-                  >
-                    &#8250;
-                  </IconButton>
-                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-zinc-300 text-xs tabular-nums bg-black/50 px-2 py-0.5 rounded-full">
-                    {selectedPhoto.galleryIndex + 1} / {selectedPhoto.gallery.length}
+              <div className="flex items-center gap-3 mb-3">
+                {selectedBusiness.business.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedBusiness.business.logo_url}
+                    alt={selectedBusiness.business.name}
+                    className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center text-xl">
+                    🏪
                   </div>
-                </>
+                )}
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                    {selectedBusiness.business.name}
+                    {selectedBusiness.business.adults_only && <AdultsOnlyBadge />}
+                  </h3>
+                  {selectedBusiness.location.label && (
+                    <p className="text-xs text-zinc-500">{selectedBusiness.location.label}</p>
+                  )}
+                </div>
+              </div>
+              {selectedBusiness.business.adults_only && (
+                <p className="text-xs text-red-400 mb-3">
+                  🔞 This business can only serve customers who are 21 or older. Please bring valid ID.
+                </p>
               )}
-            </div>
-            {selectedPhoto.contentType && selectedPhoto.contentId && (
-              <ReportPhotoButton
-                contentType={selectedPhoto.contentType}
-                contentId={selectedPhoto.contentId}
-                photoUrl={selectedPhoto.url}
-                userId={userId ?? null}
-                onHidden={() => setSelectedPhoto(null)}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {selectedBusiness && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-          onClick={() => setSelectedBusiness(null)}
-        >
-          <div
-            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <IconButton
-              onClick={() => setSelectedBusiness(null)}
-              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
-              aria-label="Close"
-            >
-              ×
-            </IconButton>
-            <div className="flex items-center gap-3 mb-3">
-              {selectedBusiness.business.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={selectedBusiness.business.logo_url}
-                  alt={selectedBusiness.business.name}
-                  className="w-12 h-12 rounded-full object-cover border border-zinc-700/50"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center text-xl">
-                  🏪
+              {selectedBusiness.business.description && (
+                <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.business.description}</p>
+              )}
+              {selectedBusiness.location.affordableOfferTitle ? (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/70 shadow-[0_0_10px_rgba(251,191,36,0.35)] flex items-center gap-2">
+                  <span className="text-base leading-none animate-pulse">🎁</span>
+                  <p className="text-sm text-amber-100">
+                    <span className="font-semibold">You have enough points!</span> Redeem {selectedBusiness.location.affordableOfferTitle} now.
+                  </p>
+                </div>
+              ) : selectedBusiness.location.activeOfferTitle && (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50 flex items-center gap-2">
+                  <span className="text-base leading-none">🎁</span>
+                  <p className="text-sm text-amber-200">
+                    <span className="font-semibold">Active offer:</span> {selectedBusiness.location.activeOfferTitle}
+                  </p>
                 </div>
               )}
-              <div>
-                <h3 className="text-lg font-semibold text-white">{selectedBusiness.business.name}</h3>
-                {selectedBusiness.location.label && (
-                  <p className="text-xs text-zinc-500">{selectedBusiness.location.label}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedBusiness.business.website_url && (
+                  <a
+                    href={selectedBusiness.business.website_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
+                  >
+                    <span aria-hidden="true">🌐</span>
+                    Website
+                  </a>
                 )}
-              </div>
-            </div>
-            {selectedBusiness.business.description && (
-              <p className="text-sm text-zinc-300 mb-3">{selectedBusiness.business.description}</p>
-            )}
-            {selectedBusiness.location.affordableOfferTitle ? (
-              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/70 shadow-[0_0_10px_rgba(251,191,36,0.35)] flex items-center gap-2">
-                <span className="text-base leading-none animate-pulse">🎁</span>
-                <p className="text-sm text-amber-100">
-                  <span className="font-semibold">You have enough points!</span> Redeem {selectedBusiness.location.affordableOfferTitle} now.
-                </p>
-              </div>
-            ) : selectedBusiness.location.activeOfferTitle && (
-              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50 flex items-center gap-2">
-                <span className="text-base leading-none">🎁</span>
-                <p className="text-sm text-amber-200">
-                  <span className="font-semibold">Active offer:</span> {selectedBusiness.location.activeOfferTitle}
-                </p>
-              </div>
-            )}
-            <div className="flex flex-col gap-1.5 text-sm">
-              {selectedBusiness.business.website_url && (
+                {selectedBusiness.location.google_maps_url && (
+                  <a
+                    href={selectedBusiness.location.google_maps_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
+                  >
+                    <span aria-hidden="true">📍</span>
+                    Google Maps
+                  </a>
+                )}
                 <a
-                  href={selectedBusiness.business.website_url}
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.location.lat},${selectedBusiness.location.lng}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
+                  className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
                 >
-                  Visit website
+                  <span aria-hidden="true">🧭</span>
+                  Directions
                 </a>
-              )}
-              {selectedBusiness.location.google_maps_url && (
-                <a
-                  href={selectedBusiness.location.google_maps_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
-                >
-                  Open in Google Maps
-                </a>
-              )}
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedBusiness.location.lat},${selectedBusiness.location.lng}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150 underline"
+              </div>
+              <Link
+                href={`/partners/${selectedBusiness.business.slug}`}
+                className="mt-4 flex items-center justify-center gap-1.5 w-full min-h-12 px-4 rounded-full bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold transition-[background-color,transform] duration-150 touch-manipulation"
               >
-                Get directions
-              </a>
+                View offer & redeem
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
             </div>
-            <Link
-              href={`/partners/${selectedBusiness.business.slug}`}
-              className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-400 active:scale-[0.97] text-emerald-950 text-sm font-semibold shadow-sm transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              View offer & redeem
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
           </div>
-        </div>
+        </BodyPortal>
       )}
 
       {selectedCleanupEvent && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-          onClick={() => setSelectedCleanupEvent(null)}
-        >
+        <BodyPortal>
           <div
-            className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setSelectedCleanupEvent(null)}
           >
-            <IconButton
-              onClick={() => setSelectedCleanupEvent(null)}
-              className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
-              aria-label="Close"
+            <div
+              className="relative max-w-sm w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             >
-              <span className="-translate-y-[2px]">×</span>
-            </IconButton>
-            <div className="flex items-center gap-3 mb-3">
-              {(selectedCleanupEvent.group_logo_url || selectedCleanupEvent.cohost_groups?.some((g) => g.group_logo_url)) && (
-                <div className="flex items-center -space-x-2 shrink-0">
-                  {selectedCleanupEvent.group_logo_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selectedCleanupEvent.group_logo_url}
-                      alt={selectedCleanupEvent.group_name}
-                      className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
-                    />
-                  )}
-                  {selectedCleanupEvent.cohost_groups?.map((g) => (
-                    g.group_logo_url && (
+              <IconButton
+                onClick={() => setSelectedCleanupEvent(null)}
+                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                aria-label="Close"
+              >
+                <span className="-translate-y-[2px]">×</span>
+              </IconButton>
+              <div className="flex items-center gap-3 mb-3">
+                {(selectedCleanupEvent.group_logo_url || selectedCleanupEvent.cohost_groups?.some((g) => g.group_logo_url)) && (
+                  <div className="flex items-center -space-x-2 shrink-0">
+                    {selectedCleanupEvent.group_logo_url && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        key={g.group_id}
-                        src={g.group_logo_url}
-                        alt={g.group_name}
+                        src={selectedCleanupEvent.group_logo_url}
+                        alt={selectedCleanupEvent.group_name}
                         className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
                       />
-                    )
-                  ))}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-white">{selectedCleanupEvent.title}</h3>
-                </div>
-                <Link
-                  href={`/groups/${selectedCleanupEvent.group_slug}`}
-                  className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
-                >
-                  {selectedCleanupEvent.group_name}
-                </Link>
-                {selectedCleanupEvent.cohost_groups && selectedCleanupEvent.cohost_groups.length > 0 && (
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    in partnership with{" "}
-                    {selectedCleanupEvent.cohost_groups.map((g, i) => (
-                      <span key={g.group_id}>
-                        {i > 0 && ", "}
-                        <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
-                          {g.group_name}
-                        </Link>
-                      </span>
+                    )}
+                    {selectedCleanupEvent.cohost_groups?.map((g) => (
+                      g.group_logo_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={g.group_id}
+                          src={g.group_logo_url}
+                          alt={g.group_name}
+                          className="w-12 h-12 rounded-full object-cover border border-zinc-700/50 relative shrink-0"
+                        />
+                      )
                     ))}
-                  </p>
+                  </div>
                 )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-white">{selectedCleanupEvent.title}</h3>
+                  </div>
+                  <Link
+                    href={`/groups/${selectedCleanupEvent.group_slug}`}
+                    className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
+                  >
+                    {selectedCleanupEvent.group_name}
+                  </Link>
+                  {selectedCleanupEvent.cohost_groups && selectedCleanupEvent.cohost_groups.length > 0 && (
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      in partnership with{" "}
+                      {selectedCleanupEvent.cohost_groups.map((g, i) => (
+                        <span key={g.group_id}>
+                          {i > 0 && ", "}
+                          <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
+                            {g.group_name}
+                          </Link>
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-            {selectedCleanupEvent.is_past && (
-              <p className="text-sm text-zinc-400 mb-1.5 flex items-center gap-1.5">
-                <span>🕓</span> This event has ended — check-in is closed.
-              </p>
-            )}
-            {selectedCleanupEvent.scheduled_start && (
-              <p className="text-sm text-zinc-300 mb-1.5">
-                {new Date(selectedCleanupEvent.scheduled_start).toLocaleString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-                {selectedCleanupEvent.scheduled_end &&
-                  ` – ${new Date(selectedCleanupEvent.scheduled_end).toLocaleString(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}`}
-              </p>
-            )}
-            {selectedCleanupEvent.description && (
-              <p className="text-sm text-zinc-300 mb-3">{selectedCleanupEvent.description}</p>
-            )}
-            {!!(
-              (selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)
-            ) && (
-                <p className="text-sm text-emerald-400 mb-3 flex items-center gap-1.5">
-                  <span>🗑️</span>
-                  {(selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)} bags logged so far
+              {selectedCleanupEvent.is_past && (
+                <p className="text-sm text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                  <span>🕓</span> This event has ended. Check-in is closed.
                 </p>
               )}
-            <Link
-              href={`/cleanup-events/${selectedCleanupEvent.id}`}
-              className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${selectedCleanupEvent.is_past
-                  ? "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] text-zinc-200"
-                  : "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950"
-                }`}
-            >
-              {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
+              {selectedCleanupEvent.scheduled_start && (
+                <p className="text-sm text-zinc-300 mb-1.5">
+                  {new Date(selectedCleanupEvent.scheduled_start).toLocaleString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                  {selectedCleanupEvent.scheduled_end &&
+                    ` – ${new Date(selectedCleanupEvent.scheduled_end).toLocaleString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}`}
+                </p>
+              )}
+              {selectedCleanupEvent.description && (
+                <p className="text-sm text-zinc-300 mb-3">{selectedCleanupEvent.description}</p>
+              )}
+              {!!(
+                (selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)
+              ) && (
+                  <p className="text-sm text-emerald-400 mb-3 flex items-center gap-1.5">
+                    <span>🗑️</span>
+                    {(selectedCleanupEvent.total_small_bags ?? 0) + (selectedCleanupEvent.total_large_bags ?? 0)} bags logged so far
+                  </p>
+                )}
+              <Link
+                href={`/cleanup-events/${selectedCleanupEvent.id}`}
+                className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${selectedCleanupEvent.is_past
+                    ? "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] text-zinc-200"
+                    : "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950"
+                  }`}
+              >
+                {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
           </div>
-        </div>
+        </BodyPortal>
       )}
 
       {selectedEvent && (() => {
@@ -6314,54 +6620,56 @@ export default function CampaignMap({
         const badgeBgCls = isTimedEvent ? "bg-amber-950/60 border-amber-700/50" : "bg-red-950/60 border-red-700/50";
         const infoTextCls = isTimedEvent ? "text-amber-300" : "text-red-300";
         return (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => setSelectedEvent(null)}
-          >
+          <BodyPortal>
             <div
-              className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
-              onClick={(e) => e.stopPropagation()}
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+              onClick={() => setSelectedEvent(null)}
             >
-              <IconButton
-                onClick={() => setSelectedEvent(null)}
-                className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
-                aria-label="Close"
+              <div
+                className={`relative max-w-sm w-full bg-zinc-900 border ${cardBorderCls} rounded-xl p-5 shadow-2xl`}
+                onClick={(e) => e.stopPropagation()}
               >
-                ×
-              </IconButton>
-              <div className="flex items-center gap-3 mb-3">
-                {selectedEvent.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={selectedEvent.image_url}
-                    alt={selectedEvent.title}
-                    className={`w-12 h-12 rounded-full object-cover border ${badgeImgBorderCls}`}
-                  />
-                ) : (
-                  <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-xl ${badgeBgCls}`}>
-                    {badgeEmoji}
-                  </div>
+                <IconButton
+                  onClick={() => setSelectedEvent(null)}
+                  className="absolute top-3 right-3 bg-black/40 text-white hover:bg-black/60 active:bg-black/60 active:scale-[0.92] transition-[background-color,transform] duration-150 touch-manipulation text-lg leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </IconButton>
+                <div className="flex items-center gap-3 mb-3">
+                  {selectedEvent.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={selectedEvent.image_url}
+                      alt={selectedEvent.title}
+                      className={`w-12 h-12 rounded-full object-cover border ${badgeImgBorderCls}`}
+                    />
+                  ) : (
+                    <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-xl ${badgeBgCls}`}>
+                      {badgeEmoji}
+                    </div>
+                  )}
+                  <h3 className="text-lg font-semibold text-white">{selectedEvent.title}</h3>
+                </div>
+                {selectedEvent.description && (
+                  <p className="text-sm text-zinc-300 mb-3">{selectedEvent.description}</p>
                 )}
-                <h3 className="text-lg font-semibold text-white">{selectedEvent.title}</h3>
-              </div>
-              {selectedEvent.description && (
-                <p className="text-sm text-zinc-300 mb-3">{selectedEvent.description}</p>
-              )}
-              <div className={`flex flex-col gap-1.5 text-sm ${infoTextCls}`}>
-                {typeof multiplier === "number" && (
-                  <p>{badgeEmoji} {multiplier}× score multiplier</p>
-                )}
-                <p>
-                  {selectedEvent.ends_at
-                    ? `Ends ${new Date(selectedEvent.ends_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
-                    : "No end date"}
-                </p>
-                {areaCount > 0 && (
-                  <p>Applies to {areaCount} area{areaCount > 1 ? "s" : ""}</p>
-                )}
+                <div className={`flex flex-col gap-1.5 text-sm ${infoTextCls}`}>
+                  {typeof multiplier === "number" && (
+                    <p>{badgeEmoji} {multiplier}× score multiplier</p>
+                  )}
+                  <p>
+                    {selectedEvent.ends_at
+                      ? `Ends ${new Date(selectedEvent.ends_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                      : "No end date"}
+                  </p>
+                  {areaCount > 0 && (
+                    <p>Applies to {areaCount} area{areaCount > 1 ? "s" : ""}</p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          </BodyPortal>
         );
       })()}
     </div>

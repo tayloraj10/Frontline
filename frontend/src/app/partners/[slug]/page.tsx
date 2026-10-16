@@ -24,7 +24,7 @@ export async function generateMetadata({
   if (!business) return {};
 
   const title = business.name;
-  const description = business.description ?? `${business.name} — Frontline partner.`;
+  const description = business.description ?? `${business.name}: Frontline partner.`;
 
   return {
     title,
@@ -59,7 +59,7 @@ export default async function PartnerDetailPage({
 
   type RawBusinessRow = {
     id: string; name: string; slug: string; description: string | null; logo_url: string | null;
-    website_url: string | null; social_links: Record<string, string> | null;
+    website_url: string | null; social_links: Record<string, string> | null; adults_only: boolean;
     partner_business_locations: {
       id: string; label: string | null; address_line1: string | null; address_line2: string | null;
       city: string | null; state: string | null; postal_code: string | null; country: string | null;
@@ -72,7 +72,7 @@ export default async function PartnerDetailPage({
       .schema("public")
       .from("partner_businesses")
       .select(
-        "id, name, slug, description, logo_url, website_url, social_links, partner_business_locations(id, label, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, status)"
+        "id, name, slug, description, logo_url, website_url, social_links, adults_only, partner_business_locations(id, label, address_line1, address_line2, city, state, postal_code, country, lat, lng, google_maps_url, status)"
       )
       .eq("slug", slug)
       .eq("status", "active")
@@ -100,6 +100,7 @@ export default async function PartnerDetailPage({
     logo_url: rawBusiness.logo_url,
     website_url: rawBusiness.website_url,
     social_links: rawBusiness.social_links,
+    adults_only: rawBusiness.adults_only,
     locations: rawBusiness.partner_business_locations
       .filter((l) => l.status === "active")
       .map((l): DetailLocation => ({
@@ -131,7 +132,7 @@ export default async function PartnerDetailPage({
     .order("created_at", { ascending: false });
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 w-full">
       <BackButton href="/partners" label="All partners" />
       <div className="mt-4">
         <PartnerDetailClient

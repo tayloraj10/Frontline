@@ -26,7 +26,7 @@ export default function CampaignsError({
       <div className="flex gap-3">
         <button
           onClick={reset}
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 active:scale-[0.96] text-white text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
+          className="px-5 py-2.5 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-300 active:scale-[0.96] text-emerald-950 text-sm font-semibold rounded-xl transition-[background-color,transform] duration-150 touch-manipulation"
         >
           Try again
         </button>

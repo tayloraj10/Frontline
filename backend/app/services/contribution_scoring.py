@@ -75,6 +75,49 @@ async def claim_first_checkin_bonus(db: AsyncSession, *, user_id: UUID | str) ->
     return result.fetchone() is not None
 
 
+async def resolve_bag_types(db: AsyncSession, keys: list[str]) -> dict[str, dict]:
+    """key -> {size_class, point_value} for the given bag_types keys.
+
+    Shared by the caller (for the legacy small_bags/large_bags rollup written
+    onto the cleanups row) and record_contribution (for granular_bags scoring).
+    """
+    if not keys:
+        return {}
+    result = await db.execute(
+        text("SELECT key, size_class, point_value FROM bag_types WHERE key = ANY(:keys)"),
+        {"keys": keys},
+    )
+    return {row.key: {"size_class": row.size_class, "point_value": float(row.point_value)} for row in result.fetchall()}
+
+
+def rollup_bag_types_to_legacy_counts(bag_type_counts: dict[str, int], lookup: dict[str, dict]) -> tuple[int, int]:
+    """Roll a granular_bags metrics_detail selection up into (small_bags, large_bags)
+    counts, by each type's size_class, so legacy dashboards built on
+    cleanups.metrics_small_bags/metrics_large_bags keep working unchanged."""
+    small = large = 0
+    for key, count in bag_type_counts.items():
+        info = lookup.get(key)
+        if not info:
+            continue
+        if info["size_class"] == "small":
+            small += count
+        else:
+            large += count
+    return small, large
+
+
+async def resolve_countable_item_type(db: AsyncSession, key: str) -> dict | None:
+    """{unit_count, points_per_unit} for one countable_item_types key, or None."""
+    result = await db.execute(
+        text("SELECT unit_count, points_per_unit FROM countable_item_types WHERE key = :key"),
+        {"key": key},
+    )
+    row = result.fetchone()
+    if row is None:
+        return None
+    return {"unit_count": row.unit_count, "points_per_unit": float(row.points_per_unit)}
+
+
 async def record_contribution(
     db: AsyncSession,
     *,
@@ -90,6 +133,7 @@ async def record_contribution(
     value: float | None,
     small_bags: int | None = None,
     large_bags: int | None = None,
+    metrics_detail: dict | None = None,
     photo_url: str | None = None,
     latitude: float | None = None,
     longitude: float | None = None,
@@ -104,7 +148,22 @@ async def record_contribution(
     settings = await get_game_settings(db)
 
     if contribution_type == "cleanup":
-        if small_bags is not None or large_bags is not None:
+        basis = (metrics_detail or {}).get("basis") or "bags"
+        if basis == "granular_bags" and metrics_detail and metrics_detail.get("bag_types"):
+            bag_type_counts = metrics_detail["bag_types"]
+            lookup = await resolve_bag_types(db, list(bag_type_counts.keys()))
+            effective_value = sum(
+                count * lookup[key]["point_value"] for key, count in bag_type_counts.items() if key in lookup
+            )
+        elif basis == "pounds" and metrics_detail and metrics_detail.get("pounds") is not None:
+            effective_value = float(metrics_detail["pounds"]) * settings.get("pound_value", 0.5)
+        elif basis == "countable_item" and metrics_detail and metrics_detail.get("countable_items"):
+            effective_value = 0
+            for key, count in metrics_detail["countable_items"].items():
+                item_type = await resolve_countable_item_type(db, key)
+                if item_type:
+                    effective_value += (count // item_type["unit_count"]) * item_type["points_per_unit"]
+        elif small_bags is not None or large_bags is not None:
             effective_value = (small_bags or 0) * settings.get("small_bag_value", 1) + (
                 large_bags or 0
             ) * settings.get("large_bag_value", 3)

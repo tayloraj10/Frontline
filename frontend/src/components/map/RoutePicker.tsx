@@ -144,6 +144,15 @@ export default function RoutePicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The map is created once, so an address picked/changed after it mounted would
+  // otherwise leave the camera on the old spot. Follow the event location until the
+  // user has started drawing, at which point their vertices own the viewport.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || coordsRef.current.length > 0) return;
+    m.jumpTo({ center: [centerLng, centerLat] });
+  }, [centerLat, centerLng]);
+
   const undoLast = () => {
     coordsRef.current = coordsRef.current.slice(0, -1);
     setCoordCount(coordsRef.current.length);
@@ -166,7 +175,7 @@ export default function RoutePicker({
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-zinc-900/95 border border-zinc-700 rounded-lg text-xs text-zinc-200 shadow-xl whitespace-nowrap">
         {justClosedLoop
-          ? "Route closed — click Undo to reopen"
+          ? "Route closed. Click Undo to reopen"
           : `Click the map to draw your route (${coordCount} point${coordCount === 1 ? "" : "s"})`}
       </div>
 

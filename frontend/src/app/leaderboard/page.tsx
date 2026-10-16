@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { createPublicClient } from "@/lib/supabase/public";
 import { formatPoints } from "@/lib/formatPoints";
+import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import LeaderboardViewSwitch from "./LeaderboardViewSwitch";
 import EntityLeaderboardTabs from "./EntityLeaderboardTabs";
 
@@ -36,7 +37,7 @@ const getTrashWarStats = unstable_cache(
       fetch(`${fastapiUrl}/api/campaigns/${campaign.id}/leaderboard`, { cache: "no-store" }).catch(() => null),
     ]);
 
-    const lbRaw: { users: unknown[]; groups: TrashWarGroup[] } = lbRes?.ok
+    const lbRaw: { users: unknown[]; groups: TrashWarGroup[]; unique_contributors?: number } = lbRes?.ok
       ? await lbRes.json()
       : { users: [], groups: [] };
     const smallBags = (bagRows ?? []).reduce((sum, r) => sum + (r.metrics_small_bags ?? 0), 0);
@@ -52,7 +53,8 @@ const getTrashWarStats = unstable_cache(
       smallBags,
       largeBags,
       totalPounds,
-      contributorCount: lbRaw.users.length + lbRaw.groups.length,
+      // The lists are capped at the top 20, so use the backend's real distinct count.
+      contributorCount: lbRaw.unique_contributors ?? lbRaw.users.length,
       groups: lbRaw.groups,
     };
   },
@@ -66,42 +68,39 @@ export default async function GlobalLeaderboardPage() {
   const trashWarStats = await getTrashWarStats(fastapiUrl);
 
   return (
-    <main className="max-w-2xl mx-auto px-6 py-10 w-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-zinc-100 leading-tight">Leaderboard</h1>
-        <p className="text-sm text-zinc-500 mt-1">Trash War's pulse, plus points across every campaign.</p>
-      </div>
+    <PageShell>
+      <PageHeader eyebrow="Leaderboard" title="Who's cleaning the most" subtitle="Trash War's pulse, plus points across every campaign." />
 
       {trashWarStats && (
         <div className="mb-8">
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Trash War Activity</div>
           <LeaderboardViewSwitch campaignId={trashWarStats.campaignId} fastapiUrl={fastapiUrl} unit="pts">
             <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5 shadow-elevation-1">
-                <dt className="text-xs text-zinc-500 flex items-baseline justify-between gap-1.5">
+              <div className="bg-zinc-900 rounded-[20px] p-4">
+                <dt className="text-xs font-medium uppercase tracking-wider text-zinc-500 flex flex-col gap-1">
                   Total bags
-                  <span className="text-sm font-semibold text-zinc-200 tabular-nums">{formatPoints(trashWarStats.totalBags)}</span>
+                  <span className="font-display text-2xl font-extrabold tracking-tight text-zinc-100 normal-case tabular-nums">{formatPoints(trashWarStats.totalBags)}</span>
                 </dt>
                 <div className="mt-1 text-[11px] text-zinc-500 tabular-nums">
                   {formatPoints(trashWarStats.smallBags)} small · {formatPoints(trashWarStats.largeBags)} large · {formatPoints(trashWarStats.totalPounds)} lbs
                 </div>
               </div>
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5 shadow-elevation-1">
-                <dt className="text-xs text-zinc-500 flex items-baseline justify-between gap-1.5">
+              <div className="bg-zinc-900 rounded-[20px] p-4">
+                <dt className="text-xs font-medium uppercase tracking-wider text-zinc-500 flex flex-col gap-1">
                   Zip codes cleaned
-                  <span className="text-sm font-semibold text-zinc-200 tabular-nums">{trashWarStats.tractsCount.toLocaleString()}</span>
+                  <span className="font-display text-2xl font-extrabold tracking-tight text-zinc-100 normal-case tabular-nums">{trashWarStats.tractsCount.toLocaleString()}</span>
                 </dt>
               </div>
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5 shadow-elevation-1">
-                <dt className="text-xs text-zinc-500 flex items-baseline justify-between gap-1.5">
+              <div className="bg-zinc-900 rounded-[20px] p-4">
+                <dt className="text-xs font-medium uppercase tracking-wider text-zinc-500 flex flex-col gap-1">
                   Contributions
-                  <span className="text-sm font-semibold text-zinc-200 tabular-nums">{trashWarStats.contribCount.toLocaleString()}</span>
+                  <span className="font-display text-2xl font-extrabold tracking-tight text-zinc-100 normal-case tabular-nums">{trashWarStats.contribCount.toLocaleString()}</span>
                 </dt>
               </div>
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2.5 shadow-elevation-1">
-                <dt className="text-xs text-zinc-500 flex items-baseline justify-between gap-1.5">
+              <div className="bg-zinc-900 rounded-[20px] p-4">
+                <dt className="text-xs font-medium uppercase tracking-wider text-zinc-500 flex flex-col gap-1">
                   Contributors
-                  <span className="text-sm font-semibold text-zinc-200 tabular-nums">{trashWarStats.contributorCount.toLocaleString()}</span>
+                  <span className="font-display text-2xl font-extrabold tracking-tight text-zinc-100 normal-case tabular-nums">{trashWarStats.contributorCount.toLocaleString()}</span>
                 </dt>
               </div>
             </dl>
@@ -110,6 +109,6 @@ export default async function GlobalLeaderboardPage() {
           </LeaderboardViewSwitch>
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }

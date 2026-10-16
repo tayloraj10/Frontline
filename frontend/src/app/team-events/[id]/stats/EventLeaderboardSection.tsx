@@ -69,7 +69,7 @@ export default function EventLeaderboardSection({ teamEventId }: { teamEventId: 
   const ranks = rows ? computeRanks(rows, (r) => r.total_value) : [];
 
   return (
-    <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+    <div className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">Leaderboard</h2>
         <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">

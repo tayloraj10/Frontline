@@ -1,6 +1,6 @@
 export default function CampaignsLoading() {
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 w-full">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-10">
         <div className="h-10 w-52 bg-zinc-800 rounded-lg animate-pulse" />
         <div className="h-4 w-36 bg-zinc-800/60 rounded mt-3 animate-pulse" />
@@ -9,7 +9,7 @@ export default function CampaignsLoading() {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 animate-pulse"
+            className="rounded-2xl border border-zinc-800/40 bg-zinc-900/60 p-5 animate-pulse"
           >
             <div className="flex gap-2 mb-3">
               <div className="h-6 w-20 bg-zinc-800 rounded-full" />

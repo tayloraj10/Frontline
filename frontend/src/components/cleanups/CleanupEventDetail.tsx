@@ -38,11 +38,14 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
+import PermissionHelp from "@/components/PermissionHelp";
+import FlowGuide from "@/components/walkthrough/FlowGuide";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 const inputCls =
-  "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
+  "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
 
 const EditGlyph = () => (
   <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
@@ -129,7 +132,6 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 export default function CleanupEventDetail({
   initialEvent,
   userId,
-  isSiteAdmin = false,
 }: {
   initialEvent: CleanupEventDetailData;
   userId: string | null;
@@ -141,11 +143,13 @@ export default function CleanupEventDetail({
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [showJoinCodeField, setShowJoinCodeField] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
   const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
   const [locationStatus, setLocationStatus] = useState<"checking" | "resolved" | "unavailable">("checking");
   const [cancelLoading, setCancelLoading] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [headerLightboxOpen, setHeaderLightboxOpen] = useState(false);
   const [checkInPointsAwarded, setCheckInPointsAwarded] = useState<number | null>(null);
   const [firstCheckinBonus, setFirstCheckinBonus] = useState(false);
   const [firstCheckinBonusPreview, setFirstCheckinBonusPreview] = useState<number | null>(null);
@@ -157,6 +161,13 @@ export default function CleanupEventDetail({
     return stored === "full" ? "full" : "guided";
   });
   const [guidedStep, setGuidedStep] = useState(0);
+  const [organizerMenuOpen, setOrganizerMenuOpen] = useState(false);
+  const [attendeeFilter, setAttendeeFilter] = useState<"all" | "not_checked_in">("all");
+  const [moreRowId, setMoreRowId] = useState<string | null>(null);
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [stepsEarly, setStepsEarly] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const changeViewMode = (mode: "guided" | "full") => {
     setViewMode(mode);
     if (typeof window !== "undefined") {
@@ -170,6 +181,15 @@ export default function CleanupEventDetail({
   const attendeeReminderEnabled = eventSettingValues.email_attendee_reminder_enabled === 1;
 
   const viewerCheckedInInitial = !!initialEvent.viewer_rsvp?.checked_in_at;
+
+  // Ticks every 15s so the check-in window gate (below) re-evaluates as the window
+  // opens/closes, without requiring the user to interact with anything.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!userId || viewerCheckedInInitial) return;
+    const id = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, [userId, viewerCheckedInInitial]);
 
   // Passively check proximity so attendees can see at a glance whether they're in
   // range, without requiring the "Check in with my location" button click first.
@@ -216,6 +236,7 @@ export default function CleanupEventDetail({
   const refresh = async () => {
     const fresh = await getCleanupEvent(event.id, userId);
     setEvent(fresh);
+    setLastRefreshedAt(Date.now());
   };
 
   const handleRsvp = async (status: "going" | "maybe" | "cancelled") => {
@@ -235,6 +256,7 @@ export default function CleanupEventDetail({
   const handleCheckInWithLocation = () => {
     if (!userId) return;
     setError(null);
+    setLocationDenied(false);
     setCheckInLoading(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -257,7 +279,8 @@ export default function CleanupEventDetail({
           setCheckInLoading(false);
         }
       },
-      () => {
+      (geoErr) => {
+        setLocationDenied(geoErr.code === 1);
         setError("Couldn't get your location. Try the join code instead.");
         setCheckInLoading(false);
       }
@@ -301,19 +324,63 @@ export default function CleanupEventDetail({
 
   const viewerStatus = event.viewer_rsvp?.status ?? null;
   const viewerCheckedIn = !!event.viewer_rsvp?.checked_in_at;
+
+  // Mirrors the server's check-in gate (window + proximity, see check_in_to_cleanup_event
+  // in backend/app/api/routes/cleanup_events.py) so the button only shows green when a
+  // click would actually succeed, and explains why when it wouldn't.
+  const checkInWindowStart = event.check_in_window_start ? new Date(event.check_in_window_start).getTime() : null;
+  const checkInWindowEnd = event.check_in_window_end ? new Date(event.check_in_window_end).getTime() : null;
+  const beforeCheckInWindow = checkInWindowStart !== null && now < checkInWindowStart;
+  const afterCheckInWindow = checkInWindowEnd !== null && now > checkInWindowEnd;
+  const withinCheckInWindow = !beforeCheckInWindow && !afterCheckInWindow;
+  const withinCheckInRange =
+    locationStatus === "resolved" && distanceMeters !== null && distanceMeters <= event.check_in_radius_meters;
+  const canCheckInWithLocation = withinCheckInWindow && withinCheckInRange;
+  const checkInBlockedReason = beforeCheckInWindow
+    ? `Check-in opens at ${formatCheckInWindow(event.check_in_window_start, event.check_in_window_end)?.split("–")[0].trim() ?? "the event start"}`
+    : afterCheckInWindow
+    ? "The check-in window has closed"
+    : locationStatus === "checking"
+    ? "Checking your location…"
+    : locationStatus === "unavailable"
+    ? "Enable location to check in"
+    : !withinCheckInRange
+    ? "Move closer to the event to check in"
+    : null;
+
   const goingCount = event.going_count;
   const spotsLeft = event.max_attendees !== null ? event.max_attendees - goingCount : null;
   const blockGoing = event.is_full && viewerStatus !== "going";
   const isCancelled = event.status === "cancelled";
   const effectiveIsOrganizer = event.is_organizer && !previewAsAttendee;
+  const opensAtMs = (() => {
+    const candidates = [event.scheduled_start, event.check_in_window_start]
+      .filter((v): v is string => !!v)
+      .map((v) => new Date(v).getTime());
+    return candidates.length > 0 ? Math.min(...candidates) : null;
+  })();
+  const beforeEventStart = opensAtMs !== null && Date.now() < opensAtMs;
 
   return (
     <div className="space-y-6">
       {event.image_url && (
-        <div className="w-full aspect-video rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700">
+        <button
+          type="button"
+          onClick={() => setHeaderLightboxOpen(true)}
+          className="block w-full aspect-video rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700 cursor-zoom-in"
+          aria-label={`View ${event.title} photo`}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={event.image_url} alt={event.title} className="w-full h-full object-contain" />
-        </div>
+        </button>
+      )}
+      {headerLightboxOpen && event.image_url && (
+        <Lightbox
+          images={[event.image_url]}
+          index={0}
+          onClose={() => setHeaderLightboxOpen(false)}
+          onNavigate={() => {}}
+        />
       )}
 
       {event.route ? (
@@ -337,6 +404,7 @@ export default function CleanupEventDetail({
           isEvent
         />
       )}
+      <div className="space-y-3 -mt-2">
       {(() => {
         const fullAddress = [
           event.address_line1,
@@ -351,23 +419,24 @@ export default function CleanupEventDetail({
           </p>
         ) : null;
       })()}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-2">
         <a
           href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
+          className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
         >
           <span aria-hidden="true">🧭</span>
           Get directions
         </a>
         <Link
           href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
-          className="inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150"
+          className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-zinc-800 text-sm font-semibold text-zinc-200 transition-[background-color,transform] duration-150 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] touch-manipulation"
         >
           <span aria-hidden="true">📍</span>
           Show on map
         </Link>
+      </div>
       </div>
 
       <div>
@@ -395,7 +464,7 @@ export default function CleanupEventDetail({
               ))}
             </div>
           )}
-          <Link href={`/groups/${event.group_slug}`} className="text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
+          <Link href={`/groups/${event.group_slug}`} className="text-sm font-semibold text-zinc-100 hover:text-white active:text-white transition-colors duration-150">
             {event.group_name}
           </Link>
           {event.cohost_groups.length > 0 && (
@@ -404,7 +473,7 @@ export default function CleanupEventDetail({
               {event.cohost_groups.map((g, i) => (
                 <span key={g.group_id}>
                   {i > 0 && ", "}
-                  <Link href={`/groups/${g.group_slug}`} className="text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150">
+                  <Link href={`/groups/${g.group_slug}`} className="font-semibold text-zinc-100 hover:text-white active:text-white transition-colors duration-150">
                     {g.group_name}
                   </Link>
                 </span>
@@ -414,16 +483,18 @@ export default function CleanupEventDetail({
         </div>
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-2xl font-black text-zinc-100 leading-tight break-words">{event.title}</h1>
+            <h1 className="font-display font-extrabold text-2xl  text-zinc-100 leading-tight break-words">{event.title}</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0 sm:pt-1">
             <ShareButton variant="icon" content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
+            {!effectiveIsOrganizer && <FlowGuide id="attendee" autoOpen variant="icon" size="md" />}
+            {effectiveIsOrganizer && <FlowGuide id="event-organizer" autoOpen variant="icon" size="md" label="Organizer guide" />}
             {effectiveIsOrganizer && (
               <>
                 <Link
                   href={`/groups/${event.group_slug}/events/${event.id}/edit`}
                   title="Edit"
-                  className="w-11 h-11 flex items-center justify-center rounded-full border border-emerald-800/60 bg-emerald-950/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/50 hover:border-emerald-700 active:text-emerald-300 active:bg-emerald-950/50 active:border-emerald-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation"
+                  className="w-11 h-11 flex items-center justify-center rounded-full bg-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-700 active:text-white active:bg-zinc-700 active:scale-[0.9] transition-[background-color,color,transform] duration-150 shrink-0 touch-manipulation"
                 >
                   <EditGlyph />
                 </Link>
@@ -432,7 +503,7 @@ export default function CleanupEventDetail({
                     onClick={() => setConfirmingCancel(true)}
                     disabled={cancelLoading}
                     title={cancelLoading ? "Cancelling…" : "Cancel event"}
-                    className="w-11 h-11 flex items-center justify-center rounded-full border border-red-800/60 bg-red-950/30 text-red-400 hover:text-red-300 hover:bg-red-950/50 hover:border-red-700 active:text-red-300 active:bg-red-950/50 active:border-red-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation disabled:opacity-40 disabled:active:text-red-400"
+                    className="w-11 h-11 flex items-center justify-center rounded-full bg-red-950/30 text-red-400 hover:text-red-300 hover:bg-red-950/50 hover:border-red-700 active:text-red-300 active:bg-red-950/50 active:border-red-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation disabled:opacity-40 disabled:active:text-red-400"
                   >
                     {cancelLoading ? (
                       <div className="w-4 h-4 border-2 border-red-400/60 border-t-red-200 rounded-full animate-spin" />
@@ -445,25 +516,8 @@ export default function CleanupEventDetail({
             )}
           </div>
         </div>
-        <div className="mt-1.5">
-          {event.logging_mode === "organizer_total" ? (
-            <span
-              title="The organizer logs one combined total for everyone at the end."
-              className="inline-flex items-center gap-1 text-xs text-amber-300 bg-amber-950/40 border border-amber-700/40 rounded-full px-2 py-0.5 cursor-help"
-            >
-              👥 Team log
-            </span>
-          ) : (
-            <span
-              title="Attendees log their own cleanup individually from the map."
-              className="inline-flex items-center gap-1 text-xs text-sky-300 bg-sky-950/40 border border-sky-700/40 rounded-full px-2 py-0.5 cursor-help"
-            >
-              🙋 Self-log
-            </span>
-          )}
-        </div>
         {isCancelled && (
-          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-red-800/60 bg-red-950/30 px-2.5 py-1 text-xs font-semibold text-red-400">
+          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-red-950/30 px-2.5 py-1 text-xs font-semibold text-red-400">
             Cancelled
           </p>
         )}
@@ -473,8 +527,25 @@ export default function CleanupEventDetail({
             Check-in window: {formatCheckInWindow(event.check_in_window_start, event.check_in_window_end)}
           </p>
         )}
+        <div className="mt-2">
+          {event.logging_mode === "organizer_total" ? (
+            <span
+              title="The organizer logs one combined total for everyone at the end."
+              className="inline-flex items-center gap-1 text-xs text-amber-300 bg-amber-950/40 rounded-full px-2 py-0.5 cursor-help"
+            >
+              👥 Team log
+            </span>
+          ) : (
+            <span
+              title="Attendees log their own cleanup individually from the map."
+              className="inline-flex items-center gap-1 text-xs text-emerald-300 bg-emerald-950/40 rounded-full px-2 py-0.5 cursor-help"
+            >
+              🙋 Self-log
+            </span>
+          )}
+        </div>
         {!isCancelled && event.event_offers.length > 0 && (
-          <div className="mt-3 rounded-xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/60 to-amber-900/15 px-4 py-3.5 shadow-elevation-1">
+          <div className="mt-3 rounded-2xl bg-amber-500/10 ring-1 ring-inset ring-amber-500/30 px-4 py-3.5">
             <div className="flex items-center gap-2">
               <span className="text-xl" aria-hidden="true">🎁</span>
               <p className="text-sm font-black text-amber-300 uppercase tracking-wide">
@@ -485,7 +556,7 @@ export default function CleanupEventDetail({
               {event.event_offers.map((offer) => (
                 <li key={offer.id} className="text-sm text-zinc-100">
                   <span className="font-semibold text-amber-100">{offer.title}</span> at{" "}
-                  <a href={`/partners/${offer.business_slug}`} className="text-sky-400 hover:underline">
+                  <a href={`/partners/${offer.business_slug}`} className="text-emerald-400 hover:underline">
                     {offer.business_name}
                   </a>
                 </li>
@@ -499,23 +570,23 @@ export default function CleanupEventDetail({
         {!viewerCheckedInInitial && userId && (
           <div className="mt-2">
             {locationStatus === "checking" && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800/60 px-2.5 py-1 text-xs font-medium text-zinc-400">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/60 px-2.5 py-1 text-xs font-medium text-zinc-400">
                 📍 Checking your distance to the event…
               </span>
             )}
             {locationStatus === "resolved" && distanceMeters !== null && (
               distanceMeters <= event.check_in_radius_meters ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2.5 py-1 text-xs font-semibold text-emerald-400">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-900/30 px-2.5 py-1 text-xs font-semibold text-emerald-400">
                   🟢 You&apos;re in check-in range
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/60 bg-amber-900/20 px-2.5 py-1 text-xs font-semibold text-amber-400">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-900/20 px-2.5 py-1 text-xs font-semibold text-amber-400">
                   🟠 {formatFeetAndMeters(distanceMeters)} away -- outside the {formatApproxFeetAndMeters(event.check_in_radius_meters)} check-in range
                 </span>
               )
             )}
             {locationStatus === "unavailable" && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800/60 px-2.5 py-1 text-xs font-medium text-zinc-500">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/60 px-2.5 py-1 text-xs font-medium text-zinc-500">
                 📍 Enable location to see if you&apos;re in check-in range
               </span>
             )}
@@ -524,7 +595,7 @@ export default function CleanupEventDetail({
         {(event.total_small_bags + event.total_large_bags > 0 ||
           event.total_pounds > 0 ||
           event.reports_cleared_count > 0) && (
-          <div className="mt-3 rounded-xl border border-emerald-800/50 bg-gradient-to-br from-emerald-950/40 to-emerald-950/10 px-4 py-3.5 shadow-elevation-1">
+          <div className="mt-3 rounded-2xl bg-zinc-900 px-4 py-3.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 mb-3">
               Logged so far
             </p>
@@ -601,7 +672,7 @@ export default function CleanupEventDetail({
             href={event.external_link}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-sm text-sky-400 hover:text-sky-300 active:text-sky-300 transition-colors duration-150 underline"
+            className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-zinc-200 hover:text-white active:text-white transition-colors duration-150 underline"
           >
             Event link ↗
           </a>
@@ -609,55 +680,89 @@ export default function CleanupEventDetail({
       </div>
 
       {event.is_organizer && !isCancelled && (
-        <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+        <div className="relative flex items-center justify-between gap-3 rounded-full bg-zinc-900 pl-4 pr-1.5 py-1.5">
+          <span className="text-xs font-semibold text-zinc-400 truncate">
+            {previewAsAttendee
+              ? "Previewing what attendees see"
+              : `Organizer view: ${viewMode === "guided" ? "Step by step" : "Everything"}`}
+          </span>
           {previewAsAttendee ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-700/60 bg-sky-900/30 px-2.5 py-1 text-xs font-semibold text-sky-300">
-              👁️ Previewing what attendees see
-            </span>
+            <button
+              type="button"
+              onClick={() => setPreviewAsAttendee(false)}
+              className="min-h-9 px-4 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-900 hover:bg-white active:bg-white transition-colors touch-manipulation shrink-0"
+            >
+              Exit preview
+            </button>
           ) : (
-            <div className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-900 p-0.5 text-xs font-semibold">
-              {(["guided", "full"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => changeViewMode(mode)}
-                  className={`px-3 py-1.5 rounded-md transition-colors touch-manipulation ${
-                    viewMode === mode
-                      ? "bg-sky-500 text-sky-950"
-                      : "text-zinc-400 hover:text-zinc-200 active:text-zinc-200"
-                  }`}
-                >
-                  {mode === "guided" ? "Guided" : "Full page"}
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => setOrganizerMenuOpen((v) => !v)}
+              aria-expanded={organizerMenuOpen}
+              className="min-h-9 px-4 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-700 transition-colors touch-manipulation shrink-0"
+            >
+              Change view
+            </button>
           )}
-          <button
-            type="button"
-            onClick={() => setPreviewAsAttendee((v) => !v)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors touch-manipulation ${
-              previewAsAttendee
-                ? "border-sky-600 bg-sky-500 text-sky-950 hover:bg-sky-400 active:bg-sky-400"
-                : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500"
-            }`}
-          >
-            {previewAsAttendee ? "Exit preview" : "👁️ Preview what attendees see"}
-          </button>
+          {organizerMenuOpen && (
+            <>
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setOrganizerMenuOpen(false)}
+                className="fixed inset-0 z-30 cursor-default"
+              />
+              <div className="absolute right-0 top-full mt-2 z-40 w-72 max-w-full rounded-3xl bg-zinc-900 border border-zinc-700/60 shadow-elevation-3 p-1.5">
+                {([
+                  { key: "guided", title: "Step by step", desc: "One stage at a time" },
+                  { key: "full", title: "Everything", desc: "All sections on one page" },
+                ] as const).map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    onClick={() => {
+                      changeViewMode(o.key);
+                      setOrganizerMenuOpen(false);
+                    }}
+                    className="w-full text-left rounded-2xl px-4 py-2.5 hover:bg-zinc-800 active:bg-zinc-800 touch-manipulation"
+                  >
+                    <span className="flex items-center justify-between text-sm font-semibold text-zinc-100">
+                      {o.title}
+                      {viewMode === o.key && <span className="text-emerald-400 text-xs">Current</span>}
+                    </span>
+                    <span className="block text-xs text-zinc-500">{o.desc}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewAsAttendee(true);
+                    setOrganizerMenuOpen(false);
+                  }}
+                  className="w-full text-left rounded-2xl px-4 py-2.5 hover:bg-zinc-800 active:bg-zinc-800 touch-manipulation"
+                >
+                  <span className="block text-sm font-semibold text-zinc-100">Preview as attendee</span>
+                  <span className="block text-xs text-zinc-500">See this page the way attendees do</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
+      {locationDenied && <PermissionHelp kind="location" alternative="You can also check in with the join code from the organizer." />}
 
       {(() => {
         const checkinSection = isCancelled ? null : !userId ? (
           <Link
             href={`/login?next=/cleanup-events/${event.id}`}
-            className="block text-center px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 text-sm font-semibold rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+            className="block text-center min-h-12 leading-[3rem] px-5 bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 text-sm font-bold rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
           >
             Log in to RSVP
           </Link>
         ) : (
-          <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-zinc-300">
                 {goingCount} going
@@ -669,7 +774,7 @@ export default function CleanupEventDetail({
                 )}
               </span>
               {viewerCheckedIn && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
                   ✓ Checked in
                   {(event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded ?? 0) > 0 &&
                     ` · +${event.viewer_rsvp?.checkin_points ?? checkInPointsAwarded} pts`}
@@ -679,22 +784,17 @@ export default function CleanupEventDetail({
             </div>
             <div className="flex items-center gap-2">
               {(["going", "maybe", "cancelled"] as const).map((status) => {
-                const activeClasses =
-                  status === "going"
-                    ? "bg-emerald-500 border-emerald-500 text-emerald-950"
-                    : status === "maybe"
-                    ? "bg-amber-500 border-amber-500 text-amber-950"
-                    : "bg-red-500 border-red-500 text-red-950";
+                const activeClasses = "bg-zinc-100 text-zinc-900";
                 return (
                   <button
                     key={status}
                     disabled={rsvpLoading || (status === "going" && blockGoing)}
                     onClick={() => handleRsvp(status)}
                     title={status === "going" && blockGoing ? "This event is full" : undefined}
-                    className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                    className={`flex-1 min-h-11 px-3 text-sm font-semibold rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.96] touch-manipulation disabled:opacity-50 ${
                       viewerStatus === status
                         ? activeClasses
-                        : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500 active:scale-[0.97]"
+                        : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 active:bg-zinc-700"
                     }`}
                   >
                     {status === "going" ? "Going" : status === "maybe" ? "Maybe" : "Can't go"}
@@ -711,11 +811,15 @@ export default function CleanupEventDetail({
                 </p>
                 <button
                   onClick={handleCheckInWithLocation}
-                  disabled={checkInLoading}
-                  className="w-full px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+                  disabled={checkInLoading || !canCheckInWithLocation}
+                  title={checkInBlockedReason ?? undefined}
+                  className="w-full min-h-12 px-5 text-sm font-bold bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
                 >
                   {checkInLoading ? "Checking in…" : "Check in with my location"}
                 </button>
+                {!checkInLoading && checkInBlockedReason && (
+                  <p className="text-xs text-zinc-500">{checkInBlockedReason}</p>
+                )}
                 {showJoinCodeField ? (
                   <div className="flex items-center gap-2">
                     <input
@@ -728,7 +832,7 @@ export default function CleanupEventDetail({
                     <button
                       onClick={handleCheckInWithCode}
                       disabled={checkInLoading || !joinCodeInput.trim()}
-                      className="px-3 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] disabled:active:scale-100 disabled:opacity-50 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation shrink-0"
+                      className="min-h-12 px-5 text-sm font-bold bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation shrink-0"
                     >
                       Submit
                     </button>
@@ -736,7 +840,7 @@ export default function CleanupEventDetail({
                 ) : (
                   <button
                     onClick={() => setShowJoinCodeField(true)}
-                    className="w-full text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150"
+                    className="w-full inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
                   >
                     Have a join code instead?
                   </button>
@@ -745,14 +849,14 @@ export default function CleanupEventDetail({
             )}
 
             {event.logging_mode === "organizer_total" ? (
-              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg shadow-elevation-1">
+              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-400 bg-zinc-900 rounded-[20px]">
                 <span aria-hidden="true">ℹ️</span>
                 The organizer will log the event totals for everyone.
               </div>
             ) : (
               <Link
                 href={`/campaigns/${event.campaign_slug}?lat=${event.lat}&lng=${event.lng}`}
-                className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950 rounded-lg shadow-md shadow-sky-500/30 transition-[background-color,transform] duration-150 touch-manipulation"
+                className="flex items-center justify-center gap-1.5 min-h-12 px-5 text-sm font-bold bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
               >
                 <span aria-hidden="true">📍</span>
                 Log your cleanup on the map
@@ -765,13 +869,17 @@ export default function CleanupEventDetail({
                   event={event}
                   userId={userId}
                   onSubmitted={() => void refresh()}
+                  disabled={!viewerCheckedIn}
+                  disabledReason={!viewerCheckedIn ? "Check in to this event to track your route" : undefined}
                 />
               )}
             {event.logging_mode !== "organizer_total" &&
-              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") && (
+              (hasRouteTrackingCapability() || process.env.NODE_ENV !== "production") &&
+              (viewerCheckedIn ? (
+                <div>
                 <Link
                   href={`/campaigns/${event.campaign_slug}?track_event=${event.id}`}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold border border-sky-700/60 text-sky-300 hover:bg-sky-950/30 active:bg-sky-950/30 active:scale-[0.97] rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+                  className="flex items-center justify-center gap-1.5 min-h-12 px-5 text-sm font-bold bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] text-zinc-200 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
                 >
                   <span aria-hidden="true">🛰️</span>
                   Track my route
@@ -779,35 +887,70 @@ export default function CleanupEventDetail({
                     BETA
                   </span>
                 </Link>
-              )}
+                <p className="mt-1.5 text-xs text-zinc-500 text-center">
+                  Records your GPS path, even with your phone locked (needs &quot;Always&quot; location). Everyone&apos;s routes show on this page afterward.
+                </p>
+                </div>
+              ) : (
+                <div>
+                  <div
+                    title="Check in to this event to track your route"
+                    className="flex items-center justify-center gap-1.5 min-h-12 px-5 text-sm font-bold bg-zinc-800/50 text-zinc-500 rounded-full cursor-not-allowed touch-manipulation"
+                  >
+                    <span aria-hidden="true">🔒</span>
+                    Track my route
+                    <span className="px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-violet-950/40 border border-violet-800/40 text-violet-500">
+                      BETA
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-zinc-500 text-center">
+                    Check in to this event to track your route
+                  </p>
+                </div>
+              ))}
           </div>
         );
 
         const checkedInCount = event.rsvps.filter((r) => r.checked_in_at).length;
         const checkinSummarySection = effectiveIsOrganizer && !isCancelled && (
-          <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
-            <div className="flex items-center gap-3 text-sm flex-wrap">
-              <span className="font-semibold text-zinc-200">{goingCount} <span className="font-normal text-zinc-500">RSVP&apos;d yes</span></span>
-              <span className="text-zinc-700">·</span>
-              <span className="font-semibold text-emerald-400">{checkedInCount} <span className="font-normal text-zinc-500">checked in</span></span>
+          <div className="rounded-[20px] bg-zinc-900 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 text-sm flex-wrap">
+                <span className="font-semibold text-zinc-200">{goingCount} <span className="font-normal text-zinc-500">RSVP&apos;d yes</span></span>
+                <span className="text-zinc-700">·</span>
+                <span className="font-semibold text-emerald-400">{checkedInCount} <span className="font-normal text-zinc-500">checked in</span></span>
+              </div>
+              <button
+                type="button"
+                disabled={refreshing}
+                onClick={async () => {
+                  setRefreshing(true);
+                  try {
+                    await refresh();
+                  } finally {
+                    setRefreshing(false);
+                  }
+                }}
+                className="min-h-10 px-5 text-sm font-bold rounded-full bg-zinc-100 text-zinc-900 hover:bg-white active:bg-white active:scale-[0.97] disabled:opacity-60 transition-[background-color,transform] duration-150 touch-manipulation shrink-0"
+              >
+                {refreshing ? "Refreshing…" : "Refresh"}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => refresh()}
-              className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation shrink-0"
-            >
-              ↻ Refresh
-            </button>
+            <p className="text-xs text-zinc-500">
+              This page does not update on its own. Tap Refresh to see new check-ins.{" "}
+              {lastRefreshedAt
+                ? `Last refreshed ${new Date(lastRefreshedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`
+                : "Showing data from when you opened the page."}
+            </p>
           </div>
         );
 
         const checkinRosterSection = effectiveIsOrganizer && !isCancelled && event.rsvps.length > 0 && (
-          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
+          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-900/40 flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-zinc-300">
                 Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
               </span>
-              {attendeeReminderEnabled && <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />}
             </div>
             <ul className="divide-y divide-zinc-800/60">
               {event.rsvps.map((r) => (
@@ -845,7 +988,7 @@ export default function CleanupEventDetail({
         );
 
         const doCleanupSection = (
-          <div className="border border-zinc-800 rounded-xl p-5 text-center space-y-1.5 shadow-elevation-1">
+          <div className="rounded-[20px] bg-zinc-900 p-5 text-center space-y-1.5">
             <p className="text-2xl" aria-hidden="true">🧹</p>
             <p className="text-sm font-semibold text-zinc-200">Time to clean!</p>
             <p className="text-xs text-zinc-500 max-w-xs mx-auto">
@@ -865,8 +1008,8 @@ export default function CleanupEventDetail({
         );
 
         const manageEventOffersSection = effectiveIsOrganizer && !isCancelled && event.event_offers.length > 0 && (
-          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-900/40">
               <span className="text-sm font-semibold text-zinc-300">Attached event offers</span>
               <p className="text-xs text-zinc-500 mt-0.5">
                 Attendees who check in to this event can redeem these offers. Removing one here only detaches it
@@ -902,57 +1045,132 @@ export default function CleanupEventDetail({
           />
         );
 
+        const manageMode = effectiveIsOrganizer && !isCancelled;
+        const visibleRsvps =
+          manageMode && attendeeFilter === "not_checked_in" ? event.rsvps.filter((r) => !r.checked_in_at) : event.rsvps;
         const attendeesSection = (
-          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-zinc-300">
-                Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
-              </span>
-              {effectiveIsOrganizer && !isCancelled && (
-                <div className="flex items-center gap-3">
-                  {attendeeReminderEnabled && <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />}
+          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+            <div className="px-4 pt-3 pb-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-zinc-300">
+                  Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
+                </span>
+                {manageMode && (
+                  <button
+                    type="button"
+                    disabled={refreshing}
+                    onClick={async () => {
+                      setRefreshing(true);
+                      try {
+                        await refresh();
+                      } finally {
+                        setRefreshing(false);
+                      }
+                    }}
+                    className="min-h-9 px-4 text-xs font-semibold rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700 active:bg-zinc-700 disabled:opacity-60 touch-manipulation"
+                  >
+                    {refreshing ? "Refreshing…" : "Refresh"}
+                  </button>
+                )}
+              </div>
+              {manageMode && (
+                <div className="flex items-center gap-2 flex-wrap">
                   <AddAttendeeControl
                     cleanupId={event.id}
                     existingUserIds={event.rsvps.map((r) => r.user_id)}
                     onAdded={refresh}
                   />
+                  {attendeeReminderEnabled && <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />}
+                </div>
+              )}
+              {manageMode && event.rsvps.length > 0 && (
+                <div className="inline-flex items-center rounded-full bg-zinc-800 p-0.5 text-xs font-semibold">
+                  {([
+                    { key: "all", label: `All (${event.rsvps.length})` },
+                    { key: "not_checked_in", label: `Not checked in (${event.rsvps.filter((r) => !r.checked_in_at).length})` },
+                  ] as const).map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setAttendeeFilter(f.key)}
+                      className={`min-h-9 px-4 rounded-full touch-manipulation transition-colors ${
+                        attendeeFilter === f.key ? "bg-zinc-100 text-zinc-900" : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
             {event.rsvps.length === 0 ? (
               <div className="px-4 py-6 text-center text-zinc-600 text-sm">No RSVPs yet.</div>
+            ) : visibleRsvps.length === 0 ? (
+              <div className="px-4 py-6 text-center text-zinc-500 text-sm">Everyone is checked in.</div>
             ) : (
-              <ul className="divide-y divide-zinc-800/60">
-                {event.rsvps.map((r) => {
-                  const hasContribution = r.small_bags + r.large_bags > 0 || r.pounds > 0 || r.points > 0;
+              <ul className="space-y-2 px-3 pb-3">
+                {visibleRsvps.map((r) => {
+                  const name = r.display_name ?? r.username ?? "Unknown";
+                  const bags = r.small_bags + r.large_bags;
+                  const hasContribution = bags > 0 || r.pounds > 0 || r.points > 0;
+                  const checkinPts = r.checkin_points || recentCheckinPoints[r.user_id] || 0;
                   return (
-                    <li key={r.user_id} className="px-4 py-2.5 flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
-                          <Avatar
-                            avatarUrl={r.avatar_url}
-                            name={r.display_name ?? r.username ?? "?"}
-                            username={r.username}
-                            size="xs"
-                          />
-                          {r.username ? (
-                            <Link href={`/users/${encodeURIComponent(r.username)}`} className="text-sm text-zinc-200 break-words hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
-                              {r.display_name ?? r.username}
-                            </Link>
-                          ) : (
-                            <span className="text-sm text-zinc-200 break-words">{r.display_name ?? "Unknown"}</span>
-                          )}
-                          <span className="text-xs text-zinc-600 shrink-0">{r.status}</span>
+                    <li key={r.user_id} className="rounded-2xl bg-zinc-800/50 p-3 space-y-2.5">
+                      <div className="flex items-center gap-3">
+                        <Avatar avatarUrl={r.avatar_url} name={name} username={r.username} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {r.username ? (
+                              <Link href={`/users/${encodeURIComponent(r.username)}`} className="text-sm font-semibold text-zinc-100 break-words hover:text-white active:text-white transition-colors duration-150">
+                                {name}
+                              </Link>
+                            ) : (
+                              <span className="text-sm font-semibold text-zinc-100 break-words">{name}</span>
+                            )}
+                            {r.is_organizer && (
+                              <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-400/10 rounded px-1.5 py-0.5 shrink-0">
+                                ★ Organizer
+                              </span>
+                            )}
+                            {r.is_late && (
+                              <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 rounded px-1.5 py-0.5 shrink-0">
+                                Late
+                              </span>
+                            )}
+                            {r.status !== "going" && (
+                              <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-700/60 rounded px-1.5 py-0.5 shrink-0">
+                                {r.status === "cancelled" ? "Can't go" : r.status === "maybe" ? "Maybe" : r.status}
+                              </span>
+                            )}
+                          </div>
+                          <p className={`mt-0.5 text-xs ${r.checked_in_at ? "text-emerald-400" : "text-zinc-500"}`}>
+                            {r.checked_in_at ? `✓ Checked in${checkinPts ? ` · +${checkinPts} pts` : ""}` : "Not checked in"}
+                          </p>
                         </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          {r.checked_in_at ? (
-                            <span className="text-xs text-emerald-400 whitespace-nowrap">
-                              ✓ checked in
-                              {(r.checkin_points || recentCheckinPoints[r.user_id])
-                                ? ` · +${r.checkin_points || recentCheckinPoints[r.user_id]} pts`
-                                : ""}
+                      </div>
+
+                      {hasContribution && (
+                        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-emerald-400">
+                          {bags > 0 && (
+                            <span title={`${r.small_bags} small bag${r.small_bags === 1 ? "" : "s"}, ${r.large_bags} large bag${r.large_bags === 1 ? "" : "s"}`}>
+                              🗑️ {bags} bag{bags === 1 ? "" : "s"}
                             </span>
-                          ) : effectiveIsOrganizer ? (
+                          )}
+                          {r.pounds > 0 && <span>⚖️ {r.pounds.toLocaleString()} lbs</span>}
+                          {r.team_total_points > 0 && (
+                            <span title="Their share of an organizer's team-total log">
+                              +{r.team_total_points.toLocaleString()} pts{bags === 0 && r.pounds === 0 ? " (team total)" : ""}
+                            </span>
+                          )}
+                          {r.checkin_points > 0 && r.team_total_points > 0 && (
+                            <span className="font-semibold text-yellow-400">= {r.points.toLocaleString()} pts total</span>
+                          )}
+                        </div>
+                      )}
+
+                      {manageMode && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {!r.checked_in_at && (
                             <OrganizerCheckInButton
                               cleanupId={event.id}
                               organizerUserId={userId!}
@@ -966,85 +1184,35 @@ export default function CleanupEventDetail({
                               }}
                               onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to check in attendee"))}
                             />
-                          ) : null}
-                          {effectiveIsOrganizer && (
-                            <OrganizerLogButton
-                              cleanupId={event.id}
-                              organizerUserId={userId!}
-                              attendeeUserId={r.user_id}
-                              attendeeName={r.display_name ?? r.username ?? "attendee"}
-                              onLogged={refresh}
-                            />
                           )}
-                        </div>
-                      </div>
-
-                      {(r.is_organizer || r.is_late || hasContribution) && (
-                        <div className="flex items-center gap-1.5 flex-wrap pl-8">
-                          {r.is_organizer && (
-                            <span className="text-[10px] font-semibold text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0">
-                              ★ Organizer
-                            </span>
-                          )}
-                          {r.is_late && (
-                            <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-0.5 shrink-0">
-                              Late
-                            </span>
-                          )}
-                          {(r.small_bags + r.large_bags > 0 || r.pounds > 0) && (
-                            <span
-                              className="text-xs text-emerald-400 shrink-0"
-                              title={`${r.small_bags} small bag${r.small_bags === 1 ? "" : "s"} (about a grocery bag size), ${r.large_bags} large bag${r.large_bags === 1 ? "" : "s"} (about a kitchen trash bag size)`}
+                          <OrganizerLogButton
+                            cleanupId={event.id}
+                            organizerUserId={userId!}
+                            attendeeUserId={r.user_id}
+                            attendeeName={name}
+                            onLogged={refresh}
+                          />
+                          {r.user_id !== userId && (
+                            <button
+                              type="button"
+                              onClick={() => setMoreRowId((cur) => (cur === r.user_id ? null : r.user_id))}
+                              aria-expanded={moreRowId === r.user_id}
+                              className="inline-flex items-center justify-center min-h-11 px-4 text-sm font-semibold text-zinc-400 hover:text-zinc-200 touch-manipulation"
                             >
-                              {r.small_bags + r.large_bags > 0 && (
-                                <>
-                                  🗑️ {r.small_bags + r.large_bags}
-                                  <span className="text-emerald-400/70"> ({r.small_bags} small, {r.large_bags} large)</span>
-                                </>
-                              )}
-                              {r.pounds > 0 && `${r.small_bags + r.large_bags > 0 ? " · " : ""}⚖️ ${r.pounds.toLocaleString()} lbs`}
-                            </span>
-                          )}
-                          {r.checkin_points > 0 && (
-                            <span
-                              className="text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/30 rounded px-1.5 py-0.5 shrink-0"
-                              title="Credited for checking in to the event"
-                            >
-                              +{r.checkin_points.toLocaleString()} pts · check-in
-                            </span>
-                          )}
-                          {r.team_total_points > 0 && (
-                            <span
-                              className="text-xs text-sky-400 bg-sky-400/10 border border-sky-400/30 rounded px-1.5 py-0.5 shrink-0"
-                              title={
-                                r.small_bags + r.large_bags === 0 && r.pounds === 0
-                                  ? "Credited as their share of an organizer's team-total log, not an individually logged amount"
-                                  : undefined
-                              }
-                            >
-                              +{r.team_total_points.toLocaleString()} pts
-                              {r.small_bags + r.large_bags === 0 && r.pounds === 0 && " · team total"}
-                            </span>
-                          )}
-                          {r.checkin_points > 0 && r.team_total_points > 0 && (
-                            <span className="text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 rounded px-1.5 py-0.5 shrink-0">
-                              = {r.points.toLocaleString()} pts
-                            </span>
+                              {moreRowId === r.user_id ? "Less" : "More"}
+                            </button>
                           )}
                         </div>
                       )}
-
-                      {effectiveIsOrganizer && r.user_id !== userId && (
-                        <div className="pl-8">
-                          <OrganizerRoleButton
-                            cleanupId={event.id}
-                            organizerUserId={userId!}
-                            targetUserId={r.user_id}
-                            isOrganizer={r.is_organizer}
-                            onChanged={refresh}
-                            onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to update organizer"))}
-                          />
-                        </div>
+                      {manageMode && r.user_id !== userId && moreRowId === r.user_id && (
+                        <OrganizerRoleButton
+                          cleanupId={event.id}
+                          organizerUserId={userId!}
+                          targetUserId={r.user_id}
+                          isOrganizer={r.is_organizer}
+                          onChanged={refresh}
+                          onError={(msg) => setError(extractErrorMessage(new Error(msg), "Failed to update organizer"))}
+                        />
                       )}
                     </li>
                   );
@@ -1055,8 +1223,8 @@ export default function CleanupEventDetail({
         );
 
         const eventOffersSection = userId && viewerCheckedIn && event.event_offers.length > 0 && (
-          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40">
+          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-900/40">
               <span className="text-sm font-semibold text-zinc-300">Redeem event offers</span>
               <p className="text-xs text-zinc-500 mt-0.5">
                 Free perks from local businesses for attending this event, no points needed. You have until 4 hours after the event ends to redeem.
@@ -1082,8 +1250,8 @@ export default function CleanupEventDetail({
         );
 
         const photosSection = (event.photos.length > 0 || (userId && !isCancelled)) && (
-          <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
-            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
+          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-900/40 flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-zinc-300">
                 Photos <span className="text-zinc-500 font-normal">({event.photos.length})</span>
               </span>
@@ -1112,72 +1280,158 @@ export default function CleanupEventDetail({
           <EventRoutesSection cleanupId={event.id} routeCount={event.attendee_route_count} />
         );
 
-        if (effectiveIsOrganizer && !isCancelled && viewMode === "guided") {
-          const attendeesStepIndex = 2 + (logSection ? 1 : 0);
-          const manageAttendeesNote = (
-            <button
-              type="button"
-              onClick={() => setGuidedStep(attendeesStepIndex)}
-              className="w-full text-left px-3 py-2 text-xs text-zinc-400 bg-zinc-900/60 border border-zinc-800 rounded-lg hover:border-zinc-600 hover:text-zinc-300 active:border-zinc-600 active:text-zinc-300 transition-colors duration-150 touch-manipulation"
-            >
-              Need to add someone, see bag/point totals, manage organizers, or remove an attached event offer? Go to <span className="text-sky-400 font-medium">Manage attendee data →</span>
-            </button>
+        if (effectiveIsOrganizer && !isCancelled && viewMode === "guided" && beforeEventStart && !stepsEarly) {
+          return (
+            <div className="space-y-4">
+              <div className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
+                <p className="text-base font-bold text-zinc-100">This event has not started yet</p>
+                <p className="text-sm text-zinc-400">
+                  The step by step guide for check-in, the cleanup and logging totals unlocks when the event begins
+                  {opensAtMs ? ` (${new Date(opensAtMs).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })})` : ""}.
+                  Until then you can manage RSVPs and offers below.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStepsEarly(true)}
+                  className="inline-flex items-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  Show the steps anyway
+                </button>
+              </div>
+              {checkinSection}
+              {joinCodeSection}
+              {attendeesSection}
+              {eventOffersSection}
+              {manageEventOffersSection}
+            </div>
           );
-          const steps: { key: string; label: string; content: React.ReactNode }[] = [
-            { key: "checkin", label: "Check in attendees", content: <>{checkinSection}{joinCodeSection}{checkinSummarySection}{checkinRosterSection}</> },
-            { key: "clean", label: "Do the cleanup", content: doCleanupSection },
-            ...(logSection ? [{ key: "log", label: "Log the cleanup", content: logSection as React.ReactNode }] : []),
-            { key: "attendees", label: "Manage attendee data", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
+        }
+
+        if (effectiveIsOrganizer && !isCancelled && viewMode === "guided") {
+          const rosterToggle = checkinRosterSection && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setRosterOpen((v) => !v)}
+                aria-expanded={rosterOpen}
+                className="w-full flex items-center justify-between gap-3 rounded-full bg-zinc-900 hover:bg-zinc-800 px-5 min-h-12 text-sm font-semibold text-zinc-200 touch-manipulation transition-colors"
+              >
+                <span>
+                  Who&apos;s here <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
+                </span>
+                <span className="text-xs text-zinc-400">{rosterOpen ? "Hide" : "Show"}</span>
+              </button>
+              {attendeeReminderEnabled && (
+                <div className="flex items-center justify-between gap-3 rounded-[20px] bg-zinc-900 px-4 py-2.5">
+                  <span className="text-xs text-zinc-400">Email everyone who RSVP&apos;d</span>
+                  <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />
+                </div>
+              )}
+              {rosterOpen && checkinRosterSection}
+            </div>
+          );
+          const steps: { key: string; label: string; hint: string; content: React.ReactNode }[] = [
+            { key: "checkin", label: "Check in attendees", hint: "Check people in as they arrive.", content: <>{checkinSection}{joinCodeSection}{checkinSummarySection}{rosterToggle}</> },
+            { key: "clean", label: "Do the cleanup", hint: "Nothing to do here but get out and clean.", content: doCleanupSection },
+            ...(logSection ? [{ key: "log", label: "Log the cleanup", hint: "Enter the totals for the whole team.", content: logSection as React.ReactNode }] : []),
+            { key: "attendees", label: "Manage attendee data", hint: "Add attendees or manage organizers.", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
             ...(photosSection
-              ? [{ key: "photos", label: "Photos and Routes", content: <>{photosSection}{routesLinkSection}</> as React.ReactNode }]
+              ? [{ key: "photos", label: "Photos and Routes", hint: "Event photos and attendee routes.", content: <>{photosSection}{routesLinkSection}</> as React.ReactNode }]
               : routesLinkSection
-                ? [{ key: "photos", label: "Photos and Routes", content: routesLinkSection as React.ReactNode }]
+                ? [{ key: "photos", label: "Photos and Routes", hint: "Event photos and attendee routes.", content: routesLinkSection as React.ReactNode }]
                 : []),
           ];
           const activeStepIndex = Math.min(guidedStep, steps.length - 1);
+          const shortLabels: Record<string, string> = {
+            checkin: "Check in",
+            clean: "Clean",
+            log: "Log",
+            attendees: "People",
+            photos: "Photos",
+          };
+          const goToStep = (idx: number) => {
+            setGuidedStep(Math.max(0, Math.min(idx, steps.length - 1)));
+            requestAnimationFrame(() => {
+              document.getElementById("guided-stepper")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          };
+          const navBtn =
+            "min-h-11 px-5 text-sm font-bold rounded-full bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[background-color,transform] duration-150 touch-manipulation";
           const prevNextRow = (
             <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                disabled={activeStepIndex === 0}
-                onClick={() => setGuidedStep(activeStepIndex - 1)}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[border-color,transform] duration-150 touch-manipulation"
-              >
-                ← Prev
+              <button type="button" disabled={activeStepIndex === 0} onClick={() => goToStep(activeStepIndex - 1)} className={navBtn}>
+                Back
               </button>
-              <span className="text-xs text-zinc-500">
-                Step {activeStepIndex + 1} of {steps.length}
-              </span>
               <button
                 type="button"
                 disabled={activeStepIndex === steps.length - 1}
-                onClick={() => setGuidedStep(activeStepIndex + 1)}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:border-zinc-500 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[border-color,transform] duration-150 touch-manipulation"
+                onClick={() => goToStep(activeStepIndex + 1)}
+                className={navBtn}
               >
-                Next →
+                Next
               </button>
             </div>
           );
           return (
             <div className="space-y-4">
-              {prevNextRow}
-              <div className="flex items-center gap-2 flex-wrap">
-                {steps.map((s, i) => (
+              <div id="guided-stepper" className="rounded-[20px] bg-zinc-900 p-4 scroll-mt-20">
+                <div className="flex items-center justify-between gap-3">
                   <button
-                    key={s.key}
                     type="button"
-                    onClick={() => setGuidedStep(i)}
-                    className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors touch-manipulation ${
-                      i === activeStepIndex
-                        ? "border-sky-500 bg-sky-950/40 text-sky-300"
-                        : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 active:text-zinc-200 active:border-zinc-500"
-                    }`}
+                    disabled={activeStepIndex === 0}
+                    onClick={() => goToStep(activeStepIndex - 1)}
+                    aria-label="Previous step"
+                    className="min-h-10 px-4 text-xs font-bold rounded-full bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none touch-manipulation"
                   >
-                    {i + 1}. {s.label}
+                    Back
                   </button>
-                ))}
+                  <div className="min-w-0 text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Step {activeStepIndex + 1} of {steps.length}
+                    </p>
+                    <p className="mt-0.5 text-base font-bold text-zinc-100 truncate">{steps[activeStepIndex].label}</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={activeStepIndex === steps.length - 1}
+                    onClick={() => goToStep(activeStepIndex + 1)}
+                    aria-label="Next step"
+                    className="min-h-10 px-4 text-xs font-bold rounded-full bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none touch-manipulation"
+                  >
+                    Next
+                  </button>
+                </div>
+                <div className="mt-4 flex items-start" role="tablist" aria-label="Event steps">
+                  {steps.map((st, i) => (
+                    <div key={st.key} className="flex-1 flex flex-col items-center">
+                      <div className="w-full flex items-center">
+                        <span className={`h-0.5 flex-1 ${i === 0 ? "bg-transparent" : i <= activeStepIndex ? "bg-emerald-500" : "bg-zinc-700"}`} />
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={i === activeStepIndex}
+                          aria-label={`Step ${i + 1}: ${st.label}`}
+                          onClick={() => goToStep(i)}
+                          className={`w-10 h-10 shrink-0 rounded-full text-sm font-bold touch-manipulation transition-colors ${
+                            i === activeStepIndex
+                              ? "bg-zinc-100 text-zinc-900"
+                              : i < activeStepIndex
+                                ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                          }`}
+                        >
+                          {i < activeStepIndex ? "✓" : i + 1}
+                        </button>
+                        <span className={`h-0.5 flex-1 ${i === steps.length - 1 ? "bg-transparent" : i < activeStepIndex ? "bg-emerald-500" : "bg-zinc-700"}`} />
+                      </div>
+                      <span className={`mt-1 text-[11px] font-semibold ${i === activeStepIndex ? "text-zinc-100" : "text-zinc-500"}`}>
+                        {shortLabels[st.key] ?? st.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-zinc-400 text-center">{steps[activeStepIndex].hint}</p>
               </div>
-              {activeStepIndex === 0 && manageAttendeesNote}
               <div className="space-y-4">{steps[activeStepIndex].content}</div>
               {prevNextRow}
             </div>
@@ -1266,7 +1520,7 @@ function AddEventPhotoButton({
   return (
     <div className="flex items-center gap-2">
       {error && <span className="text-xs text-red-400">{error}</span>}
-      <label className="text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] border border-zinc-700 rounded-lg px-3 py-1.5 cursor-pointer transition-[background-color,transform] duration-150 touch-manipulation">
+      <label className="text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] border border-zinc-700 rounded-xl px-3 py-1.5 cursor-pointer transition-[background-color,transform] duration-150 touch-manipulation">
         {loading ? "Uploading..." : "Add a photo"}
         <input
           type="file"
@@ -1340,7 +1594,7 @@ function AddAttendeeControl({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0"
+        className="shrink-0 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
       >
         + Add attendee
       </button>
@@ -1356,10 +1610,10 @@ function AddAttendeeControl({
         onChange={(e) => setQuery(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="Search by username..."
-        className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-zinc-100 focus:outline-none focus:border-zinc-500 w-40"
+        className="bg-zinc-900 border border-zinc-700 rounded-xl px-2.5 py-1 text-xs text-zinc-100 focus:outline-none focus:border-zinc-500 w-40"
       />
       {(loading || visibleResults.length > 0 || error) && (
-        <div className="absolute right-0 top-full mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-lg divide-y divide-zinc-800 max-h-48 overflow-y-auto z-10 shadow-lg">
+        <div className="absolute right-0 top-full mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-xl divide-y divide-zinc-800 max-h-48 overflow-y-auto z-10 shadow-lg">
           {loading && <p className="px-3 py-2 text-xs text-zinc-600">Searching…</p>}
           {error && <p className="px-3 py-2 text-xs text-red-400">{error}</p>}
           {!loading &&
@@ -1486,7 +1740,7 @@ function EventOfferRedemptionCard({
         <p className="text-sm font-semibold text-zinc-100 truncate">{offer.title}</p>
         <a
           href={`/partners/${offer.business_slug}`}
-          className="text-xs text-sky-400 hover:underline"
+          className="text-xs text-emerald-400 hover:underline"
         >
           {offer.business_name}
         </a>
@@ -1502,7 +1756,7 @@ function EventOfferRedemptionCard({
         {loading ? null : proof ? (
           <button
             onClick={() => setShowModal(true)}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation"
+            className="px-3 py-1.5 text-xs font-medium rounded-xl border border-zinc-700 text-zinc-300 hover:border-zinc-500 active:scale-[0.97] transition-[border-color,transform] duration-150 touch-manipulation"
           >
             View code
           </button>
@@ -1514,7 +1768,7 @@ function EventOfferRedemptionCard({
           <button
             onClick={handleRedeem}
             disabled={redeeming}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+            className="px-3 py-1.5 text-xs font-bold rounded-full bg-zinc-100 hover:bg-white text-zinc-900 disabled:opacity-50 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
           >
             {redeeming ? "Redeeming…" : "Redeem"}
           </button>
@@ -1564,7 +1818,7 @@ function OrganizerCheckInButton({
     <button
       onClick={submit}
       disabled={loading}
-      className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0 disabled:opacity-50 disabled:active:text-zinc-500"
+      className="shrink-0 disabled:opacity-50 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
     >
       {loading ? "Checking in…" : "Check in"}
     </button>
@@ -1604,12 +1858,25 @@ function OrganizerLogButton({
     : 0;
   const poundPoints = poundValueReady ? (Number(pounds) || 0) * pointValues.pound_value! : 0;
   const hasNegative = (Number(smallBags) || 0) < 0 || (Number(largeBags) || 0) < 0 || (Number(pounds) || 0) < 0;
+  const bagsEntered = (Number(smallBags) || 0) + (Number(largeBags) || 0) > 0;
+  const poundsEntered = (Number(pounds) || 0) > 0;
+  // A value sitting in the field for the *unselected* method scores 0 — this catches the
+  // organizer who typed pounds without noticing "By bags" was still highlighted.
+  const scoringMismatch =
+    (scoringMethod === "bags" && !bagsEntered && poundsEntered) ||
+    (scoringMethod === "pounds" && !poundsEntered && bagsEntered);
 
   const submit = async () => {
     const small = Number(smallBags) || 0;
     const large = Number(largeBags) || 0;
     const lbs = Number(pounds) || 0;
     if (hasNegative || small + large + lbs <= 0) return;
+    if (scoringMismatch) {
+      setError(
+        `You entered ${poundsEntered ? "pounds" : "bags"} but "By ${scoringMethod}" is selected. Switch it or this haul will score 0 points.`
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -1635,7 +1902,7 @@ function OrganizerLogButton({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0"
+        className="shrink-0 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
       >
         Log for them
       </button>
@@ -1643,99 +1910,119 @@ function OrganizerLogButton({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setOpen(false)}>
-      <div
-        className="relative max-w-xs w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h4 className="text-sm font-semibold text-zinc-100 mb-3">Log contribution for {attendeeName}</h4>
-        <div className="grid grid-cols-3 gap-x-3 gap-y-0 mb-3">
-          <label className="text-[11px] text-zinc-600">Small bags</label>
-          <label className="text-[11px] text-zinc-600">Large bags</label>
-          <label className="text-[11px] text-zinc-600">Pounds</label>
-          <p className="text-[11px] text-zinc-700 mb-1">(grocery bag)</p>
-          <p className="text-[11px] text-zinc-700 mb-1">(kitchen trash bag)</p>
-          <p className="text-[11px] text-zinc-700 mb-1">(if weighed)</p>
-          <input
-            type="number"
-            min={0}
-            value={smallBags}
-            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
-          />
-          <input
-            type="number"
-            min={0}
-            value={largeBags}
-            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
-          />
-          <input
-            type="number"
-            min={0}
-            value={pounds}
-            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
-          />
-        </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 mb-3 shadow-elevation-1">
-          <p className="text-[11px] text-zinc-600">
-            Bags and pounds are two ways of estimating the same haul — pick which one determines points.
-            Both are still saved for the event&apos;s record.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
+    <BodyPortal>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setOpen(false)}>
+        <div
+          className="relative max-w-xs w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h4 className="text-sm font-semibold text-zinc-100 mb-3">Log contribution for {attendeeName}</h4>
+          <div className="grid grid-cols-3 gap-x-3 gap-y-0 mb-3">
+            <label className="text-[11px] text-zinc-600">Small bags</label>
+            <label className="text-[11px] text-zinc-600">Large bags</label>
+            <label className="text-[11px] text-zinc-600">Pounds</label>
+            <p className="text-[11px] text-zinc-700 mb-1">(grocery bag)</p>
+            <p className="text-[11px] text-zinc-700 mb-1">(kitchen trash bag)</p>
+            <p className="text-[11px] text-zinc-700 mb-1">(if weighed)</p>
+            <input
+              type="number"
+              min={0}
+              value={smallBags}
+              onChange={(e) => {
+                const v = e.target.value.replace(/^0+(?=\d)/, "");
+                setSmallBags(v);
+                if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+              }}
+              className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
+            />
+            <input
+              type="number"
+              min={0}
+              value={largeBags}
+              onChange={(e) => {
+                const v = e.target.value.replace(/^0+(?=\d)/, "");
+                setLargeBags(v);
+                if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+              }}
+              className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
+            />
+            <input
+              type="number"
+              min={0}
+              value={pounds}
+              onChange={(e) => {
+                const v = e.target.value.replace(/^0+(?=\d)/, "");
+                setPounds(v);
+                if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
+              }}
+              className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
+            />
+          </div>
+          {scoringMismatch && (
+            <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 rounded-lg px-2.5 py-2 mb-3">
+              ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is
+              selected below. This will score 0 points unless you switch it.
+            </p>
+          )}
+          <div className="rounded-[20px] bg-zinc-900 p-3 space-y-2 mb-3 shadow-elevation-1">
+            <p className="text-[11px] text-zinc-600">
+              Bags and pounds are two ways of estimating the same haul. Pick which one determines points.
+              Both are still saved for the event&apos;s record.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setScoringMethod("bags")}
+                className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+                  scoringMethod === "bags"
+                    ? "border-emerald-600 bg-emerald-900/20"
+                    : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
+                }`}
+              >
+                <p className="text-xs font-semibold text-zinc-200">By bags</p>
+                <p className="text-[10px] text-zinc-500">
+                  {smallBags || 0}×<SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> + {largeBags || 0}×<SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} />
+                </p>
+                <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                  {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "- pts"}
+                </p>
+              </button>
+              <button
+                onClick={() => setScoringMethod("pounds")}
+                className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
+                  scoringMethod === "pounds"
+                    ? "border-emerald-600 bg-emerald-900/20"
+                    : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
+                }`}
+              >
+                <p className="text-xs font-semibold text-zinc-200">By pounds</p>
+                <p className="text-[10px] text-zinc-500">
+                  {pounds || 0}×<SettingValue value={pointValues.pound_value} loading={pointValuesLoading} />
+                </p>
+                <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                  {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "- pts"}
+                </p>
+              </button>
+            </div>
+          </div>
+          {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setScoringMethod("bags")}
-              className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
-                scoringMethod === "bags"
-                  ? "border-emerald-600 bg-emerald-900/20"
-                  : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
-              }`}
+              onClick={submit}
+              disabled={loading || hasNegative || scoringMismatch}
+              className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
             >
-              <p className="text-xs font-semibold text-zinc-200">By bags</p>
-              <p className="text-[10px] text-zinc-500">
-                {smallBags || 0}×<SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> + {largeBags || 0}×<SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} />
-              </p>
-              <p className="text-sm font-bold text-emerald-400 mt-0.5">
-                {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "— pts"}
-              </p>
+              {loading ? "Logging…" : "Log contribution"}
             </button>
             <button
-              onClick={() => setScoringMethod("pounds")}
-              className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${
-                scoringMethod === "pounds"
-                  ? "border-emerald-600 bg-emerald-900/20"
-                  : "border-zinc-800 hover:border-zinc-600 active:border-zinc-600 active:scale-[0.97]"
-              }`}
+              onClick={() => setOpen(false)}
+              className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
             >
-              <p className="text-xs font-semibold text-zinc-200">By pounds</p>
-              <p className="text-[10px] text-zinc-500">
-                {pounds || 0}×<SettingValue value={pointValues.pound_value} loading={pointValuesLoading} />
-              </p>
-              <p className="text-sm font-bold text-emerald-400 mt-0.5">
-                {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "— pts"}
-              </p>
+              Cancel
             </button>
           </div>
         </div>
-        {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={submit}
-            disabled={loading || hasNegative}
-            className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-          >
-            {loading ? "Logging…" : "Log contribution"}
-          </button>
-          <button
-            onClick={() => setOpen(false)}
-            className="px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
-          >
-            Cancel
-          </button>
-        </div>
       </div>
-    </div>
+    </BodyPortal>
   );
 }
 
@@ -1780,7 +2067,7 @@ function RemoveEventOfferButton({
     <>
       <button
         onClick={() => setConfirming(true)}
-        className="text-xs text-red-400/80 hover:text-red-300 active:text-red-300 transition-colors duration-150 underline shrink-0"
+        className="shrink-0 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-red-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
       >
         Remove
       </button>
@@ -1850,7 +2137,7 @@ function SendAttendeeReminderButton({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0"
+        className="shrink-0 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
       >
         Send reminder
       </button>
@@ -1858,83 +2145,85 @@ function SendAttendeeReminderButton({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={close}>
-      <div
-        className="relative max-w-md w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h4 className="text-sm font-semibold text-zinc-100">Send reminder to attendees</h4>
+    <BodyPortal>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={close}>
+        <div
+          className="relative max-w-md w-full bg-zinc-900 border border-zinc-700/50 rounded-xl p-5 shadow-2xl space-y-3"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h4 className="text-sm font-semibold text-zinc-100">Send reminder to attendees</h4>
 
-        {result ? (
-          <>
-            {result.sent ? (
-              <p className="text-sm text-emerald-400">Sent to {result.recipient_count} attendee{result.recipient_count === 1 ? "" : "s"}.</p>
-            ) : (
-              <p className="text-sm text-amber-400">Not sent{result.reason ? `: ${result.reason}` : "."}</p>
-            )}
-            <button
-              onClick={close}
-              className="w-full px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
-            >
-              Close
-            </button>
-          </>
-        ) : preview ? (
-          <>
-            <p className="text-xs text-zinc-500">
-              Preview — will send to {preview.recipient_count} attendee{preview.recipient_count === 1 ? "" : "s"} marked &ldquo;going&rdquo;.
-            </p>
-            <div className="rounded-lg border border-zinc-800 bg-white text-black p-3 max-h-64 overflow-y-auto text-sm">
-              <p className="font-semibold mb-2">{preview.subject}</p>
-              <div dangerouslySetInnerHTML={{ __html: preview.html }} />
-            </div>
-            {error && <p className="text-red-400 text-xs">{error}</p>}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={send}
-                disabled={loading || preview.recipient_count === 0}
-                className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                {loading ? "Sending…" : "Send"}
-              </button>
-              <button
-                onClick={() => setPreview(null)}
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
-              >
-                Back
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Optional custom note to include (e.g. meeting spot, what to bring)…"
-              maxLength={2000}
-              rows={4}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500"
-            />
-            {error && <p className="text-red-400 text-xs">{error}</p>}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadPreview}
-                disabled={loading}
-                className="flex-1 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
-              >
-                {loading ? "Loading…" : "Preview"}
-              </button>
+          {result ? (
+            <>
+              {result.sent ? (
+                <p className="text-sm text-emerald-400">Sent to {result.recipient_count} attendee{result.recipient_count === 1 ? "" : "s"}.</p>
+              ) : (
+                <p className="text-sm text-amber-400">Not sent{result.reason ? `: ${result.reason}` : "."}</p>
+              )}
               <button
                 onClick={close}
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+                className="w-full inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
-                Cancel
+                Close
               </button>
-            </div>
-          </>
-        )}
+            </>
+          ) : preview ? (
+            <>
+              <p className="text-xs text-zinc-500">
+                Preview: will send to {preview.recipient_count} attendee{preview.recipient_count === 1 ? "" : "s"} marked &ldquo;going&rdquo;.
+              </p>
+              <div className="rounded-lg border border-zinc-800 bg-white text-black p-3 max-h-64 overflow-y-auto text-sm">
+                <p className="font-semibold mb-2">{preview.subject}</p>
+                <div dangerouslySetInnerHTML={{ __html: preview.html }} />
+              </div>
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={send}
+                  disabled={loading || preview.recipient_count === 0}
+                  className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  {loading ? "Sending…" : "Send"}
+                </button>
+                <button
+                  onClick={() => setPreview(null)}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Back
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Optional custom note to include (e.g. meeting spot, what to bring)…"
+                maxLength={2000}
+                rows={4}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500"
+              />
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadPreview}
+                  disabled={loading}
+                  className="flex-1 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  {loading ? "Loading…" : "Preview"}
+                </button>
+                <button
+                  onClick={close}
+                  className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </BodyPortal>
   );
 }
 
@@ -2069,6 +2358,13 @@ function LogTeamTotalForm({
     (Number(largeBags) || 0) < 0 ||
     (Number(pounds) || 0) < 0 ||
     Object.values(overrides).some((v) => v.trim() !== "" && (Number(v) || 0) < 0);
+  const bagsEntered = (Number(smallBags) || 0) + (Number(largeBags) || 0) > 0;
+  const poundsEntered = (Number(pounds) || 0) > 0;
+  // A value sitting in the field for the *unselected* method scores 0 — this catches the
+  // organizer who typed pounds without noticing "By bags" was still highlighted.
+  const scoringMismatch =
+    (scoringMethod === "bags" && !bagsEntered && poundsEntered) ||
+    (scoringMethod === "pounds" && !poundsEntered && bagsEntered);
 
   const applyToAll = () => {
     if (applyAllValue.trim() === "") return;
@@ -2085,6 +2381,12 @@ function LogTeamTotalForm({
     const large = Number(largeBags) || 0;
     const lbs = Number(pounds) || 0;
     if (hasNegative || small + large + lbs <= 0) return;
+    if (scoringMismatch) {
+      setError(
+        `You entered ${poundsEntered ? "pounds" : "bags"} but "By ${scoringMethod}" is selected. Switch it or this haul will score 0 points.`
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     setResult(null);
@@ -2137,7 +2439,7 @@ function LogTeamTotalForm({
   };
 
   return (
-    <div className="border border-zinc-800 rounded-xl p-4 space-y-3 shadow-elevation-1">
+    <div className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
       <div>
         <p className="text-sm font-semibold text-zinc-300">Log team total</p>
         <p className="text-xs text-zinc-500 mt-0.5">
@@ -2146,7 +2448,7 @@ function LogTeamTotalForm({
       </div>
       <button
         onClick={() => setWarningOpen((v) => !v)}
-        className="w-full text-left text-[11px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2 hover:bg-amber-500/15 active:bg-amber-500/15 active:scale-[0.98] transition-[background-color,transform] duration-150 touch-manipulation"
+        className="w-full text-left text-[11px] text-amber-400/90 bg-amber-500/10 rounded-lg px-2.5 py-2 hover:bg-amber-500/15 active:bg-amber-500/15 active:scale-[0.98] transition-[background-color,transform] duration-150 touch-manipulation"
       >
         {warningOpen ? (
           <>
@@ -2166,7 +2468,7 @@ function LogTeamTotalForm({
           </>
         )}
       </button>
-      <p className="text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+      <p className="text-xs font-semibold text-amber-400 bg-amber-500/10 rounded-lg px-2.5 py-2">
         🎉 {volumeBonusTip}
       </p>
       <div className="grid grid-cols-3 gap-2">
@@ -2176,8 +2478,12 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={smallBags}
-            onChange={(e) => setSmallBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setSmallBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
         </div>
         <div>
@@ -2186,8 +2492,12 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={largeBags}
-            onChange={(e) => setLargeBags(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setLargeBags(v);
+              if ((Number(v) || 0) > 0 && !poundsEntered) setScoringMethod("bags");
+            }}
+            className={`${inputCls} ${scoringMethod === "pounds" && poundsEntered ? "opacity-50" : ""}`}
           />
         </div>
         <div>
@@ -2196,11 +2506,21 @@ function LogTeamTotalForm({
             type="number"
             min={0}
             value={pounds}
-            onChange={(e) => setPounds(e.target.value.replace(/^0+(?=\d)/, ""))}
-            className={inputCls}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setPounds(v);
+              if ((Number(v) || 0) > 0 && !bagsEntered) setScoringMethod("pounds");
+            }}
+            className={`${inputCls} ${scoringMethod === "bags" && bagsEntered ? "opacity-50" : ""}`}
           />
         </div>
       </div>
+      {scoringMismatch && (
+        <p className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 rounded-lg px-2.5 py-2">
+          ⚠️ You entered {poundsEntered ? "pounds" : "bags"}, but &quot;By {scoringMethod}&quot; is selected
+          below. This will score 0 points unless you switch it.
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-zinc-600">Split among</span>
         {(["checked_in", "going"] as const).map((p) => (
@@ -2238,11 +2558,11 @@ function LogTeamTotalForm({
       )}
 
       {(nearbyReports.length > 0 || persistedReportsClearedCount > 0) && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 p-3 space-y-2 shadow-elevation-1">
           {persistedReportsClearedCount > 0 && (
             <p className="text-[11px] text-zinc-500">
               🧹 {persistedReportsClearedCount} report{persistedReportsClearedCount === 1 ? "" : "s"} already
-              cleared for this event — that bonus is kept and re-counted on every relog, checkbox or not.
+              cleared for this event. That bonus is kept and re-counted on every relog, checkbox or not.
             </p>
           )}
           {nearbyReports.length > 0 && (
@@ -2303,9 +2623,9 @@ function LogTeamTotalForm({
         </div>
       )}
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 shadow-elevation-1">
+      <div className="rounded-[20px] bg-zinc-900 p-3 space-y-2 shadow-elevation-1">
         <p className="text-[11px] text-zinc-600">
-          Bags and pounds are two ways of estimating the same haul — pick which one determines points for
+          Bags and pounds are two ways of estimating the same haul. Pick which one determines points for
           this submission. Both are still saved for the event&apos;s record.
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -2322,7 +2642,7 @@ function LogTeamTotalForm({
               {smallBags || 0}×<SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> + {largeBags || 0}×<SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} />
             </p>
             <p className="text-sm font-bold text-emerald-400 mt-0.5">
-              {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "— pts"}
+              {bagValuesReady ? `${bagPoints.toLocaleString()} pts` : "- pts"}
             </p>
           </button>
           <button
@@ -2338,7 +2658,7 @@ function LogTeamTotalForm({
               {pounds || 0}×<SettingValue value={pointValues.pound_value} loading={pointValuesLoading} />
             </p>
             <p className="text-sm font-bold text-emerald-400 mt-0.5">
-              {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "— pts"}
+              {poundValueReady ? `${poundPoints.toLocaleString()} pts` : "- pts"}
             </p>
           </button>
         </div>
@@ -2347,7 +2667,7 @@ function LogTeamTotalForm({
           <span className="font-semibold text-zinc-100">
             {(scoringMethod === "pounds" ? poundValueReady : bagValuesReady)
               ? `${(volumeBonusTiers > 0 || reportClearBonusTotal > 0 ? grandTotalPoints : totalPoints).toLocaleString()} pts`
-              : "— pts"}
+              : "- pts"}
           </span>
           {candidates.length > 0 && (scoringMethod === "pounds" ? poundValueReady : bagValuesReady) && (
             <>
@@ -2360,7 +2680,7 @@ function LogTeamTotalForm({
           <p className="text-[11px] font-semibold text-amber-400">
             🧹 Report clear bonus: +{reportClearBonusTotal.toLocaleString()} pts ({reportsCountedThisSubmit} report
             {reportsCountedThisSubmit === 1 ? "" : "s"} × {reportClearBonusPerReport} pts, including{" "}
-            {persistedReportsClearedCount} already cleared) — {totalPoints.toLocaleString()} pts base
+            {persistedReportsClearedCount} already cleared), {totalPoints.toLocaleString()} pts base
             → {baseWithReportBonus.toLocaleString()} pts, before the volume bonus below
           </p>
         )}
@@ -2369,7 +2689,7 @@ function LogTeamTotalForm({
           (volumeBonusTiers > 0 ? (
             <p className="text-[11px] font-semibold text-amber-400">
               🎉 Volume bonus: +{Math.round((volumeBonusMultiplier - 1) * 100)}% ({volumeBonusTiers} tier
-              {volumeBonusTiers === 1 ? "" : "s"}) — {baseWithReportBonus.toLocaleString()} pts →{" "}
+              {volumeBonusTiers === 1 ? "" : "s"}), {baseWithReportBonus.toLocaleString()} pts →{" "}
               {grandTotalPoints.toLocaleString()} pts
             </p>
           ) : (
@@ -2401,7 +2721,7 @@ function LogTeamTotalForm({
       <div>
         <button
           onClick={() => setLogsOpen((v) => !v)}
-          className="text-xs text-zinc-400 hover:text-zinc-200 active:text-zinc-200 transition-colors duration-150"
+          className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
         >
           {logsOpen ? "Hide" : "Show"} log history{logs.length > 0 ? ` (${logs.length})` : ""}
         </button>
@@ -2424,7 +2744,7 @@ function LogTeamTotalForm({
                         {isCurrent ? (
                           <span className="text-emerald-400 font-medium">Current</span>
                         ) : (
-                          <span className="text-zinc-600">Overridden — no longer credited</span>
+                          <span className="text-zinc-600">Overridden, no longer credited</span>
                         )}
                       </div>
                       <span className={isCurrent ? "text-zinc-300" : "text-zinc-500 line-through"}>
@@ -2457,7 +2777,7 @@ function LogTeamTotalForm({
 
       <button
         onClick={() => setAdvancedOpen((v) => !v)}
-        className="text-[11px] text-zinc-600 hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150"
+        className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
       >
         {advancedOpen ? "Hide advanced options" : "Advanced options"}
       </button>
@@ -2473,23 +2793,23 @@ function LogTeamTotalForm({
               placeholder={`e.g. ${perAttendee}`}
               value={applyAllValue}
               onChange={(e) => setApplyAllValue(e.target.value)}
-              className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-zinc-100 text-xs focus:outline-none focus:border-zinc-500"
+              className="w-24 bg-zinc-900 border border-zinc-700 rounded-xl px-2 py-1 text-zinc-100 text-xs focus:outline-none focus:border-zinc-500"
             />
             <button
               onClick={applyToAll}
               disabled={applyAllValue.trim() === ""}
-              className="text-xs text-sky-400 hover:text-sky-300 active:text-sky-300 disabled:opacity-40 disabled:hover:text-sky-400 disabled:active:text-sky-400 transition-colors duration-150"
+              className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-emerald-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
             >
               Apply to all
             </button>
-            <button onClick={clearAll} className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150">
+            <button onClick={clearAll} className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150">
               Clear (use auto split)
             </button>
           </div>
 
           <button
             onClick={() => setOverrideListOpen((v) => !v)}
-            className="text-[11px] text-zinc-600 hover:text-zinc-400 active:text-zinc-400 transition-colors duration-150"
+            className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
             {overrideListOpen
               ? "Hide individual values"
@@ -2512,7 +2832,7 @@ function LogTeamTotalForm({
                       placeholder={String(perAttendee)}
                       value={overrides[r.user_id] ?? ""}
                       onChange={(e) => setOverrides((prev) => ({ ...prev, [r.user_id]: e.target.value }))}
-                      className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-zinc-100 text-xs focus:outline-none focus:border-zinc-500"
+                      className="w-20 bg-zinc-900 border border-zinc-700 rounded-xl px-2 py-1 text-zinc-100 text-xs focus:outline-none focus:border-zinc-500"
                     />
                   </div>
                 ))}
@@ -2526,10 +2846,16 @@ function LogTeamTotalForm({
 
       <button
         onClick={submit}
-        disabled={loading || hasNegative || candidates.length === 0}
-        className="w-full mt-3 px-3 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-600 active:scale-[0.97] disabled:active:scale-100 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-[background-color,transform] duration-150 touch-manipulation"
+        disabled={loading || hasNegative || candidates.length === 0 || scoringMismatch}
+        className="w-full mt-3 px-3 py-2 text-sm font-medium bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
       >
-        {loading ? "Logging…" : candidates.length === 0 ? "No eligible attendees" : "Log team total"}
+        {loading
+          ? "Logging…"
+          : candidates.length === 0
+          ? "No eligible attendees"
+          : scoringMismatch
+          ? "Fix scoring method above"
+          : "Log team total"}
       </button>
     </div>
   );
@@ -2572,7 +2898,7 @@ function OrganizerRoleButton({
     <button
       onClick={toggle}
       disabled={loading}
-      className="text-xs text-zinc-500 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150 underline shrink-0 disabled:opacity-40 disabled:active:text-zinc-500"
+      className="shrink-0 disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
     >
       {loading ? "…" : isOrganizer ? "Remove organizer" : "Make organizer"}
     </button>

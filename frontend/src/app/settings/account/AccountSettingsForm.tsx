@@ -166,7 +166,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
               onChange={(e) => setNewEmail(e.target.value)}
               required
               placeholder="new@example.com"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
             />
             {emailMsg && (
               <p className={`text-xs ${emailMsg.ok ? "text-emerald-400" : "text-red-400"}`}>
@@ -195,7 +195,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
               placeholder="Current password"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
             />
             <input
               type="password"
@@ -204,7 +204,7 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
               required
               minLength={8}
               placeholder="New password (min 8 chars)"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-sm outline-none transition-colors shadow-elevation-1"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-xl text-sm outline-none transition-colors"
             />
             {pwMsg && (
               <p className={`text-xs ${pwMsg.ok ? "text-emerald-400" : "text-red-400"}`}>

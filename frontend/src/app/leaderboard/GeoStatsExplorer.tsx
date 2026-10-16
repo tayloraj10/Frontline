@@ -34,6 +34,7 @@ interface TopUser {
 interface TopGroup {
   group_id: string;
   name: string | null;
+  logo_url?: string | null;
   total_value: number;
   contribution_count: number;
   small_bags: number;
@@ -129,7 +130,7 @@ function StatTile({ label, value, onClick }: { label: string; value: string; onC
     <button
       onClick={onClick}
       disabled={!onClick}
-      className="border border-zinc-800 rounded-lg px-3 py-2.5 text-left hover:bg-zinc-800/40 hover:border-zinc-700 transition-colors touch-manipulation disabled:hover:bg-transparent disabled:hover:border-zinc-800"
+      className="border border-zinc-800 rounded-xl px-3 py-2.5 text-left hover:bg-zinc-800/40 hover:border-zinc-700 transition-colors touch-manipulation disabled:hover:bg-transparent disabled:hover:border-zinc-800"
     >
       <div className="text-base font-bold text-zinc-100 tabular-nums">{value}</div>
       <div className="text-[11px] text-zinc-500">{label}</div>
@@ -331,22 +332,22 @@ export default function GeoStatsExplorer({
       <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
         <StatTile
           label="points"
-          value={data ? formatPoints(data.aggregate.total_value) : "—"}
+          value={data ? formatPoints(data.aggregate.total_value) : "-"}
           onClick={data ? () => setDetailStat("pts") : undefined}
         />
         <StatTile
           label="contributions"
-          value={data ? data.aggregate.contribution_count.toLocaleString() : "—"}
+          value={data ? data.aggregate.contribution_count.toLocaleString() : "-"}
           onClick={data ? () => setDetailStat("contributions") : undefined}
         />
         <StatTile
           label="contributors"
-          value={data ? data.aggregate.unique_contributors.toLocaleString() : "—"}
+          value={data ? data.aggregate.unique_contributors.toLocaleString() : "-"}
           onClick={data && data.top_users.length > 0 ? () => setDetailStat("contributors") : undefined}
         />
         <StatTile
           label="groups active"
-          value={data ? data.aggregate.unique_groups.toLocaleString() : "—"}
+          value={data ? data.aggregate.unique_groups.toLocaleString() : "-"}
           onClick={data && data.top_groups.length > 0 ? () => setDetailStat("groups") : undefined}
         />
       </div>
@@ -396,7 +397,7 @@ export default function GeoStatsExplorer({
       )}
 
       {level && data?.children && dataMatchesRequest && (
-        <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+        <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
           <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
             <span className="text-sm font-semibold text-zinc-300">{LEVEL_LABELS[level]} breakdown</span>
           </div>
@@ -465,7 +466,7 @@ export default function GeoStatsExplorer({
         </div>
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+      <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Groups</span>
         </div>
@@ -481,9 +482,7 @@ export default function GeoStatsExplorer({
               <li key={g.group_id} className="px-5 py-3 flex items-center gap-3">
                 <RankBadge rank={groupRanks[i]} />
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-xs font-bold shrink-0 text-emerald-400">
-                    {(g.name ?? "?")[0].toUpperCase()}
-                  </div>
+                  <Avatar avatarUrl={g.logo_url} name={g.name ?? "?"} size="sm" />
                   <span className="text-sm text-zinc-200 truncate font-medium">{g.name ?? "Unknown Group"}</span>
                 </div>
                 <div className="flex items-center gap-4 shrink-0 text-right">
@@ -517,7 +516,7 @@ export default function GeoStatsExplorer({
         )}
       </div>
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden shadow-elevation-1">
+      <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
           <span className="text-sm font-semibold text-zinc-300">Individuals</span>
         </div>

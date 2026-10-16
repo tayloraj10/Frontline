@@ -1,6 +1,6 @@
 """
 Demo data seeder: populates realistic activity for all 3 campaigns.
-Idempotent via deterministic UUIDs — safe to re-run.
+Idempotent via deterministic UUIDs: safe to re-run.
 """
 
 import json
@@ -189,7 +189,7 @@ _TRASH = [
 
 # (user_key, group_key_or_None, lat, lng, photo_seed, days_back, hour, notes)
 _GRASS = [
-    ("sarah",  "tb",   40.7851,  -73.9683,  10,  1.0, 10, "Central Park — golden hour walk"),
+    ("sarah",  "tb",   40.7851,  -73.9683,  10,  1.0, 10, "Central Park: golden hour walk"),
     ("olivia", "tb",   37.7694, -122.4862,  20,  2.0, 11, "Golden Gate Park"),
     ("alex",    None,  41.8762,  -87.6197,  30,  1.5,  9, "Grant Park lunch break"),
     ("maya",   "ms",   33.7878,  -84.3741,  40,  3.0, 14, "Piedmont Park afternoon run"),
@@ -200,16 +200,16 @@ _GRASS = [
     ("jordan",  None,  25.9312,  -80.1283,  90,  2.5,  9, "Oleta River State Park"),
     ("destiny", None,  29.7173,  -95.3904, 100,  3.0,  8, "Hermann Park"),
     ("olivia", "tb",   36.0544, -112.1401, 110,  7.0,  7, "Grand Canyon North Rim"),
-    ("sarah",  "tb",   47.8021, -123.6044, 120,  8.0,  9, "Olympic NP — Hoh Rainforest"),
+    ("sarah",  "tb",   47.8021, -123.6044, 120,  8.0,  9, "Olympic NP: Hoh Rainforest"),
     ("tyler",   None,  35.6532,  -83.5070, 130,  6.0, 10, "Smokies on a clear day"),
     ("alex",   "ccc",  37.7755, -119.5383, 140,  9.0,  8, "Yosemite Valley"),
-    ("sam",     None,  44.3386,  -68.2733, 150, 10.0, 11, "Acadia NP — Cadillac Mountain"),
+    ("sam",     None,  44.3386,  -68.2733, 150, 10.0, 11, "Acadia NP: Cadillac Mountain"),
     ("maya",    None,  25.2866,  -80.8987, 160,  4.0,  7, "Everglades kayak"),
     ("priya",   None,  48.1351,   11.5820, 170, 14.0, 14, "English Garden, Munich"),
     ("jordan",  None, -33.8688,  151.2093, 180, 20.0,  9, "Royal Botanic Garden, Sydney"),
     ("marcus",  None,  35.6762,  139.6503, 190, 25.0,  8, "Shinjuku Gyoen, Tokyo"),
     ("olivia", "tb",   44.9429, -123.0351, 200, 11.0,  9, "Silver Falls State Park"),
-    ("sarah",  "tb",   63.3334, -150.5007, 210, 30.0, 11, "Denali — Reflection Pond"),
+    ("sarah",  "tb",   63.3334, -150.5007, 210, 30.0, 11, "Denali: Reflection Pond"),
     ("tyler",  "ms",   43.0731,  -89.4012, 220,  5.0, 10, "UW Arboretum, Madison"),
     ("alex",    None,  39.7392, -104.9903, 230,  3.0, 16, "Washington Park"),
     ("sam",    "ccc",  38.5816, -121.4944, 240, 12.0,  8, "American River Parkway"),
@@ -719,8 +719,8 @@ class DemoDataSeeder(Seeder):
                 "cid": TRASH_WAR_ID,
                 "geo_id": chicago_geo,
                 "etype": "boss_spawn",
-                "title": "Boss Event: Downtown Chicago Hotspot",
-                "desc": "A surge of illegal dumping near the Loop. Responders needed — every bag counts double.",
+                "title": "Hotspot: Downtown Chicago Hotspot",
+                "desc": "A surge of illegal dumping near the Loop. Responders needed. Every bag counts double.",
                 "effect": json.dumps({"type": "score_multiplier", "multiplier": 2.0, "duration_hours": 72}),
                 "ends_at": _ts(-7, 12),
             },
@@ -729,7 +729,7 @@ class DemoDataSeeder(Seeder):
                 "cid": TRASH_WAR_ID,
                 "geo_id": houston_geo,
                 "etype": "boss_spawn",
-                "title": "Boss Event: Bayou City Cleanup",
+                "title": "Hotspot: Bayou City Cleanup",
                 "desc": "Heavy rains pushed debris into Buffalo Bayou. Emergency cleanup needed now.",
                 "effect": json.dumps({"type": "score_multiplier", "multiplier": 1.5, "duration_hours": 48}),
                 "ends_at": _ts(-5, 18),
@@ -739,7 +739,7 @@ class DemoDataSeeder(Seeder):
                 "cid": ROAD_ID,
                 "geo_id": None,
                 "etype": "cascade_unlock",
-                "title": "Independence Wave — 3 States Flipped",
+                "title": "Independence Wave: 3 States Flipped",
                 "desc": "Florida, Texas, and California have all crossed 10 independent registrations. The wave is building.",
                 "effect": json.dumps({"bonus_registrations": 50}),
                 "ends_at": _ts(-14, 12),
@@ -788,7 +788,8 @@ class DemoDataSeeder(Seeder):
                         (:id, :cid, 'Trash Hotspot Trigger', 'report_count',
                          jsonb_build_object(
                              'threshold',
-                             (SELECT value FROM game_settings WHERE key = 'report_count_threshold_default')
+                             (SELECT value FROM game_settings WHERE key = 'report_count_threshold_default'),
+                             'title', 'Trash Hotspot: Surge Needed!'
                          ), 'boss_spawn',
                          '{"type": "score_multiplier", "multiplier": 2.0}'::jsonb, TRUE)
                     ON CONFLICT (id) DO UPDATE SET
