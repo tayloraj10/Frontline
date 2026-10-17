@@ -1347,6 +1347,7 @@ export default function CampaignPageClient({
         userLocation={userLocation}
         focusCoords={focusCoords}
         activeStyle={activeMapStyle}
+        onStyleChange={setActiveMapStyle}
         nycNeighborhoodsVisible={nycNeighborhoodsVisible}
         problemReports={localProblemReports}
         onReportClick={setClickedReport}

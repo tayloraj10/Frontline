@@ -459,6 +459,7 @@ interface Props {
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   activeStyle?: StyleId;
+  onStyleChange?: (id: StyleId) => void;
   problemReports?: ProblemReports | null;
   onReportClick?: (report: ProblemReportMapData) => void;
   eventCentroids?: Record<string, { lat: number; lng: number }>;
@@ -1896,6 +1897,7 @@ export default function CampaignMap({
   userLocation,
   focusCoords,
   activeStyle = "outdoor",
+  onStyleChange,
   problemReports,
   onReportClick,
   eventCentroids,
@@ -4517,6 +4519,26 @@ export default function CampaignMap({
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
+    // MapLibre force-opens compact attribution on narrow containers, leaving the full
+    // credit strip running under the bottom-left buttons. Start it collapsed to the (i)
+    // icon; tapping the icon still toggles the full credit text.
+    // Runs on first idle because the control stays "attrib-empty" (not yet compact) until
+    // the basemap sources report their credits.
+    // Keeps re-collapsing on every idle (MapLibre re-opens it on resize/style/source
+    // changes) until the user taps the (i) icon themselves.
+    let attribTouched = false;
+    const collapseAttrib = () => {
+      if (attribTouched) return;
+      const el = map.current?.getContainer().querySelector(".maplibregl-ctrl-attrib");
+      el?.removeAttribute("open");
+      el?.classList.remove("maplibregl-compact-show");
+    };
+    map.current
+      .getContainer()
+      .querySelector(".maplibregl-ctrl-attrib-button")
+      ?.addEventListener("click", () => { attribTouched = true; });
+    collapseAttrib();
+    map.current.on("idle", collapseAttrib);
 
     const ro = new ResizeObserver(() => map.current?.resize());
     ro.observe(mapContainer.current);
@@ -6013,7 +6035,7 @@ export default function CampaignMap({
         // to overlap each other and the left-side ContributionPanel controls on
         // narrow viewports. Collapsed, this is one small button; expanded, it's a
         // fixed-width panel that grows upward, matching common map-app "Layers" menus.
-        <div className={`absolute bottom-12 flex flex-col items-end gap-2 text-xs w-[min(88vw,18rem)] ${legendOpen ? "right-14 z-40" : "right-4 z-10"}`}>
+        <div className={`absolute bottom-14 sm:bottom-12 flex flex-col items-end gap-2 text-xs w-[min(88vw,18rem)] ${legendOpen ? "right-14 z-40" : "right-4 z-10"}`}>
           <button
             onClick={() => setLegendOpen((v) => !v)}
             className="relative flex items-center gap-2 h-11 pl-3.5 pr-4 bg-zinc-900/90 rounded-full backdrop-blur-md shadow-elevation-3 text-sm font-semibold text-zinc-100 transition-[background-color,transform] duration-150 hover:bg-zinc-800/90 active:scale-[0.96] touch-manipulation"
@@ -6055,6 +6077,25 @@ export default function CampaignMap({
                   </svg>
                 </button>
               </div>
+              {onStyleChange && (
+                // Mobile only: on wider screens the basemap toggle stays in ContributionPanel's bottom-left stack
+                <div className="sm:hidden px-2 pb-1.5">
+                  <p className="px-1 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Map style</p>
+                  <div className="flex gap-1.5">
+                    {MAP_STYLES.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => { onStyleChange(s.id); setLegendOpen(false); }}
+                        aria-pressed={activeStyle === s.id}
+                        className={`flex-1 min-h-9 rounded-full px-3 text-xs font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.95] touch-manipulation ${activeStyle === s.id ? "bg-zinc-600 text-zinc-100" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {!isChoropleth && !isHeatmap && !isHexBloom && (
                 <>
                   <div className="flex items-center justify-between gap-2 pr-2">
@@ -6067,11 +6108,17 @@ export default function CampaignMap({
                   {([
                     { caption: null as string | null, badges: null as string[] | null, opts: [{ id: "zip", label: isUkViewport ? "Postcodes" : "Zip codes" }, ...(campaign.slug === "trash-war" ? [{ id: "borough", label: "NYC Boroughs" }] : [])] },
                     ...(campaign.slug === "trash-war" ? [
-                      { caption: "NYC, Philadelphia, Chicago, LA", badges: ["NYC", "PHL", "CHI", "LA"], opts: [{ id: "neighborhood", label: "Neighborhood" }, { id: "city", label: "Cities" }] },
+                      { caption: null as string | null, badges: ["NYC", "PHL", "CHI", "LA"] as string[] | null, opts: [{ id: "neighborhood", label: "Neighborhood" }, { id: "city", label: "Cities" }] },
                     ] : []),
                   ]).map((group, gi) => (
-                    <div key={gi} className="px-2 pb-1.5">
-                      {group.caption && <p className="px-1 pb-1 text-[11px] text-zinc-500">{group.caption}</p>}
+                    <div key={gi} className={group.badges ? "mx-2 mb-1.5 p-2 rounded-2xl bg-sky-500/10 ring-1 ring-inset ring-sky-400/25" : "px-2 pb-1.5"}>
+                      {group.badges && (
+                        <div className="px-1 pb-2 flex flex-wrap gap-1">
+                          {group.badges.map((b) => (
+                            <span key={b} className="px-2 py-0.5 rounded-full bg-sky-400/20 text-[11px] font-bold tracking-wide text-sky-200">{b}</span>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-1.5">
                         {group.opts.map((opt) => {
                           const active =
