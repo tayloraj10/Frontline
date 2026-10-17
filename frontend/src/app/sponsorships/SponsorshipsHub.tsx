@@ -178,14 +178,18 @@ const STATUS_VARIANT: Record<SponsorshipStatus, BadgeVariant> = {
   exhausted: "neutral",
 };
 
+export type PanelId = "claim" | "fund" | "review" | "all";
+
 export default function SponsorshipsHub({
   businesses,
   currentUserId,
   isAdmin,
+  open,
 }: {
   businesses: { id: string; name: string }[];
   currentUserId: string;
   isAdmin: boolean;
+  open: PanelId | null;
 }) {
   const [sponsorships, setSponsorships] = useState<Sponsorship[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -340,6 +344,7 @@ export default function SponsorshipsHub({
 
   return (
     <div>
+      <div id="fund-cleanups" className={open === "fund" ? "scroll-mt-20" : "hidden"}>
       <Section
         title="Fund cleanups"
         description="Pick where your money goes, then set how it pays out. Your money is only paid out after the work is verified."
@@ -536,12 +541,18 @@ export default function SponsorshipsHub({
           )}
         </Card>
       </Section>
-
-      {isAdmin && <AllocationReview />}
+      </div>
 
       {isAdmin && (
+        <div id="allocation-review" className={open === "review" ? "scroll-mt-20" : "hidden"}>
+          {open === "review" && <AllocationReview />}
+        </div>
+      )}
+
+      {isAdmin && (
+      <div id="all-sponsorships" className={open === "all" ? "scroll-mt-20" : "hidden"}>
       <Section
-        title="All sponsorships"
+        title="Every sponsorship, all statuses"
         description="Admin only. Mark released closes a funded sponsorship once its money has gone out. It stays in this list, but leaves the map."
         action={
           <div className="w-44">
@@ -633,6 +644,7 @@ export default function SponsorshipsHub({
           })}
         </div>
       </Section>
+      </div>
       )}
     </div>
   );

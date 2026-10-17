@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { circleRing, type LngLat } from "@/lib/areaShape";
 import { ExpandIcon, mapIconBtn, newGeolocateControl } from "./sponsorMapControls";
 import { cn } from "@/lib/cn";
+import { useSponsoredMapLayer } from "./useSponsoredMapLayer";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 const SRC = "shape-picker";
@@ -64,6 +65,9 @@ export default function ShapePickerMap({
   const live = useRef({ mode, vertices, onPoint, onVertices });
   live.current = { mode, vertices, onPoint, onVertices };
 
+  // Existing funded sites and areas, shown for context so new sponsorships do not stack on top of old ones.
+  useSponsoredMapLayer(mapRef, true, { availableOnly: false, listenForFocus: false });
+
   useEffect(() => {
     if (!container.current || mapRef.current) return;
     const m = new maplibregl.Map({
@@ -92,6 +96,9 @@ export default function ShapePickerMap({
       setStyleVersion((v) => v + 1);
     });
     m.on("click", (e) => {
+      // Tapping an existing sponsor pin or popup should open it, not drop a new pin underneath.
+      const t = e.originalEvent?.target as HTMLElement | undefined;
+      if (t?.closest?.(".maplibregl-marker, .maplibregl-popup")) return;
       const { mode: md, vertices: vs, onPoint: setPoint, onVertices: setVertices } = live.current;
       const p: LngLat = [e.lngLat.lng, e.lngLat.lat];
       if (md === "point") setPoint(p);
@@ -248,6 +255,11 @@ export default function ShapePickerMap({
           ))}
         </div>
       </div>
+      {!expanded && (
+        <p className="mt-2 text-xs text-zinc-500">
+          Dollar-tagged pins and dashed outlines are sponsorships that already exist. Check them before placing yours.
+        </p>
+      )}
     </div>
   );
 }

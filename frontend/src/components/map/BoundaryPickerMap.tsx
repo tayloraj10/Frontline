@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { LngLat } from "@/lib/areaShape";
 import { ExpandIcon, mapIconBtn, newGeolocateControl } from "./sponsorMapControls";
 import { cn } from "@/lib/cn";
+import { useSponsoredMapLayer } from "./useSponsoredMapLayer";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 const SRC = "boundary-picker";
@@ -72,6 +73,9 @@ export default function BoundaryPickerMap({
   live.current = { unitType, selectedIds, onToggle, atLimit };
 
   const minZoom = MIN_ZOOM_BY_TYPE[unitType] ?? 0;
+
+  // Existing funded sites and areas, so a new area does not stack on top of old ones.
+  useSponsoredMapLayer(mapRef, true, { listenForFocus: false });
 
   useEffect(() => {
     if (!container.current || mapRef.current) return;

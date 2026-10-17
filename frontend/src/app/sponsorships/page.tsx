@@ -4,9 +4,7 @@ import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible } from "@/lib/paymentsVisibility";
 import { PageHeader, PageShell } from "@/components/ui/PageShell";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
-import SponsoredMap from "./SponsoredMap";
-import SponsoredSites from "./SponsoredSites";
-import SponsorshipsHub from "./SponsorshipsHub";
+import SponsorshipsPanels from "./SponsorshipsPanels";
 import { getSponsorBusinesses } from "@/lib/sponsorBusinesses";
 
 export default async function SponsorshipsPage() {
@@ -34,9 +32,7 @@ export default async function SponsorshipsPage() {
         subtitle="Fund cleanups or the mission. Test mode only, no payouts yet."
         action={<FlowGuide id="funding" variant="link" label="How does funding work?" />}
       />
-      <SponsoredMap />
-      <SponsoredSites />
-      <SponsorshipsHub businesses={businessOptions} currentUserId={user.id} isAdmin={isAdmin} />
+      <SponsorshipsPanels businesses={businessOptions} currentUserId={user.id} isAdmin={isAdmin} />
     </PageShell>
   );
 }

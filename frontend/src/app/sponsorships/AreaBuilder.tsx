@@ -202,6 +202,9 @@ export default function AreaBuilder({
                 atLimit={atUnitLimit}
                 flyTo={flyTo}
               />
+              <p className="mt-2 text-xs text-zinc-500">
+                Dollar-tagged pins and dashed outlines are sponsorships that already exist. Check them before picking yours.
+              </p>
             </div>
           </Field>
           <p className="text-xs font-medium text-zinc-400">Or search by name</p>
