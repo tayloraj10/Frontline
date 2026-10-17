@@ -1170,7 +1170,7 @@ function TerritoryPanel({
 
   return (
     <>
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-40 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
 
       {/* Header */}
@@ -1193,7 +1193,7 @@ function TerritoryPanel({
                 Contested
               </span>
             )}
-            <IconButton onClick={onClose} className="-mr-2.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+            <IconButton onClick={onClose} className="-mr-2.5 -mt-1.5 text-3xl leading-none text-zinc-400 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150" aria-label="Close">×</IconButton>
           </div>
         </div>
 
@@ -1485,7 +1485,7 @@ function StatePanel({
   const party = Math.abs(lean) < 0.15 ? "Swing" : isR ? "Republican" : "Democrat";
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-40 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: accentColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -1494,7 +1494,7 @@ function StatePanel({
             <p className="text-xl font-black leading-none tracking-tight text-zinc-100">{displayName}</p>
             <p className="mt-1 text-xs" style={{ color: accentColor }}>{party}</p>
           </div>
-          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-3xl leading-none text-zinc-400 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
@@ -1583,7 +1583,7 @@ function HexPanel({
   }, [campaignId, entry.h3_index, refreshKey]);
 
   return (
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-20 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
+    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-40 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
       <div className="absolute inset-y-0 left-0 w-[2px]" style={{ background: stageColor }} />
       <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
         <div className="flex items-start justify-between">
@@ -1591,7 +1591,7 @@ function HexPanel({
             <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">H3 Hex · Stage {entry.bloom_stage}</p>
             <p className="text-base font-bold text-zinc-100 leading-tight" style={{ color: stageColor }}>{stageLabel}</p>
           </div>
-          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-xl leading-none text-zinc-600 hover:text-zinc-300 active:text-zinc-300 transition-colors duration-150" aria-label="Close">×</IconButton>
+          <IconButton onClick={onClose} className="ml-2 -mr-2.5 -mt-1.5 text-3xl leading-none text-zinc-400 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150" aria-label="Close">×</IconButton>
         </div>
       </div>
       <div className="px-4 pt-3 pb-4">
