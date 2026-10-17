@@ -30,3 +30,4 @@ backend/data/
 *.keystore
 frontend/android/app/keystore.properties
 
+dev-docs/store-assets/screenshots/raw/

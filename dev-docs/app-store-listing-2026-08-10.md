@@ -22,39 +22,23 @@ Cleanups, mapped & gamified
 
 ### Promotional text (170 char max — the only field editable without a new build review)
 ```
-Log cleanups, claim territory on the map, and compete with your city. Join a live campaign near you and turn collective action into a game.
+Clean your neighborhood, earn points, and spend them at local shops. See what's happening near you: cleanups, trash reports, events, partners, and hotspots.
 ```
-158 chars.
+156 chars.
 
 ### Description (4000 char max)
 ```
-Frontline turns real-world cleanup work into a live map game. Join a campaign, log what you pick up, and watch your zip code, neighborhood, or borough climb the board.
+Frontline is a free, live map of neighborhood cleanups. Log what you clean up and watch the impact add up alongside everyone else taking part.
 
-HOW IT WORKS
-• Browse active campaigns on a live map — see claimed territory, hotspots, and activity near you.
-• Log a contribution: drop a pin (GPS or manual), record bag counts or pounds collected, or trace a route you walked. Add a photo to back it up.
-• Claim territory for yourself or your group, or just track neighborhood stats without the competition layer — your call.
-• Spot trash that needs attention? Report it with a pin and photo. Claim an open report, submit before/after photos, and turn the cleanup into a logged contribution.
-
-CLEANUP EVENTS
-• Find group-hosted cleanup events near you and RSVP.
-• Check in with GPS or a join code — no app fumbling required once you're on site.
-• See who showed up, what got logged, and photos from the day.
-
-GROUPS
-• Join or start a group with your block, school, or community org.
-• Compete on the leaderboard, coordinate events, and track your group's total impact.
-
-PARTNER REWARDS
-• Local businesses back the effort — redeem points for real offers from partner businesses near your campaign.
-
-MILESTONES & PROGRESS
-• Track your points, bag counts, and pounds collected against milestone ladders.
-• See your personal history and where you rank citywide.
-
-Frontline is free to use. Location access is used to log contributions accurately and show you nearby activity — you control when it's shared. Camera/photo access is only used when you choose to attach a photo to a cleanup or report.
+• Log cleanups with a pin, bag counts or pounds, or a route you walked, and add a photo.
+• Report trash, then claim it and turn it into a logged cleanup with before-and-after photos.
+• See cleanups, trash reports, events, partners, and hotspots near you, with stats by zip code, neighborhood, and borough.
+• Find group-hosted cleanup events, RSVP, and check in with GPS or a join code.
+• Join or start a group, compete on the leaderboard, and track your group's impact.
+• Redeem points for offers from partner businesses. Rewards are currently focused on the New York City area, with more markets planned.
+• Join Trash War, our flagship cleanup map.
 ```
-~1,550 chars — well under the limit, leaves room to grow.
+Location/camera disclosure deliberately left out of the description: it is covered by the permission prompts (Info.plist), the App Privacy label, and the privacy policy.
 
 ### Keywords (100 char max, comma-separated, no spaces needed but conventional to omit them)
 ```
