@@ -4,7 +4,7 @@
     {
       "label": "Supabase: Start",
       "type": "shell",
-      "command": "npx supabase start",
+      "command": "npx -y supabase start",
       "options": { "cwd": "${workspaceFolder}" },
       "isBackground": true,
       "problemMatcher": {
