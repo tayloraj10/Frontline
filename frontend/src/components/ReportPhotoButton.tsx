@@ -12,6 +12,7 @@ export default function ReportPhotoButton({
   userId,
   onHidden,
   className = "",
+  subtle = false,
 }: {
   contentType: ContentType;
   contentId: string;
@@ -19,6 +20,7 @@ export default function ReportPhotoButton({
   userId: string | null;
   onHidden?: () => void;
   className?: string;
+  subtle?: boolean;
 }) {
   const [state, setState] = useState<"idle" | "confirming" | "submitting" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,42 @@ export default function ReportPhotoButton({
   };
 
   if (state === "done") {
-    return <p className={`text-xs text-zinc-500 ${className}`}>Reported, thanks for flagging this.</p>;
+    return <p className={`text-xs text-zinc-500 ${className}`}>{subtle ? "Reported" : "Reported, thanks for flagging this."}</p>;
+  }
+
+  if (state === "confirming" && subtle) {
+    // Floats below the button so the long prompt can't widen the avatar column.
+    return (
+      <div className={`relative ${className}`}>
+        <span className="inline-flex items-center justify-center min-h-7 px-2.5 rounded-full bg-zinc-800 text-xs font-semibold text-red-300">
+          🚩 Report photo
+        </span>
+        <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-2xl bg-zinc-900 p-3 shadow-lg ring-1 ring-zinc-800 flex flex-col gap-2">
+          <p className="text-xs text-zinc-400">
+            Report this photo as inappropriate?
+            {threshold !== undefined && (
+              <>
+                {" "}It&apos;s automatically hidden once {threshold} people report it, and an admin reviews every report.
+              </>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleReport}
+              className="inline-flex items-center justify-center min-h-9 px-3.5 rounded-full bg-red-600 hover:bg-red-500 text-xs font-bold text-white active:scale-[0.97] transition-[background-color,transform] duration-150"
+            >
+              Yes, report it
+            </button>
+            <button
+              onClick={() => setState("idle")}
+              className="inline-flex items-center justify-center min-h-9 px-3.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (state === "confirming") {
@@ -92,7 +129,11 @@ export default function ReportPhotoButton({
       <button
         onClick={() => setState("confirming")}
         disabled={state === "submitting"}
-        className="disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-red-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
+        className={
+          subtle
+            ? "disabled:opacity-40 inline-flex items-center justify-center min-h-7 px-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-red-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
+            : "disabled:opacity-40 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-red-300 active:scale-[0.97] transition-[background-color,transform] duration-150"
+        }
       >
         {state === "submitting" ? "Reporting…" : "🚩 Report photo"}
       </button>

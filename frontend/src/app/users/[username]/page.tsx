@@ -254,7 +254,7 @@ export default async function UserProfilePage({ params }: Props) {
               )}
             </div>
             {profile.avatar_url && !isOwn && currentUser && (
-              <ReportPhotoButton contentType="avatar" contentId={profile.id} photoUrl={profile.avatar_url} userId={currentUser.id} className="mt-1" />
+              <ReportPhotoButton subtle contentType="avatar" contentId={profile.id} photoUrl={profile.avatar_url} userId={currentUser.id} className="mt-2.5" />
             )}
           </div>
           <div className="min-w-0">
