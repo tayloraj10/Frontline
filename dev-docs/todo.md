@@ -19,7 +19,7 @@ Legend: anything after a `!` is a note for Claude. On a task, the text after `!`
 
 - [ ] Scope new point-earning actions, especially ones that work in cold and bad weather. Two buckets: greening actions (planting, watering, composting, etc.) and winter-proof or indoor activities, since people won't pick up trash when it's cold. Needs a new scoping doc. Also ties into the plan to fold everything into one master campaign.  Docs: none yet, write a new scoping doc. Related: random-bonus-spots-scoping, hotspot-hero-challenge-scoping, campaign-app-scope.
 - [ ] Resume testing and finish `money-and-payments` (see Branches) Docs: payments-v2-test-plan-2026-10-15, branch-tracker.
-- [ ] Move Railway crons to Infrastructure as Code before 2026-12-01 (`.railway/railway.ts` draft, master-backlog)
+- [x] Move Railway crons to Infrastructure as Code before 2026-12-01. Done 2026-10-17: `.railway/railway.ts` applied to prod, the 5 `backend/railway*.toml` files deleted. Future config changes: edit the file, then `railway.exe config plan` and `config apply --yes` (it does not apply on git push). Left: apply the `watchPatterns` change (backend-only deploys), check Vercel skips frontend builds for backend-only pushes.
 - [ ] Lock down FastAPI auth, e.g. `/api/account/{user_id}` trusts the path id (master-backlog)
 - [ ] Fix push notifications, iOS first (push-notifications-ios-debugging)
 
@@ -139,7 +139,7 @@ Linked to a task above:
 Everything currently uncommitted, and what it relates to. Nothing here is committed.
 
 - New docs (all untracked, all covered above): the 12 scoping docs listed in the index, `branch-tracker.md`, and this file
-- `.railway/railway.ts`: draft for the Railway IaC task under Now
+- `.railway/railway.ts`, `.railway/package.json` and lockfile (railway SDK, run `npm install` in `.railway/` on a fresh clone), deletion of the 5 `backend/railway*.toml` files: the Railway IaC task under Now. `railway.ts` is already applied to prod
 - `dev-docs/master-backlog.md`: new working-order lists, items marked done, payments entries
 - `dev-docs/campaign-app-scope.md` and `external-docs/app-capability-doc.md`: new Payments v2 and Frontline Plus sections. Payments v2 only exists on `money-and-payments`, so these edits arguably belong on that branch rather than master
 - `.vscode/tasks.json`: one-line change, `npx supabase start` to `npx -y supabase start`. No task, harmless tooling tweak

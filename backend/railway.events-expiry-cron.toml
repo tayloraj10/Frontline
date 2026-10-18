@@ -1,8 +1,0 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
-
-[deploy]
-startCommand = "python scripts/run_events_expiry.py"
-cronSchedule = "*/30 * * * *"
-restartPolicyType = "NEVER"
