@@ -19,7 +19,8 @@ Last updated: 2026-09-13.
 - Edit profile: display name, username, bio, avatar (R2 upload) — `/settings/profile`.
 - Account settings (`/settings/account`): change password (re-verifies current password live before allowing the change), change email (blocked for Google OAuth accounts — "managed through Google"), permanently delete account (must type "delete my account" exactly; cascades to profile + contributions).
 - View own or any user's public profile at `/users/[username]`.
-- View global leaderboard (`/leaderboard`).
+- View global leaderboard (`/leaderboard`), including a banner for whoever holds the longest active weekly cleanup streak (ties show everyone).
+- See any user's weekly cleanup streak on their profile (the goal progress and actions stay own-profile only).
 - **Legal re-acceptance gate exists but is currently disabled** — `LEGAL_GATE_ENABLED = false` in `LegalGate.tsx`. When on, it blocks existing/OAuth/stale-version users with a full-screen re-accept modal.
 
 ### Campaigns & Territory Gameplay
