@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { uploadToR2 } from "@/lib/uploadToR2";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 import { FlowFooter } from "@/components/ui/FlowSheet";
@@ -135,15 +136,7 @@ function extractHandle(url: string | null | undefined, baseUrl: string): string 
 }
 
 export async function uploadPartnerLogo(file: File): Promise<string> {
-  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
-  const res = await fetch(
-    `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}&kind=partners`
-  );
-  if (!res.ok) throw new Error("Failed to get upload URL");
-  const { upload_url, public_url } = await res.json();
-  const uploadRes = await fetch(upload_url, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-  if (!uploadRes.ok) throw new Error("Logo upload failed");
-  return public_url;
+  return uploadToR2(file, "partners");
 }
 
 export default function BusinessForm({ initial, initialCampaignIds, campaigns, onSubmit, onCancel, submitLabel }: {
