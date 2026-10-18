@@ -8,8 +8,8 @@ const DISMISS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const APP_STORE_URL =
   process.env.NEXT_PUBLIC_APP_STORE_URL ?? "https://apps.apple.com/ca/app/frontline-maps/id6799487822";
-// Android isn't published yet: set NEXT_PUBLIC_PLAY_STORE_URL to show its button.
-const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL;
+const PLAY_STORE_URL =
+  process.env.NEXT_PUBLIC_PLAY_STORE_URL ?? "https://play.google.com/store/apps/details?id=com.frontlinemaps.app";
 
 function StoreButton({ href, kicker, label }: { href: string; kicker: string; label: string }) {
   return (
@@ -73,7 +73,7 @@ export default function AppPromoCard({ className = "" }: { className?: string })
           Log cleanups from the field with your phone camera and GPS, and see your points and rewards at a glance.
         </p>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-4">
         {APP_STORE_URL && <StoreButton href={APP_STORE_URL} kicker="Download on the" label="App Store" />}
         {PLAY_STORE_URL && <StoreButton href={PLAY_STORE_URL} kicker="Get it on" label="Google Play" />}
       </div>
