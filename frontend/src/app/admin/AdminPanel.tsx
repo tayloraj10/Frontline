@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { uploadToR2 } from "@/lib/uploadToR2";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -1212,21 +1213,7 @@ function EventsTab({ campaigns, events, setEvents, currentUserId }: {
     setImagePreview(URL.createObjectURL(file));
   };
 
-  const uploadEventImage = async (file: File): Promise<string> => {
-    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
-    const res = await fetch(
-      `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}&kind=events`
-    );
-    if (!res.ok) throw new Error("Failed to get upload URL");
-    const { upload_url, public_url } = await res.json();
-    const uploadRes = await fetch(upload_url, {
-      method: "PUT",
-      body: file,
-      headers: { "Content-Type": file.type },
-    });
-    if (!uploadRes.ok) throw new Error("Image upload failed");
-    return public_url;
-  };
+  const uploadEventImage = (file: File): Promise<string> => uploadToR2(file, "events");
 
   const updateStatus = async (eventId: string, status: "active" | "paused" | "cancelled") => {
     setPendingId(eventId);

@@ -1,4 +1,5 @@
 import { uploadEventImage } from "@/lib/events";
+import { uploadToR2 } from "@/lib/uploadToR2";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
@@ -494,19 +495,7 @@ export async function promoteOrganizer({
 }
 
 export async function uploadEventPhoto(file: File): Promise<string> {
-  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
-  const res = await fetch(
-    `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}`
-  );
-  if (!res.ok) throw new Error("Failed to get upload URL");
-  const { upload_url, public_url } = await res.json();
-  const uploadRes = await fetch(upload_url, {
-    method: "PUT",
-    body: file,
-    headers: { "Content-Type": file.type },
-  });
-  if (!uploadRes.ok) throw new Error("Image upload failed");
-  return public_url;
+  return uploadToR2(file);
 }
 
 export async function addEventPhotos({

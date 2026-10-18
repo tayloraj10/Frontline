@@ -1,5 +1,10 @@
-export async function uploadToR2(file: File): Promise<string> {
-  const params = new URLSearchParams({ filename: file.name, content_type: file.type });
+import { normalizeImageForUpload } from "@/lib/normalizeImage";
+
+export type UploadKind = "contributions" | "groups" | "profiles" | "events" | "partners" | "team_events";
+
+export async function uploadToR2(original: File, kind: UploadKind = "contributions"): Promise<string> {
+  const file = await normalizeImageForUpload(original);
+  const params = new URLSearchParams({ filename: file.name, content_type: file.type, kind });
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/upload/presign?${params}`,
   );

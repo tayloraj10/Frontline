@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { uploadToR2 } from "@/lib/uploadToR2";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -48,21 +49,7 @@ export default function GroupEditForm({ groupId, slug, name, description, social
     setLogoPreview(URL.createObjectURL(file));
   };
 
-  const uploadLogo = async (file: File): Promise<string> => {
-    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
-    const res = await fetch(
-      `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}&kind=groups`
-    );
-    if (!res.ok) throw new Error("Failed to get upload URL");
-    const { upload_url, public_url } = await res.json();
-    const uploadRes = await fetch(upload_url, {
-      method: "PUT",
-      body: file,
-      headers: { "Content-Type": file.type },
-    });
-    if (!uploadRes.ok) throw new Error("Upload failed");
-    return public_url;
-  };
+  const uploadLogo = (file: File): Promise<string> => uploadToR2(file, "groups");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

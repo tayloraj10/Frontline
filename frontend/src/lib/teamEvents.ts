@@ -1,3 +1,4 @@
+import { uploadToR2 } from "@/lib/uploadToR2";
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api${path}`, {
     method: "POST",
@@ -195,18 +196,6 @@ export async function createTeamEvent({
     image_url: imageUrl ?? null,
     teams: teams.map((t) => ({ name: t.name.trim(), color: t.color ?? null, logo_url: t.logoUrl ?? null })),
   });
-}
-
-async function uploadToR2(file: File, kind: string): Promise<string> {
-  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
-  const res = await fetch(
-    `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}&kind=${kind}`
-  );
-  if (!res.ok) throw new Error("Failed to get upload URL");
-  const { upload_url, public_url } = await res.json();
-  const uploadRes = await fetch(upload_url, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-  if (!uploadRes.ok) throw new Error("Upload failed");
-  return public_url;
 }
 
 export async function uploadTeamEventLogo(file: File): Promise<string> {

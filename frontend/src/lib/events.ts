@@ -1,3 +1,4 @@
+import { uploadToR2 } from "@/lib/uploadToR2";
 import { createClient } from "@/lib/supabase/client";
 import type { SelectedArea } from "@/app/admin/EventAreaMapPicker";
 import type { Json } from "@/types/database";
@@ -16,19 +17,7 @@ export type CreatedEvent = {
 };
 
 export async function uploadEventImage(file: File): Promise<string> {
-  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
-  const res = await fetch(
-    `${fastApiUrl}/api/upload/presign?filename=${encodeURIComponent(file.name)}&content_type=${encodeURIComponent(file.type)}&kind=events`
-  );
-  if (!res.ok) throw new Error("Failed to get upload URL");
-  const { upload_url, public_url } = await res.json();
-  const uploadRes = await fetch(upload_url, {
-    method: "PUT",
-    body: file,
-    headers: { "Content-Type": file.type },
-  });
-  if (!uploadRes.ok) throw new Error("Image upload failed");
-  return public_url;
+  return uploadToR2(file, "events");
 }
 
 export async function createTimedEvent({
