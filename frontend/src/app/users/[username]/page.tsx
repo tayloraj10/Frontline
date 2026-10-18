@@ -293,7 +293,16 @@ export default async function UserProfilePage({ params }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="min-w-0 space-y-6">
-          {/* Weekly goal + streak: own profile only */}
+          {/* Streak: visible to everyone; weekly goal and actions are own profile only */}
+          {!isOwn && (
+            <div className={`${card} p-5 flex items-center justify-between gap-4`}>
+              <h2 className="font-display text-base font-extrabold tracking-tight text-zinc-100">Cleanup streak</h2>
+              <div className="text-right">
+                <div className="font-display text-2xl font-extrabold tabular-nums text-emerald-400">{streak}</div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">week streak</div>
+              </div>
+            </div>
+          )}
           {isOwn && (
             <div className={`${card} p-5`}>
               <div className="flex items-start justify-between gap-4">
