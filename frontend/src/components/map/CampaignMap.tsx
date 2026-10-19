@@ -4536,7 +4536,16 @@ export default function CampaignMap({
     map.current
       .getContainer()
       .querySelector(".maplibregl-ctrl-attrib-button")
-      ?.addEventListener("click", () => { attribTouched = true; });
+      ?.addEventListener("click", () => {
+        attribTouched = true;
+        // Runs after the native <details> toggle so `open` reflects the new state.
+        setTimeout(() => {
+          const el = map.current?.getContainer().querySelector(".maplibregl-ctrl-attrib");
+          if (!el) return;
+          if (el.hasAttribute("open")) el.setAttribute("data-user-open", "");
+          else el.removeAttribute("data-user-open");
+        }, 0);
+      });
     collapseAttrib();
     map.current.on("idle", collapseAttrib);
 

@@ -603,12 +603,19 @@ html, body {
 .maplibregl-ctrl-attrib.maplibregl-compact-show:not([open]) .maplibregl-ctrl-attrib-inner {
   display: none;
 }
+/* MapLibre opens the compact control on add and re-opens it on resize/source
+   changes, so the credit text flashed open on load until CampaignMap's first
+   idle handler collapsed it. Only show the text once the user has tapped the (i)
+   (CampaignMap sets data-user-open), regardless of MapLibre's own open state. */
+.maplibregl-ctrl-attrib:not([data-user-open]) .maplibregl-ctrl-attrib-inner {
+  display: none;
+}
 
 /* On mobile the opened credit text is wrapped into a narrow block that grows upward
    from the (i) icon, so it never runs left under the bottom-left action buttons. */
 @media (max-width: 639px) {
   .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner {
-    max-width: 9.5rem;
+    max-width: 14rem;
     white-space: normal;
     text-align: right;
     line-height: 1.3;
