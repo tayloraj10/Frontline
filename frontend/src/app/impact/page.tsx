@@ -67,7 +67,7 @@ export default async function ImpactPage() {
       />
 
       {!summary ? (
-        <EmptyState title="Numbers are unavailable right now" body="Check that the API is running and ADMIN_API_SECRET is set." />
+        <EmptyState title="Numbers are unavailable right now" body="Please try again in a few minutes." />
       ) : (
         <>
           <Section title="Impact">
