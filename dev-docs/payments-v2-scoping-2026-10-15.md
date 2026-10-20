@@ -76,10 +76,23 @@ Approved allocations accumulate as "owed". `paid_out` is a manual admin action. 
 3. Frontline Plus plan page + $5 price wiring (needs Stripe test Product/Price).
 4. `/impact` page + `GET /payments/impact-summary`.
 5. DONE (not live-tested): sponsored cleanups: migrations 115 and 116, funding flow with payout-rule picker, site claim flow, allocations, admin review queue, group area picker in event creation (`SponsoredAreaPicker`, shared by `CreateCleanupEventForm` and the `ContributionPanel` modal). Group allocations are queued only when an organizer logs a team total; individual-logging events do not create them.
-6. Docs: update `branch-tracker.md`, `master-backlog.md`, `app-capability-doc.md`, `campaign-app-scope.md`.
+6. DONE (code, not committed, mostly not browser-verified): per-bag payout rules and dollar-based limits (120), Plus earning-cap multiplier and funding perks (118, 119), boundary-based areas (117), event page Sponsored card. Open checks: `payments-v2-verification-checklist-2026-10-16.md`.
+7. Deploy: `payments-v2-deployment-plan-2026-10-20.md`; all prod migrations in `payments-v2-prod-migrations-109-120.sql`.
+8. Docs: `campaign-app-scope.md` and `master-backlog.md` updated 2026-10-20; `branch-tracker.md` and `app-capability-doc.md` still owed (not on disk locally, arrive with the master merge).
 
 ## Remaining open questions
 
 - Team-up mechanic details (deferred).
 - Exact default cap values (starting suggestion above).
 - Stripe setup info needed at step 3: test secret key, webhook secret (via Stripe CLI), and the $5/month Price ID.
+
+## Work left: payments and money flow (2026-10-20)
+
+- **Stripe Connect payouts:** not built. Earner onboarding and KYC, transfers, failure and reversal handling, tax forms. "Mark paid out" and "Mark released" only record state.
+- **Legal and tax review** before money moves in either direction.
+- **Stripe setup and real tests:** $5 Plus price, price IDs, webhook secret, env vars, live checkout and webhook (including group Support gifts).
+- **Reward fulfillment** for sponsor rewards is manual.
+- **Allocations:** store reported bag count (needs migration), cap-reason reporting, small vs large bag handling, minimum-payout warning, review queue paging.
+- **Gaps:** sites list capped at 200; events cannot change sponsorship after create; `/api/sponsored` proxy turns non-JSON errors into `{}`; Impact page counts differ from `campaign_dashboard.py`; boroughs not in boundary list; solo hosts cannot earn from areas.
+- **Later ideas:** optional per-group cap across pools, CSV export and per-event impact reports for group Plus, persisted sponsored-areas map toggle, grouping stacked site pins.
+- **Cleanup:** delete unused `PersonalInsightsCard.tsx`, `SupporterBadge.tsx`, `groups/[slug]/stats/PremiumInsightsCard.tsx`, `app/sponsorships/SponsorExplainer.tsx`, and the unused `canSeePayments` prop in `GroupStatsView`.

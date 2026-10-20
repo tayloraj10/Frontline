@@ -1038,3 +1038,16 @@ Supabase supports additional OAuth providers with minimal effort — each requir
 - **Discord** — strong fit for community/gaming-adjacent campaign types
 - **Twitter/X** — high reach for civic action campaigns (Road to Independence, BRAINROT)
 - **Passkeys / magic link** — passwordless options Supabase supports out of the box; lowers friction for non-technical users
+
+### Payments v2 (branch `money-and-payments`)
+
+Built, admin-only until `payments_enabled` is turned on: Frontline Plus subscriptions (individual and group, Stripe Checkout and billing portal, deduped webhook), sponsorships (site, group area, general fund), sponsored cleanups with per-bag or flat payout rules and pool holds, allocation review queue, and the Impact page. Migrations 109-120.
+
+**Work left on payments and money flow:**
+- Stripe Connect payouts and KYC for earners. Today "Mark paid out" and "Mark released" only record state; no money moves out.
+- Legal and tax review before real money moves either direction.
+- Stripe account setup and real checkout and webhook testing.
+- Sponsor reward fulfillment (manual today).
+- Store bag count on allocations, cap-reason reporting, allocation review paging, changing sponsorship after event create.
+
+See `payments-v2-deployment-plan-2026-10-20.md` and `payments-v2-verification-checklist-2026-10-16.md`.
