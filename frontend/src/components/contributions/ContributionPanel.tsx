@@ -21,6 +21,7 @@ import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import NearbyPartnersPanel from "@/components/cleanups/NearbyPartnersPanel";
 import { useNearbyPartners } from "@/lib/nearbyPartners";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
+import SponsoredAreaPicker, { useSponsoredAreas } from "@/components/cleanups/SponsoredAreaPicker";
 import Lightbox from "@/components/Lightbox";
 import IconButton from "@/components/ui/IconButton";
 import { GuidedStepper, StepperNav, ViewModeToggle, type GuidedStep } from "@/components/ui/GuidedStepper";
@@ -3179,6 +3180,7 @@ function HostEventModal({
   const [externalLink, setExternalLink] = useState("");
   const [route, setRoute] = useState<RouteLineString | null>(null);
   const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">("organizer_total");
+  const [sponsorshipId, setSponsorshipId] = useState<string | null>(null);
   const [locationKind, setLocationKind] = useState<"spot" | "route">("spot");
   const [showAddressDetails, setShowAddressDetails] = useState(false);
   const [viewMode, setViewMode] = useState<"guided" | "full">(() => {
@@ -3230,6 +3232,14 @@ function HostEventModal({
     route?.coordinates
   );
   const hasNearbyPartners = nearbyPartners.length > 0;
+  const sponsoredAreas = useSponsoredAreas({
+    value: sponsorshipId,
+    onChange: setSponsorshipId,
+    groupId,
+    lat: submitCoords?.latitude ?? null,
+    lng: submitCoords?.longitude ?? null,
+  });
+  const hasSponsoredAreas = sponsoredAreas.length > 0;
   const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>([]);
   const toggleOfferId = (offerId: string) => {
     setSelectedOfferIds((prev) => (prev.includes(offerId) ? prev.filter((id) => id !== offerId) : [...prev, offerId]));
@@ -3239,6 +3249,7 @@ function HostEventModal({
     { key: "schedule", label: "Schedule & Logging" },
     { key: "logistics", label: "Logistics" },
     { key: "location", label: "Location" },
+    ...(hasSponsoredAreas ? [{ key: "sponsored", label: "Sponsored area" }] : []),
     ...(hasNearbyPartners ? [{ key: "partners", label: "Nearby Partners" }] : []),
     { key: "photo", label: "Cover photo" },
   ];
@@ -3252,6 +3263,7 @@ function HostEventModal({
     !scheduledStart ? "Pick a start date to continue" : endBeforeStart ? "End time must be after the start to continue" : null,
     null,
     !submitCoords ? "Set a location to continue" : locationKind === "route" && !route ? "Draw your route to continue" : null,
+    ...(hasSponsoredAreas ? [null] : []),
     ...(hasNearbyPartners ? [null] : []),
     null,
   ];
@@ -3287,6 +3299,7 @@ function HostEventModal({
         route,
         cohostGroupIds,
         loggingMode,
+        sponsorshipId,
       });
       if (selectedOfferIds.length > 0) {
         const supabase = createClient();
@@ -3693,6 +3706,10 @@ function HostEventModal({
     </>
   );
 
+  const sponsoredSection = (
+    <SponsoredAreaPicker areas={sponsoredAreas} value={sponsorshipId} onChange={setSponsorshipId} groupId={groupId} />
+  );
+
   const partnersSection = (
     <NearbyPartnersPanel
       partners={nearbyPartners}
@@ -3733,9 +3750,15 @@ function HostEventModal({
     </>
   );
 
-  const hostEventStepSections = hasNearbyPartners
-    ? [basicsSection, scheduleSection, logisticsSection, locationSection, partnersSection, photoSection]
-    : [basicsSection, scheduleSection, logisticsSection, locationSection, photoSection];
+  const hostEventStepSections = [
+    basicsSection,
+    scheduleSection,
+    logisticsSection,
+    locationSection,
+    ...(hasSponsoredAreas ? [sponsoredSection] : []),
+    ...(hasNearbyPartners ? [partnersSection] : []),
+    photoSection,
+  ];
 
   const lastHostStep = activeGuidedStep === hostEventSteps.length - 1;
   const hostBlocked = hostEventStepBlockedReason[activeGuidedStep];

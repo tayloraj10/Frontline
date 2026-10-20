@@ -1053,3 +1053,16 @@ Supabase supports additional OAuth providers with minimal effort — each requir
 - **Passkeys / magic link** — passwordless options Supabase supports out of the box; lowers friction for non-technical users
 
 - [x] **Plus monetary incentives** (built 2026-10-15, migration 119, admin preview only) - early access window on newly funded sponsored sites and areas (`plus_early_access_hours`, default 48, locked for non-Plus in `list_sites`, `list_group_areas`, `claim_site`, `validate_event_pool`), per-group-per-pool earning cap (`sponsored_default_cap_per_group_usd`, multiplied for Plus groups), and Plus groups can opt in to direct sponsorship (`groups.open_to_sponsors`, `sponsor_pitch`, `group_support` model, `GroupSponsorCard`, `GroupSponsorSettings`) which queues a direct allocation through the existing review and manual payout flow. Rewards perk is copy only. See `payments-v2-test-plan-2026-10-15.md` section 7.
+
+### Payments v2 (branch `money-and-payments`)
+
+Built, admin-only until `payments_enabled` is turned on: Frontline Plus subscriptions (individual and group, Stripe Checkout and billing portal, deduped webhook), sponsorships (site, group area, general fund), sponsored cleanups with per-bag or flat payout rules and pool holds, allocation review queue, and the Impact page. Migrations 109-120.
+
+**Work left on payments and money flow:**
+- Stripe Connect payouts and KYC for earners. Today "Mark paid out" and "Mark released" only record state; no money moves out.
+- Legal and tax review before real money moves either direction.
+- Stripe account setup and real checkout and webhook testing.
+- Sponsor reward fulfillment (manual today).
+- Store bag count on allocations, cap-reason reporting, allocation review paging, changing sponsorship after event create.
+
+See `payments-v2-deployment-plan-2026-10-20.md` and `payments-v2-verification-checklist-2026-10-16.md`.

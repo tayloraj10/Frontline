@@ -4,6 +4,10 @@ import BackButton from "@/components/ui/BackButton";
 import GroupEditForm from "./GroupEditForm";
 import MemberManager from "./MemberManager";
 import DeleteGroupSection from "./DeleteGroupSection";
+import GroupSponsorSettings from "@/components/billing/GroupSponsorSettings";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { paymentsVisible } from "@/lib/paymentsVisibility";
+import { getPlusEntitlement } from "@/lib/plus.server";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -37,6 +41,11 @@ export default async function GroupEditPage({ params }: Props) {
   if (!isGroupAdmin && !isSiteAdmin) {
     redirect(`/groups/${slug}`);
   }
+
+  const paymentsGate = await getPaymentsGate();
+  const isPlusGroup = paymentsVisible(paymentsGate, isSiteAdmin)
+    ? (await getPlusEntitlement("group", groupData.id)).has_premium
+    : false;
 
   const { data: membersData } = await supabase
     .from("group_members")
@@ -80,6 +89,16 @@ export default async function GroupEditPage({ params }: Props) {
           logoUrl={groupData.image_url}
         />
       </div>
+
+      {isPlusGroup && (
+        <div className="rounded-[20px] p-6 bg-zinc-900 mb-8">
+          <GroupSponsorSettings
+            groupId={groupData.id}
+            initialOpen={Boolean(groupData.open_to_sponsors)}
+            initialPitch={groupData.sponsor_pitch ?? null}
+          />
+        </div>
+      )}
 
       <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">

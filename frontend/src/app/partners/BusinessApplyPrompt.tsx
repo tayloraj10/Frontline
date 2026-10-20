@@ -10,7 +10,7 @@ export default function BusinessApplyPrompt() {
     return (
       <button
         onClick={() => setExpanded(true)}
-        className="mb-6 inline-flex items-center gap-1.5 px-3 py-1.5 min-h-9 text-xs border border-sky-700/50 hover:border-sky-500 active:scale-95 bg-sky-900/20 hover:bg-sky-900/30 text-sky-400 hover:text-sky-300 rounded-lg font-medium transition-[border-color,background-color,color,transform] duration-150 touch-manipulation"
+        className="mb-6 inline-flex items-center gap-2 px-4 py-2 min-h-10 text-sm border border-sky-700/50 hover:border-sky-500 active:scale-95 bg-sky-900/20 hover:bg-sky-900/30 text-sky-400 hover:text-sky-300 rounded-lg font-medium transition-[border-color,background-color,color,transform] duration-150 touch-manipulation"
       >
         <span aria-hidden="true">🏪</span>
         Want to put your business on the map?

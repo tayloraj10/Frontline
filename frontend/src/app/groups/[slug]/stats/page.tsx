@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { paymentsVisible } from "@/lib/paymentsVisibility";
 import BackButton from "@/components/ui/BackButton";
 import GroupStatsView from "./GroupStatsView";
 import type { Database } from "@/types/database";
@@ -14,24 +16,32 @@ export default async function GroupStatsPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupData }] = await Promise.all([
+  const [{ data: { user } }, { data: groupData }, paymentsGate] = await Promise.all([
     supabase.auth.getUser(),
     supabase.from("groups").select("*").eq("slug", slug).single(),
+    getPaymentsGate(),
   ]);
 
   const group = groupData as Group | null;
   if (!group || group.status !== "approved") notFound();
 
-  const { data: memberRow } = user
-    ? await supabase
-        .from("group_members")
-        .select("role")
-        .eq("group_id", group.id)
-        .eq("user_id", user.id)
-        .maybeSingle()
-    : { data: null };
+  const [{ data: memberRow }, { data: siteAdminCheck }] = await Promise.all([
+    user
+      ? supabase
+          .from("group_members")
+          .select("role")
+          .eq("group_id", group.id)
+          .eq("user_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null as { role: string } | null }),
+    user
+      ? supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single()
+      : Promise.resolve({ data: null as { is_admin: boolean } | null }),
+  ]);
 
   const isAdmin = memberRow?.role === "admin";
+  const isSiteAdmin = !!siteAdminCheck?.is_admin;
+  const canSeePayments = paymentsVisible(paymentsGate, isSiteAdmin);
 
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
@@ -50,6 +60,7 @@ export default async function GroupStatsPage({ params }: Props) {
         groupLogoUrl={group.image_url}
         viewerUserId={user?.id ?? null}
         isAdmin={isAdmin}
+        canSeePayments={canSeePayments}
         fastapiUrl={fastapiUrl}
         slug={slug}
       />

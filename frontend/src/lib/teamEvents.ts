@@ -492,6 +492,7 @@ export type TeamEventLeaderboardIndividual = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  is_plus?: boolean;
   team_id: string;
   team_name: string;
   team_color: string;

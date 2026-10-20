@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import LegalGate from "@/components/LegalGate";
 import NativeAppBridge from "@/components/NativeAppBridge";
 import PullToRefresh from "@/components/PullToRefresh";
+import PlusFlairProvider from "@/components/billing/PlusFlairProvider";
 
 // Geist stays loaded because the campaign map page (excluded from the UI rework) still uses it.
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
@@ -80,7 +81,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <PullToRefresh />
-          {children}
+          <PlusFlairProvider>{children}</PlusFlairProvider>
         </div>
         <LegalGate />
       </body>

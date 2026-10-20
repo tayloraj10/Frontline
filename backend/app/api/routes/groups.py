@@ -14,6 +14,7 @@ from app.api.routes.cleanup_events import CLEANUP_EVENT_GRACE_MINUTES_AFTER_FALL
 from app.api.routes.leaderboard import _GEO_STATS_LEVEL_UNIT_TYPES, _GEO_STATS_LEVELS, _ZIP_UNIT_TYPES, _scope_filter
 from app.api.routes.upload import delete_r2_object
 from app.db.database import get_db
+from app.services import payments as payments_service
 from app.services.game_settings import get_game_settings
 from app.services.organizer_dashboard import get_pending_organizer_items
 from app.services.stats_window import resolve_stats_window, trend_bucket_unit
@@ -290,7 +291,7 @@ async def _compute_group_stats(
         member_rows = (
             await db.execute(
                 text("""
-                    SELECT c.user_id::text, p.username, p.display_name, p.avatar_url,
+                    SELECT c.user_id::text, p.username, p.display_name, p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = c.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                            COALESCE(SUM(c.value), 0)::float AS total_value,
                            COUNT(*)::int                     AS contribution_count
                     FROM contributions c
@@ -349,6 +350,7 @@ async def _compute_group_stats(
                     "username": r.username,
                     "display_name": r.display_name,
                     "avatar_url": r.avatar_url,
+                    "is_plus": bool(r.is_plus),
                     "total_value": r.total_value,
                     "contribution_count": r.contribution_count,
                     "small_bags": member_bags.get(r.user_id, {}).get("small_bags", 0),
@@ -687,7 +689,7 @@ async def get_group_geo_stats(
     top_users = (
         await db.execute(
             text(f"""
-                SELECT c.user_id::text, p.username, p.display_name, p.avatar_url,
+                SELECT c.user_id::text, p.username, p.display_name, p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = c.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                        COALESCE(SUM(c.value), 0)::float AS total_value,
                        COUNT(*)::int                     AS contribution_count
                 FROM contributions c
@@ -737,6 +739,7 @@ async def get_group_geo_stats(
                 "username": r.username,
                 "display_name": r.display_name,
                 "avatar_url": r.avatar_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
             }

@@ -10,6 +10,7 @@ import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";
 import { createClient } from "@/lib/supabase/client";
 import RoutePicker from "@/components/map/RoutePicker";
 import CohostGroupPicker from "@/components/cleanups/CohostGroupPicker";
+import SponsoredAreaPicker, { useSponsoredAreas } from "@/components/cleanups/SponsoredAreaPicker";
 import NearbyPartnersPanel from "@/components/cleanups/NearbyPartnersPanel";
 import { useNearbyPartners } from "@/lib/nearbyPartners";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
@@ -22,6 +23,7 @@ const hostEventStepsBase: GuidedStep[] = [
   { key: "logistics", label: "Logistics" },
   { key: "location", label: "Location" },
 ];
+const hostEventStepSponsored: GuidedStep = { key: "sponsored", label: "Sponsored area" };
 const hostEventStepPartners: GuidedStep = { key: "partners", label: "Nearby Partners" };
 const hostEventStepPhoto: GuidedStep = { key: "photo", label: "Cover photo" };
 
@@ -108,6 +110,7 @@ export default function CreateCleanupEventForm({
   const hadInitialRoute = !!initialValues?.route;
   const [cohostGroupIds, setCohostGroupIds] = useState<string[]>(initialCohostGroupIds);
   const [loggingMode, setLoggingMode] = useState<"organizer_total" | "individual">(initialValues?.loggingMode ?? "organizer_total");
+  const [sponsorshipId, setSponsorshipId] = useState<string | null>(null);
   const [guidedStep, setGuidedStep] = useState(0);
   const [locating, setLocating] = useState(false);
   const [locationDenied, setLocationDenied] = useState(false);
@@ -118,9 +121,21 @@ export default function CreateCleanupEventForm({
   const toggleOfferId = (offerId: string) => {
     setSelectedOfferIds((prev) => (prev.includes(offerId) ? prev.filter((id) => id !== offerId) : [...prev, offerId]));
   };
-  const hostEventSteps: GuidedStep[] = hasNearbyPartners
-    ? [...hostEventStepsBase, hostEventStepPartners, hostEventStepPhoto]
-    : [...hostEventStepsBase, hostEventStepPhoto];
+  const sponsoredAreas = useSponsoredAreas({
+    value: sponsorshipId,
+    onChange: setSponsorshipId,
+    groupId,
+    lat,
+    lng,
+    enabled: mode !== "edit",
+  });
+  const hasSponsoredAreas = sponsoredAreas.length > 0;
+  const hostEventSteps: GuidedStep[] = [
+    ...hostEventStepsBase,
+    ...(hasSponsoredAreas ? [hostEventStepSponsored] : []),
+    ...(hasNearbyPartners ? [hostEventStepPartners] : []),
+    hostEventStepPhoto,
+  ];
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -194,6 +209,7 @@ export default function CreateCleanupEventForm({
           route,
           cohostGroupIds,
           loggingMode,
+          sponsorshipId,
         });
         if (selectedOfferIds.length > 0) {
           const supabase = createClient();
@@ -516,9 +532,18 @@ export default function CreateCleanupEventForm({
     </>
   );
 
-  const hostEventStepSections = hasNearbyPartners
-    ? [basicsSection, scheduleSection, logisticsSection, locationSection, partnersSection, photoSection]
-    : [basicsSection, scheduleSection, logisticsSection, locationSection, photoSection];
+  const sponsoredSection = (
+    <SponsoredAreaPicker areas={sponsoredAreas} value={sponsorshipId} onChange={setSponsorshipId} groupId={groupId} />
+  );
+  const hostEventStepSections = [
+    basicsSection,
+    scheduleSection,
+    logisticsSection,
+    locationSection,
+    ...(hasSponsoredAreas ? [sponsoredSection] : []),
+    ...(hasNearbyPartners ? [partnersSection] : []),
+    photoSection,
+  ];
   const activeGuidedStep = Math.min(guidedStep, hostEventSteps.length - 1);
 
   const lastStep = activeGuidedStep === hostEventSteps.length - 1;
@@ -527,6 +552,7 @@ export default function CreateCleanupEventForm({
     !scheduledStart ? "Pick a start date to continue" : endBeforeStart ? "End time must be after the start" : null,
     null,
     lat === null || lng === null ? "Set a location to continue" : null,
+    ...(hasSponsoredAreas ? [null] : []),
     ...(hasNearbyPartners ? [null] : []),
     null,
   ][activeGuidedStep];
