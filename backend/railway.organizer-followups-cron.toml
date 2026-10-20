@@ -1,8 +1,0 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
-
-[deploy]
-startCommand = "python scripts/run_organizer_followups.py"
-cronSchedule = "30 12 * * *"
-restartPolicyType = "NEVER"

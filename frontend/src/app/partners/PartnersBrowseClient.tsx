@@ -66,6 +66,7 @@ export function OfferCard({
   userPoints,
   userLocation,
   onRedeemed,
+  onLocate,
 }: {
   offer: BrowseOffer;
   businessName: string;
@@ -75,6 +76,8 @@ export function OfferCard({
   userPoints: number | null;
   userLocation: { lat: number; lng: number } | null;
   onRedeemed: (offerId: string, spent: number) => void;
+  /** Only passed on the browse page's map view; shows a button that jumps to this business's pin. */
+  onLocate?: (locationId: string | null) => void;
 }) {
   const [redemptions, setRedemptions] = useState<Redemption[] | null>(null);
   const [redeeming, setRedeeming] = useState(false);
@@ -297,6 +300,21 @@ export function OfferCard({
             Last code: {redemptions[0].code}
           </button>
         )}
+        {onLocate && (
+          <button
+            type="button"
+            // Offer pinned to one location, else the one picked in the dropdown (auto-picked as nearest);
+            // null falls back to the whole business.
+            onClick={() => onLocate(offer.location_id ?? (pickedLocationId || null))}
+            className="ml-auto inline-flex items-center gap-1.5 min-h-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 hover:text-emerald-300 active:scale-[0.97] transition-[background-color,color,transform] duration-150 touch-manipulation"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Show on map
+          </button>
+        )}
       </div>
 
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
@@ -322,6 +340,22 @@ export default function PartnersBrowseClient({
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"list" | "map">("list");
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+
+  const handleLocate = (slug: string, locationId: string | null) => {
+    setSelectedSlug(slug);
+    setSelectedLocationId(locationId);
+    document.getElementById("partners-map")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const handleMapSelect = (slug: string | null, locationId: string | null) => {
+    setSelectedSlug(slug);
+    setSelectedLocationId(locationId);
+    if (slug) {
+      document.getElementById(`business-${slug}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
@@ -354,6 +388,7 @@ export default function PartnersBrowseClient({
         return business.locations.map((l) => ({
           businessId: business.id,
           businessSlug: business.slug,
+          locationId: l.id,
           businessName: business.name,
           hasEventOffer,
           adultsOnly: business.adults_only,
@@ -432,7 +467,9 @@ export default function PartnersBrowseClient({
 
       {view === "map" && (
         mapPoints.length > 0 ? (
-          <PartnersMap points={mapPoints} userLocation={userLocation} />
+          <div id="partners-map">
+            <PartnersMap points={mapPoints} userLocation={userLocation} selectedSlug={selectedSlug} selectedLocationId={selectedLocationId} onSelect={handleMapSelect} />
+          </div>
         ) : (
           <p className="text-sm text-zinc-500">No matching businesses have a location to show on the map.</p>
         )
@@ -450,8 +487,12 @@ export default function PartnersBrowseClient({
         <div
           key={business.id}
           id={`business-${business.slug}`}
-          className={`rounded-[20px] overflow-hidden bg-zinc-900 ${
-            hasEventOffer ? "ring-1 ring-inset ring-amber-700/50" : ""
+          className={`rounded-[20px] overflow-hidden bg-zinc-900 transition-shadow duration-200 ${
+            selectedSlug === business.slug
+              ? "ring-2 ring-inset ring-emerald-400"
+              : hasEventOffer
+                ? "ring-1 ring-inset ring-amber-700/50"
+                : ""
           }`}
         >
           <div className={`w-full px-4 py-3 flex items-center gap-3 ${hasEventOffer ? "bg-amber-950/20" : ""}`}>
@@ -508,6 +549,7 @@ export default function PartnersBrowseClient({
                 userPoints={points}
                 userLocation={userLocation}
                 onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}
+                onLocate={view === "map" && business.locations.length > 0 ? (locationId) => handleLocate(business.slug, locationId) : undefined}
               />
             ))}
           </div>

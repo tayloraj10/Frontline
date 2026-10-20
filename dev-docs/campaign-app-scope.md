@@ -721,6 +721,19 @@ Tables that drive live map updates:
 
 ## 5. Development Steps
 
+### Payments v2 (branch `money-and-payments`, admin-only preview)
+- [x] Visibility toggle `payments_admin_preview`
+- [x] Restyle sponsorships, Frontline Plus, insights cards, billing pages
+- [x] Frontline Plus redesign: one-button subscribe/manage card with member-since and renewal dates, gold name, avatar ring and Plus badge on profiles (Plus badge on group pages), monthly recap with shareable image card, 2x sponsored earning caps (`plus_earning_cap_multiplier`, migration 118), early-access flag (`hasEarlyAccess` in `lib/plus.ts`, no beta features gated yet). Plus pill also shows on leaderboards (global, campaign, team event) and cleanup attendee lists via `is_plus` on those queries and `PlusFlair`, gated by payments visibility.
+- [x] One-time donation: "Or give once" card on the user's profile (presets or custom amount, optional message) reusing the sponsorship checkout as a general-fund gift
+- [x] Mock seeder can create a non-Plus login (`create_free_user=true`, freeuser / password)
+- [x] `/impact` page
+- [x] Sponsored sites: funding, claim flow, allocation review queue (migration 115)
+- [x] Group sponsored areas: picker in event creation, event-to-pool link, allocation on team-total log (migration 116)
+- [x] Sponsored areas map layer (opt-in toggle) and local mock seeder `POST /admin/seed/payments-mock`
+- [x] Sponsor-defined areas: map pin picker for sites; group areas as merged neighborhoods, circle or drawn polygon, stored as one geometry with server-enforced limits (migration 117)
+- [ ] Live Stripe test-mode verification, prod migrations 109-116
+
 ### Phase 1: Foundation (Week 1)
 **Goal:** Auth, database, and project scaffolding working end to end
 
@@ -1038,6 +1051,8 @@ Supabase supports additional OAuth providers with minimal effort — each requir
 - **Discord** — strong fit for community/gaming-adjacent campaign types
 - **Twitter/X** — high reach for civic action campaigns (Road to Independence, BRAINROT)
 - **Passkeys / magic link** — passwordless options Supabase supports out of the box; lowers friction for non-technical users
+
+- [x] **Plus monetary incentives** (built 2026-10-15, migration 119, admin preview only) - early access window on newly funded sponsored sites and areas (`plus_early_access_hours`, default 48, locked for non-Plus in `list_sites`, `list_group_areas`, `claim_site`, `validate_event_pool`), per-group-per-pool earning cap (`sponsored_default_cap_per_group_usd`, multiplied for Plus groups), and Plus groups can opt in to direct sponsorship (`groups.open_to_sponsors`, `sponsor_pitch`, `group_support` model, `GroupSponsorCard`, `GroupSponsorSettings`) which queues a direct allocation through the existing review and manual payout flow. Rewards perk is copy only. See `payments-v2-test-plan-2026-10-15.md` section 7.
 
 ### Payments v2 (branch `money-and-payments`)
 

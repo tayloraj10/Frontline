@@ -847,6 +847,56 @@ async def get_dethrone_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
     return [{"account": r.account, "count": r.unfollow_count} for r in rows]
 
 
+@global_router.get("/streaks")
+async def get_top_active_streaks(db: AsyncSession = Depends(get_db)):
+    """
+    Who currently holds the longest active cleanup streak (ties return everyone). Mirrors
+    the profile page's streak: consecutive Monday-start UTC weeks with at least one
+    cleanup / cleanup_event_checkin, still active if the last such week is this week
+    or last week.
+    """
+    rows = (
+        await db.execute(
+            text("""
+                WITH wk AS (
+                    SELECT DISTINCT user_id,
+                           FLOOR((FLOOR(EXTRACT(EPOCH FROM submitted_at) / 86400) + 3) / 7)::int AS w
+                    FROM contributions
+                    WHERE contribution_type IN ('cleanup', 'cleanup_event_checkin')
+                      AND submitted_at IS NOT NULL AND user_id IS NOT NULL
+                ),
+                runs AS (
+                    SELECT user_id, w, w - ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY w) AS grp FROM wk
+                ),
+                active AS (
+                    SELECT user_id, COUNT(*)::int AS streak
+                    FROM runs
+                    GROUP BY user_id, grp
+                    HAVING MAX(w) >= FLOOR((FLOOR(EXTRACT(EPOCH FROM now()) / 86400) + 3) / 7)::int - 1
+                )
+                SELECT a.user_id::text, a.streak, p.username, p.display_name, p.avatar_url
+                FROM active a
+                JOIN profiles p ON p.id = a.user_id
+                WHERE a.streak = (SELECT MAX(streak) FROM active)
+                ORDER BY p.username
+            """)
+        )
+    ).fetchall()
+
+    return {
+        "streak_weeks": rows[0].streak if rows else 0,
+        "users": [
+            {
+                "user_id": r.user_id,
+                "username": r.username,
+                "display_name": r.display_name,
+                "avatar_url": r.avatar_url,
+            }
+            for r in rows
+        ],
+    }
+
+
 @global_router.get("/global")
 async def get_global_leaderboard(interval: str = Query("month"), db: AsyncSession = Depends(get_db)):
     """

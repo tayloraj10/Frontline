@@ -36,6 +36,7 @@ interface Props {
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   activeStyle?: string;
+  onStyleChange?: (id: "outdoor" | "streets" | "hybrid") => void;
   problemReports?: ProblemReports | null;
   onReportClick?: (report: ProblemReportMapData) => void;
   eventCentroids?: Record<string, { lat: number; lng: number }>;

@@ -26,7 +26,7 @@ export default function FlowGuide({
   autoOpen?: boolean;
   /** "icon" is a round "?" button; "link" is a text button with `label`. */
   variant?: "icon" | "link";
-  label?: string;
+  label: string;
   hideTrigger?: boolean;
   openSignal?: number;
   className?: string;
@@ -82,8 +82,8 @@ export default function FlowGuide({
         (variant === "icon" ? (
           <button
             onClick={() => setOpen(true)}
-            title={label ?? "How this works"}
-            aria-label={label ?? "How this works"}
+            title={label}
+            aria-label={label}
             className={`${
               size === "md"
                 ? "w-11 h-11 text-lg border-emerald-500/30 bg-zinc-800/70 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-500/50 active:text-emerald-300 active:bg-emerald-500/10"
@@ -97,7 +97,7 @@ export default function FlowGuide({
             onClick={() => setOpen(true)}
             className={`inline-flex items-center gap-1.5 min-h-9 px-3 rounded-full text-xs font-semibold text-zinc-300 bg-zinc-800/60 ring-1 ring-white/10 hover:bg-zinc-800 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation ${className}`}
           >
-            {label ?? "How this works"}
+            {label}
           </button>
         ))}
       {open && <Walkthrough def={def} onClose={close} />}

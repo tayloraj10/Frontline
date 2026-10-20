@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { createPublicClient } from "@/lib/supabase/public";
 import { formatPoints } from "@/lib/formatPoints";
@@ -62,14 +64,68 @@ const getTrashWarStats = unstable_cache(
   { revalidate: REVALIDATE_SECONDS }
 );
 
+interface StreakHolder {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+const getTopStreak = unstable_cache(
+  async (fastapiUrl: string) => {
+    const res = await fetch(`${fastapiUrl}/api/leaderboard/streaks`, { cache: "no-store" }).catch(() => null);
+    if (!res?.ok) return null;
+    const data: { streak_weeks: number; users: StreakHolder[] } = await res.json();
+    return data.users.length > 0 ? data : null;
+  },
+  ["top-active-streak"],
+  { revalidate: REVALIDATE_SECONDS }
+);
+
 export default async function GlobalLeaderboardPage() {
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
-  const trashWarStats = await getTrashWarStats(fastapiUrl);
+  const [trashWarStats, topStreak] = await Promise.all([getTrashWarStats(fastapiUrl), getTopStreak(fastapiUrl)]);
 
   return (
     <PageShell>
       <PageHeader eyebrow="Leaderboard" title="Who's cleaning the most" subtitle="Trash War's pulse, plus points across every campaign." />
+
+      {topStreak && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[20px] bg-zinc-900 px-4 py-2.5">
+          <div className="shrink-0 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            {topStreak.users.length > 1 ? "Streak freaks" : "Streak freak"}
+            <span className="ml-2 font-display text-sm font-extrabold tabular-nums normal-case tracking-normal text-emerald-400">
+              {topStreak.streak_weeks} {topStreak.streak_weeks === 1 ? "week" : "weeks"}
+            </span>
+            <span className="ml-2 text-[11px] font-medium normal-case tracking-normal text-zinc-600">Longest active streak</span>
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {topStreak.users.map((u, i) => {
+              const name = u.display_name ?? u.username ?? "?";
+              return (
+                <Fragment key={u.user_id}>
+                  {i > 0 && <span className="text-xs font-bold text-emerald-400/70">&amp;</span>}
+                  <Link
+                    href={`/users/${u.username}`}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 py-0.5 pl-0.5 pr-2.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 transition-colors"
+                  >
+                    <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full bg-zinc-700 text-[11px] font-bold text-zinc-300">
+                      {u.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        name[0].toUpperCase()
+                      )}
+                    </span>
+                    {name}
+                  </Link>
+                </Fragment>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {trashWarStats && (
         <div className="mb-8">

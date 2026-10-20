@@ -114,7 +114,7 @@ export default async function PartnerDashboardPage() {
             Manage your business listing and offers.
           </p>
         </div>
-        <FlowGuide id="partner" autoOpen variant="link" label="How it works" />
+        <FlowGuide id="partner" autoOpen variant="link" label="How does this work?" />
       </div>
 
       <PartnerDashboardClient

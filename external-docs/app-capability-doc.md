@@ -19,7 +19,8 @@ Last updated: 2026-09-13.
 - Edit profile: display name, username, bio, avatar (R2 upload) — `/settings/profile`.
 - Account settings (`/settings/account`): change password (re-verifies current password live before allowing the change), change email (blocked for Google OAuth accounts — "managed through Google"), permanently delete account (must type "delete my account" exactly; cascades to profile + contributions).
 - View own or any user's public profile at `/users/[username]`.
-- View global leaderboard (`/leaderboard`).
+- View global leaderboard (`/leaderboard`), including a banner for whoever holds the longest active weekly cleanup streak (ties show everyone).
+- See any user's weekly cleanup streak on their profile (the goal progress and actions stay own-profile only).
 - **Legal re-acceptance gate exists but is currently disabled** — `LEGAL_GATE_ENABLED = false` in `LegalGate.tsx`. When on, it blocks existing/OAuth/stale-version users with a full-screen re-accept modal.
 
 ### Campaigns & Territory Gameplay
@@ -112,6 +113,8 @@ An "Admin guide" link in the panel header opens a triggerable, tab-by-tab walkth
 
 Site admins implicitly inherit every group-admin and business-admin capability above (checks for `is_admin` short-circuit several of those gates, e.g. the business campaign-linkage restriction).
 
+**Payments v2 (admin preview only, behind `payments_admin_preview`; not visible to regular users):** `/sponsorships` (fund a site, group area, geo unit or the mission, with flat, per-bag or equal-split payout rules and per-person caps), a sponsored-site claim flow (claim, before photo, after photo), an allocation review queue (approve, reject, mark paid out), Frontline Plus subscription widget, and a public-style `/impact` page, reached from two cards on the Partners page. A "Sponsored areas" layer (on by default) on the campaign map shows funded sites and group areas. Sponsors place a site by tapping a map pin (with a visible radius) and define a group area by combining neighborhoods, dropping a circle, or drawing a shape, within size limits. Group admins creating an event will see an optional "Sponsored area" picker once payments are visible to them.
+
 ---
 
 ## 5. Known gaps / not-yet-built (tracked so this doc stays honest)
@@ -125,6 +128,10 @@ Site admins implicitly inherit every group-admin and business-admin capability a
 - **No redemption-history detail for business owners** — dashboard shows only a raw redemption count per offer, not who/when.
 - **Legal re-acceptance gate is built but switched off** (`LEGAL_GATE_ENABLED = false`).
 - **NYC borough stats outline layer is built and toggleable in code, but non-functional in prod** — `nyc_borough` geo units (5 boroughs, trimmed of small Jamaica Bay / Pelham Bay islets) are only seeded in local dev (via `POST /admin/geo-units/nyc_borough/reload`), not the prod DB, so the Borough toggle (part of the new Geographic Stats group, `trash-war` only) will show an empty layer in prod until that data load happens. Zip/Postcode and Neighborhood stats toggles are unaffected (`nyc_neighborhood` and `zip`/`uk_postcode_district` geo units are already in prod).
+
+- **Frontline Plus perks (admin preview)**: gold name, avatar ring and Plus badge on the profile, monthly recap with a shareable image card, 2x earning caps on sponsored cleanups, early access to new features, and a 48-hour head start on newly funded sponsored sites. Groups get a gold name, avatar ring and Plus badge on their page, the groups list and leaderboards, a head start on new sponsored areas, a higher per-pool earning cap, and an "Open to sponsors" option that adds a Support button to the group page so anyone can fund the group directly (reviewed and paid out by Frontline). Gear and rewards for Plus are listed as coming soon. Plus members also get a Plus pill beside their name on leaderboards and event attendee lists.
+- **One-time donation (admin preview)**: on their own profile a user can give a one-time gift ($5, $10, $25, $50 or a custom amount, with an optional message) to Frontline's general fund, without subscribing.
+- **Payments v2 is not live**: admin-only, test mode, no real payout rail (approved allocations are marked paid out manually). Group sponsored-area allocations are only queued when an organizer logs a team total, not for individual-logging events. Migrations 109-118 are local only, not applied to prod.
 
 ---
 

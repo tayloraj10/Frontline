@@ -1353,6 +1353,7 @@ export default function CampaignPageClient({
         userLocation={userLocation}
         focusCoords={focusCoords}
         activeStyle={activeMapStyle}
+        onStyleChange={setActiveMapStyle}
         nycNeighborhoodsVisible={nycNeighborhoodsVisible}
         problemReports={localProblemReports}
         onReportClick={setClickedReport}
@@ -1389,7 +1390,7 @@ export default function CampaignPageClient({
 
       {/* Side panel — desktop: fixed right column. */}
       {openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive && (
-        <div className="hidden sm:flex absolute right-3 top-[calc(var(--map-top,0px)+4.25rem)] bottom-3 sm:w-80 bg-zinc-950/95 backdrop-blur-md rounded-[20px] flex-col z-20 overflow-hidden shadow-elevation-4">
+        <div className="hidden sm:flex absolute right-16 top-[calc(var(--map-top,0px)+0.5rem)] bottom-[6.5rem] sm:w-80 bg-zinc-950/95 backdrop-blur-md rounded-[20px] flex-col z-20 overflow-hidden shadow-elevation-4">
           <PanelTabs openPanel={openPanel} onSelect={setOpenPanel} userId={userId} onClose={() => setOpenPanel(null)} />
           <div className="flex-1 overflow-y-auto">
             <PanelContent

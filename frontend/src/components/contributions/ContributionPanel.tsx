@@ -4641,7 +4641,7 @@ export default function ContributionPanel({
         />
       )}
       {!pinPickerActive && (
-        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 items-start">
+        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-3 sm:gap-2 items-start">
           {/* Mobile: condense Log/Host into one FAB that expands sub-options in an arc */}
           <div className="flex items-center gap-2 sm:hidden">
             {showHostEvent ? (
@@ -4782,7 +4782,8 @@ export default function ContributionPanel({
             </button>
           )}
           {onStyleChange && (
-            <div className="self-start flex flex-wrap gap-2">
+            // Mobile gets this toggle inside the Layers panel (CampaignMap) so it doesn't crowd the action buttons or cover the map attribution
+            <div className="self-start hidden sm:flex flex-wrap gap-2">
               <div className={`flex gap-0.5 p-1 bg-zinc-900/90 backdrop-blur-sm shadow-elevation-3 ${modernActions ? "rounded-full" : "border border-zinc-700/60 rounded-lg"}`}>
                 {MAP_STYLES.map((s) => (
                   <button
