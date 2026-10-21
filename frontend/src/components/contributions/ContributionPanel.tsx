@@ -713,7 +713,7 @@ function ContributeModal({
   };
   // Also resume-aware, for the same reason as contributeMode above: jumps straight to
   // the "How & Where" step (which holds the Track tab/screen) when reopened mid-session.
-  const [guidedStep, setGuidedStep] = useState(routeTracking.active ? 1 : 0);
+  const [guidedStep, setGuidedStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "outside" | null>(null);
   const [teamEventExcludedReason, setTeamEventExcludedReason] = useState<string | null>(null);
@@ -1210,8 +1210,8 @@ function ContributeModal({
   }
 
   const cleanupSteps: GuidedStep[] = [
-    { key: "photo", label: "Photo & Notes" },
     { key: "where", label: "How & Where" },
+    { key: "photo", label: "Photo & Notes" },
     { key: "group", label: "Group & Bags" },
   ];
 
@@ -1958,7 +1958,7 @@ function ContributeModal({
     </>
   );
 
-  const guidedStepSections = [photoAndNotesSection, modeAndLocationSection, groupAndBagsSection];
+  const guidedStepSections = [modeAndLocationSection, photoAndNotesSection, groupAndBagsSection];
 
   const stepped = isCleanup;
   const lastStep = !stepped || guidedStep === cleanupSteps.length - 1;
