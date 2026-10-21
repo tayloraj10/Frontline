@@ -18,19 +18,20 @@ Custom placeholder GUCs (`app.settings.*`) require real Postgres superuser to se
 
 1. **Confirm the Firebase secret name** in the Supabase dashboard (Edge Functions → Secrets, prod project `nvidlxyzyoxzalxbydvg`). `supabase/functions/send-push/index.ts` reads `Deno.env.get("FIREBASE_SERVICE_ACCOUNT")` — confirmed 2026-08-07 this matches the dashboard secret name already in use.
 
-2. **Deploy the Edge Function**:
+2. **Set the webhook secret and deploy the Edge Function**. `send-push` authenticates the trigger with its own shared secret, not the service_role key (the auto-injected `SUPABASE_SERVICE_ROLE_KEY` format didn't reliably match). Generate a random value (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`), add it as the Edge Function secret `PUSH_WEBHOOK_SECRET`, then:
    ```
    supabase functions deploy send-push --project-ref nvidlxyzyoxzalxbydvg
    ```
-   Inert until called — no DB wiring yet.
+   `supabase/config.toml` sets `verify_jwt = false` for this function, which is required: with gateway JWT verification on, the trigger's non-JWT bearer is rejected with `UNAUTHORIZED_INVALID_JWT_FORMAT` before the function runs (check the dashboard toggle matches). Inert until called — no DB wiring yet.
 
 3. **Apply the migration** (`062_push_notification_webhook.sql`) to prod via the normal migration process. Inert until the Vault secrets below are populated.
 
 4. **Arm the trigger** by populating the two Vault secrets on the prod DB (run once, never committed — same handling as the Firebase JSON):
    ```sql
    select vault.create_secret('https://nvidlxyzyoxzalxbydvg.supabase.co/functions/v1/send-push', 'push_function_url');
-   select vault.create_secret('<prod service_role key from Settings -> API>', 'push_service_role_key');
+   select vault.create_secret('<the same value as PUSH_WEBHOOK_SECRET>', 'push_service_role_key');
    ```
+   The Vault name `push_service_role_key` is historical; the value is the `PUSH_WEBHOOK_SECRET`, not the service_role key. To change it later use `vault.update_secret(...)`.
    Takes effect immediately — no restart or reconnect needed, unlike the old GUC approach.
 
 ## Local setup (new repo clone, or after any `supabase db reset`)
@@ -42,6 +43,7 @@ Neither of the two pieces below is in git — a fresh clone has zero push-notifi
 **2. Create `supabase/functions/.env`** (already covered by the repo's `.env*` gitignore rule) with the JSON compacted onto one line as a single env var:
 ```
 FIREBASE_SERVICE_ACCOUNT='<paste the entire downloaded JSON file's contents here, as-is>'
+PUSH_WEBHOOK_SECRET='<any local value, must match the Vault secret in step 4>'
 ```
 `supabase functions serve` picks this file up automatically — no extra flag needed. This only feeds the Edge Function itself; it's unrelated to the two Vault secrets below.
 
@@ -50,7 +52,7 @@ FIREBASE_SERVICE_ACCOUNT='<paste the entire downloaded JSON file's contents here
 **4. Populate the two Vault secrets** that arm the DB trigger (run against the local DB, `postgresql://postgres:postgres@127.0.0.1:54322/postgres` by default):
 ```sql
 select vault.create_secret('http://kong:8000/functions/v1/send-push', 'push_function_url');
-select vault.create_secret('<local service_role key from step 3>', 'push_service_role_key');
+select vault.create_secret('<same value as PUSH_WEBHOOK_SECRET in functions/.env>', 'push_service_role_key');
 ```
 `push_function_url` must use `kong:8000` (the Kong gateway's Docker network alias), **not** `127.0.0.1:54321`. The trigger's `net.http_post` call runs from *inside* the `supabase_db` container, where `127.0.0.1` refers to that container itself — `kong:8000` is reachable from there, `127.0.0.1:54321` is not (connection refused), even though the latter works fine when curled from the host. These are unrelated to Firebase — they're what let the Postgres trigger call the Edge Function at all. Both are required; the trigger no-ops silently if either is missing (check with `select name from vault.decrypted_secrets;`).
 
