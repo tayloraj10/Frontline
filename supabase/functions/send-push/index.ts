@@ -57,9 +57,11 @@ Deno.serve(async (req) => {
   try {
     // Deployed with verifyJWT disabled since the caller is a Postgres trigger,
     // not a Supabase Auth user — the trigger authenticates instead by sending
-    // the service_role key (from vault's 'push_service_role_key' secret, see
-    // 062_push_notification_webhook.sql) as a bearer token, checked here.
-    const expectedAuth = `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`;
+    // the shared secret (from vault's 'push_service_role_key' secret, see
+    // 062_push_notification_webhook.sql) as a bearer token, checked here. Compared
+    // against PUSH_WEBHOOK_SECRET rather than the service_role key, since the
+    // auto-injected SUPABASE_SERVICE_ROLE_KEY format isn't reliable to match.
+    const expectedAuth = `Bearer ${Deno.env.get("PUSH_WEBHOOK_SECRET")!}`;
     if (req.headers.get("Authorization") !== expectedAuth) {
       return new Response("unauthorized", { status: 401 });
     }
@@ -90,6 +92,7 @@ Deno.serve(async (req) => {
       : undefined;
 
     const staleTokens: string[] = [];
+    let failed = 0;
     await Promise.all(
       tokens.map(async ({ token }) => {
         const res = await fetch(`https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`, {
@@ -105,6 +108,8 @@ Deno.serve(async (req) => {
         });
         if (!res.ok) {
           const body = await res.text();
+          failed++;
+          console.error(`FCM send failed (${res.status}) for notification ${notification_id}: ${body}`);
           // FCM returns UNREGISTERED (token uninstalled/expired) or NOT_FOUND
           // for tokens that will never succeed again — prune them so future
           // sends don't keep paying for a doomed request.
@@ -117,7 +122,7 @@ Deno.serve(async (req) => {
       await supabase.from("device_tokens").delete().in("token", staleTokens);
     }
 
-    return new Response(JSON.stringify({ sent: tokens.length - staleTokens.length }), {
+    return new Response(JSON.stringify({ sent: tokens.length - failed, failed }), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {

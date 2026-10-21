@@ -1055,6 +1055,28 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             {"cleanup_id": str(row.id), "group_id": cohost_group_id},
         )
 
+    # Notify every member of the host and co-host groups (except the organizer who just
+    # created it). The user_notifications insert trigger fans this out as a push.
+    group_name = (
+        await db.execute(text("SELECT name FROM groups WHERE id = :group_id"), {"group_id": str(payload.group_id)})
+    ).scalar_one()
+    await db.execute(
+        text("""
+            INSERT INTO user_notifications (user_id, type, title, body, link_url)
+            SELECT DISTINCT gm.user_id, 'group_event_created', :title, :body, :link_url
+            FROM group_members gm
+            WHERE gm.group_id = ANY(CAST(:group_ids AS uuid[]))
+              AND gm.user_id <> CAST(:organizer_user_id AS uuid)
+        """),
+        {
+            "title": f"New event: {payload.title}",
+            "body": f"{group_name} · {format_event_datetime(payload.scheduled_start)}",
+            "link_url": f"/cleanup-events/{row.id}",
+            "group_ids": [str(payload.group_id), *cohost_group_ids],
+            "organizer_user_id": str(payload.organizer_user_id),
+        },
+    )
+
     await db.commit()
 
     return {"id": str(row.id), "join_code": row.join_code, "geo_unit_id": geo_unit_id}
