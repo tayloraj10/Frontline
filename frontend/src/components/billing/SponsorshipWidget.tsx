@@ -70,13 +70,13 @@ export default function SponsorshipWidget({
           target_geo_unit_id: targetType === "geo_unit" ? targetId : null,
           amount_cents: amountCents,
           message: message || null,
-          success_url: `${window.location.origin}/billing/success`,
-          cancel_url: `${window.location.origin}/billing/cancel`,
+          success_url: window.location.href,
+          cancel_url: window.location.href,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      window.location.assign(data.url);
     } catch (err) {
       setError(extractErrorMessage(err, "Failed to start checkout"));
     } finally {

@@ -51,8 +51,8 @@ export default function DonateCard({ userId, embedded = false }: { userId: strin
           model: "general",
           amount_cents: Math.round(dollars * 100),
           message: message.trim() || null,
-          success_url: `${window.location.origin}/billing/success`,
-          cancel_url: `${window.location.origin}/billing/cancel`,
+          success_url: window.location.href,
+          cancel_url: window.location.href,
         }),
       });
       if (!res.ok) throw new Error(await res.text());

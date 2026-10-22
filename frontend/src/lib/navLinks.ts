@@ -35,7 +35,7 @@ export function buildNavLinks({ isBusinessOnly, isBusinessAdmin, isAdmin, hasAct
     : [
         { href: "/campaigns", label: "Campaigns", shortLabel: "Map", mobileHref: "/campaigns/trash-war" },
         { href: "/leaderboard", label: "Leaderboard", shortLabel: "Leaderboard" },
-        { href: "/partners", label: "Partners", shortLabel: "Rewards" },
+        { href: "/partners", label: "Rewards", shortLabel: "Rewards" },
         { href: "/groups", label: "Groups", shortLabel: "Groups", pulse: hasPendingOrganizerItems },
         ...(hasActiveTeamEvent
           ? [{ href: "/team-events", label: "Team Events", shortLabel: "Events", pulse: true }]

@@ -1,7 +1,7 @@
 "use client";
 
 import { SPONSORED_CHANGED_EVENT } from "@/components/map/useSponsoredMapLayer";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -209,6 +209,11 @@ export default function SponsorshipsHub({
   const [message, setMessage] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const createErrorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (createError) createErrorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [createError]);
 
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -311,14 +316,13 @@ export default function SponsorshipsHub({
           site_radius_meters: targetMode === "site" ? site.radius : null,
           amount_cents: amountCents,
           message: message || null,
-          success_url: `${window.location.origin}/billing/success`,
-          cancel_url: `${window.location.origin}/billing/cancel`,
+          success_url: `${window.location.origin}/sponsorships?checkout=success`,
+          cancel_url: `${window.location.origin}/sponsorships`,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      window.open(data.url, "_blank", "noopener,noreferrer");
-      refreshList();
+      window.location.assign(data.url);
     } catch (err) {
       setCreateError(extractErrorMessage(err, "Failed to start checkout"));
     } finally {
@@ -350,8 +354,6 @@ export default function SponsorshipsHub({
         description="Pick where your money goes, then set how it pays out. Your money is only paid out after the work is verified."
       >
         <Card padding="lg" className="space-y-4">
-          {createError && <Note tone="warn">{createError}</Note>}
-
           <ChoiceChips
             value={targetMode}
             onChange={(m) => {
@@ -529,6 +531,12 @@ export default function SponsorshipsHub({
               onChange={(e) => setMessage(e.target.value)}
             />
           </Field>
+
+          {createError && (
+            <div ref={createErrorRef} className="scroll-mt-24">
+              <Note tone="warn">{createError}</Note>
+            </div>
+          )}
 
           <Button
             className="w-full"

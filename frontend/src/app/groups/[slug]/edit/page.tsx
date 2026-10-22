@@ -91,7 +91,7 @@ export default async function GroupEditPage({ params }: Props) {
       </div>
 
       {isPlusGroup && (
-        <div className="rounded-[20px] p-6 bg-zinc-900 mb-8">
+        <div id="open-to-sponsors" className="scroll-mt-24 rounded-[20px] p-6 bg-zinc-900 mb-8">
           <GroupSponsorSettings
             groupId={groupData.id}
             initialOpen={Boolean(groupData.open_to_sponsors)}

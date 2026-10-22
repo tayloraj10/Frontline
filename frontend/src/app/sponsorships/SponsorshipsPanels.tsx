@@ -50,6 +50,19 @@ export default function SponsorshipsPanels({
   const [open, setOpen] = useState<PanelId | null>(null);
   const tabs = isAdmin ? [...TABS, ...ADMIN_TABS] : TABS;
 
+  // Returning from Stripe Checkout: keep the default view, just drop the return flag from the URL.
+  const [funded, setFunded] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("checkout") !== "success") return;
+    window.history.replaceState(null, "", window.location.pathname);
+    const show = setTimeout(() => setFunded(true), 0);
+    const hide = setTimeout(() => setFunded(false), 7000);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(hide);
+    };
+  }, []);
+
   // The map is already on screen by default, so opening a section scrolls down to it.
   useEffect(() => {
     if (!open) return;
@@ -60,6 +73,14 @@ export default function SponsorshipsPanels({
 
   return (
     <div>
+      {funded && (
+        <p
+          role="status"
+          className="mb-4 rounded-2xl bg-emerald-500/15 px-4 py-3 text-sm font-semibold text-emerald-200 ring-1 ring-inset ring-emerald-400/30"
+        >
+          Thank you! Your sponsorship is received and will go live shortly.
+        </p>
+      )}
       <nav aria-label="What do you want to do?" className="mb-5">
         <h2 className="mb-2 font-display text-base font-extrabold tracking-tight text-zinc-100">What do you want to do?</h2>
         <div className="flex flex-wrap gap-1.5">

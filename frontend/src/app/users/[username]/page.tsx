@@ -14,7 +14,7 @@ import BlockUserButton from "@/components/BlockUserButton";
 import SubscriptionWidget from "@/components/billing/SubscriptionWidget";
 import PlusBadge from "@/components/billing/PlusBadge";
 import { getPlusEntitlement } from "@/lib/plus.server";
-import PlusImpactCard from "./PlusImpactCard";
+import PlusImpactCard, { type RecapMonth } from "./PlusImpactCard";
 import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
 import { PageShell } from "@/components/ui/PageShell";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -251,16 +251,37 @@ export default async function UserProfilePage({ params }: Props) {
     perWeek.set(w, (perWeek.get(w) ?? 0) + 1);
   }
   const thisWeek = perWeek.get(nowWeek) ?? 0;
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  let monthBags = 0;
-  let monthCleanups = 0;
-  (allContribsData ?? []).forEach((c, i) => {
-    if (!c.submitted_at || new Date(c.submitted_at) < monthStart) return;
-    monthBags += bagsPerContrib[i];
-    if (CLEANUP_TYPES.has(c.contribution_type)) monthCleanups++;
-  });
+  // Per-month recap data (Plus members only), newest first. The current month is always included.
+  const recapMonths: RecapMonth[] = [];
+  if (isOwn && canSeePayments && isPlus) {
+    const byMonth = new Map<string, RecapMonth>();
+    const monthOf = (d: Date) => {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      let m = byMonth.get(key);
+      if (!m) {
+        m = {
+          key,
+          label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+          monthName: d.toLocaleDateString("en-US", { month: "long" }),
+          bags: 0,
+          cleanups: 0,
+          days: new Array(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()).fill(0),
+        };
+        byMonth.set(key, m);
+      }
+      return m;
+    };
+    monthOf(new Date());
+    (allContribsData ?? []).forEach((c, i) => {
+      if (!c.submitted_at) return;
+      const d = new Date(c.submitted_at);
+      const m = monthOf(d);
+      m.bags += bagsPerContrib[i];
+      m.days[d.getDate() - 1] += bagsPerContrib[i];
+      if (CLEANUP_TYPES.has(c.contribution_type)) m.cleanups++;
+    });
+    recapMonths.push(...[...byMonth.values()].sort((a, b) => b.key.localeCompare(a.key)));
+  }
   let streak = 0;
   for (let w = perWeek.has(nowWeek) ? nowWeek : nowWeek - 1; perWeek.has(w); w--) streak++;
   const displayName = profile.display_name ?? profile.username;
@@ -308,22 +329,8 @@ export default async function UserProfilePage({ params }: Props) {
       {isOwn && canSeePayments && (
         <SubscriptionWidget ownerType="user" ownerId={profile.id} adminPreview={isSiteAdmin && !paymentsGate.enabled} />
       )}
-      {isOwn && canSeePayments && (
-        <PlusImpactCard
-          isPlus={isPlus}
-          stats={{
-            displayName,
-            username: profile.username,
-            periodLabel: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-            monthBags,
-            monthCleanups,
-            lifetimeBags,
-            lifetimeCleanups: contribCount ?? 0,
-            streak,
-            areas: totalTractsCount,
-            points: formatPoints(profile.points ?? 0),
-          }}
-        />
+      {isOwn && canSeePayments && isPlus && (
+        <PlusImpactCard displayName={displayName} username={profile.username} months={recapMonths} />
       )}
 
       {/* Impact stats */}
