@@ -253,7 +253,7 @@ export default async function GroupProfilePage({ params }: Props) {
             directly. It is off until you enable it.
           </p>
           <Link
-            href={`/groups/${slug}/edit`}
+            href={`/groups/${slug}/edit#open-to-sponsors`}
             className="inline-flex min-h-11 items-center rounded-full bg-amber-300 px-5 text-sm font-bold text-amber-950 hover:bg-amber-200"
           >
             Open to sponsors
