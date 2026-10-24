@@ -231,6 +231,8 @@ export default function MarketplaceHome({
                   className={`space-y-3 border-l-4 ${
                     selected === j.id
                       ? "border-l-sky-400"
+                      : j.is_mine
+                      ? "border-l-amber-300 border-dashed"
                       : "border-l-emerald-400/70"
                   }`}
                 >
@@ -248,6 +250,7 @@ export default function MarketplaceHome({
                       {TIME_MODE_LABELS[j.time_mode]}
                     </Badge>
                     <Badge>{JOB_TYPE_LABELS[j.job_type] ?? j.job_type}</Badge>
+                    {j.is_mine && <Badge variant="pending">Your job</Badge>}
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
                     <span className="truncate">
@@ -277,7 +280,7 @@ export default function MarketplaceHome({
                         </button>
                       )}
                       <span className="inline-flex items-center font-semibold text-emerald-300">
-                        {isCleaner ? "View and take" : "View"}
+                        {isCleaner && !j.is_mine ? "View and take" : "View"}
                         <ChevronRight
                           className="h-3.5 w-3.5"
                           aria-hidden="true"

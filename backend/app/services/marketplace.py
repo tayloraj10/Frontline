@@ -431,11 +431,12 @@ async def list_board(
                            CASE WHEN CAST(:lat AS float8) IS NOT NULL AND j.location IS NOT NULL
                                 THEN ST_Distance(j.location,
                                      ST_SetSRID(ST_MakePoint(CAST(:lng AS float8), CAST(:lat AS float8)), 4326)::geography) / 1000.0
-                           END AS distance_km
+                           END AS distance_km,
+                           (j.customer_id = :u) AS is_mine
                     FROM marketplace_jobs j
                     JOIN profiles cu ON cu.id = j.customer_id
                     LEFT JOIN profiles cl ON cl.id = j.cleaner_id
-                    WHERE j.status = 'open' AND j.customer_id <> :u
+                    WHERE j.status = 'open'
                       AND (CAST(:tm AS text) IS NULL OR j.time_mode = CAST(:tm AS text))
                       AND NOT EXISTS (SELECT 1 FROM marketplace_blocks b
                                       WHERE (b.blocker_id = :u AND b.blocked_id = j.customer_id)

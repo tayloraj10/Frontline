@@ -52,6 +52,7 @@ export type Job = {
   customer_username: string | null;
   cleaner_username: string | null;
   distance_km?: number | null;
+  is_mine?: boolean;
   latitude?: number | null;
   longitude?: number | null;
   radius_m?: number | null;

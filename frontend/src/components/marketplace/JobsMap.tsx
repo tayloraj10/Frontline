@@ -75,7 +75,13 @@ export default function JobsMap({
       el.type = "button";
       el.textContent = usd(j.price_cents);
       el.setAttribute("aria-label", `${j.title}, ${usd(j.price_cents)}`);
-      el.className = "rounded-full bg-emerald-400 px-2.5 py-1 text-xs font-extrabold text-emerald-950 shadow-lg ring-2 ring-white/80";
+      el.dataset.mine = j.is_mine ? "1" : "";
+      el.className = cn(
+        "rounded-full px-2.5 py-1 text-xs font-extrabold shadow-lg ring-2",
+        j.is_mine
+          ? "border border-dashed border-amber-950/60 bg-amber-300 text-amber-950 ring-amber-100/80"
+          : "bg-emerald-400 text-emerald-950 ring-white/80",
+      );
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         select.current(j.id);
@@ -95,8 +101,10 @@ export default function JobsMap({
       const on = id === selectedId;
       el.style.transform = on ? "scale(1.2)" : "";
       el.style.zIndex = on ? "2" : "";
+      const mine = el.dataset.mine === "1";
       el.classList.toggle("bg-sky-400", on);
-      el.classList.toggle("bg-emerald-400", !on);
+      el.classList.toggle("bg-amber-300", !on && mine);
+      el.classList.toggle("bg-emerald-400", !on && !mine);
     });
     const sel = selectedId ? markers.current.get(selectedId) : null;
     if (sel && mapRef.current) {
@@ -155,7 +163,7 @@ export default function JobsMap({
                   {usd(selectedJob.price_cents)}
                   {selectedJob.price_type === "hourly" ? "/hr" : ""}
                 </span>{" "}
-                · {JOB_TYPE_LABELS[selectedJob.job_type] ?? selectedJob.job_type} · {whenLabel(selectedJob)}
+                · {selectedJob.is_mine ? "Your job · " : ""}{JOB_TYPE_LABELS[selectedJob.job_type] ?? selectedJob.job_type} · {whenLabel(selectedJob)}
               </p>
             </div>
             {onSeeInList && !expanded && (
