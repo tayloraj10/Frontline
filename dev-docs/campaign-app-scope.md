@@ -731,7 +731,11 @@ Tables that drive live map updates:
 - [x] Sponsored sites: funding, claim flow, allocation review queue (migration 115)
 - [x] Group sponsored areas: picker in event creation, event-to-pool link, allocation on team-total log (migration 116)
 - [x] Sponsored areas map layer (opt-in toggle) and local mock seeder `POST /admin/seed/payments-mock`
+- [x] Hire page local test data: `POST /api/admin/seed/marketplace` (`MarketplaceSeeder`; mk_maria/mk_devon/mk_priya customers, mk_jamal/mk_sofia/mk_theo cleaners, password `password`; `?remove=true` deletes)
 - [x] Sponsor-defined areas: map pin picker for sites; group areas as merged neighborhoods, circle or drawn polygon, stored as one geometry with server-enforced limits (migration 117)
+- [x] Paid cleaner marketplace (local only, admin preview, migration 121): cleaner agreements and profiles (active on save, no manual approval; admins can suspend), direct bookings and an open job board where cleaners take jobs at the posted price (no offers or bartering; cleaners can flag a price as too low, migration 124), specific/window/flexible timing, hold-then-release payment status, before/after photos, messages, reviews, reports, blocks, dispute queue and `/marketplace/admin`. "Hire" tab added to the rewards tabs; Rewards, Sponsorships and Impact pages revamped with `RewardsTabs`
+- [x] Marketplace photos and on-site verification (migration 123, local only until applied in prod): customers attach 1 to 4 site photos when posting; cleaner flow is arrive (before photo plus GPS within `marketplace_site_radius_m`, default 150 m of the pin radius or drawn area), work, finish (after photo plus GPS), then customer confirm or auto-release; "My location is wrong" override proceeds but sets `location_flagged` for admins; lifecycle push/in-app notifications to both sides; seeded accepted job `j7` for mk_jamal
+- [ ] Marketplace: Stripe Connect payouts (test mode), notifications, service tests, counsel review of agreements
 - [ ] Live Stripe test-mode verification, prod migrations 109-116
 
 ### Phase 1: Foundation (Week 1)
@@ -1065,4 +1069,4 @@ Built, admin-only until `payments_enabled` is turned on: Frontline Plus subscrip
 - Sponsor reward fulfillment (manual today).
 - Store bag count on allocations, cap-reason reporting, allocation review paging, changing sponsorship after event create.
 
-See `payments-v2-deployment-plan-2026-10-20.md` and `payments-v2-verification-checklist-2026-10-16.md`.
+See the Deploy runbook in `payments-v2-scoping-2026-10-15.md` and `payments-v2-verification-checklist-2026-10-16.md`.

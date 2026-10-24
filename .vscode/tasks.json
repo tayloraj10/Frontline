@@ -37,8 +37,34 @@
       "presentation": { "panel": "dedicated", "group": "fullstack" }
     },
     {
+      // Forwards Stripe sandbox webhooks to the local backend. Needs the Stripe CLI
+      // (winget install Stripe.StripeCli) and a one-time `stripe login`. Prints the
+      // whsec_ signing secret on start; it is stable per login, so it only needs to be
+      // put in backend/.env once. See dev-docs/stripe-setup-and-cutover-2026-10-22.md.
+      "label": "Stripe: Webhook Listener",
+      "type": "process",
+      "command": "${env:LOCALAPPDATA}/Microsoft/WinGet/Links/stripe.exe",
+      "args": [
+        "listen",
+        "--events",
+        "checkout.session.completed,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed,charge.refunded",
+        "--forward-to",
+        "localhost:8000/api/payments/webhooks/stripe"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": ".*"
+        }
+      },
+      "presentation": { "panel": "dedicated", "group": "fullstack" }
+    },
+    {
       "label": "Start Frontend + Supabase",
-      "dependsOn": ["Supabase: Start", "Frontend: Next.js"],
+      "dependsOn": ["Supabase: Start", "Frontend: Next.js", "Stripe: Webhook Listener"],
       "dependsOrder": "parallel",
       "problemMatcher": []
     }

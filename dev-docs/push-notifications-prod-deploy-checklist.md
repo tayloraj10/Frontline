@@ -33,6 +33,10 @@ Custom placeholder GUCs (`app.settings.*`) require real Postgres superuser to se
    ```
    Takes effect immediately — no restart or reconnect needed, unlike the old GUC approach.
 
+## Pending redeploy: send-push link_url (2026-10-23)
+
+`send-push/index.ts` now reads `user_notifications.link_url` and uses it as the tap deep link (falls back to `campaign_slug`). The Hire marketplace sets `link_url` on every notification (new job nearby, offer received), so **`supabase functions deploy send-push --project-ref nvidlxyzyoxzalxbydvg` must be run before the marketplace goes live**, otherwise pushes arrive but taps do not open the job. Needs migration 108 (`link_url` column) in prod, which is already applied. Mark this done here and in todo.md once deployed.
+
 ## Local setup (new repo clone, or after any `supabase db reset`)
 
 Neither of the two pieces below is in git — a fresh clone has zero push-notification config until you do this. Both also need repeating any time local Vault secrets get wiped (a `supabase db reset` clears them, same as any other table's data).
