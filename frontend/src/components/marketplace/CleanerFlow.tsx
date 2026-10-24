@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import { Camera, Check, MapPin } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -213,16 +214,20 @@ function Shot({ kind, busy, count, onPick }: { kind: string; busy: boolean; coun
 }
 
 function Thumbs({ list }: { list: FlowPhoto[] }) {
+  const { open, viewer } = usePhotoViewer(list.map((p) => p.url));
   if (list.length === 0) return null;
   return (
+    <>
     <ul className="grid grid-cols-4 gap-2">
-      {list.map((p) => (
+      {list.map((p, i) => (
         <li key={p.id} className="relative overflow-hidden rounded-lg bg-zinc-900">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={p.url} alt={`${p.kind} photo`} className="aspect-square w-full object-cover" />
+          <button type="button" onClick={() => open(i)} aria-label="Enlarge photo" className="block w-full touch-manipulation">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={p.url} alt={`${p.kind} photo`} className="aspect-square w-full object-cover" />
+          </button>
           {p.distance_m != null && (
             <span
-              className={`absolute bottom-1 left-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${p.distance_m <= ON_SITE_M ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}
+              className={`pointer-events-none absolute bottom-1 left-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${p.distance_m <= ON_SITE_M ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}
             >
               {p.distance_m <= ON_SITE_M ? "On site" : `${p.distance_m} m away`}
             </span>
@@ -230,5 +235,7 @@ function Thumbs({ list }: { list: FlowPhoto[] }) {
         </li>
       ))}
     </ul>
+    {viewer}
+    </>
   );
 }

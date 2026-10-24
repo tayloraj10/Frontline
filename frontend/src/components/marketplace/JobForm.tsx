@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import { Camera, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
@@ -50,6 +51,7 @@ export default function JobForm({
   const [place, setPlace] = useState<JobPlace>(EMPTY_PLACE);
   const [step, setStep] = useState(0);
   const [photos, setPhotos] = useState<string[]>([]);
+  const { open: openPhoto, viewer: photoViewer } = usePhotoViewer(photos);
   const [uploading, setUploading] = useState(false);
   const [mode, setMode] = useState<TimeMode>("window");
   const [startsAt, setStartsAt] = useState("");
@@ -193,10 +195,12 @@ export default function JobForm({
         <div className="space-y-2">
           {photos.length > 0 && (
             <ul className="grid grid-cols-4 gap-2">
-              {photos.map((u) => (
+              {photos.map((u, i) => (
                 <li key={u} className="relative overflow-hidden rounded-lg bg-zinc-900">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={u} alt="Site photo" className="aspect-square w-full object-cover" />
+                  <button type="button" onClick={() => openPhoto(i)} aria-label="Enlarge photo" className="block w-full touch-manipulation">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={u} alt="Site photo" className="aspect-square w-full object-cover" />
+                  </button>
                   <button
                     type="button"
                     aria-label="Remove photo"
@@ -209,6 +213,7 @@ export default function JobForm({
               ))}
             </ul>
           )}
+          {photoViewer}
           {photos.length < MAX_PHOTOS && (
             <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-zinc-800 px-4 text-sm font-bold text-zinc-100 touch-manipulation hover:bg-zinc-700 active:scale-[0.97]">
               <Camera className="h-4 w-4" aria-hidden="true" />

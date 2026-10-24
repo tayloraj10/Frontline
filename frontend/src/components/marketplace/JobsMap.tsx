@@ -169,7 +169,7 @@ export default function JobsMap({
           </button>
         </div>
         {jobs.some((j) => j.is_mine) && (
-          <div className="pointer-events-none absolute left-16 top-3 z-10 flex items-center gap-3 rounded-full bg-zinc-900/90 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 shadow-elevation-3 backdrop-blur-sm">
+          <div className={cn("pointer-events-none absolute z-10 flex items-center gap-3 rounded-full bg-zinc-900/90 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 shadow-elevation-3 backdrop-blur-sm", expanded ? "left-3 top-16" : "left-16 top-3")}>
             <span className="inline-flex items-center gap-1.5">
               <span className="size-2.5 rounded-full bg-emerald-400" aria-hidden="true" />
               Open jobs

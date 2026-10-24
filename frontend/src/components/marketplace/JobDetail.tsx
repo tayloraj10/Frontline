@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -105,14 +106,7 @@ export default function JobDetail({ initial, userId }: { initial: Job; userId: s
         </dl>
         {job.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{job.description}</p>}
         {job.listing_photos && job.listing_photos.length > 0 && (
-          <ul className="grid grid-cols-4 gap-2">
-            {job.listing_photos.map((u) => (
-              <li key={u} className="overflow-hidden rounded-lg bg-zinc-900">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={u} alt="The site, from the customer" className="aspect-square w-full object-cover" />
-              </li>
-            ))}
-          </ul>
+          <ListingPhotos urls={job.listing_photos} />
         )}
         {participant && job.location_flagged && (
           <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
@@ -391,18 +385,43 @@ function CancelRow({
   );
 }
 
+function ListingPhotos({ urls }: { urls: string[] }) {
+  const { open, viewer } = usePhotoViewer(urls);
+  return (
+    <>
+      <ul className="grid grid-cols-4 gap-2">
+        {urls.map((u, i) => (
+          <li key={u} className="overflow-hidden rounded-lg bg-zinc-900">
+            <button type="button" onClick={() => open(i)} aria-label="Enlarge photo" className="block w-full touch-manipulation">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt="The site, from the customer" className="aspect-square w-full object-cover" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {viewer}
+    </>
+  );
+}
+
 function Photos({ photos }: { photos: Photo[] }) {
+  const { open, viewer } = usePhotoViewer(photos.map((p) => p.url));
   if (photos.length === 0) return <p className="text-sm text-zinc-500">No photos yet.</p>;
   return (
-    <ul className="grid grid-cols-3 gap-2">
-      {photos.map((p) => (
-        <li key={p.id} className="relative overflow-hidden rounded-xl bg-zinc-900">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={p.url} alt={`${p.kind} photo`} className="aspect-square w-full object-cover" />
-          <span className="absolute bottom-1 left-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold capitalize text-zinc-100">{p.kind}</span>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="grid grid-cols-3 gap-2">
+        {photos.map((p, i) => (
+          <li key={p.id} className="relative overflow-hidden rounded-xl bg-zinc-900">
+            <button type="button" onClick={() => open(i)} aria-label="Enlarge photo" className="block w-full touch-manipulation">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt={`${p.kind} photo`} className="aspect-square w-full object-cover" />
+            </button>
+            <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold capitalize text-zinc-100">{p.kind}</span>
+          </li>
+        ))}
+      </ul>
+      {viewer}
+    </>
   );
 }
 
