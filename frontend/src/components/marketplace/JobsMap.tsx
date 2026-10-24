@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronRight, ListOrdered, X } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -36,6 +37,8 @@ export default function JobsMap({
   const markers = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLButtonElement }>>(new Map());
   const select = useRef(onSelect);
   const [basemap, setBasemap] = useState<Basemap>("outdoor");
+  const basemapRef = useRef<Basemap>("outdoor");
+  const view = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [expanded, setExpanded] = useState(false);
   const selectedJob = selectedId ? jobs.find((j) => j.id === selectedId) : null;
   useEffect(() => {
@@ -43,12 +46,12 @@ export default function JobsMap({
   }, [onSelect]);
 
   useEffect(() => {
-    if (!container.current || mapRef.current) return;
+    if (!container.current) return;
     const m = new maplibregl.Map({
       container: container.current,
-      style: styleUrl("outdoor"),
-      center: [-73.95, 40.7],
-      zoom: 10,
+      style: styleUrl(basemapRef.current),
+      center: view.current?.center ?? [-73.95, 40.7],
+      zoom: view.current?.zoom ?? 10,
       attributionControl: false,
       cooperativeGestures: true,
     });
@@ -57,12 +60,14 @@ export default function JobsMap({
     mapRef.current = m;
     const current = markers.current;
     return () => {
+      view.current = { center: m.getCenter().toArray() as [number, number], zoom: m.getZoom() };
       current.forEach((v) => v.marker.remove());
       current.clear();
       m.remove();
       mapRef.current = null;
     };
-  }, []);
+    // Expanding renders the map in a portal, so it is rebuilt (camera kept) when that flips.
+  }, [expanded]);
 
   useEffect(() => {
     const m = mapRef.current;
@@ -92,9 +97,9 @@ export default function JobsMap({
     if (located.length) {
       const b = new maplibregl.LngLatBounds();
       located.forEach((j) => b.extend([j.longitude as number, j.latitude as number]));
-      m.fitBounds(b, { padding: 48, maxZoom: 14, duration: 0 });
+      if (!view.current) m.fitBounds(b, { padding: 48, maxZoom: 14, duration: 0 });
     }
-  }, [jobs]);
+  }, [jobs, expanded]);
 
   useEffect(() => {
     markers.current.forEach(({ el }, id) => {
@@ -112,7 +117,7 @@ export default function JobsMap({
     } else {
       mapRef.current?.easeTo({ padding: { bottom: 0, top: 0, left: 0, right: 0 }, duration: 0 });
     }
-  }, [selectedId]);
+  }, [selectedId, expanded]);
 
   // The expanded map is the same instance in a larger box, so tell it to re-measure.
   useEffect(() => {
@@ -128,15 +133,22 @@ export default function JobsMap({
 
   const changeBasemap = (next: Basemap) => {
     setBasemap(next);
+    basemapRef.current = next;
     mapRef.current?.setStyle(styleUrl(next));
   };
 
-  return (
-    <div className={cn(expanded ? "fixed inset-0 z-[60] bg-black/90 p-3 sm:p-8" : "relative")}>
+  const content = (
+    <div
+      className={cn(
+        expanded
+          ? "fixed inset-0 z-[60] bg-black/90 px-3 pt-[max(0.75rem,calc(var(--top-header-h)+0.75rem))] pb-[max(0.75rem,calc(var(--bottom-nav-h)+0.75rem))] sm:p-8"
+          : "relative",
+      )}
+    >
       <div
         className={cn(
           "relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900",
-          expanded ? "h-full" : "h-72 w-full sm:h-96",
+          expanded ? "h-full" : "h-[26rem] w-full sm:h-[28rem]",
         )}
       >
         {/* maplibre's CSS forces position: relative on its container, so sizing lives on this parent. */}
@@ -149,9 +161,11 @@ export default function JobsMap({
             onClick={() => setExpanded((v) => !v)}
             title={expanded ? "Close expanded map" : "Expand map"}
             aria-label={expanded ? "Close expanded map" : "Expand map"}
-            className={mapIconBtn}
+            className={cn(mapIconBtn, expanded && "gap-1.5 px-3 text-sm font-bold")}
+            style={expanded ? { width: "auto" } : undefined}
           >
             <ExpandIcon open={expanded} />
+            {expanded && "Close"}
           </button>
         </div>
         {jobs.some((j) => j.is_mine) && (
@@ -224,4 +238,5 @@ export default function JobsMap({
       </div>
     </div>
   );
+  return expanded ? createPortal(content, document.body) : content;
 }
