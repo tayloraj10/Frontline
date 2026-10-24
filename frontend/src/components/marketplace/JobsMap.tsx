@@ -154,6 +154,18 @@ export default function JobsMap({
             <ExpandIcon open={expanded} />
           </button>
         </div>
+        {jobs.some((j) => j.is_mine) && (
+          <div className="pointer-events-none absolute left-16 top-3 z-10 flex items-center gap-3 rounded-full bg-zinc-900/90 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 shadow-elevation-3 backdrop-blur-sm">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-emerald-400" aria-hidden="true" />
+              Open jobs
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full border border-dashed border-amber-950/60 bg-amber-300" aria-hidden="true" />
+              Your jobs
+            </span>
+          </div>
+        )}
         {selectedJob && (
           <div className="absolute inset-x-3 bottom-3 z-20 flex items-center gap-3 rounded-2xl bg-zinc-900/95 p-3 shadow-elevation-3 ring-1 ring-inset ring-zinc-700 backdrop-blur-sm">
             <div className="min-w-0 flex-1">
