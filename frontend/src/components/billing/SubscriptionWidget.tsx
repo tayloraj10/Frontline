@@ -1,5 +1,6 @@
 "use client";
 
+import { checkoutReturnUrl } from "@/lib/billingReturn";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
 import Button from "@/components/ui/Button";
@@ -112,8 +113,8 @@ export default function SubscriptionWidget({
     redirectTo(
       "/api/admin/payments/checkout-session",
       {
-        success_url: window.location.href,
-        cancel_url: window.location.href,
+        success_url: checkoutReturnUrl("success"),
+        cancel_url: checkoutReturnUrl("cancelled"),
       },
       "Could not start checkout.",
     );

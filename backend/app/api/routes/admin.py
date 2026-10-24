@@ -17,6 +17,7 @@ from app.services.game_settings import get_game_settings as get_game_balance_set
 from app.services.seeders import GEO_UNIT_SEEDERS, REGISTRY, GeoUnitType, StatesSeeder
 from app.services.seeders.cleanup_rsvps import CleanupTestAttendeesSeeder
 from app.services.seeders.payments_mock import PaymentsMockSeeder
+from app.services.seeders.marketplace import MarketplaceSeeder
 from app.services.seeders.demo_data import DemoDataSeeder, _uid as _demo_uid
 from app.services.seeders.global_hexes import GlobalHexSeeder
 from app.services.seeders.solarpunk_preseed import SolarpunkPreseedSeeder
@@ -1911,3 +1912,14 @@ async def resolve_content_flag_group(
     resolved_count = len(result.fetchall())
     await db.commit()
     return {"resolved_count": resolved_count, "hidden": hidden}
+
+
+@router.post("/seed/marketplace")
+async def seed_marketplace(remove: bool = False, db: AsyncSession = Depends(get_db)):
+    """Local Hire page testing: fake customers (mk_maria, mk_devon, mk_priya), active cleaners (mk_jamal, mk_sofia, mk_theo),
+    open jobs around NYC and a few offers. Logins use password 'password'. remove=true deletes it all."""
+    try:
+        result = await MarketplaceSeeder().run(db, {"remove": remove})
+    except Exception as exc:
+        raise HTTPException(500, f"Marketplace seeder failed: {exc}")
+    return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}

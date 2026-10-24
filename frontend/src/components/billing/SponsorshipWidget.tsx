@@ -1,5 +1,6 @@
 "use client";
 
+import { checkoutReturnUrl } from "@/lib/billingReturn";
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -70,8 +71,8 @@ export default function SponsorshipWidget({
           target_geo_unit_id: targetType === "geo_unit" ? targetId : null,
           amount_cents: amountCents,
           message: message || null,
-          success_url: window.location.href,
-          cancel_url: window.location.href,
+          success_url: checkoutReturnUrl("success"),
+          cancel_url: checkoutReturnUrl("cancelled"),
         }),
       });
       if (!res.ok) throw new Error(await res.text());

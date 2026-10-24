@@ -1,8 +1,6 @@
-import { ChevronRight, HandCoins, Sparkles } from "lucide-react";
-import Link from "next/link";
-import { Card } from "@/components/ui/Card";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible } from "@/lib/paymentsVisibility";
+import RewardsTabs from "@/components/RewardsTabs";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import { createClient } from "@/lib/supabase/server";
@@ -86,53 +84,18 @@ export default async function PartnersPage() {
     <PageShell width="wide">
       <PageHeader
         eyebrow="Rewards"
-        title="Partner perks"
+        title="Perks"
         subtitle="Spend the points you earn from cleanups on discounts at local businesses."
-        action={<FlowGuide id="rewards" autoOpen variant="link" label="How do rewards work?" />}
+        titleAction={<FlowGuide id="rewards" autoOpen variant="link" label="How do rewards work?" />}
       />
+
+      {showPayments && <RewardsTabs current="perks" />}
 
       <BusinessApplyPrompt />
 
-      {showPayments && (
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-6 sm:gap-3">
-          <Link href="/sponsorships" className="group">
-            <Card
-              interactive
-              padding="sm"
-              className="relative h-full overflow-hidden border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent max-sm:!p-2 max-sm:flex max-sm:items-center max-sm:gap-2 sm:p-4"
-            >
-              <span className="flex h-8 w-8 shrink-0 sm:mb-2 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/30 transition-transform duration-200 group-hover:scale-110">
-                <HandCoins className="h-5 w-5" aria-hidden />
-              </span>
-              <p className="flex min-w-0 flex-1 items-center justify-between gap-1 text-sm leading-tight font-semibold text-zinc-100">
-                Sponsored cleanups
-                <ChevronRight className="h-4 w-4 shrink-0 text-emerald-300/70 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
-              </p>
-              <p className="mt-0.5 hidden text-xs text-zinc-400 sm:block">Claim a funded site, or fund a cleanup yourself.</p>
-            </Card>
-          </Link>
-          <Link href="/impact" className="group">
-            <Card
-              interactive
-              padding="sm"
-              className="relative h-full overflow-hidden border-sky-500/30 bg-gradient-to-br from-sky-500/20 via-sky-500/5 to-transparent max-sm:!p-2 max-sm:flex max-sm:items-center max-sm:gap-2 sm:p-4"
-            >
-              <span className="flex h-8 w-8 shrink-0 sm:mb-2 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-sky-500/20 text-sky-300 ring-1 ring-sky-400/30 transition-transform duration-200 group-hover:scale-110">
-                <Sparkles className="h-5 w-5" aria-hidden />
-              </span>
-              <p className="flex min-w-0 flex-1 items-center justify-between gap-1 text-sm leading-tight font-semibold text-zinc-100">
-                Impact
-                <ChevronRight className="h-4 w-4 shrink-0 text-sky-300/70 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
-              </p>
-              <p className="mt-0.5 hidden text-xs text-zinc-400 sm:block">See where sponsor and supporter money goes.</p>
-            </Card>
-          </Link>
-        </div>
-      )}
-
       {isBusinessOnly && (
         <div className="mb-6 px-4 py-3 rounded-2xl bg-sky-950/30 text-sm text-sky-300">
-          This is what other users see for your business's listing and offers. A business
+          This is what other users see for your business&apos;s listing and offers. A business
           only appears here while it has at least one active offer, but it shows up on the
           map at all times regardless of offers.
         </div>

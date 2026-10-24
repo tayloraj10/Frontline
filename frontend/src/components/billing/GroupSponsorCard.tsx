@@ -1,5 +1,6 @@
 "use client";
 
+import { checkoutReturnUrl } from "@/lib/billingReturn";
 import Link from "next/link";
 import { useState } from "react";
 import Button from "@/components/ui/Button";
@@ -67,8 +68,8 @@ export default function GroupSponsorCard({
           target_group_id: groupId,
           amount_cents: Math.round(dollars * 100),
           message: message.trim() || null,
-          success_url: window.location.href,
-          cancel_url: window.location.href,
+          success_url: checkoutReturnUrl("success"),
+          cancel_url: checkoutReturnUrl("cancelled"),
         }),
       });
       if (!res.ok) throw new Error(await res.text());

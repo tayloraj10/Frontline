@@ -1,5 +1,6 @@
-export async function uploadToR2(file: File): Promise<string> {
+export async function uploadToR2(file: File, kind?: string): Promise<string> {
   const params = new URLSearchParams({ filename: file.name, content_type: file.type });
+  if (kind) params.set("kind", kind);
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/upload/presign?${params}`,
   );

@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
 
     const { data: notification, error: notificationError } = await supabase
       .from("user_notifications")
-      .select("user_id, title, body, campaign_slug")
+      .select("user_id, title, body, campaign_slug, link_url")
       .eq("id", notification_id)
       .single();
     if (notificationError || !notification) return new Response("notification not found", { status: 404 });
@@ -85,9 +85,12 @@ Deno.serve(async (req) => {
 
     const serviceAccount = JSON.parse(Deno.env.get("FIREBASE_SERVICE_ACCOUNT")!);
     const accessToken = await getFcmAccessToken(serviceAccount);
-    const deepLinkUrl = notification.campaign_slug
-      ? `https://www.frontlinemaps.com/campaigns/${notification.campaign_slug}`
-      : undefined;
+    // link_url is a site-relative path (e.g. /marketplace/jobs/<id>); campaign_slug is the older fallback.
+    const deepLinkUrl = notification.link_url
+      ? `https://www.frontlinemaps.com${notification.link_url}`
+      : notification.campaign_slug
+        ? `https://www.frontlinemaps.com/campaigns/${notification.campaign_slug}`
+        : undefined;
 
     const staleTokens: string[] = [];
     await Promise.all(

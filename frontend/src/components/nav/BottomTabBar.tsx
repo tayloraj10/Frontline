@@ -111,8 +111,11 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   // A route can be prefix-matched by more than one link (e.g. "/partners" and
   // "/partners/dashboard" both prefix-match "/partners/dashboard") — only the
   // most specific (longest) match should light up, not every prefix that matches.
+  // Paid cleanups, Hire and Impact are tabs of the Rewards area, so they keep Rewards lit.
+  const REWARDS_AREA = ["/sponsorships", "/marketplace", "/impact"];
   function matchesHref(href: string) {
     if (href === "/") return pathname === "/";
+    if (href === "/partners" && REWARDS_AREA.some((p) => pathname?.startsWith(p))) return true;
     if (!pathname?.startsWith(href)) return false;
     return pathname.length === href.length || pathname[href.length] === "/";
   }

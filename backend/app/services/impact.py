@@ -90,6 +90,21 @@ async def get_impact_summary(db: AsyncSession) -> dict:
         )
     ).scalar_one()
 
+    groups = (
+        await db.execute(
+            text(f"""
+                SELECT
+                    (SELECT COUNT(*)::int FROM groups WHERE status = 'approved') AS active_groups,
+                    (SELECT COUNT(DISTINCT gm.user_id)::int FROM group_members gm
+                       JOIN groups g ON g.id = gm.group_id AND g.status = 'approved') AS members,
+                    COUNT(*)::int AS cleanups,
+                    COALESCE(SUM(COALESCE(cl.metrics_small_bags, 0) + COALESCE(cl.metrics_large_bags, 0)), 0)::int AS bags
+                FROM cleanups cl
+                WHERE cl.group_id IS NOT NULL AND {HAPPENED}
+            """)
+        )
+    ).one()
+
     partners = (
         await db.execute(
             text("""
@@ -117,6 +132,12 @@ async def get_impact_summary(db: AsyncSession) -> dict:
             "bags_collected": impact.bags,
             "pounds_collected": impact.pounds,
             "participants": participants,
+        },
+        "groups": {
+            "active_groups": groups.active_groups,
+            "members": groups.members,
+            "cleanups": groups.cleanups,
+            "bags": groups.bags,
         },
         "partners": [dict(p) for p in partners],
     }
