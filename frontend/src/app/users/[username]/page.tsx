@@ -14,6 +14,8 @@ import BlockUserButton from "@/components/BlockUserButton";
 import SubscriptionWidget from "@/components/billing/SubscriptionWidget";
 import PlusBadge from "@/components/billing/PlusBadge";
 import { getPlusEntitlement } from "@/lib/plus.server";
+import { getMarketplaceAccess, mkFetch } from "@/lib/marketplace.server";
+import type { MeStatus } from "@/lib/marketplace";
 import PlusImpactCard, { type RecapMonth } from "./PlusImpactCard";
 import GroupAvatarLightbox from "@/components/groups/GroupAvatarLightbox";
 import { PageShell } from "@/components/ui/PageShell";
@@ -106,6 +108,9 @@ export default async function UserProfilePage({ params }: Props) {
   ]);
   const isSiteAdmin = !!viewerAdminCheck?.is_admin;
   const canSeePayments = paymentsVisible(paymentsGate, isSiteAdmin);
+  const mkAccess = isOwn ? await getMarketplaceAccess() : null;
+  const mkMe = mkAccess?.allowed ? await mkFetch<MeStatus>(currentUser!.id, mkAccess.isAdmin, "/me").catch(() => null) : null;
+  const cleanerStatus = mkMe?.cleaner_profile?.status ?? null;
   const isPlus = canSeePayments ? (await getPlusEntitlement("user", profile.id)).has_premium : false;
 
   const { data: existingBlock } =
@@ -331,6 +336,25 @@ export default async function UserProfilePage({ params }: Props) {
       )}
       {isOwn && canSeePayments && isPlus && (
         <PlusImpactCard displayName={displayName} username={profile.username} months={recapMonths} />
+      )}
+
+      {isOwn && mkAccess?.allowed && (
+        <div className="mb-6 grid grid-cols-2 gap-3">
+          <Link
+            href="/marketplace/jobs"
+            className="flex min-h-14 flex-col justify-center rounded-[20px] bg-zinc-900 px-5 py-3 touch-manipulation active:scale-[0.98]"
+          >
+            <span className="text-sm font-extrabold text-zinc-100">My bookings</span>
+            <span className="text-xs text-zinc-500">Jobs you posted or took</span>
+          </Link>
+          <Link
+            href="/marketplace/become-a-cleaner"
+            className="flex min-h-14 flex-col justify-center rounded-[20px] bg-zinc-900 px-5 py-3 touch-manipulation active:scale-[0.98]"
+          >
+            <span className="text-sm font-extrabold text-zinc-100">{cleanerStatus ? "Cleaner profile" : "Become a cleaner"}</span>
+            <span className="text-xs text-zinc-500">{cleanerStatus ? "Your area, rate and status" : "Take jobs near you"}</span>
+          </Link>
+        </div>
       )}
 
       {/* Impact stats */}

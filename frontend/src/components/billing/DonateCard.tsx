@@ -1,5 +1,6 @@
 "use client";
 
+import { checkoutReturnUrl } from "@/lib/billingReturn";
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import { ChoiceChips, Field, Note, TextArea, TextInput } from "@/components/ui/fields";
@@ -51,8 +52,8 @@ export default function DonateCard({ userId, embedded = false }: { userId: strin
           model: "general",
           amount_cents: Math.round(dollars * 100),
           message: message.trim() || null,
-          success_url: window.location.href,
-          cancel_url: window.location.href,
+          success_url: checkoutReturnUrl("success"),
+          cancel_url: checkoutReturnUrl("cancelled"),
         }),
       });
       if (!res.ok) throw new Error(await res.text());

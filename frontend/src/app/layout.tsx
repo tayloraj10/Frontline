@@ -7,6 +7,7 @@ import LegalGate from "@/components/LegalGate";
 import NativeAppBridge from "@/components/NativeAppBridge";
 import PullToRefresh from "@/components/PullToRefresh";
 import PlusFlairProvider from "@/components/billing/PlusFlairProvider";
+import CheckoutNotice from "@/components/billing/CheckoutNotice";
 
 // Geist stays loaded because the campaign map page (excluded from the UI rework) still uses it.
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
@@ -74,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
         <NativeAppBridge />
+        <CheckoutNotice />
         <AppHeader />
         <div
           id="app-scroll-container"

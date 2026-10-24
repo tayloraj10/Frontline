@@ -203,15 +203,23 @@ async function claimFromPopup(siteId: string, btn: HTMLButtonElement, status: HT
 // bring the whole card (including the call to action) into view.
 function openPopup(popup: maplibregl.Popup, m: maplibregl.Map) {
   popup.addTo(m);
-  popup.getElement().style.zIndex = "100";
-  requestAnimationFrame(() => {
+  const el = popup.getElement();
+  el.style.zIndex = "100";
+  const fit = () => {
     const frame = m.getContainer().getBoundingClientRect();
-    const card = popup.getElement().getBoundingClientRect();
+    const card = el.getBoundingClientRect();
     const pad = 12;
     const dy = Math.max(0, frame.top + pad - card.top) - Math.max(0, card.bottom - (frame.bottom - pad));
     const dx = Math.max(0, frame.left + pad - card.left) - Math.max(0, card.right - (frame.right - pad));
     if (dx || dy) m.panBy([-dx, -dy], { duration: 250 });
-  });
+  };
+  // The card grows after it opens (distance check, claim status), so re-fit whenever its size changes.
+  requestAnimationFrame(fit);
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => requestAnimationFrame(fit));
+    ro.observe(el);
+    popup.once("close", () => ro.disconnect());
+  }
 }
 
 export interface SponsoredLayerOptions {

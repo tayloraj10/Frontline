@@ -11,6 +11,8 @@ import { teamEvents } from "./teamEvents";
 import { eventOrganizer } from "./eventOrganizer";
 import { rewards } from "./rewards";
 import { funding } from "./funding";
+import { marketplace } from "./marketplace";
+import { impact } from "./impact";
 
 /**
  * Registry of every walkthrough. Add a flow by creating a data file next to this one and listing it here.
@@ -29,6 +31,8 @@ export const WALKTHROUGHS = {
   "event-organizer": eventOrganizer,
   rewards,
   funding,
+  marketplace,
+  impact,
 } satisfies Record<string, WalkthroughDef>;
 
 export type WalkthroughId = keyof typeof WALKTHROUGHS;

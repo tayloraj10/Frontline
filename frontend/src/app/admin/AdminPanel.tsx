@@ -3533,6 +3533,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
   "email_organizer_stats_reminder_enabled",
   "payments_enabled",
   "payments_admin_preview",
+  "marketplace_enabled",
   "email_organizer_followup_enabled",
 ]);
 
