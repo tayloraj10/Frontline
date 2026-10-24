@@ -204,11 +204,11 @@ export default function MarketplaceHome({
           jobs={jobs}
           selectedId={selected}
           onSelect={setSelected}
-          onSeeInList={(id) =>
+          onSeeInList={(id) => {
             document
               .getElementById(`job-${id}`)
-              ?.scrollIntoView({ behavior: "smooth", block: "center" })
-          }
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
         />
       </div>
 
@@ -229,6 +229,8 @@ export default function MarketplaceHome({
                 <Card
                   interactive
                   className={`space-y-3 border-l-4 ${
+                    selected === j.id ? "!bg-sky-500/20 !ring-2 !ring-sky-400" : ""
+                  } ${
                     selected === j.id
                       ? "border-l-sky-400"
                       : j.is_mine
