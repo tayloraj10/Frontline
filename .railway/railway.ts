@@ -52,9 +52,10 @@ export default defineRailway(() => {
   const eventsExpiryCron = cron("events-expiry-cron", "run_events_expiry.py", "*/30 * * * *");
   const organizerRemindersCron = cron("organizer-reminders-cron", "run_organizer_reminders.py", "0 12 * * *");
   const organizerFollowupsCron = cron("organizer-followups-cron", "run_organizer_followups.py", "30 12 * * *");
+  const marketplaceSweepCron = cron("marketplace-sweep-cron", "run_marketplace_sweep.py", "*/15 * * * *");
 
   return project("alluring-exploration", {
     variables: { managed: false },
-    resources: [api, decayCron, eventsExpiryCron, organizerRemindersCron, organizerFollowupsCron],
+    resources: [api, decayCron, eventsExpiryCron, organizerRemindersCron, organizerFollowupsCron, marketplaceSweepCron],
   });
 });

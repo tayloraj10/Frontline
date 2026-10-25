@@ -156,6 +156,14 @@ async def create_job(body: JobIn, a: Actor = Depends(actor), db: AsyncSession = 
         raise _wrap(e)
 
 
+@router.post("/sweep")
+async def sweep(db: AsyncSession = Depends(get_db)):
+    """Expires unclaimed jobs past their deadline and auto-releases completed jobs past the
+    review window. Called every 15 minutes by a Railway cron (scripts/run_marketplace_sweep.py).
+    Time-based and idempotent, so it needs no auth, same as the other cron endpoints."""
+    return {"changed": await svc.expire_stale_jobs(db)}
+
+
 @router.get("/jobs")
 async def my_jobs(role: Literal["customer", "cleaner"] = "customer", a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     await svc.expire_stale_jobs(db)
