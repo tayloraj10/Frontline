@@ -8,8 +8,10 @@ const DISMISS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const APP_STORE_URL =
   process.env.NEXT_PUBLIC_APP_STORE_URL ?? "https://apps.apple.com/ca/app/frontline-maps/id6799487822";
-const PLAY_STORE_URL =
-  process.env.NEXT_PUBLIC_PLAY_STORE_URL ?? "https://play.google.com/store/apps/details?id=com.frontlinemaps.app";
+// TEMP: Play listing is removed while the child safety review is pending. Restore the line below once reinstated.
+// const PLAY_STORE_URL =
+//   process.env.NEXT_PUBLIC_PLAY_STORE_URL ?? "https://play.google.com/store/apps/details?id=com.frontlinemaps.app";
+const PLAY_STORE_URL = "";
 
 function StoreButton({ href, kicker, label }: { href: string; kicker: string; label: string }) {
   return (
