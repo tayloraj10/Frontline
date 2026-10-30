@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import Badge from "@/components/ui/Badge";
@@ -21,7 +22,7 @@ const HOLD_LABEL: Record<string, string> = {
   refunded: "Payment refunded",
 };
 
-export default function JobDetail({ initial, userId }: { initial: Job; userId: string }) {
+export default function JobDetail({ initial, userId, payoutsBlocked }: { initial: Job; userId: string; payoutsBlocked: boolean }) {
   const [job, setJob] = useState(initial);
   const [messages, setMessages] = useState<Message[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -118,7 +119,7 @@ export default function JobDetail({ initial, userId }: { initial: Job; userId: s
 
       {error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
 
-      <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} />
+      <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} />
 
       {role === "customer" && job.status === "open" && (job.price_flag_count ?? 0) > 0 && (
         <PriceFlags job={job} busy={busy} act={act} />
@@ -187,6 +188,21 @@ function PriceFlags({ job, busy, act }: { job: Job; busy: string | null; act: (k
   );
 }
 
+function PayoutsNeeded() {
+  return (
+    <div className="space-y-2 rounded-2xl bg-amber-400/10 p-3 ring-1 ring-inset ring-amber-400/40">
+      <p className="text-sm font-bold text-amber-100">Set up payouts first</p>
+      <p className="text-xs text-amber-100/70">We need your bank details through Stripe before you can take a job, so we can pay you.</p>
+      <Link
+        href="/marketplace/become-a-cleaner"
+        className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-amber-400 px-5 text-sm font-bold text-amber-950 touch-manipulation active:scale-[0.97]"
+      >
+        Set up payouts
+      </Link>
+    </div>
+  );
+}
+
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -203,6 +219,7 @@ function Actions({
   act,
   photos,
   refresh,
+  payoutsBlocked,
 }: {
   job: Job;
   role: "customer" | "cleaner" | "viewer";
@@ -210,6 +227,7 @@ function Actions({
   act: (key: string, path: string, body?: unknown) => Promise<void>;
   photos: Photo[];
   refresh: () => Promise<void>;
+  payoutsBlocked: boolean;
 }) {
   const [ack, setAck] = useState(false);
   const [price, setPrice] = useState("");
@@ -231,9 +249,10 @@ function Actions({
   if (role === "cleaner" && job.status === "requested") {
     return (
       <Card className="space-y-3">
+        {payoutsBlocked && <PayoutsNeeded />}
         {safety}
         <div className="grid grid-cols-2 gap-2">
-          <Button disabled={!ack} loading={busy === "accept"} onClick={() => act("accept", `${base}/accept`, { safety_ack: ack })}>
+          <Button disabled={!ack || payoutsBlocked} loading={busy === "accept"} onClick={() => act("accept", `${base}/accept`, { safety_ack: ack })}>
             Accept
           </Button>
           <Button variant="secondary" loading={busy === "decline"} onClick={() => act("decline", `${base}/decline`)}>
@@ -250,8 +269,9 @@ function Actions({
     return (
       <Card className="space-y-3">
         <p className="text-sm font-bold text-zinc-100">Take this job at {usd(job.price_cents)}{unit}</p>
+        {payoutsBlocked && <PayoutsNeeded />}
         {safety}
-        <Button className="w-full" disabled={!ack} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
+        <Button className="w-full" disabled={!ack || payoutsBlocked} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
           Take this job
         </Button>
         <p className="text-xs text-zinc-500">You need a cleaner profile and a signed agreement. The exact address unlocks once you take it.</p>

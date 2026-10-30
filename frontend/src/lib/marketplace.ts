@@ -83,7 +83,13 @@ export type MeStatus = {
   cleaner_agreement_accepted: boolean;
   customer_terms_accepted: boolean;
   job_types: string[];
+  /** False when Stripe Connect is not configured, so the server does not gate taking jobs on payouts. */
+  payouts_required: boolean;
 };
+
+/** True when this user has a cleaner profile but the server will refuse to let them take jobs until payouts are set up. */
+export const payoutsBlocked = (me: MeStatus | null) =>
+  !!me?.payouts_required && !!me.cleaner_profile && !me.cleaner_profile.payouts_enabled;
 
 export const usd = (cents: number) =>
   new Intl.NumberFormat("en-US", {
