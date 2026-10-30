@@ -109,6 +109,7 @@ async def my_status(db: AsyncSession, user_id: UUID) -> dict:
         "cleaner_agreement_accepted": await has_accepted_current(db, user_id, "cleaner"),
         "customer_terms_accepted": await has_accepted_current(db, user_id, "customer"),
         "job_types": JOB_TYPES,
+        "payouts_required": connect.is_configured(),
     }
 
 

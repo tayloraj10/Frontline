@@ -62,14 +62,13 @@ function distanceKm(from: [number, number], lat: number, lng: number) {
 export default function MarketplaceHome({
   board,
   profileStatus,
-  payoutsEnabled,
+  payoutsBlocked,
 }: {
   board: Job[];
   profileStatus: string | null;
-  payoutsEnabled: boolean;
+  payoutsBlocked: boolean;
 }) {
   const isCleaner = profileStatus === "active";
-  const needsPayouts = profileStatus !== null && !payoutsEnabled;
   const [service, setService] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [me, setMe] = useState<[number, number] | null>(null);
@@ -108,7 +107,7 @@ export default function MarketplaceHome({
 
   return (
     <div className="space-y-4">
-      {needsPayouts && (
+      {payoutsBlocked && (
         <Link
           href="/marketplace/become-a-cleaner"
           className="flex items-center gap-3 rounded-2xl bg-amber-400/10 p-4 ring-1 ring-inset ring-amber-400/40 touch-manipulation active:scale-[0.98]"

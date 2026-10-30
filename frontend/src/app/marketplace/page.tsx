@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/PageShell";
 import MarketplaceHome from "@/components/marketplace/MarketplaceHome";
 import { mkFetch, requireMarketplace } from "@/lib/marketplace.server";
 import type { AdminOverview } from "@/components/marketplace/AdminPanel";
-import type { Job, MeStatus } from "@/lib/marketplace";
+import { payoutsBlocked, type Job, type MeStatus } from "@/lib/marketplace";
 
 export default async function MarketplacePage() {
   const { user, isAdmin } = await requireMarketplace();
@@ -32,7 +32,7 @@ export default async function MarketplacePage() {
       />
       <RewardsTabs current="hire" />
       <MarketplaceHome board={board} profileStatus={me?.cleaner_profile?.status ?? null}
-        payoutsEnabled={me?.cleaner_profile?.payouts_enabled ?? false}
+        payoutsBlocked={payoutsBlocked(me)}
       />
       {isAdmin && (
         <Link
