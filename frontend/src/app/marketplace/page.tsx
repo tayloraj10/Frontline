@@ -31,7 +31,9 @@ export default async function MarketplacePage() {
         titleAction={<FlowGuide id="marketplace" variant="link" label="How does hiring work?" />}
       />
       <RewardsTabs current="hire" />
-      <MarketplaceHome board={board} profileStatus={me?.cleaner_profile?.status ?? null} />
+      <MarketplaceHome board={board} profileStatus={me?.cleaner_profile?.status ?? null}
+        payoutsEnabled={me?.cleaner_profile?.payouts_enabled ?? false}
+      />
       {isAdmin && (
         <Link
           href="/marketplace/admin"
