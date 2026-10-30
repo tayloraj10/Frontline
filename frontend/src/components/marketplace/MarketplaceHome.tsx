@@ -4,6 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import {
+  Banknote,
   Briefcase,
   ChevronRight,
   Crosshair,
@@ -61,11 +62,14 @@ function distanceKm(from: [number, number], lat: number, lng: number) {
 export default function MarketplaceHome({
   board,
   profileStatus,
+  payoutsEnabled,
 }: {
   board: Job[];
   profileStatus: string | null;
+  payoutsEnabled: boolean;
 }) {
   const isCleaner = profileStatus === "active";
+  const needsPayouts = profileStatus !== null && !payoutsEnabled;
   const [service, setService] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [me, setMe] = useState<[number, number] | null>(null);
@@ -104,6 +108,22 @@ export default function MarketplaceHome({
 
   return (
     <div className="space-y-4">
+      {needsPayouts && (
+        <Link
+          href="/marketplace/become-a-cleaner"
+          className="flex items-center gap-3 rounded-2xl bg-amber-400/10 p-4 ring-1 ring-inset ring-amber-400/40 touch-manipulation active:scale-[0.98]"
+        >
+          <Banknote className="h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-amber-100">Set up payouts to take jobs</span>
+            <span className="block text-sm text-amber-100/70">
+              You can browse, but you cannot take a job until Stripe has your bank details. It takes a few minutes.
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
+        </Link>
+      )}
+
       {isCleaner ? (
         <Card className="flex items-center gap-3 border-emerald-400/30 bg-emerald-400/5">
           <div className="min-w-0 flex-1">
