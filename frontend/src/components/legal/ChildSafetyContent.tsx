@@ -5,8 +5,8 @@ export default function ChildSafetyContent() {
     <div className="space-y-8 text-zinc-300">
       <Section title="1. Our Standard">
         <p>
-          Frontline has zero tolerance for child sexual abuse and exploitation (CSAE) and child
-          sexual abuse material (CSAM). Any content, account, or behavior on Frontline that
+          Frontline Maps ("Frontline") has zero tolerance for child sexual abuse and exploitation
+          (CSAE) and child sexual abuse material (CSAM). Any content, account, or behavior on Frontline Maps that
           sexualizes, exploits, or endangers minors is strictly prohibited and will be removed.
         </p>
       </Section>
