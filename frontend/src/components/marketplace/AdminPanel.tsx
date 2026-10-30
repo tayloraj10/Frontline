@@ -64,11 +64,11 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
               <li key={j.id}>
                 <Card padding="sm" className="space-y-2">
                   <Link href={`/marketplace/jobs/${j.id}`} className="font-bold text-zinc-100 underline-offset-2 hover:underline">
-                    {j.title} · {usd(j.price_cents)}
+                    {j.title} Â· {usd(j.price_cents)}
                   </Link>
                   <p className="text-xs text-zinc-500">
                     {j.customer_username} hired {j.cleaner_username}
-                    {j.release_after ? ` · auto-release ${new Date(j.release_after).toLocaleString()}` : ""}
+                    {j.release_after ? ` Â· auto-release ${new Date(j.release_after).toLocaleString()}` : ""}
                   </p>
                   {j.payment_error && <p className="text-sm text-amber-300">Last payment attempt failed: {j.payment_error}</p>}
                   <Button loading={busy === `${j.id}a`} onClick={() => run(`${j.id}a`, `/admin/jobs/${j.id}/release`, {})}>
