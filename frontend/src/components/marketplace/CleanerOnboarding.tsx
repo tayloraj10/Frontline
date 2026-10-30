@@ -129,6 +129,24 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
         </Card>
       )}
 
+      {p && (
+        <Card className={`space-y-3 ${p.payouts_enabled ? "" : "!ring-amber-400/40"}`}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-bold text-zinc-100">Payouts</p>
+            <Badge variant={p.payouts_enabled ? "success" : "pending"}>{p.payouts_enabled ? "Ready" : "Setup needed"}</Badge>
+          </div>
+          <p className="text-sm text-zinc-400">
+            {p.payouts_enabled
+              ? "You are set up to get paid. Earnings are sent to your bank through Stripe after a customer confirms a job."
+              : "Set up payouts with Stripe to take jobs. It takes a few minutes and you add your bank details on Stripe, never here."}
+          </p>
+          {payError && <p role="alert" className="text-sm text-red-400">{payError}</p>}
+          <Button variant={p.payouts_enabled ? "secondary" : "primary"} className="w-full" loading={payBusy} onClick={startPayouts}>
+            {p.payouts_enabled ? "Update payout details" : "Set up payouts"}
+          </Button>
+        </Card>
+      )}
+
       <Card className="space-y-4">
         <Field label="Headline" hint="One line customers see first.">
           <TextInput value={headline} onChange={(e) => setHeadline(e.target.value)} maxLength={120} />
@@ -204,24 +222,6 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
           {p ? "Save changes" : "Save and start taking jobs"}
         </Button>
       </Card>
-
-      {p && (
-        <Card className={`space-y-3 ${p.payouts_enabled ? "" : "!ring-amber-400/40"}`}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-bold text-zinc-100">Payouts</p>
-            <Badge variant={p.payouts_enabled ? "success" : "pending"}>{p.payouts_enabled ? "Ready" : "Setup needed"}</Badge>
-          </div>
-          <p className="text-sm text-zinc-400">
-            {p.payouts_enabled
-              ? "You are set up to get paid. Earnings are sent to your bank through Stripe after a customer confirms a job."
-              : "Set up payouts with Stripe to take jobs. It takes a few minutes and you add your bank details on Stripe, never here."}
-          </p>
-          {payError && <p role="alert" className="text-sm text-red-400">{payError}</p>}
-          <Button variant={p.payouts_enabled ? "secondary" : "primary"} className="w-full" loading={payBusy} onClick={startPayouts}>
-            {p.payouts_enabled ? "Update payout details" : "Set up payouts"}
-          </Button>
-        </Card>
-      )}
     </div>
   );
 }
