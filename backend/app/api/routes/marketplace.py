@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
+from app.services import connect
 from app.services import marketplace as svc
+from app.services import marketplace_payments as mp
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
@@ -82,6 +84,44 @@ async def accept_agreement(
 @router.get("/me")
 async def me(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     return await svc.my_status(db, a.user_id)
+
+
+@router.get("/payments/card")
+async def card(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    try:
+        return await mp.card_status(db, a.user_id)
+    except mp.PaymentError as e:
+        raise HTTPException(502, str(e))
+
+
+class CardSetupIn(BaseModel):
+    return_path: str = Field(default="/marketplace/post", max_length=200)
+
+
+@router.post("/payments/card/setup")
+async def card_setup(body: CardSetupIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    ok = body.return_path.startswith("/marketplace") and "//" not in body.return_path
+    path = body.return_path if ok else "/marketplace/post"
+    try:
+        return {"url": await mp.create_card_setup_url(db, a.user_id, path)}
+    except mp.PaymentError as e:
+        raise HTTPException(502, str(e))
+
+
+@router.post("/payouts/onboard")
+async def payouts_onboard(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    try:
+        return await connect.create_onboarding_link(db, a.user_id, None)
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.get("/payouts/status")
+async def payouts_status(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    try:
+        return await connect.refresh_status(db, a.user_id)
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))
 
 
 class CleanerProfileIn(BaseModel):
@@ -416,6 +456,14 @@ async def admin_resolve_report(
 ):
     try:
         return await svc.resolve_report(db, report_id, a.user_id, body.status, body.resolution)
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+
+
+@router.post("/admin/jobs/{job_id}/release")
+async def admin_release(job_id: UUID, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
+    try:
+        return await svc.admin_release_job(db, job_id)
     except svc.MarketplaceError as e:
         raise _wrap(e)
 
