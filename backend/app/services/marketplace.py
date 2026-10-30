@@ -19,6 +19,9 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import connect
+from app.services import marketplace_payments as mp
+
 logger = logging.getLogger(__name__)
 
 MAX_LISTING_PHOTOS = 4
@@ -249,6 +252,8 @@ async def create_job(
         raise MarketplaceError("Confirm there are no hazardous materials or unsafe conditions at the site.")
     if not await has_accepted_current(db, customer_id, "customer"):
         raise MarketplaceError("Accept the customer terms before posting a job.", 403)
+    if not (await mp.card_status(db, customer_id))["has_card"]:
+        raise MarketplaceError("Add a payment card before posting a job. You are only charged when a cleaner takes it.", 402)
     if cleaner_id is not None:
         if cleaner_id == customer_id:
             raise MarketplaceError("You cannot book yourself.")
@@ -457,23 +462,32 @@ async def expire_stale_jobs(db: AsyncSession) -> int:
                WHERE status IN ('open', 'requested') AND expires_at IS NOT NULL AND expires_at < now()"""
         )
     )
-    rel = await db.execute(
-        text(
-            """UPDATE marketplace_jobs SET status = 'released', hold_status = 'released', released_at = now()
-               WHERE status = 'completed' AND release_after IS NOT NULL AND release_after < now()
-               RETURNING id, cleaner_id, title"""
-        )
-    )
-    released = rel.all()
     await db.commit()
-    for jid, cid, title in released:
-        await _bump_cleaner_jobs(db, cid)
-        await db.commit()
-        await _notify_safe(
-            db, cid, "marketplace_job_paid", "Payment released",
-            f"\"{title}\" was released automatically. Your payout is on its way.", f"/marketplace/jobs/{jid}", "View job",
+    due = (
+        await db.execute(
+            text(
+                """SELECT id FROM marketplace_jobs
+                   WHERE status = 'completed' AND release_after IS NOT NULL AND release_after < now()"""
+            )
         )
-    return (res.rowcount or 0) + len(released)
+    ).scalars().all()
+    released = 0
+    for jid in due:
+        job = await _load_for_update(db, jid)
+        if job["status"] != "completed":
+            await db.rollback()
+            continue
+        try:
+            await _release(db, job, "released")
+        except MarketplaceError:
+            logger.warning("Auto-release failed for job %s, will retry next sweep", jid)
+            continue
+        released += 1
+        await _notify_safe(
+            db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
+            f"\"{job['title']}\" was released automatically. Your payout is on its way.", f"/marketplace/jobs/{jid}", "View job",
+        )
+    return (res.rowcount or 0) + released
 
 
 async def _load_for_update(db: AsyncSession, job_id: UUID) -> dict:
@@ -490,11 +504,67 @@ async def _require_cleaner_ready(db: AsyncSession, user_id: UUID) -> None:
         raise MarketplaceError("Accept the current cleaner agreement before taking jobs.", 403)
     ok = (
         await db.execute(
-            text("SELECT 1 FROM cleaner_profiles WHERE user_id = :u AND status = 'active'"), {"u": user_id}
+            text("SELECT payouts_enabled FROM cleaner_profiles WHERE user_id = :u AND status = 'active'"), {"u": user_id}
         )
     ).first()
     if not ok:
         raise MarketplaceError("Your cleaner profile is not active yet.", 403)
+    if connect.is_configured() and not ok.payouts_enabled:
+        raise MarketplaceError("Set up payouts before taking jobs, so we can pay you.", 403)
+
+
+async def _charge(db: AsyncSession, job: dict) -> str | None:
+    """Charges the customer when a cleaner takes the job (this is the hold). Nothing changes if it fails."""
+    try:
+        return await mp.charge_job(db, job)
+    except mp.PaymentError as e:
+        await db.rollback()
+        raise MarketplaceError(str(e), 402)
+
+
+async def _fail_payment(db: AsyncSession, job_id: UUID, err: Exception) -> MarketplaceError:
+    await db.rollback()
+    await db.execute(
+        text("UPDATE marketplace_jobs SET payment_error = :e WHERE id = :id"), {"e": str(err)[:500], "id": job_id}
+    )
+    await db.commit()
+    return MarketplaceError(str(err), 502)
+
+
+async def _release(db: AsyncSession, job: dict, status: str, *, confirmed: bool = False) -> None:
+    """Pays the cleaner and marks the job released (or confirmed). If Stripe fails the job is left as it
+    was with payment_error set, so it can be retried by the sweep or by an admin. Commits."""
+    try:
+        transfer_id = await mp.pay_out(db, job)
+    except mp.PaymentError as e:
+        raise await _fail_payment(db, job["id"], e)
+    await db.execute(
+        text(
+            """UPDATE marketplace_jobs SET status = :s, hold_status = 'released', released_at = now(),
+                 confirmed_at = CASE WHEN CAST(:c AS boolean) THEN now() ELSE confirmed_at END,
+                 stripe_transfer_id = coalesce(:t, stripe_transfer_id), payment_error = NULL
+               WHERE id = :id"""
+        ),
+        {"s": status, "c": confirmed, "t": transfer_id, "id": job["id"]},
+    )
+    if job["cleaner_id"]:
+        await _bump_cleaner_jobs(db, job["cleaner_id"])
+    await db.commit()
+
+
+async def _refund(db: AsyncSession, job: dict, status: str) -> None:
+    """Refunds the customer and marks the job. Same failure behavior as _release. Commits."""
+    try:
+        await mp.refund(job)
+    except mp.PaymentError as e:
+        raise await _fail_payment(db, job["id"], e)
+    await db.execute(
+        text(
+            """UPDATE marketplace_jobs SET status = :s, hold_status = 'refunded', payment_error = NULL WHERE id = :id"""
+        ),
+        {"s": status, "id": job["id"]},
+    )
+    await db.commit()
 
 
 async def accept_direct_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, safety_ack: bool) -> dict:
@@ -504,12 +574,13 @@ async def accept_direct_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, sa
     if not safety_ack:
         raise MarketplaceError("Confirm you checked the site and can do this safely.")
     await _require_cleaner_ready(db, cleaner_id)
+    intent_id = await _charge(db, job)
     await db.execute(
         text(
             """UPDATE marketplace_jobs SET status = 'accepted', accepted_at = now(), safety_ack_at = now(),
-                 hold_status = 'held' WHERE id = :id"""
+                 hold_status = 'held', stripe_payment_intent_id = :pi WHERE id = :id"""
         ),
-        {"id": job_id},
+        {"id": job_id, "pi": intent_id},
     )
     await db.commit()
     return await get_job(db, job_id, cleaner_id)
@@ -538,12 +609,14 @@ async def take_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, safety_ack:
     await _require_cleaner_ready(db, cleaner_id)
     fee_pct = await _setting(db, "marketplace_platform_fee_percent", 10)
     fee = int(round(job["price_cents"] * fee_pct / 100))
+    intent_id = await _charge(db, job)
     await db.execute(
         text(
             """UPDATE marketplace_jobs SET status = 'accepted', cleaner_id = :c, platform_fee_cents = :f,
-                 accepted_at = now(), safety_ack_at = now(), hold_status = 'held' WHERE id = :j"""
+                 accepted_at = now(), safety_ack_at = now(), hold_status = 'held', stripe_payment_intent_id = :pi
+               WHERE id = :j"""
         ),
-        {"c": cleaner_id, "f": fee, "j": job_id},
+        {"c": cleaner_id, "f": fee, "j": job_id, "pi": intent_id},
     )
     await db.commit()
     await _notify_safe(
@@ -606,10 +679,16 @@ async def cancel_job(db: AsyncSession, job_id: UUID, user_id: UUID, reason: str 
     if job["status"] not in ("requested", "open", "accepted"):
         raise MarketplaceError("This job can no longer be cancelled.", 409)
     refunded = job["hold_status"] == "held"
+    if refunded:
+        try:
+            await mp.refund(job)
+        except mp.PaymentError as e:
+            raise await _fail_payment(db, job_id, e)
     await db.execute(
         text(
             """UPDATE marketplace_jobs SET status = 'cancelled', cancelled_by = :u, cancel_reason = :r,
-                 hold_status = CASE WHEN hold_status = 'held' THEN 'refunded' ELSE hold_status END WHERE id = :id"""
+                 hold_status = CASE WHEN hold_status = 'held' THEN 'refunded' ELSE hold_status END,
+                 payment_error = NULL WHERE id = :id"""
         ),
         {"u": user_id, "r": reason, "id": job_id},
     )
@@ -741,15 +820,7 @@ async def confirm_job(db: AsyncSession, job_id: UUID, customer_id: UUID) -> dict
         raise MarketplaceError("Job not found.", 404)
     if job["status"] != "completed":
         raise MarketplaceError("The cleaner has not marked this job complete.", 409)
-    await db.execute(
-        text(
-            """UPDATE marketplace_jobs SET status = 'confirmed', confirmed_at = now(),
-                 hold_status = 'released', released_at = now() WHERE id = :id"""
-        ),
-        {"id": job_id},
-    )
-    await _bump_cleaner_jobs(db, job["cleaner_id"])
-    await db.commit()
+    await _release(db, job, "confirmed", confirmed=True)
     await _notify_safe(
         db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
         f"The customer confirmed \"{job['title']}\". Your payout is on its way.", f"/marketplace/jobs/{job_id}", "View job",
@@ -994,7 +1065,19 @@ async def admin_overview(db: AsyncSession) -> dict:
             )
         )
     ).mappings().all()
+    awaiting = (
+        await db.execute(
+            text(
+                """SELECT j.id, j.title, j.price_cents, j.completed_at, j.release_after, j.payment_error,
+                          cu.username AS customer_username, cl.username AS cleaner_username
+                   FROM marketplace_jobs j JOIN profiles cu ON cu.id = j.customer_id
+                   LEFT JOIN profiles cl ON cl.id = j.cleaner_id
+                   WHERE j.status = 'completed' ORDER BY j.completed_at"""
+            )
+        )
+    ).mappings().all()
     return {
+        "awaiting_release": [_plain(r) for r in awaiting],
         "pending_cleaners": [_plain(r) for r in pending],
         "disputed_jobs": [_plain(r) for r in disputed],
         "open_reports": [_plain(r) for r in reports],
@@ -1024,19 +1107,25 @@ async def admin_resolve_dispute(db: AsyncSession, job_id: UUID, outcome: Literal
     if job["status"] != "disputed":
         raise MarketplaceError("This job is not in dispute.", 409)
     if outcome == "release":
-        await db.execute(
-            text("UPDATE marketplace_jobs SET status = 'released', hold_status = 'released', released_at = now() WHERE id = :id"),
-            {"id": job_id},
-        )
-        if job["cleaner_id"]:
-            await _bump_cleaner_jobs(db, job["cleaner_id"])
+        await _release(db, job, "released")
     else:
-        await db.execute(
-            text("UPDATE marketplace_jobs SET status = 'refunded', hold_status = 'refunded' WHERE id = :id"),
-            {"id": job_id},
-        )
-    await db.commit()
+        await _refund(db, job, "refunded")
     return {"ok": True, "outcome": outcome}
+
+
+async def admin_release_job(db: AsyncSession, job_id: UUID) -> dict:
+    """Admin approval for a finished job whose customer has not confirmed in time (or whose
+    payout failed and needs a retry). Pays the cleaner the same way the customer's confirm does."""
+    job = await _load_for_update(db, job_id)
+    if job["status"] != "completed":
+        raise MarketplaceError("Only a job the cleaner marked complete can be released.", 409)
+    await _release(db, job, "released")
+    if job["cleaner_id"]:
+        await _notify_safe(
+            db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
+            f"\"{job['title']}\" was approved by Frontline. Your payout is on its way.", f"/marketplace/jobs/{job_id}", "View job",
+        )
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------- helpers

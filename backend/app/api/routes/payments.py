@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
+from app.services import connect as connect_service
 from app.services import impact as impact_service
 from app.services import payments as payments_service
 from app.services import sponsorships as sponsorships_service
@@ -175,6 +176,8 @@ async def stripe_webhook(request: Request, stripe_signature: str | None = Header
             "Stripe invoice payment failed: invoice=%s customer=%s subscription=%s",
             obj.get("id"), obj.get("customer"), obj.get("subscription"),
         )
+    elif event_type == "account.updated":
+        await connect_service.sync_account_from_webhook(db, obj)
     elif event_type == "charge.refunded":
         payment_intent_id = obj.get("payment_intent")
         if payment_intent_id:

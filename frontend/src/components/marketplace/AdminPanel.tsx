@@ -9,6 +9,7 @@ import { Section } from "@/components/ui/PageShell";
 import { mk, usd } from "@/lib/marketplace";
 
 export type AdminOverview = {
+  awaiting_release: { id: string; title: string; price_cents: number; release_after: string | null; payment_error: string | null; customer_username: string | null; cleaner_username: string | null }[];
   pending_cleaners: { user_id: string; username: string | null; headline: string; services: string[]; created_at: string }[];
   disputed_jobs: { id: string; title: string; price_cents: number; customer_username: string | null; cleaner_username: string | null; details: string | null }[];
   open_reports: { id: string; kind: string; details: string; job_id: string | null; reporter: string | null; reported: string | null }[];
@@ -50,6 +51,35 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
       </div>
 
       {error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+      <Section
+        title={`Awaiting release (${data.awaiting_release.length})`}
+        description="Finished jobs the customer has not confirmed. They pay out on their own after the review window. Release now pays the cleaner immediately."
+      >
+        {data.awaiting_release.length === 0 ? (
+          <p className="text-sm text-zinc-500">None.</p>
+        ) : (
+          <ul className="space-y-3">
+            {data.awaiting_release.map((j) => (
+              <li key={j.id}>
+                <Card padding="sm" className="space-y-2">
+                  <Link href={`/marketplace/jobs/${j.id}`} className="font-bold text-zinc-100 underline-offset-2 hover:underline">
+                    {j.title} · {usd(j.price_cents)}
+                  </Link>
+                  <p className="text-xs text-zinc-500">
+                    {j.customer_username} hired {j.cleaner_username}
+                    {j.release_after ? ` · auto-release ${new Date(j.release_after).toLocaleString()}` : ""}
+                  </p>
+                  {j.payment_error && <p className="text-sm text-amber-300">Last payment attempt failed: {j.payment_error}</p>}
+                  <Button loading={busy === `${j.id}a`} onClick={() => run(`${j.id}a`, `/admin/jobs/${j.id}/release`, {})}>
+                    Release now
+                  </Button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
       <Section title={`Cleaners awaiting approval (${data.pending_cleaners.length})`}>
         {data.pending_cleaners.length === 0 ? (

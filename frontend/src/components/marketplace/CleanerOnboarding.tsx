@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getPosition } from "@/lib/getPosition";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -37,6 +37,31 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
   async function reload() {
     setMe(await mk<MeStatus>("/me"));
   }
+
+  const [payBusy, setPayBusy] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  async function startPayouts() {
+    setPayBusy(true);
+    setPayError(null);
+    try {
+      const { url } = await mk<{ url: string }>("/payouts/onboard", { method: "POST", body: {} });
+      window.location.href = url;
+    } catch (e) {
+      setPayError((e as Error).message);
+      setPayBusy(false);
+    }
+  }
+
+  // Back from Stripe's hosted onboarding: ask Stripe where the account stands, then reload.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).get("payouts")) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    mk("/payouts/status")
+      .then(() => mk<MeStatus>("/me"))
+      .then(setMe)
+      .catch(() => {});
+  }, []);
 
   const [locating, setLocating] = useState(false);
 
@@ -181,11 +206,20 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
       </Card>
 
       {p && (
-        <Card className="space-y-1">
-          <p className="font-bold text-zinc-100">Payouts</p>
+        <Card className={`space-y-3 ${p.payouts_enabled ? "" : "!ring-amber-400/40"}`}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-bold text-zinc-100">Payouts</p>
+            <Badge variant={p.payouts_enabled ? "success" : "pending"}>{p.payouts_enabled ? "Ready" : "Setup needed"}</Badge>
+          </div>
           <p className="text-sm text-zinc-400">
-            {p.payouts_enabled ? "Payouts are set up." : "Payout setup via Stripe arrives soon. Until then, payment is held safely and released once jobs are confirmed."}
+            {p.payouts_enabled
+              ? "You are set up to get paid. Earnings are sent to your bank through Stripe after a customer confirms a job."
+              : "Set up payouts with Stripe to take jobs. It takes a few minutes and you add your bank details on Stripe, never here."}
           </p>
+          {payError && <p role="alert" className="text-sm text-red-400">{payError}</p>}
+          <Button variant={p.payouts_enabled ? "secondary" : "primary"} className="w-full" loading={payBusy} onClick={startPayouts}>
+            {p.payouts_enabled ? "Update payout details" : "Set up payouts"}
+          </Button>
         </Card>
       )}
     </div>

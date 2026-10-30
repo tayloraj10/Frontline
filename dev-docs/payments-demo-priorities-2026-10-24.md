@@ -35,8 +35,8 @@ Order matters: migrations before backend, backend before frontend, otherwise the
 
 ## C. Things that go with it (found while preparing this)
 
-- [ ] **Stale-job sweep has no scheduler.** `expire_stale_jobs` (expires unclaimed jobs past their deadline, auto-releases completed jobs after the review window) exists in `services/marketplace.py` but nothing calls it. Needs a `run_marketplace_sweep.py` script plus a cron entry in `.railway/railway.ts` (then `railway.exe config plan` and `config apply --yes`). Must exist before the demo is anything more than a click-through, since auto-release is part of the pitch.
-- [ ] **No money moves yet.** Hold on accept, capture on release and the cleaner payout are only status fields (`hold_status`). Say so in the demo. Real flow needs Stripe Connect for cleaners (onboarding, transfer on release, webhooks, "Set up payouts" prompt). Open decision: auto-pay on approval vs manual release.
+- [x] **Stale-job sweep** built (`run_marketplace_sweep.py`, Railway cron). Still needs `config plan` and `config apply --yes`.
+- [x] **Money moves (built, unverified against Stripe).** Customer saves a card (Checkout setup). Card is charged at accept (the hold), cleaner share transferred on release via Connect, refund on cancel. Release paths: customer confirm, auto after the review window (sweep), admin "Release now" in `/marketplace/admin`. Failures set `payment_error` and retry. Needs migration 125. Cleaners need payout onboarding, posters need a test card (4242...). Connected-account webhook endpoint is optional for now.
 - [ ] **Admin "Cleaners awaiting approval" queue** is now always empty because profiles save active. Hide or remove it.
 - [ ] **Cleaner verification stance.** Auto-active was a deliberate call. Stripe Connect identity checks become the real gate once payouts exist. Revisit before launch with legal.
 - [ ] **Tests.** The marketplace has no automated tests, and nothing was runtime-tested in a browser end to end. Do a manual pass on a phone before showing anyone.
