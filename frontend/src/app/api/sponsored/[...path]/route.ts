@@ -42,7 +42,7 @@ async function forward(
 
   const secret = process.env.ADMIN_API_SECRET;
   if (!secret) {
-    return NextResponse.json({ detail: "ADMIN_API_SECRET is not configured on the frontend server." }, { status: 503 });
+    return NextResponse.json({ detail: "Something went wrong. Please try again in a few minutes." }, { status: 503 });
   }
 
   const url = new URL(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/sponsorships/${path}`);
