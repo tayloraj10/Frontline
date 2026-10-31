@@ -2202,10 +2202,12 @@ export default function CampaignMap({
     const src = map.current?.getSource("route-picker") as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
     const vertices = routeVerticesRef.current;
-    const features: GeoJSON.Feature[] = vertices.map((coord) => ({
+    // The first vertex is the meetup point for events (pin, directions, check-in), so it
+    // is drawn larger and green to stand apart from the amber route nodes.
+    const features: GeoJSON.Feature[] = vertices.map((coord, i) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: coord },
-      properties: {},
+      properties: { start: i === 0 },
     }));
     if (vertices.length >= 2) {
       features.push({
@@ -4058,8 +4060,8 @@ export default function CampaignMap({
       source: "route-picker",
       filter: ["==", ["geometry-type"], "Point"],
       paint: {
-        "circle-radius": 6,
-        "circle-color": "#f59e0b",
+        "circle-radius": ["case", ["==", ["get", "start"], true], 10, 6],
+        "circle-color": ["case", ["==", ["get", "start"], true], "#10b981", "#f59e0b"],
         "circle-stroke-width": 2,
         "circle-stroke-color": "#451a03",
       },
@@ -5897,11 +5899,13 @@ export default function CampaignMap({
 
       {routePickerActive && (
         <>
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md whitespace-nowrap bg-zinc-900/95 text-zinc-100 flex items-center gap-2">
+          <div className="absolute top-14 sm:top-[calc(var(--map-top,2.75rem)+0.75rem)] left-1/2 -translate-x-1/2 z-30 w-max max-w-[calc(100%-1.5rem)] px-5 py-2.5 rounded-3xl text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md bg-zinc-900/95 text-zinc-100 flex items-center gap-2">
             <span>
               {routePickerJustClosedLoop
                 ? "Route closed. Click Undo to reopen"
-                : `Click the map to draw your cleanup route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
+                : routePickerVertexCount === 0
+                  ? "Tap the map to place the meetup point (start)"
+                  : `Keep clicking to draw the route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
             </span>
           </div>
           <div className="absolute bottom-20 left-3 right-3 sm:left-1/2 sm:right-auto sm:w-[26rem] sm:-translate-x-1/2 z-30 flex flex-col gap-2 p-2.5 rounded-3xl bg-zinc-950/95 backdrop-blur-md shadow-elevation-3 border border-zinc-700/60">
