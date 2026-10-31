@@ -3580,7 +3580,7 @@ function HostEventModal({
         </p>
         <InlineTip title="Spot or route">
           <p><span className="font-semibold text-zinc-200">One spot:</span> everyone meets at a single address or pin.</p>
-          <p><span className="font-semibold text-zinc-200">A route:</span> you draw a stretch of street or trail to clean along. Pick a meetup point where people gather first.</p>
+          <p><span className="font-semibold text-zinc-200">A route:</span> you draw a stretch of street or trail to clean along. The first point you draw is where people meet, and anyone along the route can check in.</p>
         </InlineTip>
       </div>
 

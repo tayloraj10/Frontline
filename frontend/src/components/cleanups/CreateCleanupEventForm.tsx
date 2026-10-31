@@ -391,12 +391,12 @@ export default function CreateCleanupEventForm({
       <div className="flex items-start justify-between gap-2 -mt-1">
         <p className="text-xs text-zinc-400">
           {showRoutePicker
-            ? "Jump to the area first, then tap the map to draw the route. The spot you searched is the meetup point."
+            ? "Jump to the area first, then tap the map to draw the route. The first point you draw is the meetup point."
             : "Search for an address, or tap the map to drop the pin."}
         </p>
         <InlineTip title="Spot or route">
           <p><span className="font-semibold text-zinc-200">One spot:</span> everyone meets at a single address or pin.</p>
-          <p><span className="font-semibold text-zinc-200">A route:</span> you draw a stretch of street or trail to clean along. Pick a meetup point where people gather first.</p>
+          <p><span className="font-semibold text-zinc-200">A route:</span> you draw a stretch of street or trail to clean along. The first point you draw is where people meet, and anyone along the route can check in.</p>
         </InlineTip>
       </div>
 
