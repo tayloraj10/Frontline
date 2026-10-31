@@ -2820,10 +2820,12 @@ export default function CampaignMap({
       });
   }, []);
 
-  // Midpoint marker per drawn route — a pre-planned group-event route reuses the
-  // existing event detail modal (its id matches a cleanupEvents entry); an individual/group
-  // route instead shows a lightweight popup (not a full page navigation), matching a
-  // point-based cleanup's hover-tooltip convention.
+  // One marker per drawn route — a pre-planned group-event route reuses the existing event
+  // detail modal (its id matches a cleanupEvents entry) and is anchored at the route's start,
+  // since that is the meetup point (and where the event pin / directions / check-in point
+  // are); an individual/group route has no meetup point, so it sits at the middle vertex and
+  // shows a lightweight popup (not a full page navigation), matching a point-based
+  // cleanup's hover-tooltip convention.
   const updateCleanupRouteMarkers = useCallback(
     (routes: CampaignCleanupRoute[], events: MapCleanupEvent[]) => {
       if (!map.current) return;
@@ -2843,8 +2845,8 @@ export default function CampaignMap({
       for (const r of routes) {
         const coords = r.route.coordinates;
         if (!coords || coords.length === 0) continue;
-        const mid = coords[Math.floor(coords.length / 2)];
         const event = eventById.get(r.id);
+        const mid = event ? coords[0] : coords[Math.floor(coords.length / 2)];
 
         const wrapper = document.createElement("div");
         wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;";
@@ -2937,9 +2939,9 @@ export default function CampaignMap({
             { id: r.id, latitude: photo.lat, longitude: photo.lng, photo_url: photo.url },
             (p) => setSelectedPhoto(p.contentId ? p : { url: p.url }),
             36,
-            // Offset up and out of the way of the route's midpoint waypoint icon, which
-            // otherwise sits fully hidden underneath (and unclickable) when a photo happens
-            // to have been taken at that exact node.
+            // Offset up and out of the way of the route's waypoint icon (start for events,
+            // middle for ad hoc routes), which otherwise sits fully hidden underneath (and
+            // unclickable) when a photo happens to have been taken at that exact node.
             [0, -30],
             routePhotoMarkerScaleElsRef,
             map.current ? getRoutePhotoMarkerScale(map.current.getZoom()) : 1,
