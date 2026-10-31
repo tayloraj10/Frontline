@@ -88,7 +88,10 @@ with `is_group_event = true`, a `group_id`, and a `join_code`.
 3. **Check in on arrival** — `POST /cleanup-events/{id}/check-in`, two ways to
    satisfy it:
    - **Live location**: the caller's lat/lng, verified server-side to be within
-     `CLEANUP_EVENT_PROXIMITY_METERS` (150m) of the event.
+     `CLEANUP_EVENT_PROXIMITY_METERS` (150m) of the event. For route events the
+     zone is the whole route (the blue buffer on the event map), not just the pin, so
+     late arrivals anywhere along it can check in. The pin of a route event is always
+     snapped to the route's first point on create/edit.
    - **Join code**: typed in manually (shouted-across-a-parking-lot fallback for
      unreliable GPS) — exempts the proximity check but *not* the time window.
 
