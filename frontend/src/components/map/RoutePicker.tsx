@@ -61,7 +61,7 @@ export default function RoutePicker({
         ...(coords.length >= 2
           ? [{ type: "Feature" as const, properties: {}, geometry: { type: "LineString" as const, coordinates: coords } }]
           : []),
-        ...coords.map((c) => ({ type: "Feature" as const, properties: {}, geometry: { type: "Point" as const, coordinates: c } })),
+        ...coords.map((c, i) => ({ type: "Feature" as const, properties: { start: i === 0 }, geometry: { type: "Point" as const, coordinates: c } })),
       ],
     });
   };
@@ -108,8 +108,8 @@ export default function RoutePicker({
         source: "route-picker",
         filter: ["==", ["geometry-type"], "Point"],
         paint: {
-          "circle-radius": 6,
-          "circle-color": "#f59e0b",
+          "circle-radius": ["case", ["==", ["get", "start"], true], 10, 6],
+          "circle-color": ["case", ["==", ["get", "start"], true], "#10b981", "#f59e0b"],
           "circle-stroke-width": 2,
           "circle-stroke-color": "#451a03",
         },
@@ -173,10 +173,12 @@ export default function RoutePicker({
     <div className={`relative w-full ${heightClassName}`}>
       <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden border border-zinc-700/50" />
 
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-zinc-900/95 border border-zinc-700 rounded-lg text-xs text-zinc-200 shadow-xl whitespace-nowrap">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-max max-w-[calc(100%-1.5rem)] px-4 py-2 bg-zinc-900/95 border border-zinc-700 rounded-lg text-xs text-center text-zinc-200 shadow-xl">
         {justClosedLoop
           ? "Route closed. Click Undo to reopen"
-          : `Click the map to draw your route (${coordCount} point${coordCount === 1 ? "" : "s"})`}
+          : coordCount === 0
+            ? "Tap the map to place the meetup point (start)"
+            : `Keep clicking to draw the route (${coordCount} point${coordCount === 1 ? "" : "s"})`}
       </div>
 
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex gap-2">
