@@ -92,3 +92,37 @@ export async function listCampaignCleanupRoutes(campaignId: string): Promise<Cam
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<CampaignCleanupRoute[]>;
 }
+
+// Distance in meters from a point to the closest spot on a route polyline (0 if it lies
+// on it). Mirrors the server's check-in proximity (ST_DWithin against the route), so the
+// "X away" hint on the event page agrees with whether check-in will actually succeed.
+// Uses a local equirectangular projection per segment: error is negligible at the
+// sub-kilometer scales involved.
+export function distanceToRouteMeters(
+  lat: number,
+  lng: number,
+  coordinates: [number, number][],
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const cosLat = Math.cos(toRad(lat));
+  // Project to meters relative to the query point, so the point is the origin.
+  const project = ([cLng, cLat]: [number, number]) => ({
+    x: toRad(cLng - lng) * cosLat * R,
+    y: toRad(cLat - lat) * R,
+  });
+  if (coordinates.length === 0) return Infinity;
+  let best = Infinity;
+  let prev = project(coordinates[0]);
+  best = Math.hypot(prev.x, prev.y);
+  for (let i = 1; i < coordinates.length; i++) {
+    const cur = project(coordinates[i]);
+    const dx = cur.x - prev.x;
+    const dy = cur.y - prev.y;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, -(prev.x * dx + prev.y * dy) / lenSq));
+    best = Math.min(best, Math.hypot(prev.x + t * dx, prev.y + t * dy));
+    prev = cur;
+  }
+  return best;
+}

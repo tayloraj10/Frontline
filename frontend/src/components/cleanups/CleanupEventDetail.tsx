@@ -25,7 +25,7 @@ import {
   type CleanupEventOffer,
   type CleanupEventOfferLocation,
 } from "@/lib/cleanupEvents";
-import type { RouteLineString } from "@/lib/cleanupRoutes";
+import { distanceToRouteMeters, type RouteLineString } from "@/lib/cleanupRoutes";
 import GroupEventTrackRoute from "@/components/cleanups/GroupEventTrackRoute";
 import EventRoutesSection from "@/components/cleanups/EventRoutesSection";
 import { searchUsers, type UserSearchResult } from "@/lib/users";
@@ -208,9 +208,16 @@ export default function CleanupEventDetail({
       setLocationStatus("unavailable");
       return;
     }
+    // Route events: the check-in zone is the whole route buffer (matches the server's
+    // ST_DWithin against the route), so measure to the closest point on the route.
+    const routeCoords = event.route?.coordinates ?? null;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setDistanceMeters(haversineMeters(pos.coords.latitude, pos.coords.longitude, event.lat, event.lng));
+        setDistanceMeters(
+          routeCoords && routeCoords.length >= 2
+            ? distanceToRouteMeters(pos.coords.latitude, pos.coords.longitude, routeCoords)
+            : haversineMeters(pos.coords.latitude, pos.coords.longitude, event.lat, event.lng),
+        );
         setLocationStatus("resolved");
       },
       () => {
@@ -218,7 +225,9 @@ export default function CleanupEventDetail({
         // action (the check-in button still works on click), but still say so.
         setLocationStatus("unavailable");
       },
-      { maximumAge: 60000, timeout: 10000 }
+      // A fresh high-accuracy fix: the default coarse/cached one can be hundreds of
+      // meters off in dense areas, which reads as "too far" to people on site.
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, viewerCheckedInInitial]);
@@ -292,7 +301,8 @@ export default function CleanupEventDetail({
         setLocationDenied(geoErr.code === 1);
         setError("Couldn't get your location. Try the join code instead.");
         setCheckInLoading(false);
-      }
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
     );
   };
 

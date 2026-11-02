@@ -143,6 +143,18 @@ class PatchCleanupEventRequest(BaseModel):
         return v
 
 
+def _snap_pin_to_route_start(payload: "CreateCleanupEventRequest | PatchCleanupEventRequest") -> None:
+    """For route events the meetup pin is the route's first point. The form only uses the
+    searched address to center the map, so left alone the pin lands wherever the search did
+    (e.g. a neighborhood centroid hundreds of meters from where the route actually starts).
+    Done server-side so every client gets it. GeoJSON coordinates are [lng, lat]."""
+    if payload.route is None:
+        return
+    lng, lat = payload.route["coordinates"][0][:2]
+    payload.longitude = float(lng)
+    payload.latitude = float(lat)
+
+
 class RsvpRequest(BaseModel):
     user_id: UUID
     status: str = "going"
@@ -966,6 +978,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
 
 @router.post("")
 async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSession = Depends(get_db)):
+    _snap_pin_to_route_start(payload)
     if not await _is_group_admin(db, payload.group_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin can create an event for this group")
 
@@ -1085,6 +1098,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
 @router.patch("/{cleanup_id}")
 async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventRequest, db: AsyncSession = Depends(get_db)):
     event = await _get_event_or_404(db, cleanup_id)
+    _snap_pin_to_route_start(payload)
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can edit this event")
@@ -1311,7 +1325,7 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
         prox_result = await db.execute(
             text("""
                 SELECT ST_DWithin(
-                    location,
+                    COALESCE(route, location),
                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
                     :threshold
                 ) FROM cleanups WHERE id = :id
@@ -1324,6 +1338,8 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
             },
         )
         if not prox_result.scalar():
+            # For route events the zone is the whole route (the blue area on the event map),
+            # so late arrivals anywhere along it can still check in.
             raise HTTPException(status_code=403, detail="You're too far from the event location to check in")
 
     # Only the first check-in for this attendee should award points — re-checking in
