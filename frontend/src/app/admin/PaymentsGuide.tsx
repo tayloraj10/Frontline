@@ -119,7 +119,7 @@ const SECTIONS: Section[] = [
         <H>Rules that protect the platform</H>
         <UL>
           <li>One active job per cleaner. A start by time applies, and missing it returns the job to the board with a strike.</li>
-          <li>Backing out after the start time is a strike. 3 strikes in 90 days suspends the cleaner until an admin reinstates them.</li>
+          <li>A cleaner can back out of a job before or after starting it. Backing out after the start time, or once work has started, is a strike, and a board job goes back on the board with the customer refunded. 3 strikes in 90 days suspends the cleaner until an admin reinstates them.</li>
           <li>Chat blocks phone numbers, emails and links to keep payment on the platform. Abusive messages appear under Flagged messages for review.</li>
           <li>The address is hidden until a cleaner takes the job.</li>
         </UL>

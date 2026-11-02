@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { type LucideIcon } from "lucide-react";
 
-type Tone = "solid" | "sky" | "emerald" | "zinc";
+type Tone = "solid" | "sky" | "emerald" | "zinc" | "red";
 
 const TONES: Record<Tone, { box: string; sub: string; icon: string }> = {
   solid: {
@@ -18,6 +18,11 @@ const TONES: Record<Tone, { box: string; sub: string; icon: string }> = {
     box: "bg-zinc-900 text-zinc-100 ring-1 ring-inset ring-emerald-400/40 hover:bg-zinc-800",
     sub: "text-zinc-400",
     icon: "text-emerald-300",
+  },
+  red: {
+    box: "bg-red-500/10 text-red-100 ring-2 ring-inset ring-red-400/60 hover:bg-red-500/15",
+    sub: "text-red-200/80",
+    icon: "text-red-300",
   },
   zinc: {
     box: "bg-zinc-900 text-zinc-100 ring-1 ring-inset ring-zinc-700 hover:bg-zinc-800",

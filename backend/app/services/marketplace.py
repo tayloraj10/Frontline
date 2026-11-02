@@ -182,12 +182,26 @@ async def set_cleaner_status(db: AsyncSession, user_id: UUID, status: str) -> No
     """Admin approval: pending_review -> active, or suspend/pause."""
     if status not in ("active", "paused", "suspended", "pending_review"):
         raise MarketplaceError("Invalid status.")
-    res = await db.execute(
-        text("UPDATE cleaner_profiles SET status = :s WHERE user_id = :u"), {"s": status, "u": user_id}
-    )
-    if res.rowcount == 0:
+    before = (
+        await db.execute(text("SELECT status FROM cleaner_profiles WHERE user_id = :u FOR UPDATE"), {"u": user_id})
+    ).scalar_one_or_none()
+    if before is None:
         raise MarketplaceError("Cleaner profile not found.", 404)
+    await db.execute(text("UPDATE cleaner_profiles SET status = :s WHERE user_id = :u"), {"s": status, "u": user_id})
     await db.commit()
+    # Tell the cleaner when an admin suspends or reinstates them, so it is never a silent change.
+    if status != before and status == "suspended":
+        await _notify_safe(
+            db, user_id, "marketplace_strike", "Your cleaner profile was suspended",
+            "You cannot take jobs while it is suspended. Contact support to appeal.",
+            "/marketplace/become-a-cleaner", "View",
+        )
+    elif status != before and status == "active" and before == "suspended":
+        await _notify_safe(
+            db, user_id, "marketplace_strike", "Your cleaner profile is active again",
+            "You can take jobs again. Your strikes still count until they drop off.",
+            "/marketplace/become-a-cleaner", "View",
+        )
 
 
 async def list_cleaners(
@@ -611,7 +625,7 @@ async def _require_no_active_job(db: AsyncSession, cleaner_id: UUID) -> None:
 _CANCEL_DIRECT_SQL = """UPDATE marketplace_jobs SET status = 'cancelled', cancel_reason = :r,
                           hold_status = 'refunded', payment_error = NULL WHERE id = :id"""
 _REOPEN_SQL = """UPDATE marketplace_jobs SET status = 'open', cleaner_id = NULL, accepted_at = NULL, safety_ack_at = NULL,
-                   arrive_by = NULL, hold_status = 'none', stripe_payment_intent_id = NULL, payment_error = NULL
+                   started_at = NULL, check_in_distance_m = NULL, arrive_by = NULL, hold_status = 'none', stripe_payment_intent_id = NULL, payment_error = NULL
                  WHERE id = :id"""
 
 
@@ -639,7 +653,7 @@ async def _add_strike(db: AsyncSession, user_id: UUID, job_id: UUID, kind: str) 
         "You took jobs and did not do them, so your cleaner profile is suspended. Contact support to appeal."
         if suspended
         else f"Taking a job and not doing it earns a strike. You have {n} of {limit}; at {limit} your cleaner profile is suspended.",
-        "/marketplace", "Hire",
+        "/marketplace/become-a-cleaner" if suspended else "/marketplace", "View" if suspended else "Hire",
     )
 
 
@@ -734,11 +748,15 @@ async def _require_cleaner_ready(db: AsyncSession, user_id: UUID) -> None:
     if not await has_accepted_current(db, user_id, "cleaner"):
         raise MarketplaceError("Accept the current cleaner agreement before taking jobs.", 403)
     ok = (
-        await db.execute(
-            text("SELECT payouts_enabled FROM cleaner_profiles WHERE user_id = :u AND status = 'active'"), {"u": user_id}
-        )
+        await db.execute(text("SELECT status, payouts_enabled FROM cleaner_profiles WHERE user_id = :u"), {"u": user_id})
     ).first()
     if not ok:
+        raise MarketplaceError("Create your cleaner profile before taking jobs.", 403)
+    if ok.status == "suspended":
+        raise MarketplaceError("Your cleaner profile is suspended, so you cannot take jobs. Contact support to appeal.", 403)
+    if ok.status == "paused":
+        raise MarketplaceError("Your cleaner profile is paused. Ask support to turn it back on before taking jobs.", 403)
+    if ok.status != "active":
         raise MarketplaceError("Your cleaner profile is not active yet.", 403)
     if connect.is_configured() and not ok.payouts_enabled:
         raise MarketplaceError("Set up payouts before taking jobs, so we can pay you.", 403)
@@ -930,7 +948,11 @@ async def cancel_job(db: AsyncSession, job_id: UUID, user_id: UUID, reason: str 
     job = await _load_for_update(db, job_id)
     if user_id not in (job["customer_id"], job["cleaner_id"]):
         raise MarketplaceError("Job not found.", 404)
-    if job["status"] not in ("requested", "open", "accepted"):
+    is_cleaner = user_id == job["cleaner_id"]
+    # A cleaner can always give a job back, even after starting it (that costs a strike). The customer can only
+    # cancel before work starts: after that they open a dispute instead.
+    allowed = ("requested", "open", "accepted") + (("in_progress",) if is_cleaner else ())
+    if job["status"] not in allowed:
         raise MarketplaceError("This job can no longer be cancelled.", 409)
     refunded = job["hold_status"] == "held"
     if refunded:
@@ -939,13 +961,20 @@ async def cancel_job(db: AsyncSession, job_id: UUID, user_id: UUID, reason: str 
         except mp.PaymentError as e:
             raise await _fail_payment(db, job_id, e)
     # A cleaner backing out of a board job puts it back on the board for someone else.
-    reopened = user_id == job["cleaner_id"] and job["status"] == "accepted" and job["origin"] != "direct"
+    reopened = is_cleaner and job["status"] in ("accepted", "in_progress") and job["origin"] != "direct"
     # Backing out before the job's start time is free. Backing out after it is a strike.
-    late = user_id == job["cleaner_id"] and job["status"] == "accepted" and (
-        await db.execute(
-            text("SELECT COALESCE(starts_at, window_start) < now() FROM marketplace_jobs WHERE id = :id"), {"id": job_id}
+    late = is_cleaner and (
+        job["status"] == "in_progress"
+        or (
+            job["status"] == "accepted"
+            and (
+                await db.execute(
+                    text("SELECT COALESCE(starts_at, window_start) < now() FROM marketplace_jobs WHERE id = :id"),
+                    {"id": job_id},
+                )
+            ).scalar_one()
         )
-    ).scalar_one()
+    )
     if reopened:
         await db.execute(text(_REOPEN_SQL), {"id": job_id})
     else:
@@ -1035,7 +1064,8 @@ async def start_job(
         raise MarketplaceError("Your time to start this job has run out, so it is going back on the board.", 409)
     before = (
         await db.execute(
-            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'before'"), {"id": job_id}
+            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'before' AND uploader_id = :u"),
+            {"id": job_id, "u": cleaner_id},
         )
     ).scalar_one()
     if before < 1:
@@ -1068,7 +1098,8 @@ async def complete_job(
         raise MarketplaceError("Start the job before marking it complete.", 409)
     photos = (
         await db.execute(
-            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'after'"), {"id": job_id}
+            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'after' AND uploader_id = :u"),
+            {"id": job_id, "u": cleaner_id},
         )
     ).scalar_one()
     if photos < 1:

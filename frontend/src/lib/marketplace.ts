@@ -113,6 +113,9 @@ export const needsCleanerSetup = (me: MeStatus | null) => !me?.cleaner_profile |
 export const payoutsBlocked = (me: MeStatus | null) =>
   !!me?.payouts_required && !!me.cleaner_profile && !me.cleaner_profile.payouts_enabled;
 
+/** True when an admin or the strike rule has suspended this user's cleaner profile. */
+export const cleanerSuspended = (me: MeStatus | null) => me?.cleaner_profile?.status === "suspended";
+
 export const usd = (cents: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
