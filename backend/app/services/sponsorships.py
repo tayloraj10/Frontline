@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.services import connect as connect_service
 from app.services import payments as payments_service
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,8 @@ async def _assert_group_accepts_sponsors(db: AsyncSession, group_id: UUID | None
         raise ValueError("This group is not available for sponsorship")
     if not row.open_to_sponsors or not await payments_service.has_premium(db, "group", group_id):
         raise ValueError("This group is not accepting sponsors right now")
+    if not await connect_service.group_payouts_ready(db, group_id):
+        raise ValueError("This group has not set up payouts yet")
     return row.name
 
 

@@ -9,7 +9,10 @@ import { Card } from "@/components/ui/Card";
 import { Field, TextArea, TextInput } from "@/components/ui/fields";
 import { Section } from "@/components/ui/PageShell";
 import { JOB_TYPE_LABELS, STATUS_LABELS, TIME_MODE_LABELS, mk, usd, whenLabel, type Job } from "@/lib/marketplace";
+import BackOutButton from "./BackOutButton";
 import CleanerFlow, { type FlowPhoto } from "./CleanerFlow";
+import JobSiteCard from "./JobSiteCard";
+import LocalTime from "./LocalTime";
 import ReportBlock from "./ReportBlock";
 
 type Message = { id: string; sender_id: string; username: string | null; body: string; created_at: string };
@@ -22,7 +25,7 @@ const HOLD_LABEL: Record<string, string> = {
   refunded: "Payment refunded",
 };
 
-export default function JobDetail({ initial, userId, payoutsBlocked }: { initial: Job; userId: string; payoutsBlocked: boolean }) {
+export default function JobDetail({ initial, userId, payoutsBlocked, needsSetup }: { initial: Job; userId: string; payoutsBlocked: boolean; needsSetup: boolean }) {
   const [job, setJob] = useState(initial);
   const [messages, setMessages] = useState<Message[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -85,7 +88,6 @@ export default function JobDetail({ initial, userId, payoutsBlocked }: { initial
   const s = STATUS_LABELS[job.status] ?? { label: job.status, tone: "neutral" as const };
   const other = role === "customer" ? job.cleaner_username : job.customer_username;
   const otherId = role === "customer" ? job.cleaner_id : job.customer_id;
-  const active = ["accepted", "in_progress"].includes(job.status);
 
   return (
     <div className="space-y-6">
@@ -101,10 +103,17 @@ export default function JobDetail({ initial, userId, payoutsBlocked }: { initial
         </div>
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <Info label="When" value={whenLabel(job) || "To be agreed"} />
-          <Info label="Price" value={`${usd(job.price_cents)}${job.price_type === "hourly" ? "/hr" : " fixed"}`} />
+          <Info
+            label={role === "customer" ? "You pay" : role === "cleaner" ? "You receive" : "Pays"}
+            value={usd(role === "customer" && job.total_cents ? job.total_cents : job.price_cents)}
+            hint={role === "customer" && job.total_cents && job.total_cents !== job.price_cents ? `${usd(job.price_cents)} to the cleaner + ${usd(job.total_cents - job.price_cents)} service fee` : undefined}
+          />
           <Info label="Location" value={job.address_label ?? "Shared once a cleaner is assigned"} />
           <Info label={role === "customer" ? "Cleaner" : "Customer"} value={other ?? "Not assigned yet"} />
         </dl>
+        {(participant || job.status === "open") && !["cancelled", "declined", "expired"].includes(job.status) && (
+          <JobSiteCard job={job} navigate={participant} />
+        )}
         {job.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{job.description}</p>}
         {job.listing_photos && job.listing_photos.length > 0 && (
           <ListingPhotos urls={job.listing_photos} />
@@ -119,7 +128,7 @@ export default function JobDetail({ initial, userId, payoutsBlocked }: { initial
 
       {error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
 
-      <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} />
+      <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} />
 
       {role === "customer" && job.status === "open" && (job.price_flag_count ?? 0) > 0 && (
         <PriceFlags job={job} busy={busy} act={act} />
@@ -142,19 +151,12 @@ export default function JobDetail({ initial, userId, payoutsBlocked }: { initial
       )}
 
       {participant && (
-        <Section title="Messages" description="Keep the conversation in the app. Contact details stay private.">
+        <div id="messages" className="scroll-mt-20">
+        <Section title="Messages" description="For this job only. Admins can read these messages.">
+          <MessageRules role={role} />
           <Messages jobId={job.id} messages={messages} userId={userId} onSent={refresh} canSend={job.status !== "cancelled" && job.status !== "declined"} />
         </Section>
-      )}
-
-      {participant && active && (
-        <Card className="space-y-2 border border-red-500/20">
-          <p className="text-sm font-bold text-zinc-100">Something wrong?</p>
-          <p className="text-xs text-zinc-400">If anyone is in danger, call emergency services first.</p>
-          <a href="tel:911" className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-red-500/15 px-5 text-sm font-bold text-red-300 ring-1 ring-inset ring-red-500/30">
-            Call 911
-          </a>
-        </Card>
+        </div>
       )}
 
       {participant && otherId && <ReportBlock userId={otherId} jobId={job.id} />}
@@ -203,11 +205,12 @@ function PayoutsNeeded() {
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">{label}</dt>
-      <dd className="truncate text-zinc-200">{value}</dd>
+      <dd className="break-words text-zinc-200">{value}</dd>
+      {hint && <p className="text-[11px] text-zinc-500">{hint}</p>}
     </div>
   );
 }
@@ -220,6 +223,7 @@ function Actions({
   photos,
   refresh,
   payoutsBlocked,
+  needsSetup,
 }: {
   job: Job;
   role: "customer" | "cleaner" | "viewer";
@@ -228,6 +232,7 @@ function Actions({
   photos: Photo[];
   refresh: () => Promise<void>;
   payoutsBlocked: boolean;
+  needsSetup: boolean;
 }) {
   const [ack, setAck] = useState(false);
   const [price, setPrice] = useState("");
@@ -241,7 +246,7 @@ function Actions({
   const safety = (
     <label className="flex items-start gap-3 text-sm text-zinc-200">
       <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-emerald-400" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-      <span>I checked the site for hazards and can do this work safely.</span>
+      <span>I understand the job and will check the site for hazards when I arrive. I will skip it if it is not safe.</span>
     </label>
   );
 
@@ -249,6 +254,7 @@ function Actions({
   if (role === "cleaner" && job.status === "requested") {
     return (
       <Card className="space-y-3">
+        <EarnLine job={job} />
         {payoutsBlocked && <PayoutsNeeded />}
         {safety}
         <div className="grid grid-cols-2 gap-2">
@@ -265,16 +271,42 @@ function Actions({
 
   // Anyone else viewing an open board job can take it at the posted price, or flag the price as too low
   if (role === "viewer" && job.status === "open") {
-    const unit = job.price_type === "hourly" ? "/hr" : "";
     return (
       <Card className="space-y-3">
-        <p className="text-sm font-bold text-zinc-100">Take this job at {usd(job.price_cents)}{unit}</p>
+        <p className="text-sm font-bold text-zinc-100">Take this job for {usd(job.price_cents)}</p>
+        <EarnLine job={job} />
         {payoutsBlocked && <PayoutsNeeded />}
         {safety}
-        <Button className="w-full" disabled={!ack || payoutsBlocked} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
+        {job.arrive_deadline && (
+          <div className="rounded-2xl bg-amber-500/10 p-3 text-sm text-amber-100 ring-1 ring-inset ring-amber-400/30">
+            <p className="font-bold text-amber-200">
+              You must start by <LocalTime iso={job.arrive_deadline} />
+            </p>
+            <p className="mt-1">
+              You get {Math.round((job.arrive_minutes ?? 120) / 60 * 10) / 10} hours from {job.starts_at || job.window_start ? "the job start time" : "taking it"}. If you have not started
+              by then, the job goes back on the board, the customer is refunded and you get a strike.
+            </p>
+          </div>
+        )}
+        {needsSetup && (
+          <div className="rounded-2xl bg-amber-500/10 p-3 text-sm text-amber-100 ring-1 ring-inset ring-amber-400/30">
+            <p className="font-bold text-amber-200">Set up as a cleaner first</p>
+            <p className="mt-1">You need a cleaner profile and a signed agreement before you can take jobs.</p>
+            <Link href="/marketplace/become-a-cleaner" className="mt-2 inline-flex min-h-11 items-center font-bold text-amber-300 underline underline-offset-2">
+              Set up now
+            </Link>
+          </div>
+        )}
+        <div className="rounded-2xl bg-sky-400/10 p-3 text-sm text-zinc-100 ring-1 ring-inset ring-sky-400/30">
+          <p className="font-bold text-sky-300">Before you take it</p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5">
+            <li>The exact address unlocks once you take it.</li>
+            <li>You can only hold one job at a time.</li>
+          </ul>
+        </div>
+        <Button className="w-full" disabled={!ack || payoutsBlocked || needsSetup} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
           Take this job
         </Button>
-        <p className="text-xs text-zinc-500">You need a cleaner profile and a signed agreement. The exact address unlocks once you take it.</p>
         {job.price_flagged_by_me ? (
           <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">You flagged this price as too low. The poster has been told.</p>
         ) : (
@@ -314,7 +346,7 @@ function Actions({
     return (
       <div className="space-y-3">
         <CleanerFlow job={job} photos={photos} refresh={refresh} />
-        {job.status === "accepted" && <CancelRow busy={busy} act={act} base={base} reason={reason} setReason={setReason} />}
+        {job.status === "accepted" && <BackOutButton jobId={job.id} direct={job.origin === "direct"} onDone={refresh} />}
       </div>
     );
   }
@@ -375,13 +407,28 @@ function Actions({
   return null;
 }
 
+/** What the cleaner takes home, so nobody accepts a job without knowing the number. */
+function EarnLine({ job }: { job: Job }) {
+  const net = job.cleaner_payout_cents ?? job.price_cents - job.platform_fee_cents;
+  return (
+    <p className="text-sm text-zinc-300">
+      {job.fee_on_top
+        ? `You receive the full ${usd(job.price_cents)}. The customer pays the service fee on top.`
+        : `You receive ${usd(net)}.`}{" "}
+      Paid to your bank through Stripe after the customer confirms.
+    </p>
+  );
+}
+
 function CancelRow({
+  cleaner = false,
   busy,
   act,
   base,
   reason,
   setReason,
 }: {
+  cleaner?: boolean;
   busy: string | null;
   act: (key: string, path: string, body?: unknown) => Promise<void>;
   base: string;
@@ -392,14 +439,18 @@ function CancelRow({
   if (!open)
     return (
       <button type="button" onClick={() => setOpen(true)} className="text-xs font-semibold text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline">
-        Cancel this job
+        {cleaner ? "Back out of this job" : "Cancel this job"}
       </button>
     );
   return (
     <div className="space-y-2">
+      <p className="text-xs text-zinc-400">
+        {cleaner && "The job goes back on the board for someone else. "}You can cancel until the work starts. If the customer&apos;s card was charged, it is refunded in full, and the other
+        person is told right away. Once work has started, open a dispute instead.
+      </p>
       <TextInput value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" />
       <Button variant="destructive" className="w-full" loading={busy === "cancel"} onClick={() => act("cancel", `${base}/cancel`, { reason: reason || null })}>
-        Confirm cancel
+        {cleaner ? "Confirm: back out" : "Confirm cancel"}
       </Button>
     </div>
   );
@@ -442,6 +493,36 @@ function Photos({ photos }: { photos: Photo[] }) {
       </ul>
       {viewer}
     </>
+  );
+}
+
+function MessageRules({ role }: { role: "customer" | "cleaner" | "viewer" }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex min-h-11 items-center text-sm font-semibold text-sky-300 touch-manipulation"
+      >
+        {open ? "Hide what this is for" : "What is this for?"}
+      </button>
+      {open && (
+        <div className="rounded-2xl bg-sky-400/10 p-3 text-sm text-zinc-100 ring-1 ring-inset ring-sky-400/30">
+          <p>Sorting out the details of this job with the {role === "customer" ? "cleaner" : "customer"}:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <li>Where to go, access, parking, where the bags or tools are</li>
+            <li>Timing, running late, or what you found on site</li>
+            <li>Questions about the work or the photos</li>
+          </ul>
+          <p className="mt-2 text-zinc-300">
+            Not allowed: phone numbers, emails, links, taking payment outside the app, or anything abusive. Those messages are blocked or
+            flagged for review, and repeated problems can get an account suspended. For an emergency, call local emergency services.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -508,7 +589,7 @@ function ReviewForm({ jobId, who, onDone }: { jobId: string; who: string; onDone
   return (
     <Card className="space-y-3">
       <p className="font-bold text-zinc-100">How was it with {who}?</p>
-      <div className="flex gap-1.5" role="radiogroup" aria-label="Rating">
+      <div className="flex gap-1" role="radiogroup" aria-label="Rating">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
@@ -517,12 +598,13 @@ function ReviewForm({ jobId, who, onDone }: { jobId: string; who: string; onDone
             aria-checked={rating === n}
             aria-label={`${n} star${n > 1 ? "s" : ""}`}
             onClick={() => setRating(n)}
-            className={`h-11 w-11 rounded-xl text-lg font-bold touch-manipulation ${n <= rating ? "bg-amber-400 text-amber-950" : "bg-zinc-800 text-zinc-500"}`}
+            className={`h-11 w-11 text-3xl leading-none touch-manipulation ${n <= rating ? "text-amber-400" : "text-zinc-700"}`}
           >
-            {n}
+            ★
           </button>
         ))}
       </div>
+      <p className="text-xs text-zinc-400">{["Poor", "Fair", "Good", "Very good", "Excellent"][rating - 1]}</p>
       <TextArea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment" maxLength={1000} />
       {err && <p className="text-xs text-red-400">{err}</p>}
       <Button className="w-full" loading={busy} onClick={submit}>

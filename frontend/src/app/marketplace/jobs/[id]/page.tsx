@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import JobDetail from "@/components/marketplace/JobDetail";
-import { payoutsBlocked, type Job, type MeStatus } from "@/lib/marketplace";
+import { needsCleanerSetup, payoutsBlocked, type Job, type MeStatus } from "@/lib/marketplace";
 import { MarketplaceApiError, mkFetch, requireMarketplace } from "@/lib/marketplace.server";
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
@@ -14,5 +14,5 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
     throw e;
   }
   const me = await mkFetch<MeStatus>(user.id, isAdmin, "/me").catch(() => null);
-  return <JobDetail initial={job} userId={user.id} payoutsBlocked={payoutsBlocked(me)} />;
+  return <JobDetail initial={job} userId={user.id} payoutsBlocked={payoutsBlocked(me)} needsSetup={needsCleanerSetup(me)} />;
 }

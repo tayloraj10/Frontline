@@ -43,6 +43,8 @@ export const rewards: WalkthroughDef = {
       how: [
         "Keep the confirmation screen open until they have seen it",
         "Staff tap Mark as used so it cannot be used twice",
+        "Use one code before redeeming another",
+        "Event offers are free if you checked in, and can be redeemed for 4 hours after the event ends",
         "You can find past redemptions again later",
       ],
       visual: (

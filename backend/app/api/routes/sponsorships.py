@@ -1,27 +1,18 @@
 from uuid import UUID
 
 import stripe
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, model_validator
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.rate_limit import limit_money, limit_writes
+from app.core.auth import CurrentUser, require_admin, require_user
 from app.db.database import get_db
-from app.services import sponsored_cleanups
+from app.services import connect, earn_payouts, sponsored_cleanups
 from app.services import sponsorships as sponsorships_service
 
 router = APIRouter(prefix="/sponsorships", tags=["sponsorships"])
-
-
-def _check_secret(x_admin_api_secret: str | None) -> None:
-    """Same shared-secret defense-in-depth as payments.py: the Next.js server route
-    re-verifies the caller is an authenticated site admin before forwarding here.
-    Funding-only scope (dev-docs/payments-scoping-2026-08-20.md) -- no payout/Connect
-    endpoints here, and everything stays admin-only until this is ready to launch."""
-    if not settings.admin_api_secret:
-        raise HTTPException(503, "Admin endpoint is not configured (ADMIN_API_SECRET unset).")
-    if x_admin_api_secret != settings.admin_api_secret:
-        raise HTTPException(403, "Invalid or missing admin API secret.")
 
 
 class CreateSponsorshipCheckoutRequest(BaseModel):
@@ -84,13 +75,35 @@ class CreateSponsorshipCheckoutRequest(BaseModel):
         return self
 
 
-@router.post("/checkout-session")
+async def _is_business_member(db: AsyncSession, user_id: UUID, business_id: UUID | None) -> bool:
+    row = await db.execute(
+        text(
+            """
+            SELECT 1 FROM partner_businesses b
+            WHERE b.id = :bid AND b.status = 'active'
+              AND (b.created_by = :uid
+                   OR EXISTS (SELECT 1 FROM partner_business_admins a
+                              WHERE a.business_id = b.id AND a.user_id = :uid))
+            """
+        ),
+        {"bid": business_id, "uid": user_id},
+    )
+    return row.first() is not None
+
+
+@router.post("/checkout-session", dependencies=[Depends(limit_money)])
 async def create_checkout_session(
     payload: CreateSponsorshipCheckoutRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
+    # The sponsor is the signed-in user, or an active business they created or administer.
+    if payload.sponsor_type == "business":
+        if not await _is_business_member(db, user.id, payload.sponsor_business_id):
+            raise HTTPException(403, "You can only sponsor as a business you belong to.")
+        sponsor_user_id = None
+    else:
+        sponsor_user_id = user.id
     payout_rule = None
     area_wkt = area_source = area_default_name = None
     try:
@@ -108,7 +121,7 @@ async def create_checkout_session(
         url = await sponsorships_service.create_sponsorship_checkout_session(
             db,
             sponsor_type=payload.sponsor_type,
-            sponsor_user_id=payload.sponsor_user_id,
+            sponsor_user_id=sponsor_user_id,
             sponsor_business_id=payload.sponsor_business_id,
             target_type=payload.target_type,
             target_cleanup_id=payload.target_cleanup_id,
@@ -139,26 +152,19 @@ async def create_checkout_session(
 @router.get("")
 async def list_sponsorships(
     status: str | None = None,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     return {"sponsorships": await sponsorships_service.list_sponsorships(db, status)}
 
 
-class ReleaseSponsorshipRequest(BaseModel):
-    released_by: UUID
-
-
-@router.post("/{sponsorship_id}/release")
+@router.post("/{sponsorship_id}/release", dependencies=[Depends(limit_money)])
 async def release_sponsorship(
     sponsorship_id: UUID,
-    payload: ReleaseSponsorshipRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
-    ok = await sponsorships_service.release_sponsorship(db, sponsorship_id, payload.released_by)
+    ok = await sponsorships_service.release_sponsorship(db, sponsorship_id, user.id)
     if not ok:
         raise HTTPException(404, "Sponsorship not found or not in 'funded' status.")
     return {"released": True}
@@ -170,30 +176,25 @@ def _raise(e: sponsored_cleanups.SponsoredError):
 
 @router.get("/sites")
 async def list_sites(
-    user_id: UUID | None = None,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
-    return {"sites": await sponsored_cleanups.list_sites(db, user_id)}
+    return {"sites": await sponsored_cleanups.list_sites(db, user.id)}
 
 
 @router.get("/my-limits")
 async def my_limits(
-    user_id: UUID,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
-    return await sponsored_cleanups.daily_limit_status(db, user_id)
+    return await sponsored_cleanups.daily_limit_status(db, user.id)
 
 
 @router.get("/map")
 async def map_features(
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     return await sponsored_cleanups.list_map_features(db)
 
 
@@ -202,15 +203,13 @@ async def list_group_areas(
     group_id: UUID | None = None,
     lat: float | None = None,
     lng: float | None = None,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     return {"areas": await sponsored_cleanups.list_group_areas(db, group_id, lat, lng)}
 
 
 class SiteClaimRequest(BaseModel):
-    user_id: UUID
     latitude: float
     longitude: float
 
@@ -220,68 +219,59 @@ class SitePhotoRequest(SiteClaimRequest):
     bags: int | None = None
 
 
-class SiteReleaseRequest(BaseModel):
-    user_id: UUID
-
-
-@router.post("/{sponsorship_id}/claim")
+@router.post("/{sponsorship_id}/claim", dependencies=[Depends(limit_writes)])
 async def claim_site(
     sponsorship_id: UUID,
     payload: SiteClaimRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     try:
         return await sponsored_cleanups.claim_site(
-            db, sponsorship_id, payload.user_id, payload.latitude, payload.longitude
+            db, sponsorship_id, user.id, payload.latitude, payload.longitude
         )
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
 
 
-@router.post("/{sponsorship_id}/claim/before-photo")
+@router.post("/{sponsorship_id}/claim/before-photo", dependencies=[Depends(limit_writes)])
 async def site_before_photo(
     sponsorship_id: UUID,
     payload: SitePhotoRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     try:
         return await sponsored_cleanups.submit_before_photo(
-            db, sponsorship_id, payload.user_id, payload.photo_url, payload.latitude, payload.longitude
+            db, sponsorship_id, user.id, payload.photo_url, payload.latitude, payload.longitude
         )
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
 
 
-@router.post("/{sponsorship_id}/claim/after-photo")
+@router.post("/{sponsorship_id}/claim/after-photo", dependencies=[Depends(limit_writes)])
 async def site_after_photo(
     sponsorship_id: UUID,
     payload: SitePhotoRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     try:
         return await sponsored_cleanups.submit_after_photo(
-            db, sponsorship_id, payload.user_id, payload.photo_url, payload.latitude, payload.longitude, payload.bags
+            db, sponsorship_id, user.id, payload.photo_url, payload.latitude, payload.longitude, payload.bags
         )
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
 
 
-@router.post("/{sponsorship_id}/claim/release")
+@router.post("/{sponsorship_id}/claim/release", dependencies=[Depends(limit_writes)])
 async def site_release(
     sponsorship_id: UUID,
-    payload: SiteReleaseRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     try:
-        return await sponsored_cleanups.release_claim(db, sponsorship_id, payload.user_id)
+        return await sponsored_cleanups.release_claim(db, sponsorship_id, user.id)
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
 
@@ -289,48 +279,125 @@ async def site_release(
 @router.get("/allocations")
 async def list_allocations(
     status: str | None = None,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     return {"allocations": await sponsored_cleanups.list_allocations(db, status)}
 
 
 class ReviewAllocationRequest(BaseModel):
-    reviewer_id: UUID
     approve: bool
     reject_reason: str | None = None
 
 
-@router.post("/allocations/{allocation_id}/review")
+@router.post("/allocations/{allocation_id}/review", dependencies=[Depends(limit_money)])
 async def review_allocation(
     allocation_id: UUID,
     payload: ReviewAllocationRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     try:
         return await sponsored_cleanups.review_allocation(
-            db, allocation_id, payload.reviewer_id, payload.approve, payload.reject_reason
+            db, allocation_id, user.id, payload.approve, payload.reject_reason
         )
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
 
 
-class PaidOutRequest(BaseModel):
-    admin_id: UUID
-
-
-@router.post("/allocations/{allocation_id}/paid-out")
+@router.post("/allocations/{allocation_id}/paid-out", dependencies=[Depends(limit_money)])
 async def mark_paid_out(
     allocation_id: UUID,
-    payload: PaidOutRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
     try:
-        return await sponsored_cleanups.mark_paid_out(db, allocation_id, payload.admin_id)
+        return await sponsored_cleanups.mark_paid_out(db, allocation_id, user.id)
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
+
+
+@router.post("/allocations/{allocation_id}/pay", dependencies=[Depends(limit_money)])
+async def pay_allocation(
+    allocation_id: UUID,
+    user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retry the Stripe transfer for an approved allocation (e.g. after the recipient finishes setup)."""
+    return await earn_payouts.pay_allocation(db, allocation_id)
+
+
+@router.get("/payouts/status")
+async def payout_status(user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    try:
+        return await connect.refresh_payout_status(db, user.id)
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.post("/payouts/onboard", dependencies=[Depends(limit_money)])
+async def payout_onboard(user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    try:
+        return await connect.create_payout_onboarding_link(db, user.id, user.email, "/sponsorships")
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.post("/payouts/dashboard", dependencies=[Depends(limit_money)])
+async def payout_dashboard(user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    try:
+        return await connect.create_dashboard_link(db, user.id)
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Group payout accounts: any admin of the group sets up where the group's money goes.
+# ---------------------------------------------------------------------------
+
+
+async def _group_admin(group_id: UUID, user: CurrentUser, db: AsyncSession) -> None:
+    from app.services.event_permissions import is_group_admin
+
+    if not await is_group_admin(db, group_id, user.id):
+        raise HTTPException(403, "Only a group admin can manage group payouts.")
+
+
+@router.get("/groups/{group_id}/payouts/status")
+async def group_payout_status(group_id: UUID, user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    await _group_admin(group_id, user, db)
+    try:
+        return await connect.refresh_group_status(db, group_id)
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))
+
+
+class GroupPayoutOnboard(BaseModel):
+    return_path: str = "/groups"
+
+
+@router.post("/groups/{group_id}/payouts/onboard", dependencies=[Depends(limit_money)])
+async def group_payout_onboard(
+    group_id: UUID,
+    payload: GroupPayoutOnboard,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _group_admin(group_id, user, db)
+    # Only same-site paths: this is where Stripe sends the admin back to.
+    path = payload.return_path if payload.return_path.startswith("/") and not payload.return_path.startswith("//") else "/groups"
+    try:
+        return await connect.create_group_onboarding_link(db, group_id, user.id, user.email, path)
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))
+    except stripe.StripeError:
+        raise HTTPException(502, "Could not open payout setup right now. Try again in a moment.")
+
+
+@router.post("/groups/{group_id}/payouts/dashboard", dependencies=[Depends(limit_money)])
+async def group_payout_dashboard(group_id: UUID, user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    await _group_admin(group_id, user, db)
+    try:
+        return await connect.create_group_dashboard_link(db, group_id)
+    except connect.ConnectError as e:
+        raise HTTPException(e.status, str(e))

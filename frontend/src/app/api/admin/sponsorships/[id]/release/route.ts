@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authHeader } from "@/lib/fastapiAuth";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,14 +16,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .single();
   if (!profile?.is_admin) return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
 
-  const secret = process.env.ADMIN_API_SECRET;
-  if (!secret) {
-    return NextResponse.json({ detail: "Something went wrong. Please try again in a few minutes." }, { status: 503 });
-  }
+  const authz = await authHeader();
+  if (!authz) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/sponsorships/${id}/release`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Admin-Api-Secret": secret },
+    headers: { "Content-Type": "application/json", ...authz },
     body: JSON.stringify({ released_by: user.id }),
   });
   const data = await res.json();

@@ -224,7 +224,7 @@ export default function SponsoredSites() {
                 setShown(PAGE_SIZE);
               }}
               className={cn(
-                "inline-flex min-h-9 items-center rounded-full px-3.5 text-[13px] font-semibold touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
+                "inline-flex min-h-11 items-center rounded-full px-3.5 text-[13px] font-semibold touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
                 filter === value ? "bg-emerald-400 text-emerald-950" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100",
               )}
             >

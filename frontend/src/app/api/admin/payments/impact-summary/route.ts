@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
+import { authHeader } from "@/lib/fastapiAuth";
 import { requireAdminOrPaymentsEnabled } from "@/lib/paymentsAuth";
 
 export async function GET() {
-  const auth = await requireAdminOrPaymentsEnabled();
+  const auth = await requireAdminOrPaymentsEnabled({ rewards: true });
   if (auth.error) return auth.error;
 
-  const secret = process.env.ADMIN_API_SECRET;
-  if (!secret) {
-    return NextResponse.json({ detail: "Something went wrong. Please try again in a few minutes." }, { status: 503 });
-  }
+  const authz = await authHeader();
+  if (!authz) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/payments/impact-summary`, {
-    headers: { "X-Admin-Api-Secret": secret },
+    headers: { ...authz },
     cache: "no-store",
   });
   const data = await res.json();

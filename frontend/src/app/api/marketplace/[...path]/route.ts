@@ -3,7 +3,7 @@ import { getMarketplaceAccess, mkFetch, marketplaceError } from "@/lib/marketpla
 
 /**
  * Authenticated proxy for the client components. It checks the session and the marketplace
- * gate, then forwards to FastAPI with the verified user id. Admin routes need is_admin.
+ * gate, then forwards to FastAPI with the user's token. Admin routes need is_admin.
  */
 async function handle(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const access = await getMarketplaceAccess();

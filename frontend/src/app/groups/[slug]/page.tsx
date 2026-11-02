@@ -1,4 +1,5 @@
 import TodoBadge from "./TodoBadge";
+import GroupPayoutBanner from "./GroupPayoutBanner";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -6,7 +7,7 @@ import { BarChart3, CalendarPlus, ClipboardList, Pencil, ChevronRight } from "lu
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
-import { paymentsVisible } from "@/lib/paymentsVisibility";
+import { paymentsVisible, rewardsVisible } from "@/lib/paymentsVisibility";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import GroupMembershipButton from "@/components/groups/GroupMembershipButton";
 import ShareButton from "@/components/ShareButton";
@@ -126,11 +127,12 @@ export default async function GroupProfilePage({ params }: Props) {
 
   const [{ data: siteAdminCheck }, paymentsGate] = await Promise.all([
     isAdmin && user
-      ? supabase.from("profiles").select("is_admin").eq("id", user.id).single()
-      : Promise.resolve({ data: null as { is_admin: boolean } | null }),
+      ? supabase.from("profiles").select("is_admin, rewards_beta").eq("id", user.id).single()
+      : Promise.resolve({ data: null as { is_admin: boolean; rewards_beta?: boolean } | null }),
     getPaymentsGate(),
   ]);
   const isSiteAdmin = !!siteAdminCheck?.is_admin;
+  const showPayoutBanner = isAdmin && rewardsVisible(paymentsGate, isSiteAdmin, Boolean(siteAdminCheck?.rewards_beta));
   const isPlusGroup = paymentsVisible(paymentsGate, isSiteAdmin) ? (await getPlusEntitlement("group", group.id)).has_premium : false;
 
   const { data: groupTeamEventsData } = await supabase
@@ -280,6 +282,7 @@ export default async function GroupProfilePage({ params }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="min-w-0 space-y-6">
+          {showPayoutBanner && <GroupPayoutBanner groupId={group.id} slug={slug} />}
           {isAdmin && (
             <div className="rounded-[20px] bg-zinc-900 p-5">
               <div className="flex items-start justify-between gap-3">

@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/PageShell";
 import { JOB_TYPE_LABELS, type CleanerCard } from "@/lib/marketplace";
 
 /** Browse cleaners, per the mocks: search plus filter chips over the full list. */
-export default function BrowseCleaners({ cleaners }: { cleaners: CleanerCard[] }) {
+export default function BrowseCleaners({ cleaners, loadFailed = false }: { cleaners: CleanerCard[]; loadFailed?: boolean }) {
   const [query, setQuery] = useState("");
   const [top, setTop] = useState(true);
   const [under30, setUnder30] = useState(false);
@@ -50,8 +50,14 @@ export default function BrowseCleaners({ cleaners }: { cleaners: CleanerCard[] }
       </div>
       {list.length === 0 ? (
         <EmptyState
-          title={cleaners.length === 0 ? "No cleaners in your area yet" : "No cleaners match"}
-          body={cleaners.length === 0 ? "Post a job and cleaners will come to you." : "Try clearing a filter."}
+          title={loadFailed ? "Could not load cleaners" : cleaners.length === 0 ? "No cleaners in your area yet" : "No cleaners match"}
+          body={
+            loadFailed
+              ? "Something went wrong on our side. Refresh the page to try again."
+              : cleaners.length === 0
+                ? "Post a job and cleaners will come to you."
+                : "Try clearing a filter."
+          }
         />
       ) : (
         <ul className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -72,7 +78,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`inline-flex min-h-9 shrink-0 items-center rounded-full px-3 text-[13px] font-semibold ring-1 ring-inset touch-manipulation transition-colors active:scale-[0.97] ${
+      className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-[13px] font-semibold ring-1 ring-inset touch-manipulation transition-colors active:scale-[0.97] ${
         active ? "bg-emerald-400 text-emerald-950 ring-emerald-300" : "bg-zinc-900 text-zinc-400 ring-zinc-800 hover:text-zinc-200"
       }`}
     >

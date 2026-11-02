@@ -8,7 +8,12 @@ import { TextInput } from "@/components/ui/fields";
 import { Section } from "@/components/ui/PageShell";
 import { mk, usd } from "@/lib/marketplace";
 
+export type ChatMessage = { id: string; sender_id: string; username: string | null; body: string; created_at: string; flag_reason: string | null; reviewed_at: string | null };
+
 export type AdminOverview = {
+  flagged_messages?: { id: string; job_id: string; title: string; body: string; flag_reason: string; sender: string | null; created_at: string }[];
+  chats?: { job_id: string; title: string; customer_username: string | null; cleaner_username: string | null; messages: number; last_at: string }[];
+  struck_cleaners?: { user_id: string; username: string | null; status: string; strikes: number; last_strike_at: string }[];
   awaiting_release: { id: string; title: string; price_cents: number; release_after: string | null; payment_error: string | null; customer_username: string | null; cleaner_username: string | null }[];
   pending_cleaners: { user_id: string; username: string | null; headline: string; services: string[]; created_at: string }[];
   disputed_jobs: { id: string; title: string; price_cents: number; customer_username: string | null; cleaner_username: string | null; details: string | null }[];
@@ -107,6 +112,79 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
         )}
       </Section>
 
+      <Section
+        title={`Flagged messages (${data.flagged_messages?.length ?? 0})`}
+        description="The filter flags abusive language and threats. Contact details and off-app payment are refused before they are sent."
+      >
+        {!data.flagged_messages?.length ? (
+          <p className="text-sm text-zinc-500">None.</p>
+        ) : (
+          <ul className="space-y-3">
+            {data.flagged_messages.map((m) => (
+              <li key={m.id}>
+                <Card padding="sm" className="space-y-2 border border-amber-500/30">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">{m.flag_reason}</p>
+                  <p className="break-words text-sm text-zinc-100">&ldquo;{m.body}&rdquo;</p>
+                  <p className="text-xs text-zinc-500">
+                    {m.sender} on{" "}
+                    <Link href={`/marketplace/jobs/${m.job_id}`} className="underline-offset-2 hover:underline">{m.title}</Link>
+                    {" "}· {new Date(m.created_at).toLocaleString()}
+                  </p>
+                  <Button variant="secondary" loading={busy === m.id} onClick={() => run(m.id, `/admin/messages/${m.id}/review`, {})}>
+                    Mark reviewed
+                  </Button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="Recent chats" description="Open any job conversation to read it.">
+        {!data.chats?.length ? (
+          <p className="text-sm text-zinc-500">No chats yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {data.chats.map((c) => (
+              <ChatRow key={c.job_id} chat={c} />
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section
+        title={`Cleaners with strikes (${data.struck_cleaners?.length ?? 0})`}
+        description="Strikes come from taking a job and not starting it, or backing out after the start time. Suspended cleaners cannot take jobs."
+      >
+        {!data.struck_cleaners?.length ? (
+          <p className="text-sm text-zinc-500">None.</p>
+        ) : (
+          <ul className="space-y-3">
+            {data.struck_cleaners.map((c) => (
+              <li key={c.user_id}>
+                <Card padding="sm" className="space-y-2">
+                  <p className="font-bold text-zinc-100">
+                    {c.username ?? "Unknown"} · {c.strikes} {c.strikes === 1 ? "strike" : "strikes"}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {c.status === "suspended" ? "Suspended" : "Active"} · last strike {new Date(c.last_strike_at).toLocaleDateString()}
+                  </p>
+                  {c.status === "suspended" ? (
+                    <Button loading={busy === c.user_id} onClick={() => run(c.user_id, `/admin/cleaners/${c.user_id}/status`, { status: "active" })}>
+                      Reinstate
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" loading={busy === c.user_id} onClick={() => run(c.user_id, `/admin/cleaners/${c.user_id}/status`, { status: "suspended" })}>
+                      Suspend
+                    </Button>
+                  )}
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       <Section title={`Disputes (${data.disputed_jobs.length})`} description="Release pays the cleaner. Refund returns the money to the customer.">
         {data.disputed_jobs.length === 0 ? (
           <p className="text-sm text-zinc-500">None.</p>
@@ -175,5 +253,52 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
         )}
       </Section>
     </div>
+  );
+}
+
+function ChatRow({ chat }: { chat: NonNullable<AdminOverview["chats"]>[number] }) {
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function toggle() {
+    setOpen((v) => !v);
+    if (!msgs) {
+      try {
+        setMsgs(await mk<ChatMessage[]>(`/admin/jobs/${chat.job_id}/messages`));
+      } catch (e) {
+        setErr((e as Error).message);
+      }
+    }
+  }
+
+  return (
+    <li>
+      <Card padding="sm" className="space-y-2">
+        <button type="button" onClick={toggle} className="flex min-h-11 w-full items-start justify-between gap-3 text-left touch-manipulation">
+          <span className="min-w-0">
+            <span className="block break-words font-bold text-zinc-100">{chat.title}</span>
+            <span className="block text-xs text-zinc-500">
+              {chat.customer_username} and {chat.cleaner_username ?? "no cleaner"} · {chat.messages} messages · {new Date(chat.last_at).toLocaleString()}
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold text-sky-300">{open ? "Hide" : "Read"}</span>
+        </button>
+        {open && (
+          <div className="space-y-2 border-t border-zinc-800 pt-2">
+            {err && <p className="text-xs text-red-400">{err}</p>}
+            {msgs?.map((m) => (
+              <p key={m.id} className={`rounded-xl px-3 py-2 text-sm ${m.flag_reason ? "bg-amber-500/10 text-amber-100" : "bg-zinc-800 text-zinc-200"}`}>
+                <span className="block text-[11px] font-semibold text-zinc-500">
+                  {m.username} · {new Date(m.created_at).toLocaleString()}
+                  {m.flag_reason ? ` · flagged: ${m.flag_reason}` : ""}
+                </span>
+                <span className="whitespace-pre-wrap break-words">{m.body}</span>
+              </p>
+            ))}
+          </div>
+        )}
+      </Card>
+    </li>
   );
 }

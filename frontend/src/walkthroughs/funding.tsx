@@ -25,6 +25,26 @@ export const funding: WalkthroughDef = {
       ),
     },
     {
+      title: "Claiming a site",
+      label: "Claim",
+      body: "Claiming holds the site for you, but the clock starts right away, so claim it when you are ready to go.",
+      how: [
+        "You need to be at the site to claim it",
+        "You have 30 minutes after claiming to take the before photo",
+        "Then you have 2 hours to clean up and take the after photo",
+        "If time runs out, the site opens up for others and you get a notification. You can also let it go yourself",
+        "Per-bag sites ask for your bag count with the after photo",
+        "Rewards are capped per person and per day, and you need payouts set up to receive the money",
+      ],
+      visual: (
+        <Stage>
+          <Chip on>30 min</Chip>
+          <Arrow />
+          <Chip on>2 hrs</Chip>
+        </Stage>
+      ),
+    },
+    {
       title: "Group areas",
       label: "Areas",
       body: "An area is a whole region, like a few neighborhoods, zip codes or a shape you draw. It is for groups hosting cleanup events.",

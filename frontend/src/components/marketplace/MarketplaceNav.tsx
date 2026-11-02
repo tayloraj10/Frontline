@@ -11,7 +11,7 @@ export default function MarketplaceNav() {
   return (
     <Link
       href="/marketplace"
-      className="mb-4 inline-flex min-h-10 items-center gap-1 rounded-full pr-3 text-sm font-semibold text-zinc-400 touch-manipulation hover:text-zinc-100 active:scale-[0.97]"
+      className="mb-4 inline-flex min-h-11 items-center gap-1 rounded-full pr-3 text-sm font-semibold text-zinc-400 touch-manipulation hover:text-zinc-100 active:scale-[0.97]"
     >
       <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       Hire

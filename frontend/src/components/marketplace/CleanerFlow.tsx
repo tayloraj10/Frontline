@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import LocalTime from "@/components/marketplace/LocalTime";
 import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import { Camera, Check, MapPin } from "lucide-react";
 import Button from "@/components/ui/Button";
@@ -13,7 +14,7 @@ export type FlowPhoto = { id: string; kind: string; url: string; distance_m?: nu
 
 type Coords = { latitude: number; longitude: number };
 
-const ON_SITE_M = 150;
+const DEFAULT_ON_SITE_M = 150;
 
 /**
  * The cleaner's path through an accepted job: arrive (before photo + location check), do the work,
@@ -39,6 +40,7 @@ export default function CleanerFlow({
   const after = photos.filter((p) => p.kind === "after");
   const arriving = job.status === "accepted";
   const working = job.status === "in_progress";
+  const onSiteM = job.on_site_m ?? DEFAULT_ON_SITE_M;
   const payout = job.cleaner_payout_cents ?? job.price_cents - job.platform_fee_cents;
 
   async function capture(kind: "before" | "after", file: File | undefined) {
@@ -107,9 +109,11 @@ export default function CleanerFlow({
         <Card className="space-y-1 border-emerald-400/30 bg-emerald-400/5">
           <p className="font-bold text-emerald-300">You earned {usd(payout)}</p>
           <p className="text-sm text-zinc-300">
-            {usd(job.price_cents)} job price, minus {usd(job.platform_fee_cents)} platform fee. Payment is released.
+            {job.fee_on_top
+              ? `The full ${usd(job.price_cents)} job price is yours. The customer covered the service fee.`
+              : `That is the ${usd(job.price_cents)} job price.`}{" "}
+            Payment is on its way to your bank through Stripe.
           </p>
-          <p className="text-xs text-zinc-500">Bank payouts turn on once Stripe Connect is live.</p>
         </Card>
       );
     }
@@ -121,6 +125,11 @@ export default function CleanerFlow({
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{arriving ? "Step 1 of 2" : "Step 2 of 2"}</p>
         <p className="text-lg font-extrabold text-zinc-50">{arriving ? "Arrive and start" : "Finish up"}</p>
+        {arriving && job.arrive_by && (
+          <p className="mt-1 text-sm font-semibold text-amber-200">
+            Start by <LocalTime iso={job.arrive_by} />, or the job goes back on the board.
+          </p>
+        )}
         {job.address_label && (
           <p className="mt-1 flex items-center gap-1.5 text-sm text-zinc-400">
             <MapPin className="h-4 w-4 shrink-0 text-sky-300" aria-hidden="true" />
@@ -132,18 +141,18 @@ export default function CleanerFlow({
       <ol className="space-y-3">
         <Item done={arriving ? before.length > 0 : true} title="Before photo" hint="Show the site as you found it. Take it when you arrive.">
           {arriving && <Shot kind="before" busy={busy === "before"} count={before.length} onPick={(f) => capture("before", f)} />}
-          <Thumbs list={before} />
+          <Thumbs list={before} onSiteM={onSiteM} />
         </Item>
         {working && (
           <Item done={after.length > 0} title="After photo" hint="Show the finished site. The customer sees this before paying.">
             <Shot kind="after" busy={busy === "after"} count={after.length} onPick={(f) => capture("after", f)} />
-            <Thumbs list={after} />
+            <Thumbs list={after} onSiteM={onSiteM} />
           </Item>
         )}
         <Item
           done={false}
           title="Location check"
-          hint={`We check your phone is within about ${ON_SITE_M} m of the job when you ${arriving ? "start" : "finish"}.`}
+          hint={`We check your phone is within about ${onSiteM} m of the job when you ${arriving ? "start" : "finish"}.`}
         />
       </ol>
 
@@ -156,12 +165,12 @@ export default function CleanerFlow({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Why? (optional)"
-                className="min-h-10 w-full rounded-xl bg-zinc-900 px-3 text-sm text-zinc-100 ring-1 ring-inset ring-zinc-700"
+                className="min-h-11 w-full rounded-xl bg-zinc-900 px-3 text-sm text-zinc-100 ring-1 ring-inset ring-zinc-700"
               />
               <button
                 type="button"
                 onClick={() => go(arriving ? "start" : "complete", true)}
-                className="text-xs font-bold text-amber-300 underline underline-offset-2"
+                className="inline-flex min-h-11 items-center text-xs font-bold text-amber-300 underline underline-offset-2"
               >
                 My location is wrong, continue anyway (we will review it)
               </button>
@@ -213,7 +222,7 @@ function Shot({ kind, busy, count, onPick }: { kind: string; busy: boolean; coun
   );
 }
 
-function Thumbs({ list }: { list: FlowPhoto[] }) {
+function Thumbs({ list, onSiteM }: { list: FlowPhoto[]; onSiteM: number }) {
   const { open, viewer } = usePhotoViewer(list.map((p) => p.url));
   if (list.length === 0) return null;
   return (
@@ -227,9 +236,9 @@ function Thumbs({ list }: { list: FlowPhoto[] }) {
           </button>
           {p.distance_m != null && (
             <span
-              className={`pointer-events-none absolute bottom-1 left-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${p.distance_m <= ON_SITE_M ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}
+              className={`pointer-events-none absolute bottom-1 left-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${p.distance_m <= onSiteM ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}
             >
-              {p.distance_m <= ON_SITE_M ? "On site" : `${p.distance_m} m away`}
+              {p.distance_m <= onSiteM ? "On site" : `${p.distance_m} m away`}
             </span>
           )}
         </li>

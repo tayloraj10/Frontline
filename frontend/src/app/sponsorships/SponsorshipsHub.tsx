@@ -22,12 +22,41 @@ const STATUS_HELP: [string, string][] = [
   ["Refunded", "The payment was refunded through Stripe, so the sponsorship is void. This is set automatically."],
 ];
 
-const RULE_HELP: Record<RuleType, string> = {
-  single: "Best for a one-off job. The first cleaner whose photos are approved gets all of it, and the site closes.",
-  flat_per_cleanup: "Every approved cleanup earns the same amount, until your money runs out.",
-  per_bag: "Pay for what gets collected. Each approved bag earns the rate, up to the max.",
-  equal_split: "Each person who attended the event earns the rate, so bigger events earn more.",
-};
+const RULE_OPTIONS: {
+  value: RuleType;
+  modes: ("site" | "group_area")[];
+  title: string;
+  sub: string;
+  areaTitle?: string;
+  areaSub?: string;
+}[] = [
+  {
+    value: "single",
+    modes: ["site"],
+    title: "One cleaner gets it all",
+    sub: "The first cleanup an admin approves is paid the whole amount, then the site closes.",
+  },
+  {
+    value: "flat_per_cleanup",
+    modes: ["site", "group_area"],
+    title: "Same pay for every cleanup",
+    sub: "Built for multiple people to get paid. Every approved cleanup earns the amount you set, from a cleaner or a group, until the money runs out.",
+    areaTitle: "Same pay for every event",
+    areaSub: "Built for multiple groups to get paid. Every verified event earns the amount you set, from any group, until the money runs out.",
+  },
+  {
+    value: "per_bag",
+    modes: ["site", "group_area"],
+    title: "Pay for each bag",
+    sub: "Cleaners earn a set amount per bag they collect, up to a maximum number of bags.",
+  },
+  {
+    value: "equal_split",
+    modes: ["group_area"],
+    title: "Pay for each person who shows up",
+    sub: "Each attendee at a group's event earns the amount you set, so bigger events earn more.",
+  },
+];
 
 const usdText = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
@@ -234,6 +263,10 @@ export default function SponsorshipsHub({
     }
   }, [statusFilter, isAdmin]);
 
+  const { values: capSettings } = useGameSettings(["sponsored_default_cap_per_user_usd", "plus_earning_cap_multiplier"] as const);
+  const defaultCapUsd = capSettings.sponsored_default_cap_per_user_usd ?? 25;
+  const plusCapMultiplier = Math.max(1, capSettings.plus_earning_cap_multiplier ?? 2);
+
   const totalCents = Math.round(parseFloat(amountDollars) * 100) || 0;
 
   const buildRule = (): Record<string, unknown> | null => {
@@ -359,6 +392,7 @@ export default function SponsorshipsHub({
             onChange={(m) => {
               setTargetMode(m);
               if (m === "group_area" && ruleType === "single") setRuleType("flat_per_cleanup");
+              if (m === "site" && ruleType === "equal_split") setRuleType("flat_per_cleanup");
             }}
             options={[
               { value: "site", label: "Cleanup site" },
@@ -379,16 +413,33 @@ export default function SponsorshipsHub({
           {targetMode === "site" && <SitePlacePicker value={site} onChange={setSite} />}
           {targetMode !== "donate" && (
             <div className="space-y-3">
-              <Field label="How it pays out" hint={RULE_HELP[ruleType]}>
-                <Select value={ruleType} onChange={(e) => setRuleType(e.target.value as RuleType)}>
-                  {targetMode === "site" && <option value="single">One payout, the whole amount</option>}
-                  <option value="flat_per_cleanup">
-                    {targetMode === "site" ? "Fixed amount per cleanup" : "Fixed amount per hosted event"}
-                  </option>
-                  <option value="per_bag">Per bag collected</option>
-                  {targetMode === "group_area" && <option value="equal_split">Per attendee</option>}
-                </Select>
-              </Field>
+              <div role="radiogroup" aria-label="How should cleaners be paid?" className="space-y-2">
+                <p className="text-sm font-semibold text-zinc-200">How should cleaners be paid?</p>
+                {RULE_OPTIONS.filter((o) => o.modes.includes(targetMode as "site" | "group_area")).map((o) => {
+                  const on = ruleType === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => setRuleType(o.value)}
+                      className={`flex w-full flex-col rounded-2xl px-4 py-3 text-left touch-manipulation transition active:scale-[0.99] ${
+                        on
+                          ? "bg-emerald-400/15 ring-2 ring-inset ring-emerald-400/60"
+                          : "bg-zinc-900 ring-1 ring-inset ring-zinc-700 hover:bg-zinc-800"
+                      }`}
+                    >
+                      <span className={`text-sm font-bold ${on ? "text-emerald-200" : "text-zinc-100"}`}>
+                        {targetMode === "group_area" && o.areaTitle ? o.areaTitle : o.title}
+                      </span>
+                      <span className="text-xs text-zinc-400">
+                        {targetMode === "group_area" && o.areaSub ? o.areaSub : o.sub}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               {ruleType !== "single" && (
                 <div className="grid grid-cols-2 gap-3">
                   <Field label={ruleType === "per_bag" ? "USD per bag" : ruleType === "equal_split" ? "USD per attendee" : "USD per payout"}>
@@ -418,14 +469,14 @@ export default function SponsorshipsHub({
               {targetMode === "site" && ruleType !== "single" && (
                 <Field
                   label="Most one person can earn (USD)"
-                  hint="Stops one cleaner from taking the whole pool. Leave blank to use the Frontline default."
+                  hint={`Stops one cleaner from taking the whole pool. Leave blank and each person can earn up to $${defaultCapUsd} (Plus members up to $${Math.round(defaultCapUsd * plusCapMultiplier)}).`}
                   optional
                 >
                   <TextInput
                     type="number"
                     inputMode="decimal"
                     min="1"
-                    placeholder="Frontline default"
+                    placeholder={String(defaultCapUsd)}
                     value={capDollars}
                     onChange={(e) => setCapDollars(e.target.value)}
                   />
@@ -437,11 +488,70 @@ export default function SponsorshipsHub({
                   groups), so one crew cannot drain it.
                 </p>
               )}
+
+              <Field label="Total to put in (USD)" hint="The whole pool. Nothing is paid out beyond this.">
+                <TextInput
+                  type="number"
+                  inputMode="decimal"
+                  min="1"
+                  step="1"
+                  value={amountDollars}
+                  onChange={(e) => setAmountDollars(e.target.value)}
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {[25, 50, 100, 250].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setAmountDollars(String(d))}
+                      aria-pressed={amountDollars === String(d)}
+                      className={`inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold touch-manipulation active:scale-[0.96] ${
+                        amountDollars === String(d) ? "bg-emerald-400 text-emerald-950" : "bg-zinc-800 text-zinc-200"
+                      }`}
+                    >
+                      ${d}
+                    </button>
+                  ))}
+                </div>
+              </Field>
             </div>
           )}
 
           {targetMode !== "donate" && (
           <>
+          {targetMode === "site" && ruleType !== "single" && (() => {
+            const unitCents = Math.round(parseFloat(ruleDollars) * 100) || 0;
+            const bags = parseInt(maxBags, 10) || 1;
+            const biggest = ruleType === "per_bag" ? unitCents * Math.max(1, bags) : ruleType === "flat_per_cleanup" ? unitCents : 0;
+            if (totalCents <= 0 || biggest <= totalCents) return null;
+            return (
+              <Note tone="warn">
+                <span className="block">
+                  One cleanup can earn up to {usdText(biggest)}, but the total is only {usdText(totalCents)}. It should be at least{" "}
+                  {usdText(biggest)} so a single cleanup is paid in full.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAmountDollars(String(Math.ceil(biggest / 100)))}
+                  className="mt-2 inline-flex min-h-9 items-center rounded-full bg-amber-400 px-3.5 text-[13px] font-semibold text-amber-950 touch-manipulation active:scale-[0.96]"
+                >
+                  Raise total to {usdText(Math.ceil(biggest / 100) * 100)}
+                </button>
+              </Note>
+            );
+          })()}
+
+          {totalCents > 0 && (
+            <PayoutSummary
+              mode={targetMode === "group_area" ? "group_area" : "site"}
+              rule={ruleType}
+              total={totalCents}
+              unit={Math.round(parseFloat(ruleDollars) * 100) || 0}
+              maxBags={parseInt(maxBags, 10) || 0}
+              sponsorCap={capDollars ? Math.round(parseFloat(capDollars) * 100) || 0 : 0}
+            />
+          )}
+
           <ChoiceChips
             value={sponsorMode}
             onChange={(v) => {
@@ -479,50 +589,6 @@ export default function SponsorshipsHub({
             </Field>
           )}
 
-          <Field label="Total to put in (USD)" hint="The whole pool. Nothing is paid out beyond this.">
-            <TextInput
-              type="number"
-              inputMode="decimal"
-              min="1"
-              step="1"
-              value={amountDollars}
-              onChange={(e) => setAmountDollars(e.target.value)}
-            />
-          </Field>
-
-          {targetMode === "site" && ruleType !== "single" && (() => {
-            const unitCents = Math.round(parseFloat(ruleDollars) * 100) || 0;
-            const bags = parseInt(maxBags, 10) || 1;
-            const biggest = ruleType === "per_bag" ? unitCents * Math.max(1, bags) : ruleType === "flat_per_cleanup" ? unitCents : 0;
-            if (totalCents <= 0 || biggest <= totalCents) return null;
-            return (
-              <Note tone="warn">
-                <span className="block">
-                  One cleanup can earn up to {usdText(biggest)}, but the total is only {usdText(totalCents)}. It should be at least{" "}
-                  {usdText(biggest)} so a single cleanup is paid in full.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAmountDollars(String(Math.ceil(biggest / 100)))}
-                  className="mt-2 inline-flex min-h-9 items-center rounded-full bg-amber-400 px-3.5 text-[13px] font-semibold text-amber-950 touch-manipulation active:scale-[0.96]"
-                >
-                  Raise total to {usdText(Math.ceil(biggest / 100) * 100)}
-                </button>
-              </Note>
-            );
-          })()}
-
-          {totalCents > 0 && (
-            <PayoutSummary
-              mode={targetMode === "group_area" ? "group_area" : "site"}
-              rule={ruleType}
-              total={totalCents}
-              unit={Math.round(parseFloat(ruleDollars) * 100) || 0}
-              maxBags={parseInt(maxBags, 10) || 0}
-              sponsorCap={capDollars ? Math.round(parseFloat(capDollars) * 100) || 0 : 0}
-            />
-          )}
-
           <Field label="Message" optional>
             <TextInput
               type="text"
@@ -543,7 +609,7 @@ export default function SponsorshipsHub({
             loading={createLoading}
             onClick={handleCreate}
           >
-            Start test checkout
+            Continue to checkout
           </Button>
           </>
           )}
