@@ -16,6 +16,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import connect
 from app.services import payments as payments_service
 from app.services.game_settings import get_game_settings
 
@@ -766,6 +767,10 @@ async def validate_event_pool(
     if not row.inside:
         raise SponsoredError(422, "The event location is outside the sponsored area")
     await _assert_early_access(db, sponsorship_id, "group", group_id)
+    if not await connect.group_payouts_ready(db, group_id):
+        raise SponsoredError(
+            409, "Your group needs a payout account before it can host a sponsored event. A group admin can add one on the group page."
+        )
     # First come, first reserved: other groups' upcoming events hold money back, and a group that
     # has already earned its cap on this pool cannot take another slot.
     if await _pool_available_cents(db, sponsorship_id, group_id, include_holds=True) <= 0:
@@ -891,11 +896,14 @@ async def list_allocations(db: AsyncSession, status: str | None = None) -> list[
         await db.execute(
             text("""
                 SELECT a.id, a.sponsorship_id, a.amount_cents, a.status, a.created_at,
-                       a.reviewed_at, a.reject_reason, a.paid_out_at,
+                       a.reviewed_at, a.reject_reason, a.paid_out_at, a.payout_error, a.stripe_transfer_id,
                        a.user_id, p.display_name AS user_name, p.username,
                        a.group_id, g.name AS group_name,
                        a.is_direct, s.site_label, s.model, s.remaining_cents,
-                       cl.before_photo_url, cl.after_photo_url
+                       cl.before_photo_url, cl.after_photo_url,
+                       ROUND(ST_Distance(s.site_location, cl.before_location))::int AS before_distance_m,
+                       ROUND(ST_Distance(s.site_location, cl.after_location))::int AS after_distance_m,
+                       ROUND(EXTRACT(EPOCH FROM (cl.after_submitted_at - cl.before_submitted_at)) / 60)::int AS minutes_on_site
                 FROM sponsorship_allocations a
                 JOIN sponsorships s ON s.id = a.sponsorship_id
                 LEFT JOIN profiles p ON p.id = a.user_id
@@ -911,6 +919,16 @@ async def list_allocations(db: AsyncSession, status: str | None = None) -> list[
     return [
         {**dict(r), "id": str(r["id"]), "sponsorship_id": str(r["sponsorship_id"])} for r in rows
     ]
+
+
+async def _tell_recipient(db: AsyncSession, allocation_id: UUID, kind: str, title: str, body: str) -> None:
+    from app.services.marketplace import _notify_safe
+
+    uid = (
+        await db.execute(text("SELECT user_id FROM sponsorship_allocations WHERE id = :id"), {"id": str(allocation_id)})
+    ).scalar()
+    if uid:
+        await _notify_safe(db, uid, kind, title, body, "/sponsorships", "Open Earn")
 
 
 async def review_allocation(
@@ -940,6 +958,10 @@ async def review_allocation(
         if result.fetchone() is None:
             raise SponsoredError(409, "Allocation is not pending review")
         await db.commit()
+        await _tell_recipient(
+            db, allocation_id, "earn_rejected", "Reward not approved",
+            reject_reason or "Your cleanup did not pass review.",
+        )
         return {"status": "rejected"}
 
     pool = (
@@ -973,7 +995,11 @@ async def review_allocation(
         {"id": str(alloc.sponsorship_id), "amount": alloc.amount_cents},
     )
     await db.commit()
-    return {"status": "approved"}
+    from app.services import earn_payouts
+
+    await _tell_recipient(db, allocation_id, "earn_approved", "Reward approved", "Your cleanup was approved.")
+    paid = await earn_payouts.pay_allocation(db, allocation_id)
+    return {"status": paid["status"] if paid["status"] == "paid_out" else "approved", "payout": paid["status"]}
 
 
 async def mark_paid_out(db: AsyncSession, allocation_id: UUID, admin_id: UUID) -> dict:

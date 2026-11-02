@@ -2,14 +2,17 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.rate_limit import limit_money, limit_writes
+from app.core.auth import CurrentUser, require_service, require_user
 from app.db.database import get_db
 from app.services import connect
+from app.services.admin_roles import is_site_admin
 from app.services import marketplace as svc
+from app.services import sweep_health
 from app.services import marketplace_payments as mp
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
@@ -20,23 +23,10 @@ class Actor(BaseModel):
     is_admin: bool = False
 
 
-def actor(
-    x_admin_api_secret: str | None = Header(default=None),
-    x_acting_user_id: str | None = Header(default=None),
-    x_acting_is_admin: str | None = Header(default=None),
-) -> Actor:
-    """Same shared-secret defense-in-depth as payments.py and sponsorships.py: the Next.js
-    server route verifies the session and the marketplace/payments gate, then forwards the
-    verified user id here. The marketplace is gated until marketplace_enabled is turned on."""
-    if not settings.admin_api_secret:
-        raise HTTPException(503, "Admin endpoint is not configured (ADMIN_API_SECRET unset).")
-    if x_admin_api_secret != settings.admin_api_secret:
-        raise HTTPException(403, "Invalid or missing admin API secret.")
-    try:
-        uid = UUID(x_acting_user_id or "")
-    except ValueError:
-        raise HTTPException(400, "Missing acting user.")
-    return Actor(user_id=uid, is_admin=x_acting_is_admin == "1")
+async def actor(user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)) -> Actor:
+    """Identity comes from the verified Supabase token (core/auth.py), never from caller-supplied
+    headers. Admin status is read from the database on every request."""
+    return Actor(user_id=user.id, is_admin=await is_site_admin(db, user.id))
 
 
 def admin_only(a: Actor = Depends(actor)) -> Actor:
@@ -67,7 +57,7 @@ class AcceptAgreement(BaseModel):
     app_version: str | None = None
 
 
-@router.post("/agreements/accept")
+@router.post("/agreements/accept", dependencies=[Depends(limit_writes)])
 async def accept_agreement(
     body: AcceptAgreement, request: Request, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)
 ):
@@ -98,7 +88,7 @@ class CardSetupIn(BaseModel):
     return_path: str = Field(default="/marketplace/post", max_length=200)
 
 
-@router.post("/payments/card/setup")
+@router.post("/payments/card/setup", dependencies=[Depends(limit_money)])
 async def card_setup(body: CardSetupIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     ok = body.return_path.startswith("/marketplace") and "//" not in body.return_path
     path = body.return_path if ok else "/marketplace/post"
@@ -108,7 +98,7 @@ async def card_setup(body: CardSetupIn, a: Actor = Depends(actor), db: AsyncSess
         raise HTTPException(502, str(e))
 
 
-@router.post("/payouts/onboard")
+@router.post("/payouts/onboard", dependencies=[Depends(limit_money)])
 async def payouts_onboard(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await connect.create_onboarding_link(db, a.user_id, None)
@@ -136,7 +126,7 @@ class CleanerProfileIn(BaseModel):
     area_label: str | None = None
 
 
-@router.put("/cleaner-profile")
+@router.put("/cleaner-profile", dependencies=[Depends(limit_writes)])
 async def put_cleaner_profile(body: CleanerProfileIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.upsert_cleaner_profile(db, a.user_id, **body.model_dump())
@@ -188,7 +178,12 @@ class JobIn(BaseModel):
     photos: list[str] = Field(default_factory=list, max_length=4)  # photos of the site, uploaded first
 
 
-@router.post("/jobs")
+@router.get("/pricing")
+async def pricing(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    return await svc.pricing(db)
+
+
+@router.post("/jobs", dependencies=[Depends(limit_money)])
 async def create_job(body: JobIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.create_job(db, a.user_id, **body.model_dump())
@@ -196,18 +191,39 @@ async def create_job(body: JobIn, a: Actor = Depends(actor), db: AsyncSession = 
         raise _wrap(e)
 
 
-@router.post("/sweep")
+@router.post("/sweep", dependencies=[Depends(require_service)])
 async def sweep(db: AsyncSession = Depends(get_db)):
     """Expires unclaimed jobs past their deadline and auto-releases completed jobs past the
     review window. Called every 15 minutes by a Railway cron (scripts/run_marketplace_sweep.py).
-    Time-based and idempotent, so it needs no auth, same as the other cron endpoints."""
+    Time-based and idempotent, but it moves money, so it requires the service secret."""
+    await sweep_health.record_run(db)
     return {"changed": await svc.expire_stale_jobs(db)}
 
 
 @router.get("/jobs")
 async def my_jobs(role: Literal["customer", "cleaner"] = "customer", a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    await sweep_health.alert_if_stale(db)
     await svc.expire_stale_jobs(db)
     return await svc.list_my_jobs(db, a.user_id, role)
+
+
+@router.get("/jobs/summary")
+async def my_jobs_summary(role: Literal["customer", "cleaner"] = "customer", a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    return await svc.job_money_summary(db, a.user_id, role)
+
+
+@router.get("/board/pins")
+async def board_pins(
+    time_mode: Literal["specific", "window", "flexible"] | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    job_type: str | None = None,
+    a: Actor = Depends(actor),
+    db: AsyncSession = Depends(get_db),
+):
+    return await svc.board_pins(
+        db, a.user_id, time_mode=time_mode, latitude=latitude, longitude=longitude, job_type=job_type
+    )
 
 
 @router.get("/board")
@@ -215,10 +231,16 @@ async def board(
     time_mode: Literal["specific", "window", "flexible"] | None = None,
     latitude: float | None = None,
     longitude: float | None = None,
+    job_type: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
     a: Actor = Depends(actor),
     db: AsyncSession = Depends(get_db),
 ):
-    return await svc.list_board(db, a.user_id, time_mode=time_mode, latitude=latitude, longitude=longitude)
+    return await svc.list_board(
+        db, a.user_id, time_mode=time_mode, latitude=latitude, longitude=longitude,
+        job_type=job_type, limit=limit, offset=offset,
+    )
 
 
 @router.get("/jobs/{job_id}")
@@ -233,7 +255,7 @@ class SafetyAck(BaseModel):
     safety_ack: bool = False
 
 
-@router.post("/jobs/{job_id}/accept")
+@router.post("/jobs/{job_id}/accept", dependencies=[Depends(limit_money)])
 async def accept_job(job_id: UUID, body: SafetyAck, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.accept_direct_job(db, job_id, a.user_id, body.safety_ack)
@@ -241,7 +263,7 @@ async def accept_job(job_id: UUID, body: SafetyAck, a: Actor = Depends(actor), d
         raise _wrap(e)
 
 
-@router.post("/jobs/{job_id}/decline")
+@router.post("/jobs/{job_id}/decline", dependencies=[Depends(limit_writes)])
 async def decline_job(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.decline_direct_job(db, job_id, a.user_id)
@@ -249,7 +271,7 @@ async def decline_job(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession 
         raise _wrap(e)
 
 
-@router.post("/jobs/{job_id}/take")
+@router.post("/jobs/{job_id}/take", dependencies=[Depends(limit_money)])
 async def take_job(job_id: UUID, body: SafetyAck, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.take_job(db, job_id, a.user_id, body.safety_ack)
@@ -262,7 +284,7 @@ class PriceFlagIn(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 
 
-@router.post("/jobs/{job_id}/price-flag")
+@router.post("/jobs/{job_id}/price-flag", dependencies=[Depends(limit_writes)])
 async def flag_price(job_id: UUID, body: PriceFlagIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.flag_price(db, job_id, a.user_id, body.suggested_price_cents, body.note)
@@ -274,7 +296,7 @@ class PriceIn(BaseModel):
     price_cents: int = Field(gt=0, le=1_000_000)
 
 
-@router.post("/jobs/{job_id}/price")
+@router.post("/jobs/{job_id}/price", dependencies=[Depends(limit_money)])
 async def update_price(job_id: UUID, body: PriceIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.update_price(db, job_id, a.user_id, body.price_cents)
@@ -286,7 +308,7 @@ class CancelIn(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
-@router.post("/jobs/{job_id}/cancel")
+@router.post("/jobs/{job_id}/cancel", dependencies=[Depends(limit_money)])
 async def cancel_job(job_id: UUID, body: CancelIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.cancel_job(db, job_id, a.user_id, body.reason)
@@ -300,7 +322,7 @@ class SiteCheckIn(BaseModel):
     override: bool = False  # "my location is wrong": proceed anyway, flagged for review
 
 
-@router.post("/jobs/{job_id}/start")
+@router.post("/jobs/{job_id}/start", dependencies=[Depends(limit_writes)])
 async def start_job(job_id: UUID, body: SiteCheckIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.start_job(db, job_id, a.user_id, latitude=body.latitude, longitude=body.longitude, override=body.override)
@@ -308,7 +330,7 @@ async def start_job(job_id: UUID, body: SiteCheckIn, a: Actor = Depends(actor), 
         raise _wrap(e)
 
 
-@router.post("/jobs/{job_id}/complete")
+@router.post("/jobs/{job_id}/complete", dependencies=[Depends(limit_writes)])
 async def complete_job(job_id: UUID, body: SiteCheckIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.complete_job(db, job_id, a.user_id, latitude=body.latitude, longitude=body.longitude, override=body.override)
@@ -316,7 +338,7 @@ async def complete_job(job_id: UUID, body: SiteCheckIn, a: Actor = Depends(actor
         raise _wrap(e)
 
 
-@router.post("/jobs/{job_id}/confirm")
+@router.post("/jobs/{job_id}/confirm", dependencies=[Depends(limit_money)])
 async def confirm_job(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.confirm_job(db, job_id, a.user_id)
@@ -328,7 +350,7 @@ class DisputeIn(BaseModel):
     details: str = Field(min_length=3, max_length=2000)
 
 
-@router.post("/jobs/{job_id}/dispute")
+@router.post("/jobs/{job_id}/dispute", dependencies=[Depends(limit_money)])
 async def dispute_job(job_id: UUID, body: DisputeIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.dispute_job(db, job_id, a.user_id, body.details)
@@ -351,7 +373,7 @@ async def messages(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession = D
         raise _wrap(e)
 
 
-@router.post("/jobs/{job_id}/messages")
+@router.post("/jobs/{job_id}/messages", dependencies=[Depends(limit_writes)])
 async def post_message(job_id: UUID, body: MessageIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.post_message(db, job_id, a.user_id, body.body)
@@ -374,7 +396,7 @@ async def photos(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Dep
         raise _wrap(e)
 
 
-@router.post("/jobs/{job_id}/photos")
+@router.post("/jobs/{job_id}/photos", dependencies=[Depends(limit_writes)])
 async def add_photo(job_id: UUID, body: PhotoIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.add_photo(db, job_id, a.user_id, body.kind, body.url, body.latitude, body.longitude)
@@ -387,7 +409,7 @@ class ReviewIn(BaseModel):
     comment: str | None = Field(default=None, max_length=1000)
 
 
-@router.post("/jobs/{job_id}/review")
+@router.post("/jobs/{job_id}/review", dependencies=[Depends(limit_writes)])
 async def review(job_id: UUID, body: ReviewIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.add_review(db, job_id, a.user_id, body.rating, body.comment)
@@ -405,7 +427,7 @@ class ReportIn(BaseModel):
     details: str = Field(min_length=3, max_length=2000)
 
 
-@router.post("/reports")
+@router.post("/reports", dependencies=[Depends(limit_writes)])
 async def report(body: ReportIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.create_report(db, a.user_id, body.job_id, body.reported_user_id, body.kind, body.details)
@@ -417,7 +439,7 @@ class BlockIn(BaseModel):
     user_id: UUID
 
 
-@router.post("/blocks")
+@router.post("/blocks", dependencies=[Depends(limit_writes)])
 async def block(body: BlockIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.block_user(db, a.user_id, body.user_id)
@@ -430,11 +452,24 @@ async def admin_overview(a: Actor = Depends(admin_only), db: AsyncSession = Depe
     return await svc.admin_overview(db)
 
 
+@router.get("/admin/jobs/{job_id}/messages")
+async def admin_job_messages(job_id: UUID, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
+    return await svc.admin_job_messages(db, job_id)
+
+
+@router.post("/admin/messages/{message_id}/review", dependencies=[Depends(limit_writes)])
+async def admin_review_message(message_id: UUID, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
+    try:
+        return await svc.admin_review_message(db, message_id)
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+
+
 class CleanerStatusIn(BaseModel):
     status: Literal["active", "paused", "suspended", "pending_review"]
 
 
-@router.post("/admin/cleaners/{cleaner_id}/status")
+@router.post("/admin/cleaners/{cleaner_id}/status", dependencies=[Depends(limit_writes)])
 async def admin_cleaner_status(
     cleaner_id: UUID, body: CleanerStatusIn, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)
 ):
@@ -450,7 +485,7 @@ class ResolveReportIn(BaseModel):
     resolution: str | None = Field(default=None, max_length=1000)
 
 
-@router.post("/admin/reports/{report_id}/resolve")
+@router.post("/admin/reports/{report_id}/resolve", dependencies=[Depends(limit_writes)])
 async def admin_resolve_report(
     report_id: UUID, body: ResolveReportIn, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)
 ):
@@ -460,7 +495,7 @@ async def admin_resolve_report(
         raise _wrap(e)
 
 
-@router.post("/admin/jobs/{job_id}/release")
+@router.post("/admin/jobs/{job_id}/release", dependencies=[Depends(limit_money)])
 async def admin_release(job_id: UUID, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.admin_release_job(db, job_id)
@@ -472,7 +507,7 @@ class ResolveDisputeIn(BaseModel):
     outcome: Literal["release", "refund"]
 
 
-@router.post("/admin/jobs/{job_id}/resolve-dispute")
+@router.post("/admin/jobs/{job_id}/resolve-dispute", dependencies=[Depends(limit_money)])
 async def admin_resolve_dispute(
     job_id: UUID, body: ResolveDisputeIn, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)
 ):

@@ -1,16 +1,20 @@
+import { authHeader } from "@/lib/fastapiAuth";
 import Image from "next/image";
 import { Banknote, Recycle, Trash2, Users, UsersRound } from "lucide-react";
 import Link from "next/link";
+import MoneySupport from "@/components/ui/MoneySupport";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
-import { paymentsVisible } from "@/lib/paymentsVisibility";
+import { rewardsVisible } from "@/lib/paymentsVisibility";
 import RewardsTabs from "@/components/RewardsTabs";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import SubscriptionWidget from "@/components/billing/SubscriptionWidget";
 import { Card } from "@/components/ui/Card";
 import { EmptyState, PageHeader, PageShell, Section } from "@/components/ui/PageShell";
 import StatTile from "@/components/ui/StatTile";
+import type { MoneySummary } from "@/lib/marketplace";
+import { mkFetch } from "@/lib/marketplace.server";
 
 export const metadata = { title: "Impact and funding - Frontline" };
 
@@ -34,11 +38,11 @@ const usd = (cents: number) =>
 const num = (n: number) => new Intl.NumberFormat("en-US").format(Math.round(n));
 
 async function loadSummary(): Promise<ImpactSummary | null> {
-  const secret = process.env.ADMIN_API_SECRET;
-  if (!secret) return null;
+  const authz = await authHeader();
+  if (!authz) return null;
   try {
     const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/payments/impact-summary`, {
-      headers: { "X-Admin-Api-Secret": secret },
+      headers: { ...authz },
       cache: "no-store",
     });
     return res.ok ? ((await res.json()) as ImpactSummary) : null;
@@ -57,12 +61,19 @@ export default async function ImpactPage({ searchParams }: { searchParams: Promi
   if (!user) redirect("/login");
 
   const [{ data: profile }, paymentsGate] = await Promise.all([
-    supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single(),
+    supabase.schema("public").from("profiles").select("is_admin, rewards_beta").eq("id", user.id).single(),
     getPaymentsGate(),
   ]);
-  if (!paymentsVisible(paymentsGate, !!profile?.is_admin)) redirect("/");
+  if (!rewardsVisible(paymentsGate, !!profile?.is_admin, !!profile?.rewards_beta)) redirect("/");
 
   const summary = youTab ? null : await loadSummary();
+
+  // Marketplace money for the Your money section: what this person has earned cleaning and spent hiring.
+  const noMoney: MoneySummary = { paid_cents: 0, paid_jobs: 0, pending_cents: 0, pending_jobs: 0 };
+  const [earned, spent] = await Promise.all([
+    mkFetch<MoneySummary>(user.id, !!profile?.is_admin, "/jobs/summary?role=cleaner").catch(() => noMoney),
+    mkFetch<MoneySummary>(user.id, !!profile?.is_admin, "/jobs/summary?role=customer").catch(() => noMoney),
+  ]);
 
   // The You tab: this person's own lifetime and this-year totals, from their contributions.
   let mine: {
@@ -237,13 +248,17 @@ export default async function ImpactPage({ searchParams }: { searchParams: Promi
             </div>
             <Card padding="lg" className="mt-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">Gifts by month</p>
-              <div className="mt-3 flex h-24 items-end gap-1.5">
+              <div
+                role="img"
+                aria-label={`Gifts by month: ${summary.money.monthly.map((m) => `${m.month} ${usd(m.gifts_cents)}`).join(", ")}`}
+                className="mt-3 flex h-24 items-end gap-1.5"
+              >
                 {summary.money.monthly.map((m) => {
                   const max = Math.max(1, ...summary.money.monthly.map((x) => x.gifts_cents));
                   return (
                     <div key={m.month} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${m.month}: ${usd(m.gifts_cents)}, ${m.new_supporters} new supporters`}>
                       <div className="w-full rounded-t bg-emerald-400" style={{ height: `${Math.max(2, (m.gifts_cents / max) * 100)}%` }} />
-                      <span className="text-[9px] text-zinc-500">{m.month.slice(5)}</span>
+                      <span className="text-[10px] text-zinc-400">{m.month.slice(5)}</span>
                     </div>
                   );
                 })}
@@ -275,6 +290,33 @@ export default async function ImpactPage({ searchParams }: { searchParams: Promi
           </Section>
         </>
       )}
+
+      <Section title="Your money" className="mt-8">
+        <div className="grid grid-cols-2 gap-3">
+          <StatTile hero value={usd(earned.paid_cents)} label="Earned cleaning" />
+          <StatTile hero value={usd(spent.paid_cents)} label="Spent hiring" />
+          <StatTile value={usd(earned.pending_cents)} label="Earnings pending" />
+          <StatTile value={usd(spent.pending_cents)} label="On hold for jobs" />
+        </div>
+        <p className="mt-2 text-xs text-zinc-500">
+          Marketplace jobs only. Pending money is held until the customer confirms or the review window ends.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Link href="/sponsorships">
+            <Card interactive padding="lg" className="h-full">
+              <p className="font-display text-base font-extrabold text-zinc-100">Payouts and sponsored pay</p>
+              <p className="mt-1 text-sm text-zinc-400">Set up or check your bank payout, and see sponsored cleanup pay.</p>
+            </Card>
+          </Link>
+          <Link href="/marketplace/jobs">
+            <Card interactive padding="lg" className="h-full">
+              <p className="font-display text-base font-extrabold text-zinc-100">My bookings</p>
+              <p className="mt-1 text-sm text-zinc-400">Every job you posted or took, with its payment status.</p>
+            </Card>
+          </Link>
+        </div>
+        <MoneySupport />
+      </Section>
 
       <Section title="Sponsor a group">
         <Link href="/groups">

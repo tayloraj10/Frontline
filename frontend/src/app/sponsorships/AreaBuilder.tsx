@@ -231,7 +231,7 @@ export default function AreaBuilder({
                   key={id}
                   type="button"
                   onClick={() => toggleUnit({ id, label: value.geoUnitLabels[id] ?? "Area" })}
-                  className="min-h-9 rounded-full bg-emerald-500/15 px-3 text-xs font-medium text-emerald-300"
+                  className="min-h-11 rounded-full bg-emerald-500/15 px-3 text-xs font-medium text-emerald-300"
                 >
                   {value.geoUnitLabels[id] ?? "Area"} ✕
                 </button>

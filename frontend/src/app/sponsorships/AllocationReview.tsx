@@ -23,6 +23,11 @@ interface Allocation {
   remaining_cents: number;
   before_photo_url: string | null;
   after_photo_url: string | null;
+  before_distance_m?: number | null;
+  after_distance_m?: number | null;
+  minutes_on_site?: number | null;
+  payout_error?: string | null;
+  stripe_transfer_id?: string | null;
 }
 
 const STATUS_VARIANT: Record<AllocationStatus, BadgeVariant> = {
@@ -74,7 +79,7 @@ export default function AllocationReview() {
     load();
   }, [load]);
 
-  const send = async (id: string, path: "review" | "paid-out", body: Record<string, unknown>) => {
+  const send = async (id: string, path: "review" | "paid-out" | "pay", body: Record<string, unknown>) => {
     setBusyId(id);
     setError(null);
     try {
@@ -95,7 +100,7 @@ export default function AllocationReview() {
   return (
     <Section
       title="Allocation review"
-      description="Admin only. Check each earned payout against its photos, approve or reject it, then mark it paid once you have sent the money."
+      description="Admin only. Check each earned payout against its photos, approve or reject it, then approval pays the worker through Stripe. If a payout is stuck, retry it here."
       action={
         <div className="w-44">
           <Select
@@ -133,6 +138,15 @@ export default function AllocationReview() {
               </div>
               <Badge variant={STATUS_VARIANT[a.status]}>{a.status.replace("_", " ")}</Badge>
             </div>
+
+            {a.minutes_on_site != null && (
+              <p className="text-xs text-zinc-400">
+                {a.minutes_on_site} min between photos
+                {a.before_distance_m != null && a.after_distance_m != null &&
+                  ` · ${a.before_distance_m} m / ${a.after_distance_m} m from the site`}
+                {a.minutes_on_site < 5 && <span className="font-semibold text-amber-300"> (quick, check the photos)</span>}
+              </p>
+            )}
 
             {(a.before_photo_url || a.after_photo_url) && (
               <div className="grid grid-cols-2 gap-2">
@@ -181,14 +195,24 @@ export default function AllocationReview() {
             )}
 
             {a.status === "approved" && (
-              <Button
-                variant="secondary"
-                className="w-full"
-                loading={busyId === a.id}
-                onClick={() => send(a.id, "paid-out", {})}
-              >
-                Mark paid out
-              </Button>
+              <div className="space-y-2">
+                {a.payout_error && <p className="text-xs text-amber-400">Payout waiting: {a.payout_error}</p>}
+                <Button
+                  className="w-full"
+                  loading={busyId === a.id}
+                  onClick={() => send(a.id, "pay", {})}
+                >
+                  Pay now through Stripe
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  loading={busyId === a.id}
+                  onClick={() => send(a.id, "paid-out", {})}
+                >
+                  Mark paid out (sent outside Stripe)
+                </Button>
+              </div>
             )}
           </Card>
         ))}

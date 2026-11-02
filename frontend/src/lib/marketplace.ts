@@ -38,8 +38,14 @@ export type Job = {
   hold_status: string;
   cancel_reason: string | null;
   completed_at: string | null;
+  arrive_by?: string | null;
+  arrive_minutes?: number;
+  arrive_deadline?: string;
   release_after: string | null;
   cleaner_payout_cents?: number;
+  total_cents?: number;
+  on_site_m?: number;
+  fee_on_top?: boolean;
   listing_photos?: string[];
   price_flag_count?: number;
   price_flagged_by_me?: boolean;
@@ -78,14 +84,30 @@ export type CleanerCard = {
   reviews?: { rating: number; comment: string | null; created_at: string; username: string | null }[];
 };
 
+/** What the board map needs per job. The list pages separately, so a pin may not be in the list yet. */
+export type BoardPin = Pick<
+  Job,
+  | "id" | "title" | "job_type" | "price_type" | "price_cents" | "time_mode" | "starts_at" | "window_start"
+  | "window_end" | "flexible_days" | "is_mine" | "latitude" | "longitude"
+>;
+
 export type MeStatus = {
   cleaner_profile: (CleanerCard & { status: string; payouts_enabled: boolean }) | null;
+  /** Strikes still inside the window, newest first. Absent on older API responses. */
+  strikes?: {
+    limit: number;
+    window_days: number;
+    items: { kind: "no_show" | "late_back_out"; created_at: string; expires_at: string; job_title: string | null }[];
+  };
   cleaner_agreement_accepted: boolean;
   customer_terms_accepted: boolean;
   job_types: string[];
   /** False when Stripe Connect is not configured, so the server does not gate taking jobs on payouts. */
   payouts_required: boolean;
 };
+
+/** True when this user still has to create a cleaner profile or sign the cleaner agreement before taking jobs. */
+export const needsCleanerSetup = (me: MeStatus | null) => !me?.cleaner_profile || !me.cleaner_agreement_accepted;
 
 /** True when this user has a cleaner profile but the server will refuse to let them take jobs until payouts are set up. */
 export const payoutsBlocked = (me: MeStatus | null) =>
@@ -138,3 +160,5 @@ export async function mk<T>(path: string, init: { method?: string; body?: unknow
   if (!res.ok) throw new Error(data && typeof data.detail === "string" ? data.detail : "Something went wrong.");
   return data as T;
 }
+
+export type MoneySummary = { paid_cents: number; paid_jobs: number; pending_cents: number; pending_jobs: number };

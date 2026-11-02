@@ -1,12 +1,13 @@
 "use client";
 
+import PayoutSetupCard from "@/app/sponsorships/PayoutSetupCard";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
-  Briefcase,
   ChevronRight,
+  ClipboardList,
   Crosshair,
   Fence,
   Footprints,
@@ -14,16 +15,21 @@ import {
   Plus,
   Sprout,
   Trash2,
+  UserRound,
 } from "lucide-react";
+import ActionTile from "@/components/ui/ActionTile";
 import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/PageShell";
 import { getPosition } from "@/lib/getPosition";
 import {
   JOB_TYPE_LABELS,
+  mk,
   TIME_MODE_LABELS,
   usd,
   whenLabel,
+  type BoardPin,
   type Job,
 } from "@/lib/marketplace";
 
@@ -43,6 +49,7 @@ const CATEGORY_TILES = [
   { id: "light_yard_work", label: "Yard", Icon: Sprout },
 ];
 
+const PAGE_SIZE = 20;
 const MI_PER_KM = 0.621371;
 
 function distanceKm(from: [number, number], lat: number, lng: number) {
@@ -75,9 +82,84 @@ export default function MarketplaceHome({
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
 
+  // The server pages the board (nearest first once we know where the viewer is, with no radius cutoff).
+  const [items, setItems] = useState(board);
+  const [hasMore, setHasMore] = useState(board.length >= PAGE_SIZE);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const first = useRef(true);
+
+  async function fetchPage(offset: number) {
+    const q = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+    if (service) q.set("job_type", service);
+    if (me) {
+      q.set("latitude", String(me[0]));
+      q.set("longitude", String(me[1]));
+    }
+    return mk<Job[]>(`/board?${q}`);
+  }
+
+  // The map shows a pin for every open job, so looking around is not limited to the pages loaded in the list.
+  const [pins, setPins] = useState<BoardPin[]>(board);
+  const [total, setTotal] = useState<number | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const q = new URLSearchParams();
+    if (service) q.set("job_type", service);
+    if (me) {
+      q.set("latitude", String(me[0]));
+      q.set("longitude", String(me[1]));
+    }
+    mk<{ total: number; pins: BoardPin[] }>(`/board/pins?${q}`)
+      .then((r) => {
+        if (!live) return;
+        setPins(r.pins);
+        setTotal(r.total);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [service, me]);
+
+  // A new filter or a new location starts the list over.
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    let live = true;
+    setPageError(null);
+    fetchPage(0)
+      .then((rows) => {
+        if (!live) return;
+        setItems(rows);
+        setHasMore(rows.length >= PAGE_SIZE);
+      })
+      .catch((e) => live && setPageError(e instanceof Error ? e.message : "Could not load jobs."));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service, me]);
+
+  async function showMore() {
+    setLoadingMore(true);
+    setPageError(null);
+    try {
+      const rows = await fetchPage(items.length);
+      setItems((prev) => [...prev, ...rows.filter((r) => !prev.some((p) => p.id === r.id))]);
+      setHasMore(rows.length >= PAGE_SIZE);
+    } catch (e) {
+      setPageError(e instanceof Error ? e.message : "Could not load more jobs.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   const jobs = useMemo(() => {
-    const list = board
-      .filter((j) => !service || j.job_type === service)
+    const list = items
       .map((j) => ({
         ...j,
         distance_km:
@@ -88,7 +170,7 @@ export default function MarketplaceHome({
     return me
       ? list.sort((a, b) => (a.distance_km ?? 1e9) - (b.distance_km ?? 1e9))
       : list;
-  }, [board, service, me]);
+  }, [items, me]);
 
   async function nearMe() {
     setLocating(true);
@@ -104,6 +186,16 @@ export default function MarketplaceHome({
       setLocating(false);
     }
   }
+
+  // Full width (no earnings tile beside it) it also nudges people down to the map and the list.
+  const myJobsTile = (wide: boolean) => (
+    <ActionTile
+      href="/marketplace/jobs"
+      icon={ClipboardList}
+      title="View my jobs"
+      sub={wide ? "Or pick a job on the map below and take it." : "Jobs you took or posted."}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -123,79 +215,50 @@ export default function MarketplaceHome({
         </Link>
       )}
 
-      {isCleaner ? (
-        <Card className="flex items-center gap-3 border-emerald-400/30 bg-emerald-400/5">
-          <div className="min-w-0 flex-1">
-            <p className="font-bold text-zinc-100">
-              Pick a job below and take it
-            </p>
-            <p className="text-sm text-zinc-400">
-              You get a notification when a job is posted near you.
-            </p>
-          </div>
-          <Link
-            href="/marketplace/jobs"
-            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl bg-zinc-800 px-3 text-sm font-semibold text-zinc-100 active:scale-[0.97]"
-          >
-            <Briefcase className="h-4 w-4" aria-hidden="true" />
-            My jobs
-          </Link>
-        </Card>
-      ) : null}
+      {isCleaner && !payoutsBlocked && <PayoutSetupCard tileSibling={myJobsTile} />}
+      {isCleaner && payoutsBlocked && myJobsTile(true)}
 
       <div className="grid grid-cols-2 gap-3">
-        <Link
+        <ActionTile
+          tone="solid"
           href="/marketplace/post"
-          className={`flex min-h-20 flex-col justify-center gap-0.5 rounded-2xl px-4 touch-manipulation active:scale-[0.98] ${
-            isCleaner
-              ? "bg-zinc-900 ring-1 ring-inset ring-zinc-800"
-              : "bg-emerald-400 text-emerald-950"
-          }`}
-        >
-          <span className="inline-flex items-center gap-1.5 text-[15px] font-extrabold">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Post a job
-          </span>
-          <span
-            className={`text-xs ${
-              isCleaner ? "text-zinc-400" : "text-emerald-950/70"
-            }`}
-          >
-            Free. A neighbor takes it at your price.
-          </span>
-        </Link>
-        <Link
+          icon={Plus}
+          title="Post a job"
+          sub="Free. A neighbor takes it at your price."
+        />
+        <ActionTile
+          tone="sky"
           href="/marketplace/become-a-cleaner"
-          className="flex min-h-20 flex-col justify-center gap-0.5 rounded-2xl bg-zinc-900 px-4 ring-1 ring-inset ring-sky-400/40 touch-manipulation active:scale-[0.98]"
-        >
-          <span className="text-[15px] font-extrabold text-zinc-100">
-            {profileStatus ? "My cleaner profile" : "Earn as a cleaner"}
-          </span>
-          <span className="text-xs text-zinc-400">
-            {profileStatus
-              ? "Your area, rate and status."
-              : "Pick jobs near you. Get paid."}
-          </span>
-        </Link>
+          icon={profileStatus ? UserRound : Sprout}
+          title={profileStatus ? "Cleaner profile" : "Start earning"}
+          sub={profileStatus ? "Your area, rate and status." : "Pick jobs near you."}
+        />
       </div>
 
       <div className="flex items-center justify-between gap-2 pt-1">
-        <h2 className="text-sm font-bold text-zinc-100">
-          Open jobs ({jobs.length})
-        </h2>
-        <button
-          type="button"
-          onClick={nearMe}
-          disabled={locating}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-zinc-900 px-3 text-xs font-semibold text-sky-300 ring-1 ring-inset ring-zinc-800 disabled:opacity-60"
-        >
-          <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
-          {locating
-            ? "Finding you..."
-            : me
-            ? "Sorted by distance"
-            : "Closest to me"}
-        </button>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-zinc-100">
+            Open jobs ({total != null && total > jobs.length ? `${jobs.length} of ${total}` : (total ?? jobs.length)})
+          </h2>
+          {isCleaner ? (
+            <p className="text-xs font-bold text-emerald-300">Pick a job below and take it</p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={nearMe}
+            disabled={locating}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-zinc-900 px-3 text-xs font-semibold text-sky-300 ring-1 ring-inset ring-zinc-800 disabled:opacity-60"
+          >
+            <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
+            {locating
+              ? "Finding you..."
+              : me
+              ? "Sorted by distance"
+              : "Closest to me"}
+          </button>
+        </div>
       </div>
       {locError && <p className="text-xs text-amber-300">{locError}</p>}
 
@@ -220,7 +283,8 @@ export default function MarketplaceHome({
 
       <div id="jobs-map" className="scroll-mt-20">
         <JobsMap
-          jobs={jobs}
+          jobs={pins}
+          inList={(id) => jobs.some((j) => j.id === id)}
           selectedId={selected}
           onSelect={setSelected}
           onSeeInList={(id) => {
@@ -233,9 +297,9 @@ export default function MarketplaceHome({
 
       {jobs.length === 0 ? (
         <EmptyState
-          title={board.length === 0 ? "No open jobs yet" : "No jobs match"}
+          title={!service && items.length === 0 ? "No open jobs yet" : "No jobs match"}
           body={
-            board.length === 0
+            !service && items.length === 0
               ? "Jobs show up here as neighbors post them."
               : "Try clearing the filter."
           }
@@ -261,9 +325,6 @@ export default function MarketplaceHome({
                     <p className="min-w-0 font-bold text-zinc-100">{j.title}</p>
                     <p className="shrink-0 text-lg font-extrabold leading-none text-emerald-300">
                       {usd(j.price_cents)}
-                      <span className="text-xs font-semibold text-emerald-300/70">
-                        {j.price_type === "hourly" ? "/hr" : ""}
-                      </span>
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -294,7 +355,7 @@ export default function MarketplaceHome({
                                 block: "center",
                               });
                           }}
-                          className="inline-flex min-h-8 items-center gap-1 rounded-full bg-zinc-800 px-2.5 font-semibold text-sky-300"
+                          className="inline-flex min-h-11 items-center gap-1 rounded-full bg-zinc-800 px-2.5 font-semibold text-sky-300"
                         >
                           <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
                           Map
@@ -314,6 +375,13 @@ export default function MarketplaceHome({
             </li>
           ))}
         </ul>
+      )}
+
+      {pageError && <p role="alert" className="text-sm text-red-300">{pageError}</p>}
+      {hasMore && (
+        <Button variant="secondary" className="w-full" onClick={() => void showMore()} disabled={loadingMore}>
+          {loadingMore ? "Loading..." : me ? "Show more, farther away" : "Show more"}
+        </Button>
       )}
     </div>
   );

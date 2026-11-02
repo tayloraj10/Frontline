@@ -50,6 +50,8 @@ async def card_status(db: AsyncSession, user_id: UUID) -> dict:
         return {"configured": False, "has_card": True}
     customer_id = await _customer_id(db, user_id)
     cards = _cards(customer_id) if customer_id else []
+    await db.execute(text("UPDATE profiles SET hire_card_on_file = :c WHERE id = :u"), {"c": bool(cards), "u": user_id})
+    await db.commit()
     if not cards:
         return {"configured": True, "has_card": False}
     card = cards[0].card
@@ -76,6 +78,12 @@ async def create_card_setup_url(db: AsyncSession, user_id: UUID, return_path: st
     return session.url
 
 
+def charge_total(job: dict) -> int:
+    """What the hirer's card is charged: the posted price plus the service fee on fee-on-top jobs."""
+    fee = (job.get("platform_fee_cents") or 0) if job.get("fee_on_top") else 0
+    return job["price_cents"] + fee
+
+
 async def charge_job(db: AsyncSession, job: dict) -> str | None:
     """Charges the customer's saved card for the job price. Returns the PaymentIntent id (None when
     payments are off). Raises PaymentError with a message safe to show."""
@@ -88,7 +96,7 @@ async def charge_job(db: AsyncSession, job: dict) -> str | None:
     try:
         pi = _client().payment_intents.create(
             params={
-                "amount": job["price_cents"],
+                "amount": charge_total(job),
                 "currency": "usd",
                 "customer": customer_id,
                 "payment_method": cards[0].id,
@@ -98,7 +106,7 @@ async def charge_job(db: AsyncSession, job: dict) -> str | None:
                 "transfer_group": f"job_{job['id']}",
                 "metadata": {"job_id": str(job["id"])},
             },
-            options={"idempotency_key": f"mk-charge-{job['id']}"},
+            options={"idempotency_key": f"mk-charge-{job['id']}-{job.get('claim_count') or 0}"},
         )
     except stripe.CardError as e:
         raise PaymentError("The customer's card was declined, so this job cannot be taken right now.") from e
@@ -125,7 +133,7 @@ async def pay_out(db: AsyncSession, job: dict) -> str | None:
     ).first()
     if not row or not row.stripe_connect_account_id:
         raise PaymentError("The cleaner has not set up payouts yet.")
-    payout = job["price_cents"] - (job["platform_fee_cents"] or 0)
+    payout = job["price_cents"] if job.get("fee_on_top") else job["price_cents"] - (job["platform_fee_cents"] or 0)
     try:
         client = _client()
         charge = client.payment_intents.retrieve(job["stripe_payment_intent_id"]).latest_charge
@@ -153,7 +161,7 @@ async def refund(job: dict) -> None:
     try:
         _client().refunds.create(
             params={"payment_intent": job["stripe_payment_intent_id"]},
-            options={"idempotency_key": f"mk-refund-{job['id']}"},
+            options={"idempotency_key": f"mk-refund-{job['id']}-{job.get('claim_count') or 0}"},
         )
     except stripe.StripeError as e:
         logger.exception("Stripe refund failed for job %s", job["id"])

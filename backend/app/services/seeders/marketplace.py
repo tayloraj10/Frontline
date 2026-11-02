@@ -1,6 +1,7 @@
 import uuid
 
 import httpx
+import stripe
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +21,8 @@ CUSTOMERS = [
     {"key": "mk_cust_devon", "username": "mk_devon", "name": "Devon Price"},
     {"key": "mk_cust_priya", "username": "mk_priya", "name": "Priya Shah"},
 ]
+# mk_priya is left without a card on purpose: with Stripe on, her jobs must stay off the board.
+CUSTOMERS_WITH_CARD = {"mk_cust_maria", "mk_cust_devon"}
 CLEANERS = [
     {"key": "mk_clean_jamal", "username": "mk_jamal", "name": "Jamal Carter", "headline": "Weekend lot and sidewalk crew",
      "services": ["lot_cleanup", "sidewalk", "litter"], "rate_type": "hourly", "rate_cents": 2500, "radius_km": 15,
@@ -95,6 +98,9 @@ class MarketplaceSeeder(Seeder):
             await self._add_user(db, result, u)
         for c in CLEANERS:
             await self._add_cleaner(db, result, c)
+        for u in CUSTOMERS:
+            if u["key"] in CUSTOMERS_WITH_CARD:
+                await self._add_test_card(db, result, u)
         for j in JOBS:
             await self._add_job(db, result, j)
         await self._add_flow_states(db, result)
@@ -139,6 +145,38 @@ class MarketplaceSeeder(Seeder):
         result.inserted += 1
 
     @staticmethod
+    async def _add_test_card(db: AsyncSession, result: SeedResult, u: dict) -> None:
+        """Gives the fake customer a Stripe test customer with Stripe's test Visa, so taking their jobs can be tried.
+        Test-mode keys only; skipped when Stripe is off (manual payouts need no card)."""
+        key = settings.stripe_secret_key
+        if not key:
+            return
+        if not key.startswith("sk_test_"):
+            result.errors.append(f"{u['username']} card: skipped, STRIPE_SECRET_KEY is not a test key")
+            return
+        uid = _uid(u["key"])
+        existing = (await db.execute(text("SELECT stripe_customer_id FROM profiles WHERE id = :id"), {"id": uid})).scalar()
+        try:
+            client = stripe.StripeClient(key)
+            customer_id = existing
+            if not customer_id:
+                customer_id = client.customers.create(
+                    params={"name": u["name"], "email": f"{u['username']}@example.com", "metadata": {"user_id": uid, "seeded": "true"}},
+                    options={"idempotency_key": f"seed-customer-{uid}"},
+                ).id
+            if not client.payment_methods.list(params={"customer": customer_id, "type": "card"}).data:
+                pm = client.payment_methods.attach("pm_card_visa", params={"customer": customer_id})
+                client.customers.update(customer_id, params={"invoice_settings": {"default_payment_method": pm.id}})
+                result.inserted += 1
+        except stripe.StripeError as exc:
+            result.errors.append(f"{u['username']} card: {exc}")
+            return
+        await db.execute(
+            text("UPDATE profiles SET stripe_customer_id = :c, hire_card_on_file = true WHERE id = :id"),
+            {"c": customer_id, "id": uid},
+        )
+
+    @staticmethod
     async def _add_cleaner(db: AsyncSession, result: SeedResult, c: dict) -> None:
         res = await db.execute(
             text("""
@@ -161,7 +199,7 @@ class MarketplaceSeeder(Seeder):
             text("""
                 INSERT INTO marketplace_jobs (id, customer_id, origin, title, description, job_type, size, hazards_ack, address_label,
                                               location, radius_m, area, time_mode, starts_at, window_start, window_end, flexible_days,
-                                              expires_at, price_type, price_cents, status)
+                                              expires_at, price_type, price_cents, platform_fee_cents, fee_on_top, status)
                 VALUES (:id, :cust, 'board', :title, 'Seeded test job.', :jt, :size, true, :addr,
                         ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :rad,
                         CASE WHEN CAST(:poly AS text) IS NULL THEN NULL ELSE ST_GeogFromText('SRID=4326;' || CAST(:poly AS text)) END,
@@ -170,7 +208,7 @@ class MarketplaceSeeder(Seeder):
                         CASE WHEN :tm = 'window' THEN now() + interval '2 days' END,
                         CASE WHEN :tm = 'window' THEN now() + interval '6 days' END,
                         CASE WHEN :tm = 'flexible' THEN 14 END,
-                        now() + interval '14 days', :pt, :price, 'open')
+                        now() + interval '14 days', :pt, :price, round(:price * 0.05), true, 'open')
                 ON CONFLICT (id) DO NOTHING
             """),
             {"id": _uid(f"job_{key}"), "cust": _uid(cust), "title": title, "jt": jtype, "size": size, "addr": addr, "lat": lat,
@@ -215,10 +253,23 @@ class MarketplaceSeeder(Seeder):
             extra_sql = ", " + extra.strip().rstrip(",") if extra else ""
             await db.execute(
                 text(f"""UPDATE marketplace_jobs SET status = :st, cleaner_id = :c, hold_status = :h,
-                           platform_fee_cents = round(price_cents * 0.10), accepted_at = now() - interval '1 day',
+                           platform_fee_cents = round(price_cents * 0.055), fee_on_top = true, accepted_at = now() - interval '1 day',
+                           arrive_by = CASE WHEN CAST(:st AS text) = 'accepted' THEN now() + interval '2 hours' END,
                            safety_ack_at = now() - interval '1 day'{extra_sql}
                          WHERE id = :j AND status = 'open'"""),
                 {"st": status, "c": _uid(cleaner), "h": hold, "j": _uid(f"job_{job}")},
+            )
+
+        # A short chat on the accepted job, one message flagged so the admin queue has something to show
+        for sender, body, flag in [
+            ("mk_cust_maria", "Thanks for taking this. The bags are by the fence.", None),
+            (jamal, "On my way, see you soon.", None),
+            ("mk_cust_maria", "You are late, this is a piece of shit service.", "abusive language"),
+        ]:
+            await db.execute(
+                text("""INSERT INTO marketplace_messages (job_id, sender_id, body, flag_reason)
+                        SELECT :j, :s, :b, :f WHERE NOT EXISTS (SELECT 1 FROM marketplace_messages WHERE job_id = :j AND body = :b)"""),
+                {"j": _uid("job_j7"), "s": _uid(sender), "b": body, "f": flag},
             )
 
         # Cleaner photos, each with where it was taken
@@ -257,6 +308,13 @@ class MarketplaceSeeder(Seeder):
         await db.execute(text(f"DELETE FROM cleaner_profiles WHERE user_id {any_ids}"), arg)
         await db.execute(text(f"DELETE FROM user_notifications WHERE user_id {any_ids}"), arg)
         result.skipped = jobs.rowcount or 0
+        if settings.stripe_secret_key.startswith("sk_test_"):
+            rows = (await db.execute(text(f"SELECT stripe_customer_id FROM profiles WHERE id {any_ids} AND stripe_customer_id IS NOT NULL"), arg)).all()
+            for r in rows:
+                try:
+                    stripe.StripeClient(settings.stripe_secret_key).customers.delete(r.stripe_customer_id)
+                except stripe.StripeError as exc:
+                    result.errors.append(f"stripe customer {r.stripe_customer_id}: {exc}")
         try:
             async with httpx.AsyncClient() as client:
                 for uid in ids:

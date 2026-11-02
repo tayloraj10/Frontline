@@ -6,7 +6,8 @@ import MemberManager from "./MemberManager";
 import DeleteGroupSection from "./DeleteGroupSection";
 import GroupSponsorSettings from "@/components/billing/GroupSponsorSettings";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
-import { paymentsVisible } from "@/lib/paymentsVisibility";
+import { paymentsVisible, rewardsVisible } from "@/lib/paymentsVisibility";
+import PayoutSetupCard from "@/app/sponsorships/PayoutSetupCard";
 import { getPlusEntitlement } from "@/lib/plus.server";
 
 interface Props {
@@ -32,7 +33,7 @@ export default async function GroupEditPage({ params }: Props) {
       .eq("group_id", groupData.id)
       .eq("user_id", user.id)
       .single(),
-    supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single(),
+    supabase.schema("public").from("profiles").select("is_admin, rewards_beta").eq("id", user.id).single(),
   ]);
 
   const isGroupAdmin = membershipData?.role === "admin";
@@ -43,6 +44,7 @@ export default async function GroupEditPage({ params }: Props) {
   }
 
   const paymentsGate = await getPaymentsGate();
+  const showPayouts = rewardsVisible(paymentsGate, isSiteAdmin, Boolean(profileData?.rewards_beta));
   const isPlusGroup = paymentsVisible(paymentsGate, isSiteAdmin)
     ? (await getPlusEntitlement("group", groupData.id)).has_premium
     : false;
@@ -78,6 +80,12 @@ export default async function GroupEditPage({ params }: Props) {
       </div>
 
       <h1 className="font-display font-extrabold text-xl text-zinc-100 mt-6 mb-8">Edit group</h1>
+
+      {showPayouts && (
+        <div id="group-payouts" className="scroll-mt-24 mb-8">
+          <PayoutSetupCard groupId={groupData.id} returnPath={`/groups/${slug}/edit`} />
+        </div>
+      )}
 
       <div className="rounded-[20px] p-6 bg-zinc-900 mb-8">
         <GroupEditForm

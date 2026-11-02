@@ -13,3 +13,12 @@ export type PaymentsGate = { enabled: boolean; preview: boolean };
 export function paymentsVisible(gate: PaymentsGate, isSiteAdmin: boolean): boolean {
   return gate.preview && (isSiteAdmin || gate.enabled);
 }
+
+/**
+ * Gate for the Earn, Hire and Impact pages only. Same as paymentsVisible, plus users flagged
+ * profiles.rewards_beta get in before payments_enabled goes live. Perks and every other
+ * payments-gated surface keep using paymentsVisible.
+ */
+export function rewardsVisible(gate: PaymentsGate, isSiteAdmin: boolean, beta: boolean): boolean {
+  return gate.preview && (isSiteAdmin || beta || gate.enabled);
+}

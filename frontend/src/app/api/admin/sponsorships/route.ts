@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authHeader } from "@/lib/fastapiAuth";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdminOrPaymentsEnabled } from "@/lib/paymentsAuth";
 import { getSponsorBusinesses } from "@/lib/sponsorBusinesses";
@@ -23,28 +24,24 @@ export async function GET(request: NextRequest) {
   const auth = await requireSiteAdmin();
   if (auth.error) return auth.error;
 
-  const secret = process.env.ADMIN_API_SECRET;
-  if (!secret) {
-    return NextResponse.json({ detail: "Something went wrong. Please try again in a few minutes." }, { status: 503 });
-  }
+  const authz = await authHeader();
+  if (!authz) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
   const status = request.nextUrl.searchParams.get("status");
   const url = new URL(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/sponsorships`);
   if (status) url.searchParams.set("status", status);
 
-  const res = await fetch(url.toString(), { headers: { "X-Admin-Api-Secret": secret } });
+  const res = await fetch(url.toString(), { headers: { ...authz } });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdminOrPaymentsEnabled();
+  const auth = await requireAdminOrPaymentsEnabled({ rewards: true });
   if (auth.error) return auth.error;
 
-  const secret = process.env.ADMIN_API_SECRET;
-  if (!secret) {
-    return NextResponse.json({ detail: "Something went wrong. Please try again in a few minutes." }, { status: 503 });
-  }
+  const authz = await authHeader();
+  if (!authz) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
   const body = await request.json();
   // The sponsor is always the signed-in user, or a business they belong to. Never trust the body.
@@ -61,7 +58,7 @@ export async function POST(request: NextRequest) {
   }
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/sponsorships/checkout-session`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Admin-Api-Secret": secret },
+    headers: { "Content-Type": "application/json", ...authz },
     body: JSON.stringify(body),
   });
   const data = await res.json();

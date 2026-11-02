@@ -109,7 +109,7 @@ function MapFrame({ expanded, onToggleExpand }: { expanded: boolean; onToggleExp
 
   const chip = (active: boolean) =>
     cn(
-      "inline-flex items-center min-h-9 px-3.5 text-[13px] font-semibold rounded-full cursor-pointer touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
+      "inline-flex items-center min-h-11 px-3.5 text-[13px] font-semibold rounded-full cursor-pointer touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
       active ? "bg-emerald-400 text-emerald-950" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100",
     );
 
@@ -129,7 +129,7 @@ function MapFrame({ expanded, onToggleExpand }: { expanded: boolean; onToggleExp
               onClick={() => changeBasemap(b.value)}
               aria-pressed={basemap === b.value}
               className={cn(
-                "min-h-8 rounded-full px-3 text-xs font-medium touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.95]",
+                "min-h-11 rounded-full px-3 text-xs font-medium touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.95]",
                 basemap === b.value ? "bg-zinc-600 text-zinc-100" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200",
               )}
             >
@@ -191,7 +191,7 @@ function MapFrame({ expanded, onToggleExpand }: { expanded: boolean; onToggleExp
                   type="button"
                   onClick={() => setLayersOpen(false)}
                   aria-label="Close layers"
-                  className="-mr-2 grid h-9 w-9 place-items-center rounded-full bg-zinc-800 text-zinc-300 transition-[background-color,color,transform] duration-150 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.92] touch-manipulation"
+                  className="-mr-2 grid h-11 w-11 place-items-center rounded-full bg-zinc-800 text-zinc-300 transition-[background-color,color,transform] duration-150 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.92] touch-manipulation"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
                     <path d="M6 6l12 12M18 6 6 18" />

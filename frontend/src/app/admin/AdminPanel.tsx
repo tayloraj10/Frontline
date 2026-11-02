@@ -26,6 +26,8 @@ import { listTeamEvents, getTeamEvent, type TeamEventListItem, type TeamEventDet
 import NewTeamEventForm from "./team-events/new/NewTeamEventForm";
 import EditTeamEventView from "./team-events/[id]/edit/EditTeamEventView";
 import AdminRolesTab from "./AdminRolesTab";
+import RewardsBetaCard from "./RewardsBetaCard";
+import PaymentsGuide from "./PaymentsGuide";
 import type { Json, Database } from "@/types/database";
 
 export type Campaign = {
@@ -3525,6 +3527,44 @@ const CATEGORY_LABELS: Record<string, string> = {
   payments: "Payments",
 };
 
+// The DB keeps every money setting in one "payments" category. The admin page shows one Payments
+// section split into visual subsections by key, in the order a person would think about them.
+const PAYMENT_SUBSECTIONS = [
+  { id: "switches", title: "Master switches", intro: "Turn money features on or off. These gate everything below." },
+  { id: "earn", title: "Earn (sponsored cleanups)", intro: "Claim timing, distance and how much one person or group can earn." },
+  { id: "plus", title: "Frontline Plus perks", intro: "What Plus members get on top of the Earn rules." },
+  { id: "hire", title: "Hire (marketplace)", intro: "Pricing and fees, job timing, on-site rules and strikes." },
+];
+const PAYMENT_KEY_ORDER = [
+  "payments_enabled", "payments_admin_preview", "marketplace_enabled",
+  "sponsored_claim_before_window_minutes", "sponsored_claim_work_window_minutes", "sponsored_claim_proximity_meters",
+  "sponsored_default_cap_per_user_usd", "sponsored_daily_cap_per_user_usd", "sponsored_default_cap_per_group_usd",
+  "plus_earning_cap_multiplier", "plus_early_access_hours",
+  "marketplace_platform_fee_percent", "marketplace_min_job_cents",
+  "marketplace_auto_release_days", "marketplace_flexible_max_days", "marketplace_arrive_minutes",
+  "marketplace_site_radius_m", "marketplace_strike_limit", "marketplace_strike_window_days",
+];
+
+// Extra caution text shown under a setting's description.
+const SETTING_WARNINGS: Record<string, { tone: "red" | "amber"; text: string }> = {
+  payments_enabled: {
+    tone: "red",
+    text: "Full go-live switch. Turning this on shows every money feature (sponsorships, Plus, rewards) to ALL users in production. Leave off until you are ready to launch.",
+  },
+  marketplace_enabled: {
+    tone: "amber",
+    text: "Hire only shows up when BOTH this and Payments enabled are on. Admins can also see it with this on plus \"Show payment features to admins\".",
+  },
+};
+
+function paymentSection(key: string): string {
+  if (BOOLEAN_SETTING_KEYS.has(key)) return "switches";
+  if (key.startsWith("sponsored_")) return "earn";
+  if (key.startsWith("plus_")) return "plus";
+  if (key.startsWith("marketplace_")) return "hire";
+  return "switches";
+}
+
 // Settings that are conceptually booleans (stored as 0/1 in the numeric game_settings
 // column) get a toggle switch instead of a number input.
 const BOOLEAN_SETTING_KEYS = new Set([
@@ -3581,6 +3621,59 @@ const UNIT_LABELS: Record<string, string> = {
   cleanup_pound_milestone_5: "lbs",
 };
 
+// Stripe's standard US card pricing. Verify against the dashboard before trusting the margin math.
+const STRIPE_PCT = 0.029;
+const STRIPE_FIXED_CENTS = 30;
+
+// Live check of the Hire fee settings so a bad edit can't quietly make every job lose money.
+// Uses the unsaved draft values, so the warning shows before the change is saved.
+function HireFeeCheck({ feePercent, minCents }: { feePercent: number; minCents: number }) {
+  if (!Number.isFinite(feePercent) || !Number.isFinite(minCents) || minCents <= 0) return null;
+  const rows = [minCents, 2500, 5000, 10000].filter((p, i, a) => p >= minCents && a.indexOf(p) === i);
+  const net = (price: number) => {
+    const fee = Math.round((price * feePercent) / 100);
+    const stripe = Math.round((price + fee) * STRIPE_PCT + STRIPE_FIXED_CENTS);
+    return { fee, stripe, keep: fee - stripe };
+  };
+  const breakEvenPct = ((minCents * STRIPE_PCT + STRIPE_FIXED_CENTS) / (minCents * (1 - STRIPE_PCT))) * 100;
+  const losing = net(minCents).keep < 0;
+  const usd = (c: number) => `${c < 0 ? "-" : ""}$${(Math.abs(c) / 100).toFixed(2)}`;
+  return (
+    <div className={`rounded-xl border px-4 py-3 text-xs space-y-2 ${losing ? "border-red-700/70 bg-red-950/30" : "border-zinc-800 bg-zinc-900/40"}`}>
+      <p className={`font-semibold ${losing ? "text-red-300" : "text-zinc-300"}`}>
+        {losing
+          ? `Warning: at ${feePercent}% with a ${usd(minCents)} minimum, the smallest jobs lose money.`
+          : "Hire fee check: every job at or above the minimum covers Stripe."}
+      </p>
+      <p className="text-zinc-400">
+        The hirer pays price + fee and the cleaner gets the full price, so the fee must cover Stripe&apos;s{" "}
+        {STRIPE_PCT * 100}% + {usd(STRIPE_FIXED_CENTS)} on the whole charge. At a {usd(minCents)} minimum the
+        break-even fee is {breakEvenPct.toFixed(2)}%.
+      </p>
+      <table className="w-full text-right text-zinc-400">
+        <thead>
+          <tr className="text-zinc-500">
+            <th className="text-left font-medium">Job price</th><th className="font-medium">Fee</th>
+            <th className="font-medium">Stripe cost</th><th className="font-medium">Frontline keeps</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((price) => {
+            const r = net(price);
+            return (
+              <tr key={price}>
+                <td className="text-left">{usd(price)}</td><td>{usd(r.fee)}</td><td>{usd(r.stripe)}</td>
+                <td className={r.keep < 0 ? "text-red-400 font-semibold" : "text-emerald-400"}>{usd(r.keep)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="text-zinc-500">Does not include Connect payout fees; check the Stripe dashboard for those.</p>
+    </div>
+  );
+}
+
 function SettingsTab({ settings, setSettings }: {
   settings: GameSetting[];
   setSettings: (s: GameSetting[]) => void;
@@ -3597,6 +3690,8 @@ function SettingsTab({ settings, setSettings }: {
     for (const s of settings) {
       (groups[s.category] ??= []).push(s);
     }
+    const rank = (k: string) => { const i = PAYMENT_KEY_ORDER.indexOf(k); return i === -1 ? 999 : i; };
+    groups.payments?.sort((a, b) => rank(a.key) - rank(b.key));
     return groups;
   }, [settings]);
 
@@ -3644,6 +3739,7 @@ function SettingsTab({ settings, setSettings }: {
         ))}
       </nav>
       <div className="flex-1 min-w-0 space-y-8">
+      <PaymentsGuide />
       {Object.entries(grouped).map(([category, rows]) => (
         <div key={category} id={`settings-${category}`} className="space-y-3 scroll-mt-20">
           <h2 className="text-sm font-semibold text-zinc-300">{CATEGORY_LABELS[category] ?? category}</h2>
@@ -3655,8 +3751,77 @@ function SettingsTab({ settings, setSettings }: {
               exception is trash report value, which is calculated live and is fully covered by recompute.
             </p>
           )}
+          {(category === "payments"
+            ? PAYMENT_SUBSECTIONS.map(sub => ({ sub, rows: rows.filter(r => paymentSection(r.key) === sub.id) })).filter(b => b.rows.length > 0)
+            : [{ sub: null, rows }]
+          ).map(block => (
+          <div key={block.sub?.id ?? "all"} id={block.sub ? `settings-payments-${block.sub.id}` : undefined} className="space-y-2 scroll-mt-20">
+            {block.sub && (
+              <div className="pt-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/80">{block.sub.title}</h3>
+                <p className="text-xs text-zinc-500">{block.sub.intro}</p>
+              </div>
+            )}
+            {block.sub?.id === "switches" && (() => {
+              const v = (k: string) => (settings.find(x => x.key === k)?.value ?? 0) !== 0;
+              const pay = v("payments_enabled"), preview = v("payments_admin_preview"), mk = v("marketplace_enabled");
+              const hireWho = !mk ? "nobody (Marketplace is off)" : pay ? "everyone" : preview ? "admins only" : "nobody (Payments is off and admin preview is off)";
+              const payWho = pay ? "everyone" : preview ? "admins only" : "nobody";
+              return (
+                <p className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-400">
+                  Right now: payment features are visible to <span className="font-semibold text-zinc-200">{payWho}</span>, Hire is visible to <span className="font-semibold text-zinc-200">{hireWho}</span>.
+                </p>
+              );
+            })()}
+            {block.sub?.id === "plus" && (() => {
+              const n = (k: string) => Number(drafts[k]);
+              const mult = n("plus_earning_cap_multiplier");
+              const caps = [
+                ["per person, per pool", n("sponsored_default_cap_per_user_usd")],
+                ["per person, per day", n("sponsored_daily_cap_per_user_usd")],
+                ["per group, per pool", n("sponsored_default_cap_per_group_usd")],
+              ] as const;
+              if (!Number.isFinite(mult) || caps.some(([, c]) => !Number.isFinite(c))) return null;
+              const usd = (d: number) => `$${d.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+              return (
+                <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/20 px-3 py-2.5 text-xs text-zinc-400 space-y-2">
+                  <p>
+                    <span className="font-semibold text-zinc-200">Plus cap = base cap x multiplier.</span> The base caps are set
+                    in{" "}
+                    <a href="#settings-payments-earn" className="font-semibold text-emerald-300 underline underline-offset-2">
+                      Earn (sponsored cleanups)
+                    </a>{" "}
+                    above. A multiplier of 1 gives Plus members no extra room.
+                  </p>
+                  <table className="w-full text-right">
+                    <thead>
+                      <tr className="text-zinc-500">
+                        <th className="text-left font-medium">Cap</th>
+                        <th className="font-medium">Base (everyone)</th>
+                        <th className="font-medium">Plus members</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {caps.map(([label, c]) => (
+                        <tr key={label}>
+                          <td className="text-left">{label}</td>
+                          <td className="text-zinc-200">{usd(c)}</td>
+                          <td className="font-semibold text-emerald-300">{usd(c * mult)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+            {block.sub?.id === "hire" && block.rows.some(r => r.key === "marketplace_platform_fee_percent") && (
+              <HireFeeCheck
+                feePercent={Number(drafts["marketplace_platform_fee_percent"])}
+                minCents={Number(drafts["marketplace_min_job_cents"])}
+              />
+            )}
           <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 shadow-elevation-1">
-            {rows.map(setting => {
+            {block.rows.map(setting => {
               const dirty = drafts[setting.key] !== String(setting.value);
               const isProximity = setting.category === "proximity" || setting.key === "bonus_spot_default_radius_m";
               const isSolarpunkTieIn = setting.key === "trash_war_solarpunk_credit";
@@ -3671,6 +3836,15 @@ function SettingsTab({ settings, setSettings }: {
                       <p className="font-medium text-sm text-zinc-200">{setting.label}</p>
                       {setting.description && (
                         <p className="text-xs text-zinc-500 mt-0.5">{setting.description}</p>
+                      )}
+                      {SETTING_WARNINGS[setting.key] && (
+                        <p className={`mt-1.5 text-xs font-medium rounded-lg px-2.5 py-1.5 ${
+                          SETTING_WARNINGS[setting.key].tone === "red"
+                            ? "bg-red-950/40 text-red-300 border border-red-800/60"
+                            : "bg-amber-950/30 text-amber-300 border border-amber-800/50"
+                        }`}>
+                          ⚠ {SETTING_WARNINGS[setting.key].text}
+                        </p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -3761,6 +3935,8 @@ function SettingsTab({ settings, setSettings }: {
               );
             })}
           </div>
+          </div>
+          ))}
         </div>
       ))}
       {settings.length === 0 && (
@@ -4102,7 +4278,12 @@ export default function AdminPanel({
       )}
       {tab === "leaderboard" && <LeaderboardTab campaigns={activeCampaigns} />}
       {tab === "moderation" && <ModerationTab />}
-      {tab === "admins" && <AdminRolesTab requestingUserId={currentUserId} />}
+      {tab === "admins" && (
+        <div className="space-y-6">
+          <AdminRolesTab requestingUserId={currentUserId} />
+          <RewardsBetaCard />
+        </div>
+      )}
       {tab === "settings" && <SettingsTab settings={settings} setSettings={setSettings} />}
     </main>
   );

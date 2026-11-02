@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authHeader } from "@/lib/fastapiAuth";
 import { requireAdminOrPaymentsEnabled } from "@/lib/paymentsAuth";
 
 /**
@@ -9,8 +10,18 @@ import { requireAdminOrPaymentsEnabled } from "@/lib/paymentsAuth";
  */
 
 const UUID = "[0-9a-f-]{36}";
-const USER_GET = [/^sites$/, /^group-areas$/, /^map$/, /^my-limits$/];
+const USER_GET = [
+  /^sites$/,
+  /^group-areas$/,
+  /^map$/,
+  /^my-limits$/,
+  /^payouts\/status$/,
+  new RegExp(`^groups/${UUID}/payouts/status$`),
+];
 const USER_POST = [
+  /^payouts\/onboard$/,
+  /^payouts\/dashboard$/,
+  new RegExp(`^groups/${UUID}/payouts/(onboard|dashboard)$`),
   new RegExp(`^${UUID}/claim$`),
   new RegExp(`^${UUID}/claim/(before-photo|after-photo|release)$`),
 ];
@@ -18,6 +29,7 @@ const ADMIN_GET = [/^allocations$/];
 const ADMIN_POST = [
   new RegExp(`^allocations/${UUID}/review$`),
   new RegExp(`^allocations/${UUID}/paid-out$`),
+  new RegExp(`^allocations/${UUID}/pay$`),
 ];
 
 const matches = (patterns: RegExp[], path: string) => patterns.some((p) => p.test(path));
@@ -34,19 +46,17 @@ async function forward(
     return NextResponse.json({ detail: "Not found" }, { status: 404 });
   }
 
-  const auth = await requireAdminOrPaymentsEnabled();
+  const auth = await requireAdminOrPaymentsEnabled({ rewards: true });
   if (auth.error) return auth.error;
   if (isAdminRoute && !auth.isSiteAdmin) {
     return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
   }
 
-  const secret = process.env.ADMIN_API_SECRET;
-  if (!secret) {
-    return NextResponse.json({ detail: "Something went wrong. Please try again in a few minutes." }, { status: 503 });
-  }
+  const authz = await authHeader();
+  if (!authz) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
   const url = new URL(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/sponsorships/${path}`);
-  const init: RequestInit = { method, headers: { "X-Admin-Api-Secret": secret }, cache: "no-store" };
+  const init: RequestInit = { method, headers: { ...authz }, cache: "no-store" };
 
   if (method === "GET") {
     request.nextUrl.searchParams.forEach((value, key) => {

@@ -22,8 +22,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 /**
  * Fund-a-sponsorship widget for a fixed target (a cleanup event or a geo area). Only
  * ever rendered for site admins right now -- see callers -- since sponsorships are
- * still a Stripe test-mode, funding-only harness (no payout/Connect yet, see
- * dev-docs/payments-scoping-2026-08-20.md).
+ * gated. Payouts to workers go through Stripe Connect on approval (see services/earn_payouts.py).
  */
 export default function SponsorshipWidget({
   targetType,
@@ -94,7 +93,7 @@ export default function SponsorshipWidget({
         <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-emerald-400">Admin preview</span>
       </div>
       <p className="text-sm text-zinc-400">
-        Funds a cleanup program for &quot;{targetLabel}&quot;. Test mode, funding only, no payouts yet.
+        Funds a cleanup program for &quot;{targetLabel}&quot;.
       </p>
 
       {error && <Note tone="warn">{error}</Note>}
@@ -148,7 +147,7 @@ export default function SponsorshipWidget({
       </Field>
 
       <Button className="w-full" loading={loading} onClick={handleCheckout}>
-        Start test checkout
+        Continue to checkout
       </Button>
     </Card>
   );

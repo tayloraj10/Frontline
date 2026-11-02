@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    stripe_connect_webhook_secret: str = ""
     stripe_price_id_individual: str = ""
     stripe_price_id_group: str = ""
 

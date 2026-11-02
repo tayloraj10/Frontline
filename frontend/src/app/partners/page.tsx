@@ -1,5 +1,5 @@
 import { getPaymentsGate } from "@/lib/gameSettings.server";
-import { paymentsVisible } from "@/lib/paymentsVisibility";
+import { rewardsVisible } from "@/lib/paymentsVisibility";
 import RewardsTabs from "@/components/RewardsTabs";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { PageShell, PageHeader } from "@/components/ui/PageShell";
@@ -36,12 +36,12 @@ export default async function PartnersPage() {
     supabase.schema("public").from("campaign_partner_businesses").select("business_id, campaign_id"),
     supabase.schema("public").from("campaigns").select("id").eq("status", "active"),
     user
-      ? supabase.schema("public").from("profiles").select("spendable_points, is_business_only, is_admin").eq("id", user.id).single()
+      ? supabase.schema("public").from("profiles").select("spendable_points, is_business_only, is_admin, rewards_beta").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
 
   // Payments v2 entry points live here (rewards) rather than in the main nav.
-  const showPayments = user ? paymentsVisible(await getPaymentsGate(), !!profileResult?.data?.is_admin) : false;
+  const showPayments = user ? rewardsVisible(await getPaymentsGate(), !!profileResult?.data?.is_admin, !!profileResult?.data?.rewards_beta) : false;
 
   const activeCampaignIds = new Set((activeCampaigns ?? []).map((c) => c.id));
   const businessIdsInActiveCampaign = new Set(

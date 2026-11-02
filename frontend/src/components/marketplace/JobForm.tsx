@@ -36,11 +36,15 @@ export default function JobForm({
   services,
   termsAccepted,
   flexibleMaxDays,
+  feePercent,
+  minPriceCents,
 }: {
   cleaner?: Target;
   services: string[];
   termsAccepted: boolean;
   flexibleMaxDays: number;
+  feePercent: number;
+  minPriceCents: number;
 }) {
   const router = useRouter();
   const [accepted, setAccepted] = useState(termsAccepted);
@@ -58,8 +62,9 @@ export default function JobForm({
   const [winStart, setWinStart] = useState("");
   const [winEnd, setWinEnd] = useState("");
   const [days, setDays] = useState(Math.min(7, flexibleMaxDays));
-  const [priceType, setPriceType] = useState<"hourly" | "fixed">(cleaner?.rate_type ?? "fixed");
-  const [price, setPrice] = useState(cleaner?.rate_cents ? String(cleaner.rate_cents / 100) : "");
+  const [price, setPrice] = useState(
+    cleaner?.rate_type === "fixed" && cleaner.rate_cents ? String(cleaner.rate_cents / 100) : ""
+  );
   const [hazards, setHazards] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +97,7 @@ export default function JobForm({
     const where = placeProblem(place);
     if (where) return setError(where);
     if (!Number.isFinite(dollars) || dollars <= 0) return setError("Enter a price.");
+    if (Math.round(dollars * 100) < minPriceCents) return setError(`The minimum price is ${usd(minPriceCents)}.`);
     if (mode === "specific" && !startsAt) return setError("Pick a date and time.");
     if (mode === "window" && (!winStart || !winEnd || winEnd < winStart)) return setError("Pick a start and end date.");
     if (!hazards) return setError("Confirm the site safety check to continue.");
@@ -113,7 +119,7 @@ export default function JobForm({
           window_start: mode === "window" ? startOfDay(winStart) : null,
           window_end: mode === "window" ? endOfDay(winEnd) : null,
           flexible_days: mode === "flexible" ? days : null,
-          price_type: priceType,
+          price_type: "fixed",
           price_cents: Math.round(dollars * 100),
           photos,
         },
@@ -145,7 +151,7 @@ export default function JobForm({
       {cleaner && (
         <Card padding="sm" className="text-sm text-zinc-300">
           Booking <span className="font-bold text-zinc-100">{cleaner.username ?? "this cleaner"}</span>
-          {cleaner.rate_cents ? ` (${usd(cleaner.rate_cents)}${cleaner.rate_type === "hourly" ? "/hr" : " per job"})` : ""}.
+          {cleaner.rate_cents && cleaner.rate_type === "fixed" ? ` (usually ${usd(cleaner.rate_cents)} per job)` : ""}.
           You are not charged until they accept.
         </Card>
       )}
@@ -239,7 +245,7 @@ export default function JobForm({
               type="button"
               aria-pressed={mode === m}
               onClick={() => setMode(m)}
-              className={`min-h-10 rounded-xl text-[13px] font-bold touch-manipulation transition-colors ${
+              className={`min-h-11 rounded-xl text-[13px] font-bold touch-manipulation transition-colors ${
                 mode === m ? "bg-zinc-700 text-zinc-50 shadow-sm" : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
@@ -282,17 +288,32 @@ export default function JobForm({
 
       {step === 3 && (
         <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Pay type">
-          <Select value={priceType} onChange={(e) => setPriceType(e.target.value as "hourly" | "fixed")}>
-            <option value="fixed">Fixed price</option>
-            <option value="hourly">Hourly</option>
-          </Select>
-        </Field>
-        <Field label={priceType === "hourly" ? "Rate ($/hr)" : "Price ($)"}>
-          <TextInput inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="60" />
-        </Field>
-      </div>
+      <Field label="Price ($)" hint={`What the cleaner receives. Minimum ${usd(minPriceCents)}.`}>
+        <TextInput inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="60" />
+      </Field>
+
+      {Number(price) > 0 && (
+        <Card padding="sm" className="space-y-1.5 text-sm">
+          <div className="flex justify-between text-zinc-300">
+            <span>Cleaner receives</span>
+            <span>{usd(Math.round(Number(price) * 100))}</span>
+          </div>
+          <div className="flex justify-between text-zinc-400">
+            <span>Service fee ({feePercent}%)</span>
+            <span>{usd(Math.round((Math.round(Number(price) * 100) * feePercent) / 100))}</span>
+          </div>
+          <div className="flex justify-between border-t border-zinc-800 pt-1.5 font-bold text-zinc-100">
+            <span>You pay</span>
+            <span>
+              {usd(
+                Math.round(Number(price) * 100) +
+                  Math.round((Math.round(Number(price) * 100) * feePercent) / 100)
+              )}
+            </span>
+          </div>
+          <p className="pt-1 text-xs text-zinc-500">Your card is charged only when a cleaner takes the job.</p>
+        </Card>
+      )}
 
       <label className="flex items-start gap-3 rounded-2xl bg-amber-500/10 p-4 text-sm text-amber-100 ring-1 ring-inset ring-amber-400/20">
         <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-emerald-400" checked={hazards} onChange={(e) => setHazards(e.target.checked)} />

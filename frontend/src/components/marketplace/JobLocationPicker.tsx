@@ -131,7 +131,7 @@ export default function JobLocationPicker({ value, onChange }: { value: JobPlace
                 type="button"
                 disabled={value.vertices.length === 0}
                 onClick={() => set({ vertices: value.vertices.slice(0, -1) })}
-                className="inline-flex min-h-9 items-center gap-1 rounded-xl bg-zinc-900 px-3 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-800 disabled:opacity-40"
+                className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-zinc-900 px-3 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-800 disabled:opacity-40"
               >
                 <Undo2 className="h-3.5 w-3.5" aria-hidden="true" /> Undo
               </button>
@@ -139,7 +139,7 @@ export default function JobLocationPicker({ value, onChange }: { value: JobPlace
                 type="button"
                 disabled={value.vertices.length === 0}
                 onClick={() => set({ vertices: [] })}
-                className="inline-flex min-h-9 items-center gap-1 rounded-xl bg-zinc-900 px-3 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-800 disabled:opacity-40"
+                className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-zinc-900 px-3 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-800 disabled:opacity-40"
               >
                 <Eraser className="h-3.5 w-3.5" aria-hidden="true" /> Clear
               </button>

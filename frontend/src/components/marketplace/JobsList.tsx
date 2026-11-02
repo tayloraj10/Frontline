@@ -5,11 +5,22 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/PageShell";
-import { JOB_TYPE_LABELS, STATUS_LABELS, TIME_MODE_LABELS, usd, whenLabel, type Job } from "@/lib/marketplace";
+import { JOB_TYPE_LABELS, STATUS_LABELS, TIME_MODE_LABELS, usd, whenLabel, type Job, type MoneySummary } from "@/lib/marketplace";
 
-export default function JobsList({ asCustomer, asCleaner }: { asCustomer: Job[]; asCleaner: Job[] }) {
+export default function JobsList({
+  asCustomer,
+  asCleaner,
+  spent,
+  earned,
+}: {
+  asCustomer: Job[];
+  asCleaner: Job[];
+  spent: MoneySummary;
+  earned: MoneySummary;
+}) {
   const [role, setRole] = useState<"customer" | "cleaner">("customer");
   const jobs = role === "customer" ? asCustomer : asCleaner;
+  const money = role === "customer" ? spent : earned;
 
   return (
     <div>
@@ -25,13 +36,30 @@ export default function JobsList({ asCustomer, asCleaner }: { asCustomer: Job[];
             type="button"
             aria-pressed={role === id}
             onClick={() => setRole(id)}
-            className={`min-h-10 rounded-xl text-[13px] font-bold touch-manipulation transition-colors ${
+            className={`min-h-11 rounded-xl text-[13px] font-bold touch-manipulation transition-colors ${
               role === id ? "bg-zinc-700 text-zinc-50 shadow-sm" : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             {label}
           </button>
         ))}
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <Card className="space-y-0.5">
+          <p className="text-xs text-zinc-500">{role === "customer" ? "Total spent" : "Total earned"}</p>
+          <p className="text-xl font-bold text-emerald-300">{usd(money.paid_cents)}</p>
+          <p className="text-xs text-zinc-500">
+            {money.paid_jobs} paid job{money.paid_jobs === 1 ? "" : "s"}
+          </p>
+        </Card>
+        <Card className="space-y-0.5">
+          <p className="text-xs text-zinc-500">{role === "customer" ? "On hold" : "Pending"}</p>
+          <p className="text-xl font-bold text-zinc-100">{usd(money.pending_cents)}</p>
+          <p className="text-xs text-zinc-500">
+            {money.pending_jobs} job{money.pending_jobs === 1 ? "" : "s"} in progress
+          </p>
+        </Card>
       </div>
 
       {jobs.length === 0 ? (

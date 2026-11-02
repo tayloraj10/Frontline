@@ -68,9 +68,21 @@ export default function Walkthrough({
         </div>
 
         <div key={i} className="px-6 pt-5 pb-4 min-h-[22rem] max-h-[70dvh] overflow-y-auto flex flex-col">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
-            Step {i + 1} of {steps.length}
-            {step.label && <span className="text-emerald-400">{" · "}{step.label}</span>}
+          <p className="mb-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
+            <span>Step {i + 1} of {steps.length}</span>
+            {step.track ? (
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold tracking-wider ring-1 ring-inset ${
+                  step.track.tone === "sky"
+                    ? "bg-sky-400/15 text-sky-300 ring-sky-400/40"
+                    : "bg-emerald-400/15 text-emerald-300 ring-emerald-400/40"
+                }`}
+              >
+                {step.track.name}
+              </span>
+            ) : (
+              step.label && <span className="text-emerald-400">{" · "}{step.label}</span>
+            )}
           </p>
           {step.visual}
           <h2 className="mt-5 text-xl font-black text-zinc-100 tracking-tight flex items-center gap-2">

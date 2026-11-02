@@ -20,8 +20,9 @@ app.add_middleware(
     allow_origins=settings.cors_allowed_origins,
     allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    # Browsers only send these; the shared-secret header is server-to-server and never needs CORS.
+    allow_headers=["Authorization", "Content-Type", "sentry-trace", "baggage"],
 )
 
 app.include_router(health.router)

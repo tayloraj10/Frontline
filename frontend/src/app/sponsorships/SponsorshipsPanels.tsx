@@ -9,7 +9,7 @@ type MainTab = "earn" | "fund" | "admin";
 
 const MAIN_TABS: { id: MainTab; label: string }[] = [
   { id: "earn", label: "Claim" },
-  { id: "fund", label: "Fund one" },
+  { id: "fund", label: "Fund" },
 ];
 
 const ADMIN_PANELS: { id: PanelId; label: string }[] = [
@@ -62,6 +62,7 @@ export default function SponsorshipsPanels({
         </p>
       )}
       <nav aria-label="What do you want to do?" className="mb-3">
+        <p className="mb-1.5 text-center text-sm font-semibold text-zinc-300">What do you want to do?</p>
         <div className={`grid gap-1 rounded-2xl bg-zinc-900 p-1 ring-1 ring-inset ring-zinc-800/60 ${tabs.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
           {tabs.map((t) => {
             const active = tab === t.id;

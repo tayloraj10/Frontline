@@ -24,8 +24,7 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
   const [headline, setHeadline] = useState(p?.headline ?? "");
   const [bio, setBio] = useState(p?.bio ?? "");
   const [services, setServices] = useState<string[]>(p?.services ?? []);
-  const [rateType, setRateType] = useState<"hourly" | "fixed">(p?.rate_type ?? "hourly");
-  const [rate, setRate] = useState(p?.rate_cents ? String(p.rate_cents / 100) : "");
+  const [rateType, setRateType] = useState<"hourly" | "fixed">("fixed");
   const [radius, setRadius] = useState(String(Math.round((p?.service_radius_km ?? 24) * 0.621371)));
   const [area, setArea] = useState(p?.area_label ?? "");
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -91,7 +90,7 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
           bio,
           services,
           rate_type: rateType,
-          rate_cents: rate ? Math.round(Number(rate) * 100) : null,
+          rate_cents: p?.rate_cents ?? null,
           service_radius_km: Math.max(1, Math.round((Number(radius) || 15) / 0.621371)),
           area_label: area || null,
           ...(coords ?? {}),
@@ -126,6 +125,31 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
             <Badge variant={st.tone}>{st.label}</Badge>
           </div>
           <p className="text-sm text-zinc-400">{st.note}</p>
+        </Card>
+      )}
+
+      {p && me.strikes && me.strikes.items.length > 0 && (
+        <Card className="space-y-2 border-amber-400/30">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-bold text-amber-300">Your strikes</p>
+            <Badge variant={p.status === "suspended" ? "error" : "pending"}>
+              {me.strikes.items.length} of {me.strikes.limit}
+            </Badge>
+          </div>
+          <p className="text-sm text-zinc-400">
+            You get a strike when you take a job and do not start it in time, or back out after its start time. {me.strikes.limit} strikes within {me.strikes.window_days} days suspends your cleaner profile. Each strike drops off after {me.strikes.window_days} days.
+          </p>
+          <ul className="space-y-1.5 text-sm">
+            {me.strikes.items.map((s, i) => (
+              <li key={i} className="rounded-xl bg-zinc-900/60 p-2.5">
+                <span className="font-semibold text-zinc-100">{s.kind === "no_show" ? "Did not start in time" : "Backed out after the start time"}</span>
+                {s.job_title && <span className="text-zinc-300">: {s.job_title}</span>}
+                <span className="block text-xs text-zinc-500">
+                  {new Date(s.created_at).toLocaleDateString()}, drops off {new Date(s.expires_at).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 
@@ -166,7 +190,7 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
                   type="button"
                   aria-pressed={on}
                   onClick={() => setServices(on ? services.filter((s) => s !== k) : [...services, k])}
-                  className={`min-h-10 rounded-full px-4 text-sm font-semibold touch-manipulation ${on ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40" : "bg-zinc-800 text-zinc-400"}`}
+                  className={`min-h-11 rounded-full px-4 text-sm font-semibold touch-manipulation ${on ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40" : "bg-zinc-800 text-zinc-400"}`}
                 >
                   {label}
                 </button>
@@ -174,18 +198,6 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
             })}
           </div>
         </fieldset>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Rate type">
-            <Select value={rateType} onChange={(e) => setRateType(e.target.value as "hourly" | "fixed")}>
-              <option value="hourly">Hourly</option>
-              <option value="fixed">Fixed price</option>
-            </Select>
-          </Field>
-          <Field label={rateType === "hourly" ? "Rate ($/hr)" : "Starting at ($)"}>
-            <TextInput inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} />
-          </Field>
-        </div>
 
         <Field
           label="Where are you based out of?"

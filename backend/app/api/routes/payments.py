@@ -7,9 +7,12 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import limit_money, limit_writes
+from app.core.auth import CurrentUser, require_user
 from app.core.config import settings
 from app.db.database import get_db
 from app.services import connect as connect_service
+from app.services.admin_roles import is_site_admin
 from app.services import impact as impact_service
 from app.services import payments as payments_service
 from app.services import sponsorships as sponsorships_service
@@ -18,15 +21,22 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 logger = logging.getLogger(__name__)
 
 
-def _check_secret(x_admin_api_secret: str | None) -> None:
-    """Same shared-secret defense-in-depth as admin_prod.py: the Next.js server route
-    re-verifies the caller is an authenticated site admin before forwarding here.
-    Every endpoint in this file (except the Stripe webhook) is admin-only -- there's no
-    premium feature to gate yet, so nothing is meant to be reachable by a normal user."""
-    if not settings.admin_api_secret:
-        raise HTTPException(503, "Admin endpoint is not configured (ADMIN_API_SECRET unset).")
-    if x_admin_api_secret != settings.admin_api_secret:
-        raise HTTPException(403, "Invalid or missing admin API secret.")
+async def _is_owner(db: AsyncSession, user: CurrentUser, owner_type: str, owner_id: UUID) -> bool:
+    """True for the owner themselves, an admin of the group, or a site admin."""
+    if owner_type == "user":
+        ok = owner_id == user.id
+    else:
+        row = await db.execute(
+            text("SELECT 1 FROM group_members WHERE group_id = :gid AND user_id = :uid AND role = 'admin'"),
+            {"gid": str(owner_id), "uid": str(user.id)},
+        )
+        ok = row.first() is not None
+    return ok or await is_site_admin(db, user.id)
+
+
+async def _require_owner(db: AsyncSession, user: CurrentUser, owner_type: str, owner_id: UUID) -> None:
+    if not await _is_owner(db, user, owner_type, owner_id):
+        raise HTTPException(403, "You do not manage this account.")
 
 
 class CheckoutSessionRequest(BaseModel):
@@ -42,13 +52,13 @@ class PortalSessionRequest(BaseModel):
     return_url: str
 
 
-@router.post("/checkout-session")
+@router.post("/checkout-session", dependencies=[Depends(limit_money)])
 async def create_checkout_session(
     payload: CheckoutSessionRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
+    await _require_owner(db, user, payload.owner_type, payload.owner_id)
 
     table = "profiles" if payload.owner_type == "user" else "groups"
     name_col = "display_name" if payload.owner_type == "user" else "name"
@@ -79,13 +89,13 @@ async def create_checkout_session(
     return {"url": url}
 
 
-@router.post("/portal-session")
+@router.post("/portal-session", dependencies=[Depends(limit_money)])
 async def create_portal_session(
     payload: PortalSessionRequest,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
+    await _require_owner(db, user, payload.owner_type, payload.owner_id)
 
     table = "profiles" if payload.owner_type == "user" else "groups"
     row = (
@@ -110,20 +120,22 @@ async def create_portal_session(
 async def get_entitlement(
     owner_type: payments_service.OwnerType,
     owner_id: UUID,
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _check_secret(x_admin_api_secret)
-    return await payments_service.get_subscription_summary(db, owner_type, owner_id)
+    summary = await payments_service.get_subscription_summary(db, owner_type, owner_id)
+    if await _is_owner(db, user, owner_type, owner_id):
+        return summary
+    # Plus flair is public on profiles and groups; billing detail is not.
+    return {"has_premium": summary["has_premium"]}
 
 
 @router.get("/plus-groups")
 async def get_plus_groups(
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Ids of groups with an active Plus subscription, for list-page flair."""
-    _check_secret(x_admin_api_secret)
     rows = await db.execute(
         text("SELECT owner_id::text AS id FROM subscriptions WHERE owner_type = 'group' AND status IN ('active', 'trialing')")
     )
@@ -132,12 +144,11 @@ async def get_plus_groups(
 
 @router.get("/impact-summary")
 async def get_impact_summary(
-    x_admin_api_secret: str | None = Header(default=None),
+    user: CurrentUser = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Aggregate-only data for the Impact & Funding page. Admin-gated for now, like the
     rest of this file; the Next.js route enforces the payments visibility toggle."""
-    _check_secret(x_admin_api_secret)
     return await impact_service.get_impact_summary(db)
 
 
@@ -149,10 +160,16 @@ async def stripe_webhook(request: Request, stripe_signature: str | None = Header
         raise HTTPException(503, "Webhook endpoint is not configured (STRIPE_WEBHOOK_SECRET unset).")
 
     payload = await request.body()
-    try:
-        event = stripe.Webhook.construct_event(payload, stripe_signature, settings.stripe_webhook_secret)
-    except (ValueError, stripe.SignatureVerificationError) as e:
-        raise HTTPException(400, f"Invalid Stripe webhook payload: {e}") from e
+    # Connected-account events (account.updated) come from a second Stripe destination with its own secret.
+    secrets = [s for s in (settings.stripe_webhook_secret, settings.stripe_connect_webhook_secret) if s]
+    event = None
+    for i, secret in enumerate(secrets):
+        try:
+            event = stripe.Webhook.construct_event(payload, stripe_signature, secret)
+            break
+        except (ValueError, stripe.SignatureVerificationError) as e:
+            if i == len(secrets) - 1:
+                raise HTTPException(400, f"Invalid Stripe webhook payload: {e}") from e
 
     if not await payments_service.record_webhook_event_once(db, event["id"], event["type"]):
         logger.info("Ignoring duplicate Stripe webhook delivery %s (%s)", event["id"], event["type"])
@@ -182,5 +199,18 @@ async def stripe_webhook(request: Request, stripe_signature: str | None = Header
         payment_intent_id = obj.get("payment_intent")
         if payment_intent_id:
             await sponsorships_service.mark_refunded_from_payment_intent(db, payment_intent_id)
+    elif event_type in ("charge.dispute.created", "transfer.reversed"):
+        # A chargeback or a clawed-back payout needs a human: money may already have left.
+        from app.services.marketplace import _notify_admins
+
+        what = "Chargeback opened" if event_type == "charge.dispute.created" else "Payout reversed"
+        ref = obj.get("payment_intent") or obj.get("id")
+        amount = (obj.get("amount") or 0) / 100
+        logger.error("Stripe %s: object=%s ref=%s amount=%.2f", event_type, obj.get("id"), ref, amount)
+        await _notify_admins(
+            db, "payments_admin_alert", f"{what}: ${amount:.2f}",
+            f"Stripe reference {ref}. Review it in the Stripe dashboard before any related payout moves.",
+            "/admin",
+        )
 
     return {"received": True}

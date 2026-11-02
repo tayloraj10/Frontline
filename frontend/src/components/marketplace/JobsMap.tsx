@@ -8,7 +8,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { ExpandIcon, mapIconBtn, newGeolocateControl } from "@/components/map/sponsorMapControls";
 import { cn } from "@/lib/cn";
-import { JOB_TYPE_LABELS, usd, whenLabel, type Job } from "@/lib/marketplace";
+import { JOB_TYPE_LABELS, usd, whenLabel, type BoardPin } from "@/lib/marketplace";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -26,11 +26,14 @@ export default function JobsMap({
   selectedId,
   onSelect,
   onSeeInList,
+  inList,
 }: {
-  jobs: Job[];
+  jobs: BoardPin[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onSeeInList?: (id: string) => void;
+  /** The list pages, so a pin may not be loaded in it. Hides "Show in list" when it is not. */
+  inList?: (id: string) => boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -192,7 +195,7 @@ export default function JobsMap({
                 · {selectedJob.is_mine ? "Your job · " : ""}{JOB_TYPE_LABELS[selectedJob.job_type] ?? selectedJob.job_type} · {whenLabel(selectedJob)}
               </p>
             </div>
-            {onSeeInList && !expanded && (
+            {onSeeInList && !expanded && (!inList || inList(selectedJob.id)) && (
               <button
                 type="button"
                 onClick={() => onSeeInList(selectedJob.id)}
@@ -204,7 +207,7 @@ export default function JobsMap({
             )}
             <Link
               href={`/marketplace/jobs/${selectedJob.id}`}
-              className="inline-flex min-h-10 shrink-0 items-center gap-0.5 rounded-xl bg-emerald-400 px-3 text-sm font-extrabold text-emerald-950 active:scale-[0.97]"
+              className="inline-flex min-h-11 shrink-0 items-center gap-0.5 rounded-xl bg-emerald-400 px-3 text-sm font-extrabold text-emerald-950 active:scale-[0.97]"
             >
               View
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -227,7 +230,7 @@ export default function JobsMap({
               onClick={() => changeBasemap(b.value)}
               aria-pressed={basemap === b.value}
               className={cn(
-                "min-h-8 rounded-full px-3 text-xs font-medium touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.95]",
+                "min-h-11 rounded-full px-3 text-xs font-medium touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.95]",
                 basemap === b.value ? "bg-zinc-600 text-zinc-100" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200",
               )}
             >

@@ -7,10 +7,11 @@ import sys
 import httpx
 
 API_URL = os.environ["API_URL"].rstrip("/")
+SECRET = os.environ["ADMIN_API_SECRET"]
 
 
 def main() -> None:
-    response = httpx.post(f"{API_URL}/api/marketplace/sweep", timeout=30)
+    response = httpx.post(f"{API_URL}/api/marketplace/sweep", headers={"X-Admin-API-Secret": SECRET}, timeout=30)
     response.raise_for_status()
     print(response.json())
 

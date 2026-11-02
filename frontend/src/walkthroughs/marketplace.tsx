@@ -7,7 +7,8 @@ export const marketplace: WalkthroughDef = {
   steps: [
     {
       title: "Say what needs cleaning",
-      label: "Hiring: post",
+      label: "I'm hiring",
+      track: { name: "I'm hiring", tone: "sky" },
       body: "Post a job at the price you want. Cleaners near you get notified and the first one to take it gets the job.",
       how: ["Search the address, drop a pin or draw the area", "Choose the job type and when", "Set your budget"],
       visual: (
@@ -20,7 +21,8 @@ export const marketplace: WalkthroughDef = {
     },
     {
       title: "We hold your payment",
-      label: "Hiring: pay",
+      label: "I'm hiring",
+      track: { name: "I'm hiring", tone: "sky" },
       body: "When a cleaner takes your job your card is charged and the money is held. Your exact address unlocks only now, and you can message the cleaner any time.",
       visual: (
         <Stage>
@@ -32,7 +34,8 @@ export const marketplace: WalkthroughDef = {
     },
     {
       title: "Confirm and release",
-      label: "Hiring: confirm",
+      label: "I'm hiring",
+      track: { name: "I'm hiring", tone: "sky" },
       body: "Happy with it? Confirm and rate, and the money is released. If you do nothing it releases 3 days after they finish. Not happy? Open a dispute before then.",
       visual: (
         <Stage>
@@ -43,8 +46,22 @@ export const marketplace: WalkthroughDef = {
       ),
     },
     {
+      title: "Changing your mind",
+      label: "I'm hiring",
+      track: { name: "I'm hiring", tone: "sky" },
+      body: "You can cancel a job before it is finished. If no one has started it, you get a full refund and it comes off the board. If a cleaner never shows up, you are refunded and the job reopens.",
+      visual: (
+        <Stage>
+          <span className="text-3xl">↩️</span>
+          <Arrow />
+          <Chip on>Refund</Chip>
+        </Stage>
+      ),
+    },
+    {
       title: "Set up your cleaner profile",
-      label: "Cleaning: apply",
+      label: "I'm cleaning",
+      track: { name: "I'm cleaning", tone: "emerald" },
       body: "Want to earn instead? Add your rate, the jobs you do and the area you work in, then sign the cleaner agreement. You can start taking jobs right away.",
       visual: (
         <Stage>
@@ -56,7 +73,8 @@ export const marketplace: WalkthroughDef = {
     },
     {
       title: "Get alerts and take jobs",
-      label: "Cleaning: take",
+      label: "I'm cleaning",
+      track: { name: "I'm cleaning", tone: "emerald" },
       body: "We notify you when a job is posted near you. Open it and take it at the posted price, or flag the price if it is too low. The exact address unlocks once you take it.",
       visual: (
         <Stage>
@@ -67,9 +85,29 @@ export const marketplace: WalkthroughDef = {
       ),
     },
     {
+      title: "Do the job",
+      label: "I'm cleaning",
+      track: { name: "I'm cleaning", tone: "emerald" },
+      body: "Taking a job starts a clock, so only take one you can get to. You can have one job at a time.",
+      how: [
+        "Get to the site within 2 hours of the start time, or the job goes back on the board",
+        "Take a before photo, then start the job once you are at the site",
+        "Take an after photo and mark it done",
+        "Backing out after the start time counts as a strike",
+      ],
+      visual: (
+        <Stage>
+          <Chip on>2 hrs</Chip>
+          <Arrow />
+          <span className="text-3xl">📸</span>
+        </Stage>
+      ),
+    },
+    {
       title: "Get paid",
-      label: "Cleaning: payout",
-      body: "You are paid after the customer confirms. Frontline keeps a 15% commission and the rest goes to your bank through Stripe.",
+      label: "I'm cleaning",
+      track: { name: "I'm cleaning", tone: "emerald" },
+      body: "You are paid the full posted price after the customer confirms. The hirer pays Frontline's service fee on top, so nothing comes out of your pay. The money goes to your bank through Stripe.",
       visual: (
         <Stage>
           <Chip on>$80</Chip>
