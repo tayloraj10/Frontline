@@ -28,7 +28,7 @@ export default function JobsList({
         {(
           [
             ["customer", `I hired (${asCustomer.length})`],
-            ["cleaner", `I clean (${asCleaner.length})`],
+            ["cleaner", `I cleaned (${asCleaner.length})`],
           ] as const
         ).map(([id, label]) => (
           <button
