@@ -13,6 +13,7 @@ import {
   Footprints,
   MapPin,
   Plus,
+  ShieldAlert,
   Sprout,
   Trash2,
   UserRound,
@@ -76,6 +77,7 @@ export default function MarketplaceHome({
   payoutsBlocked: boolean;
 }) {
   const isCleaner = profileStatus === "active";
+  const suspended = profileStatus === "suspended";
   const [service, setService] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [me, setMe] = useState<[number, number] | null>(null);
@@ -199,6 +201,21 @@ export default function MarketplaceHome({
 
   return (
     <div className="space-y-4">
+      {suspended && (
+        <Link
+          href="/marketplace/become-a-cleaner"
+          className="flex items-center gap-3 rounded-2xl bg-red-500/10 p-4 ring-2 ring-inset ring-red-400/60 touch-manipulation active:scale-[0.98]"
+        >
+          <ShieldAlert className="h-5 w-5 shrink-0 text-red-300" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-red-100">Your cleaner profile is suspended</span>
+            <span className="block text-sm text-red-100/70">
+              You can browse, but you cannot take jobs. See your strikes and how to appeal.
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-red-300" aria-hidden="true" />
+        </Link>
+      )}
       {payoutsBlocked && (
         <Link
           href="/marketplace/become-a-cleaner"
@@ -227,11 +244,11 @@ export default function MarketplaceHome({
           sub="Free. A neighbor takes it at your price."
         />
         <ActionTile
-          tone="sky"
+          tone={suspended ? "red" : "sky"}
           href="/marketplace/become-a-cleaner"
-          icon={profileStatus ? UserRound : Sprout}
-          title={profileStatus ? "Cleaner profile" : "Start earning"}
-          sub={profileStatus ? "Your area, rate and status." : "Pick jobs near you."}
+          icon={suspended ? ShieldAlert : profileStatus ? UserRound : Sprout}
+          title={suspended ? "Profile suspended" : profileStatus ? "Cleaner profile" : "Start earning"}
+          sub={suspended ? "Tap to see why." : profileStatus ? "Your area, rate and status." : "Pick jobs near you."}
         />
       </div>
 

@@ -349,10 +349,16 @@ export default async function UserProfilePage({ params }: Props) {
           </Link>
           <Link
             href="/marketplace/become-a-cleaner"
-            className="flex min-h-14 flex-col justify-center rounded-[20px] bg-zinc-900 px-5 py-3 touch-manipulation active:scale-[0.98]"
+            className={`flex min-h-14 flex-col justify-center rounded-[20px] px-5 py-3 touch-manipulation active:scale-[0.98] ${
+              cleanerStatus === "suspended" ? "bg-red-500/10 ring-2 ring-inset ring-red-400/60" : "bg-zinc-900"
+            }`}
           >
-            <span className="text-sm font-extrabold text-zinc-100">{cleanerStatus ? "Cleaner profile" : "Become a cleaner"}</span>
-            <span className="text-xs text-zinc-500">{cleanerStatus ? "Your area, rate and status" : "Take jobs near you"}</span>
+            <span className={`text-sm font-extrabold ${cleanerStatus === "suspended" ? "text-red-100" : "text-zinc-100"}`}>
+              {cleanerStatus === "suspended" ? "Profile suspended" : cleanerStatus ? "Cleaner profile" : "Become a cleaner"}
+            </span>
+            <span className={`text-xs ${cleanerStatus === "suspended" ? "text-red-200/80" : "text-zinc-500"}`}>
+              {cleanerStatus === "suspended" ? "Tap to see why" : cleanerStatus ? "Your area, rate and status" : "Take jobs near you"}
+            </span>
           </Link>
         </div>
       )}

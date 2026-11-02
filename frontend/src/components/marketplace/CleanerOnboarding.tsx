@@ -118,8 +118,20 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
 
   return (
     <div className="space-y-5">
+      {p?.status === "suspended" && (
+        <div role="alert" className="space-y-2 rounded-2xl bg-red-500/10 p-4 ring-2 ring-inset ring-red-400/60">
+          <p className="font-bold text-red-200">Your cleaner profile is suspended</p>
+          <p className="text-sm text-red-100/80">
+            You cannot take jobs while it is suspended. {me.strikes && me.strikes.items.length > 0
+              ? `It happens at ${me.strikes.limit} strikes within ${me.strikes.window_days} days, and you have ${me.strikes.items.length}. The strikes are listed below.`
+              : "An admin may have suspended it."}{" "}
+            If you think this is a mistake, contact support to appeal.
+          </p>
+        </div>
+      )}
+
       {p && st && (
-        <Card className="space-y-2">
+        <Card className={`space-y-2 ${p.status === "suspended" ? "!ring-red-400/50" : ""}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="font-bold text-zinc-100">Profile status</p>
             <Badge variant={st.tone}>{st.label}</Badge>

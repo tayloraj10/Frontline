@@ -25,7 +25,19 @@ const HOLD_LABEL: Record<string, string> = {
   refunded: "Payment refunded",
 };
 
-export default function JobDetail({ initial, userId, payoutsBlocked, needsSetup }: { initial: Job; userId: string; payoutsBlocked: boolean; needsSetup: boolean }) {
+export default function JobDetail({
+  initial,
+  userId,
+  payoutsBlocked,
+  needsSetup,
+  suspended = false,
+}: {
+  initial: Job;
+  userId: string;
+  payoutsBlocked: boolean;
+  needsSetup: boolean;
+  suspended?: boolean;
+}) {
   const [job, setJob] = useState(initial);
   const [messages, setMessages] = useState<Message[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -128,7 +140,7 @@ export default function JobDetail({ initial, userId, payoutsBlocked, needsSetup 
 
       {error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
 
-      <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} />
+      <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} suspended={suspended} />
 
       {role === "customer" && job.status === "open" && (job.price_flag_count ?? 0) > 0 && (
         <PriceFlags job={job} busy={busy} act={act} />
@@ -190,6 +202,21 @@ function PriceFlags({ job, busy, act }: { job: Job; busy: string | null; act: (k
   );
 }
 
+function SuspendedNotice() {
+  return (
+    <div role="alert" className="space-y-2 rounded-2xl bg-red-500/10 p-3 ring-2 ring-inset ring-red-400/60">
+      <p className="text-sm font-bold text-red-200">Your cleaner profile is suspended</p>
+      <p className="text-xs text-red-100/80">You cannot take jobs while it is suspended. See your profile for the strikes behind it and how to appeal.</p>
+      <Link
+        href="/marketplace/become-a-cleaner"
+        className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-red-400 px-5 text-sm font-bold text-red-950 touch-manipulation active:scale-[0.97]"
+      >
+        View my profile
+      </Link>
+    </div>
+  );
+}
+
 function PayoutsNeeded() {
   return (
     <div className="space-y-2 rounded-2xl bg-amber-400/10 p-3 ring-1 ring-inset ring-amber-400/40">
@@ -224,6 +251,7 @@ function Actions({
   refresh,
   payoutsBlocked,
   needsSetup,
+  suspended,
 }: {
   job: Job;
   role: "customer" | "cleaner" | "viewer";
@@ -233,6 +261,7 @@ function Actions({
   refresh: () => Promise<void>;
   payoutsBlocked: boolean;
   needsSetup: boolean;
+  suspended: boolean;
 }) {
   const [ack, setAck] = useState(false);
   const [price, setPrice] = useState("");
@@ -255,10 +284,11 @@ function Actions({
     return (
       <Card className="space-y-3">
         <EarnLine job={job} />
+        {suspended && <SuspendedNotice />}
         {payoutsBlocked && <PayoutsNeeded />}
         {safety}
         <div className="grid grid-cols-2 gap-2">
-          <Button disabled={!ack || payoutsBlocked} loading={busy === "accept"} onClick={() => act("accept", `${base}/accept`, { safety_ack: ack })}>
+          <Button disabled={!ack || payoutsBlocked || suspended} loading={busy === "accept"} onClick={() => act("accept", `${base}/accept`, { safety_ack: ack })}>
             Accept
           </Button>
           <Button variant="secondary" loading={busy === "decline"} onClick={() => act("decline", `${base}/decline`)}>
@@ -275,6 +305,7 @@ function Actions({
       <Card className="space-y-3">
         <p className="text-sm font-bold text-zinc-100">Take this job for {usd(job.price_cents)}</p>
         <EarnLine job={job} />
+        {suspended && <SuspendedNotice />}
         {payoutsBlocked && <PayoutsNeeded />}
         {safety}
         {job.arrive_deadline && (
@@ -288,7 +319,7 @@ function Actions({
             </p>
           </div>
         )}
-        {needsSetup && (
+        {needsSetup && !suspended && (
           <div className="rounded-2xl bg-amber-500/10 p-3 text-sm text-amber-100 ring-1 ring-inset ring-amber-400/30">
             <p className="font-bold text-amber-200">Set up as a cleaner first</p>
             <p className="mt-1">You need a cleaner profile and a signed agreement before you can take jobs.</p>
@@ -304,7 +335,7 @@ function Actions({
             <li>You can only hold one job at a time.</li>
           </ul>
         </div>
-        <Button className="w-full" disabled={!ack || payoutsBlocked || needsSetup} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
+        <Button className="w-full" disabled={!ack || payoutsBlocked || needsSetup || suspended} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
           Take this job
         </Button>
         {job.price_flagged_by_me ? (
@@ -346,7 +377,7 @@ function Actions({
     return (
       <div className="space-y-3">
         <CleanerFlow job={job} photos={photos} refresh={refresh} />
-        {job.status === "accepted" && <BackOutButton jobId={job.id} direct={job.origin === "direct"} onDone={refresh} />}
+        {(job.status === "accepted" || job.status === "in_progress") && <BackOutButton jobId={job.id} direct={job.origin === "direct"} onDone={refresh} />}
       </div>
     );
   }
