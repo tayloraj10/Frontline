@@ -91,3 +91,63 @@ What this means when we push:
 4. Check after deploy: trigger the cron once manually in Railway, confirm a 200 in its log.
 5. Rotating the secret later means changing it on the API, Vercel (still used by `admin_prod` proxies) and the cron service together.
 6. Stale-sweep alert (built): each sweep run records a heartbeat; `GET /api/marketplace/jobs` checks it and alerts admins if it is over 45 minutes old. Migration 130 seeds the row, so a missing cron is flagged about 45 minutes after deploy.
+
+## Phase 2: rest of the backend, priority order (2026-11-01)
+
+The Earn, Hire and Impact pattern (`require_user` / `require_admin` / `require_service`, route-walk test, rate limits) is proven, so this phase rolls it across every other router. One router per PR. Each PR: swap identity to the token, delete client-supplied `user_id` params, add ownership checks in the service layer, add the router prefix to `AUDITED_PREFIXES` in `tests/test_route_auth.py`, and update the frontend callers to forward the token (via `lib/fastapiAuth.ts` or a Next proxy). Counts below are from `backend/app/api/routes/*.py` (route handlers / writes). Routes 1 and 2 in the current code have zero auth references.
+
+### P0: takeover, destruction, public operational endpoints (do first, small)
+
+| # | Target | Routes (writes) | Why it is P0 | Fix |
+|---|---|---|---|---|
+| 0 | `profiles_update` RLS (Supabase, not FastAPI) | n/a | Any user can update their own row via PostgREST, including `points` and `is_admin`. This bypasses every backend check. | Column-level guard trigger or restricted policy, like `guard_rewards_beta`. Needs its own review. |
+| 1 | `admin_roles.py` | 3 (2) | Mounted in prod, trusts `requesting_user_id`. Anyone with an admin UUID can grant themselves admin. | `require_admin` on all. |
+| 2 | Cron endpoints: `events.py` `/expire`, `decay.py` `/run`, `cleanup_events.py` `/organizer-reminders/run` and `/organizer-followups/run` | 4 | Public. They email users and mutate data. | `require_service`; add the secret header to the `backend/scripts/run_*.py` scripts; set the env var on each Railway cron before deploy (same steps as the sweep deploy note). |
+| 3 | `account.py` | 2 (1) | `DELETE /account/{user_id}` and the data export trust the path id. Anyone can delete or export another user. | `require_user`, id from token, 403 if path id differs (admin may override for support). |
+| 4 | `upload.py` | 1 | `/upload/presign` is public, so anyone can mint R2 upload URLs. | `require_user` plus a rate limit and a size/type cap. |
+| 5 | `device_tokens.py` | 1 (1) | Hand-rolled Supabase `/auth/v1/user` call per request. | Replace with `require_user` (faster, one pattern). |
+| 6 | `admin.py` | 33 (26) | Seed, wipe, recompute. Only guarded by `not is_production`, so a staging deploy would expose it. | `require_admin` on the router now, before staging exists. |
+
+### P1: user impersonation and point/email abuse
+
+| # | Target | Routes (writes) | Notes |
+|---|---|---|---|
+| 7 | `partners.py` (Perks) | 14 (7) | Redeem spends points, mark-used, business admin management. Plan item 5 above. Business admin checks server side. Goes through a Next proxy. |
+| 8 | `contributions.py` | 11 (3) | `/submit` awards points, `DELETE /{id}`, `/process`. Highest points-abuse surface. |
+| 9 | `cleanup_events.py` | 23 (15) | RSVP, check-in, organizer check-in, `log-for-attendee`, `log-team-total`, organizers, attendee reminder send (emails a list). Organizer checks must be real. Largest file (2481 lines), split into 2 PRs: attendee actions, then organizer actions. |
+| 10 | `team_events.py` | 27 (11) | Same shape as cleanup_events: join/leave, teams, submissions review, organizers. |
+| 11 | `groups.py` | 14 (1) | Delete group and membership paths; 81 identity references. Group-admin helper. |
+| 12 | `users.py` | 3 (0) | `/{user_id}/premium-insights` is a private read keyed by path id. `/me/...` needs the token. |
+
+### P2: lower risk writes
+
+| # | Target | Routes (writes) | Notes |
+|---|---|---|---|
+| 13 | `problem_reports.py` | 11 (8) | Create, claim, photos, release, flags. Claim flow needs the actor to be the claimer. |
+| 14 | `content_flags.py` | 1 (1) | Report content; `require_user` plus rate limit to stop flag spam. |
+| 15 | `events.py` (rest) | 8 (3) | `/campaign/{id}/bonus-spot` and `/check-triggers/{id}` need `require_admin` or `require_service`. |
+
+### P3: public by design (allowlist, no auth)
+
+`tiles.py` (13), `geo_units.py` (6), `leaderboard.py` (8), `campaign_dashboard.py` (8), `health.py` (1). List them in the route-walk allowlist explicitly, add per-IP rate limits, and confirm none leak private fields (emails, exact home areas). `leaderboard.py` and `campaign_dashboard.py` have heavy `user_id` params, so check they are filters, not identity.
+
+### Cross-cutting, after the routers
+
+- Tighten the route-walk test: flip it from "audited prefixes" to "every route must declare a dependency or be on the public allowlist" once P2 is done.
+- Security headers, CORS regex verification, and RLS review for tables the browser reads directly (plan item 7).
+- Rotate `ADMIN_API_SECRET` once the header is gone from every code path except `admin_prod` and the crons.
+- Staging environment is a prerequisite for rehearsing cron secrets and token wiring (see `security-lockdown-and-staging-2026-10-17.md`).
+
+### Suggested PR order
+
+1. P0 items 1, 2, 3, 4, 5 (one PR: small routers, cron scripts, env var steps) plus item 0 as its own migration PR.
+2. Item 6 (`admin.py`).
+3. Items 7, 8 (points and Perks).
+4. Items 9, 10, 11, 12.
+5. P2, then P3 allowlist and the tightened route-walk test.
+
+### Progress
+
+- [ ] 0 profiles RLS  - [ ] 1 admin_roles  - [ ] 2 crons  - [ ] 3 account  - [ ] 4 upload  - [ ] 5 device_tokens  - [ ] 6 admin
+- [ ] 7 partners  - [ ] 8 contributions  - [ ] 9 cleanup_events  - [ ] 10 team_events  - [ ] 11 groups  - [ ] 12 users
+- [ ] 13 problem_reports  - [ ] 14 content_flags  - [ ] 15 events rest  - [ ] P3 allowlist and final test
