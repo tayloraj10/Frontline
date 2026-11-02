@@ -77,7 +77,7 @@ Fee and break even:
 
 Protections:
 - One active job per cleaner. A start by time applies, missing it returns the job to the board with a strike.
-- Backing out after the start time is a strike. 3 strikes in 90 days suspends the cleaner until an admin reinstates them.
+- A cleaner can back out of a job before or after starting it. Backing out after the start time, or once work has started, is a strike, and a board job goes back on the board with the customer refunded. The customer cannot cancel once work starts and opens a dispute instead. 3 strikes in 90 days suspends the cleaner until an admin reinstates them.
 - Chat blocks phone numbers, emails and links. Abusive messages appear under Flagged messages.
 - The address is hidden until a cleaner takes the job.
 
