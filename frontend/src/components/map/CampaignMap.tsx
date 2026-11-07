@@ -22,6 +22,7 @@ import ReportPhotoButton from "@/components/ReportPhotoButton";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BodyPortal from "@/components/ui/BodyPortal";
 import { useSponsoredMapLayer } from "./useSponsoredMapLayer";
+import { addRouteArrowLayers } from "./routeArrows";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -2734,6 +2735,19 @@ export default function CampaignMap({
           },
         })),
       });
+      const startSrc = map.current.getSource("cleanup-routes-start") as maplibregl.GeoJSONSource | undefined;
+      startSrc?.setData({
+        type: "FeatureCollection",
+        features: routes.flatMap((r) => {
+          if (eventById.get(r.id)?.is_past) return [];
+          const g = r.route as GeoJSON.Geometry;
+          const first =
+            g.type === "LineString" ? g.coordinates[0] : g.type === "MultiLineString" ? g.coordinates[0]?.[0] : undefined;
+          return first
+            ? [{ type: "Feature" as const, geometry: { type: "Point" as const, coordinates: first }, properties: {} }]
+            : [];
+        }),
+      });
       // Server-computed geodesic buffer (ST_Buffer) around event-linked routes only,
       // mirroring the point event's CLEANUP_EVENT_RADIUS_METERS circle — a true offset
       // corridor rather than a fake line-width-based "zone" that broke on turns/loops.
@@ -4107,6 +4121,12 @@ export default function CampaignMap({
     m.addSource("cleanup-routes", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
+      lineMetrics: true, // required by the comet's line-gradient (routeArrows.ts)
+    });
+    // One Point per non-past route start, for the subtle pulsing start ring.
+    m.addSource("cleanup-routes-start", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
     });
     // True geodesic buffer polygon (server-computed via ST_Buffer) around event routes'
     // check-in corridor — same fill/line styling as cleanup-event-radius-fill/-line, giving
@@ -4159,27 +4179,18 @@ export default function CampaignMap({
         "line-opacity": ["case", ["get", "is_past"], 0.55, 1],
       },
     });
-    m.addLayer({
-      id: "cleanup-routes-arrows",
-      type: "symbol",
+    // Breathing glow, comet runner, "▶" arrows and start ring; shared with RoutePreviewMap
+    // (routeArrows.ts). Past events' routes stay static.
+    addRouteArrowLayers(m, {
       source: "cleanup-routes",
-      layout: {
-        "symbol-placement": "line",
-        "symbol-spacing": 60,
-        "text-field": "▶",
-        "text-size": 14,
-        "text-rotation-alignment": "map",
-        "text-pitch-alignment": "map",
-        "text-keep-upright": false,
-        "text-allow-overlap": true,
-        "text-ignore-placement": true,
-      },
-      paint: {
-        "text-color": ["case", ["get", "is_event"], "#0c4a6e", "#78350f"],
-        "text-halo-color": "#ecfeff",
-        "text-halo-width": 1,
-        "text-opacity": ["case", ["get", "is_past"], 0.5, 1],
-      },
+      prefix: "cleanup-routes",
+      textColor: ["case", ["get", "is_event"], "#0c4a6e", "#78350f"],
+      haloColor: "#ecfeff",
+      glowColor: ["case", ["get", "is_past"], "#71717a", ["get", "is_event"], "#38bdf8", "#fbbf24"],
+      glowBefore: "cleanup-routes-casing",
+      pastAware: true,
+      opacity: ["case", ["get", "is_past"], 0.5, 1],
+      startSource: "cleanup-routes-start",
     });
 
     applyLayerVisibility(m, layerToggleRef.current);
