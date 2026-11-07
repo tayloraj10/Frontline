@@ -5,7 +5,7 @@ import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
 import RankBadge from "@/components/ui/RankBadge";
 import { computeRanks } from "@/lib/ranking";
-import { mondayOf } from "@/app/groups/[slug]/stats/statsWindow";
+import { mondayOf, statsWindowParams, detailedIntervalLabel, type StatsWindow } from "@/app/groups/[slug]/stats/statsWindow";
 import GeoStatsMap from "./GeoStatsMap";
 import StatDetailModal, { StatKind } from "./StatDetailModal";
 
@@ -142,12 +142,21 @@ export default function GeoStatsExplorer({
   campaignId,
   fastapiUrl,
   unit,
+  externalWindow,
 }: {
   campaignId: string;
   fastapiUrl: string;
   unit: string;
+  /** When set (admin dashboard), the parent's period picker drives this explorer, so it can
+   * show any past day/week/month; its own This-month/All-time buttons are hidden. */
+  externalWindow?: StatsWindow;
 }) {
-  const [interval, setInterval] = useState<Interval>("month");
+  const [localInterval, setInterval] = useState<Interval>("month");
+  const interval: Interval = externalWindow?.interval ?? localInterval;
+  const windowParams: Record<string, string> = externalWindow
+    ? statsWindowParams(externalWindow)
+    : { interval: localInterval };
+  const windowKey = JSON.stringify(windowParams);
   const [focusStack, setFocusStack] = useState<FocusUnit[]>([]);
   const [level, setLevel] = useState<GeoLevel | null>(null);
   const [data, setData] = useState<GeoStatsResponse | null>(null);
@@ -192,7 +201,7 @@ export default function GeoStatsExplorer({
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    const params = new URLSearchParams({ interval });
+    const params = new URLSearchParams(windowParams);
     if (focus) params.set("focus_geo_unit_id", focus.geo_unit_id);
     if (level) params.set("children_level", level);
     fetch(`${fastapiUrl}/api/campaigns/${campaignId}/geo-stats?${params}`, { signal: controller.signal })
@@ -205,7 +214,7 @@ export default function GeoStatsExplorer({
       .finally(() => setLoading(false));
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, fastapiUrl, interval, focus, level]);
+  }, [campaignId, fastapiUrl, windowKey, focus, level]);
 
   useEffect(() => {
     setShowAllChildren(false);
@@ -268,13 +277,18 @@ export default function GeoStatsExplorer({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
+        {externalWindow ? (
+          <div className="px-2.5 py-1 text-xs text-zinc-500 border border-zinc-800 rounded-lg w-fit">
+            {detailedIntervalLabel(externalWindow)}
+          </div>
+        ) : (
         <div className="flex items-center gap-1 flex-wrap">
           {INTERVALS.map((iv) => (
             <button
               key={iv.id}
               onClick={() => setInterval(iv.id)}
               className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors touch-manipulation ${
-                interval === iv.id
+                localInterval === iv.id
                   ? "bg-zinc-700 text-zinc-100"
                   : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60"
               }`}
@@ -283,8 +297,9 @@ export default function GeoStatsExplorer({
             </button>
           ))}
         </div>
+        )}
 
-        {interval !== "all" && (
+        {!externalWindow && interval !== "all" && (
           <div className="px-2.5 py-1 text-xs text-zinc-500 border border-zinc-800 rounded-lg w-fit">
             {dateRangeLabel(interval)}
           </div>
@@ -374,6 +389,7 @@ export default function GeoStatsExplorer({
           campaignId={campaignId}
           fastapiUrl={fastapiUrl}
           interval={interval}
+          windowParams={windowParams}
           focusGeoUnitId={focus?.geo_unit_id ?? null}
           topUsers={data.top_users}
           topGroups={data.top_groups}

@@ -612,7 +612,7 @@ export default function CampaignDashboardView({
       </Section>
 
       <Section title="Geography">
-        <GeoStatsExplorer campaignId={campaignId} fastapiUrl={fastapiUrl} unit="pts" />
+        <GeoStatsExplorer campaignId={campaignId} fastapiUrl={fastapiUrl} unit="pts" externalWindow={statsWindow} />
       </Section>
     </div>
   );
