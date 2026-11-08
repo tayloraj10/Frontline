@@ -12,7 +12,7 @@ import CheckoutNotice from "@/components/billing/CheckoutNotice";
 // Geist stays loaded because the campaign map page (excluded from the UI rework) still uses it.
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 const figtree = Figtree({ variable: "--font-body", subsets: ["latin"] });
-const bricolage = Bricolage_Grotesque({ variable: "--font-display-face", subsets: ["latin"], weight: ["600", "700", "800"] });
+const bricolage = Bricolage_Grotesque({ variable: "--font-display-face", subsets: ["latin"] });
 const dmMono = DM_Mono({ variable: "--font-mono-ui", subsets: ["latin"], weight: ["400", "500"] });
 
 const SITE_URL = "https://www.frontlinemaps.com";
