@@ -9,6 +9,9 @@ interface Props {
   email: string;
   isOAuthUser: boolean;
   provider: string;
+  userId: string;
+  isAdmin: boolean;
+  adminDigestOptOut: boolean;
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -16,7 +19,17 @@ const PROVIDER_LABELS: Record<string, string> = {
   apple: "Apple",
 };
 
-export default function AccountSettingsForm({ email, isOAuthUser, provider }: Props) {
+export default function AccountSettingsForm({
+  email,
+  isOAuthUser,
+  provider,
+  userId,
+  isAdmin,
+  adminDigestOptOut,
+}: Props) {
+  const [digestOn, setDigestOn] = useState(!adminDigestOptOut);
+  const [digestSaving, setDigestSaving] = useState(false);
+  const [digestError, setDigestError] = useState<string | null>(null);
   const providerLabel = PROVIDER_LABELS[provider] ?? provider;
   const router = useRouter();
   const [newEmail, setNewEmail] = useState("");
@@ -138,6 +151,22 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
     }
   }
 
+  async function handleDigestToggle() {
+    const next = !digestOn;
+    setDigestSaving(true);
+    setDigestError(null);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ admin_daily_email_opt_out: !next })
+      .eq("id", userId);
+    setDigestSaving(false);
+    if (error) {
+      setDigestError("Could not save. Try again.");
+      return;
+    }
+    setDigestOn(next);
+  }
+
   async function handleLogoutEverywhere() {
     setLogoutLoading(true);
     setLogoutMsg(null);
@@ -228,6 +257,27 @@ export default function AccountSettingsForm({ email, isOAuthUser, provider }: Pr
           <p className="text-xs text-zinc-500">
             Your account uses {providerLabel} sign-in. Email and password changes are managed through {providerLabel}.
           </p>
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-100">Admin emails</h2>
+          <p className="text-xs text-zinc-500">
+            A short list each morning of approvals and other items waiting on an admin (skipped when nothing is
+            waiting), plus a full activity summary every Monday.
+          </p>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={digestOn}
+            onClick={handleDigestToggle}
+            disabled={digestSaving}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 text-sm font-medium rounded-lg shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation"
+          >
+            {digestOn ? "On (tap to turn off)" : "Off (tap to turn on)"}
+          </button>
+          {digestError && <p className="text-xs text-red-400">{digestError}</p>}
         </section>
       )}
 

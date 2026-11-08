@@ -19,6 +19,7 @@ from app.api.routes.admin import (
 )
 from app.core.config import settings
 from app.db.database import get_db
+from app.services.admin_digest import send_daily_digest, send_weekly_digest
 
 router = APIRouter(prefix="/admin-prod", tags=["admin-prod"])
 
@@ -124,6 +125,26 @@ async def activity_snapshot(
 ):
     _check_secret(x_admin_api_secret)
     return await get_recent_activity_snapshot(db, days)
+
+
+@router.post("/daily-digest/run")
+async def run_daily_digest(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Short daily admin action list, called once a day by a Railway cron (scripts/run_daily_emails.py)."""
+    _check_secret(x_admin_api_secret)
+    return await send_daily_digest(db)
+
+
+@router.post("/weekly-digest/run")
+async def run_weekly_digest(
+    x_admin_api_secret: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Full weekly admin summary, called on Mondays by the same cron (scripts/run_daily_emails.py)."""
+    _check_secret(x_admin_api_secret)
+    return await send_weekly_digest(db)
 
 
 @router.get("/blocked-users")

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import type { AdminRole } from "@/lib/adminRoles";
+import { createClient } from "@/lib/supabase/client";
 
 type UserSearchResult = { id: string; username: string | null; email: string };
+type AdminPerson = { user_id: string; username: string | null; email: string; emails_on: boolean };
 type RoleHolder = { user_id: string; username: string | null; email: string; roles: AdminRole[] };
 
 const ROLE_OPTIONS: { value: AdminRole; label: string; description: string }[] = [
@@ -28,12 +30,29 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 }
 
 export default function AdminRolesTab({ requestingUserId }: { requestingUserId: string }) {
+  const [siteAdmins, setSiteAdmins] = useState<AdminPerson[]>([]);
   const [holders, setHolders] = useState<RoleHolder[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/admin/roles?requesting_user_id=${requestingUserId}`
+        );
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        setSiteAdmins(data.site_admins as AdminPerson[]);
+        setHolders(data.scoped as RoleHolder[]);
+      } catch (err) {
+        setError(extractErrorMessage(err, "Failed to load admins"));
+      }
+    })();
+  }, [requestingUserId]);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -84,6 +103,24 @@ export default function AdminRolesTab({ requestingUserId }: { requestingUserId: 
     }
   };
 
+  const handleToggleEmails = async (person: AdminPerson) => {
+    const next = !person.emails_on;
+    setSavingId(person.user_id);
+    setError(null);
+    const { error: err } = await createClient()
+      .from("profiles")
+      .update({ admin_daily_email_opt_out: !next })
+      .eq("id", person.user_id);
+    setSavingId(null);
+    if (err) {
+      setError("Could not save your email setting. Try again.");
+      return;
+    }
+    setSiteAdmins((prev) =>
+      prev.map((a) => (a.user_id === person.user_id ? { ...a, emails_on: next } : a))
+    );
+  };
+
   const handleToggleRole = async (holder: RoleHolder, role: AdminRole) => {
     const nextRoles = holder.roles.includes(role)
       ? holder.roles.filter((r) => r !== role)
@@ -113,6 +150,57 @@ export default function AdminRolesTab({ requestingUserId }: { requestingUserId: 
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <div className={cardCls}>
+        <h2 className={sectionTitleCls}>Site admins ({siteAdmins.length})</h2>
+        <p className="text-xs text-zinc-500 -mt-2">
+          Full admin access, including every scoped role below. Each admin can turn their own admin
+          emails (daily action list and Monday summary) on or off here or in Settings, Account.
+        </p>
+        {siteAdmins.length === 0 ? (
+          <p className="text-sm text-zinc-600">None loaded.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {siteAdmins.map((a) => (
+              <li key={a.user_id} className="flex items-center justify-between gap-3 text-sm text-zinc-200">
+                <span className="min-w-0 truncate">
+                  {a.username ?? a.email} <span className="text-zinc-600">({a.email})</span>
+                </span>
+                {a.user_id === requestingUserId ? (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={a.emails_on}
+                    disabled={savingId === a.user_id}
+                    onClick={() => handleToggleEmails(a)}
+                    aria-label="Admin emails"
+                    className="min-h-11 shrink-0 flex items-center gap-2.5 disabled:opacity-60"
+                  >
+                    <span className={`text-xs font-semibold ${a.emails_on ? "text-emerald-300" : "text-zinc-500"}`}>
+                      Admin emails {a.emails_on ? "on" : "off"}
+                    </span>
+                    <span
+                      className={`relative inline-block h-6 w-11 rounded-full transition-colors duration-150 ${
+                        a.emails_on ? "bg-emerald-600" : "bg-zinc-700"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-150 ${
+                          a.emails_on ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </span>
+                  </button>
+                ) : (
+                  <span className={`shrink-0 text-xs ${a.emails_on ? "text-emerald-400" : "text-zinc-600"}`}>
+                    Admin emails {a.emails_on ? "on" : "off"}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className={cardCls}>
         <h2 className={sectionTitleCls}>Scoped admin roles</h2>
         <p className="text-xs text-zinc-500 -mt-2">
@@ -152,7 +240,7 @@ export default function AdminRolesTab({ requestingUserId }: { requestingUserId: 
 
       {holders.length > 0 && (
         <div className={cardCls}>
-          <h2 className={sectionTitleCls}>Assigned</h2>
+          <h2 className={sectionTitleCls}>Assigned ({holders.length})</h2>
           <div className="space-y-4">
             {holders.map((h) => (
               <div key={h.user_id} className="rounded-[20px] bg-zinc-900 px-4 py-3 space-y-2">
