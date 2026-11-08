@@ -2000,7 +2000,7 @@ async def send_attendee_reminder(cleanup_id: UUID, payload: AttendeeReminderRequ
 async def run_organizer_reminders(db: AsyncSession = Depends(get_db)):
     """Day-of reminder to each event's organizer(s), with current RSVP/cohost/offer
     stats. Intended to be called once each morning by a Railway cron (see
-    scripts/run_organizer_reminders.py), same pattern as decay.py's /decay/run. Gated by
+    scripts/run_daily_emails.py), same pattern as decay.py's /decay/run. Gated by
     the email_organizer_stats_reminder_enabled killswitch (defaults off) and by
     cleanups.organizer_reminder_sent_at, which this marks per-event so re-running the
     same day never double-sends."""
@@ -2085,7 +2085,7 @@ async def run_organizer_followups(db: AsyncSession = Depends(get_db)):
     """Post-event follow-up to each event's organizer(s), sent once the check-in window
     has closed: a stats summary if metrics were logged, or a nudge to log them if not.
     Also drops a user_notifications row for every admin of the hosting group. Intended
-    to be called once a day by a Railway cron (see scripts/run_organizer_followups.py),
+    to be called once a day by a Railway cron (see scripts/run_daily_emails.py),
     same pattern as organizer-reminders/run. Gated by the
     email_organizer_followup_enabled killswitch (defaults off) and by
     cleanups.organizer_followup_sent_at, which this marks per-event so re-running the
