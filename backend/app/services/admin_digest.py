@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.services.email import render_cta_button, send_email, wrap_email_html
+from app.services.email import SUPPORT_EMAIL, render_cta_button, send_email, wrap_email_html
 from app.services import sweep_health
 
 logger = logging.getLogger(__name__)
@@ -383,24 +383,23 @@ async def _admin_emails(db: AsyncSession) -> list[str]:
     return [r.email for r in rows]
 
 
-async def _send_each(db: AsyncSession, emails: list[str], subject: str, html: str, kind: str) -> dict:
-    sent = 0
-    # One message per admin so addresses stay private and one bad address cannot block the rest.
-    for email in emails:
-        if await send_email(db, to=[email], subject=subject, html=html, kind=kind):
-            sent += 1
-    return {"sent": sent, "admins": len(emails)}
+async def _send_once(db: AsyncSession, emails: list[str], subject: str, html: str, kind: str) -> dict:
+    # One message: To the shared support inbox, CC every opted-in admin (admins know each other).
+    if not emails:
+        return {"sent": 0, "admins": 0, "reason": "no admins opted in"}
+    ok = await send_email(db, to=[SUPPORT_EMAIL], cc=emails, subject=subject, html=html, kind=kind)
+    return {"sent": 1 if ok else 0, "admins": len(emails)}
 
 
 async def send_daily_digest(db: AsyncSession) -> dict:
     items = action_items(await build_digest(db, 1))
     if not items:
         return {"sent": 0, "reason": "nothing waiting on an admin"}
-    return await _send_each(db, await _admin_emails(db), "Frontline: admin items waiting", render_daily_html(items), DAILY_KIND)
+    return await _send_once(db, await _admin_emails(db), "Frontline: admin items waiting", render_daily_html(items), DAILY_KIND)
 
 
 async def send_weekly_digest(db: AsyncSession) -> dict:
     digest = await build_digest(db, 7)
     if not needs_attention(digest):
         return {"sent": 0, "reason": "nothing to report"}
-    return await _send_each(db, await _admin_emails(db), "Frontline weekly summary", render_weekly_html(digest), WEEKLY_KIND)
+    return await _send_once(db, await _admin_emails(db), "Frontline weekly summary", render_weekly_html(digest), WEEKLY_KIND)
