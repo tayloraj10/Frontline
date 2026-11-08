@@ -2739,7 +2739,9 @@ export default function CampaignMap({
       startSrc?.setData({
         type: "FeatureCollection",
         features: routes.flatMap((r) => {
-          if (eventById.get(r.id)?.is_past) return [];
+          // Pulsing start ring is for group event routes only; individual routes stay plain.
+          const ev = eventById.get(r.id);
+          if (!ev || ev.is_past) return [];
           const g = r.route as GeoJSON.Geometry;
           const first =
             g.type === "LineString" ? g.coordinates[0] : g.type === "MultiLineString" ? g.coordinates[0]?.[0] : undefined;
