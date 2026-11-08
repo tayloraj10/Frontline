@@ -13,17 +13,6 @@ Single source of truth for "what's left, across everything." Each item links to 
 8. [ ] Business Proximity Bonus
 9. [ ] Lock down FastAPI/Railway backend auth
 
-## Working order (set 2026-08-30, work one at a time)
-1. [x] Granular bag-size/type tracking + cigarette points + points-basis choice (folds in Contractor bag tier) — done 2026-09-13
-2. [x] New-user first-action bonus points — done 2026-08-30
-3. [x] Tracked routes for group events — done, merged via PR #98 (`group-event-route-tracking`)
-4. [ ] Fix Push Notifications
-5. [ ] Campaign "how it works" info modal overflows on mobile
-6. [ ] Start Building Payments System — mock up UI + logic flows now (Stripe test account); real bank account needed before full implementation
-7. [ ] Hot Spot Hero
-8. [ ] Business Proximity Bonus
-9. [ ] Lock down FastAPI/Railway backend auth
-
 Sort of blocked
 - Full UI rework — likely needs a professional; considering letting Claude attempt a full app-wide redesign to burn $100 in Claude credits expiring 2026-09-19, see how it looks.
 
@@ -34,32 +23,12 @@ Already done (2026-08-30)
 - Rework campaign instructions modals to a compact grid layout — already done (very similar to the info-modal-overflow item above, which is still open).
 - New "city limits" geo layer + Chicago/Philadelphia neighborhoods, and New "city" geo unit type + boundary data for team-event geofencing — both done, data pushed to prod.
 
-## Working order (set 2026-08-27, work one at a time)
-1. [x] Group Event Offers System
-2. [x] Sytems Emails
-3. [x] New Route Cleanup — done 2026-08-30 (same as Live cleanup route tracking below), needs testing + iOS app version push to roll out
-4. [x] Simplied Business Offer Flow — done 2026-08-27, `OfferForm.tsx` converted to guided step-by-step modal (Basics/Redemption/Limits/Details) with full-form fallback, matching cleanup event/contribution pattern
-5. [ ] Fix Push Notifications
-6. [ ] Start Building Payments System
-7. [ ] Business Proximity Bonus to encourage cleanups around businesses
-8. [ ] Hot Spot Hero
-9. [ ] Full UI rework
-
-
-## Working order (set 2026-08-11, work one at a time)
-
-1. [x] QR code generation anywhere there's a share button — done 2026-08-12
-2. [x] Partner businesses: multi-location support — done 2026-08-12
-3. [x] Business "radius of influence" view + Business user portal (redemption-history detail) — done 2026-08-13
-4. [x] Convert multi-field modals to step-by-step wizard flow — done 2026-08-20
-5. [x] SEO improvements
-
 ## Mobile / Capacitor / App Store push
 
 - [ ] **HIGH PRIORITY — Frontline Plus via Apple IAP / Google Play Billing + Stripe return handoff to the apps** (noted 2026-10-29) — two linked pieces, both must land in one bundled native release, and Plus must not go public (`payments_enabled` on) in native builds until the IAP build ships. (1) **Plus in-app purchase:** Plus is a digital subscription, so Apple 3.1.1 / Play Billing require store billing in the native apps (Stripe Checkout in-app is a rejection risk). Plan: RevenueCat (or own validation) + `provider` column on `subscriptions`, webhook, platform-branched `SubscriptionWidget`, restore purchases, double-subscription guard; Stripe stays for web. Open: group Plus (recommended web-only), RevenueCat vs. own validation, store console/agreements setup. (2) **Stripe return handoff:** after Stripe-hosted pages (payout onboarding, card setup) the phone opens the browser instead of the app. Fix: https bounce page `/marketplace/stripe-return` plus `com.frontlinemaps.app://` scheme (Android intent filter, iOS `CFBundleURLTypes`, extend `appUrlOpen` in `NativeAppBridge.tsx`); also wrap `stripe.StripeError` in `connect.py`. Legal status (Epic v. Apple / Epic v. Google, Supreme Court cert granted 2026-06-30) summarized in the doc. → `stripe-return-handoff-and-plus-iap-scoping-2026-10-29.md`
-- [ ] **iOS native scaffolding** — `npx cap add ios` never run, no `ios/` directory. Mac-only. → `ios-setup-2026-08-06.md`, `capacitor-scoping-2026-08-04.md`
+- [x] **iOS native scaffolding** — the `ios/` project exists and builds ship via TestFlight. → `ios-setup-2026-08-06.md`, `capacitor-scoping-2026-08-04.md`
 - [ ] **Apple/Google dev account legal-entity decision** — proceeding on personal accounts for now; blocks physical iOS builds, signed release builds, store submission. → `capacitor-scoping-2026-08-04.md`
-- [ ] **Android release keystore** — doesn't exist yet; needed for signing + `assetlinks.json` SHA-256. Until filled, Android App Links to `frontlinemaps.com` can't verify, so both Google OAuth return-to-app **and push notification tap-to-open** fall back to opening Chrome instead of the app (confirmed 2026-08-07 via a real push test on emulator). → `capacitor-scoping-2026-08-04.md`, `new-machine-setup-2026-08-06.md`, `android-release-checklist.md`
+- [x] **Android release keystore** — exists (`frontline-app-signing-key.jks`, back it up); was needed for signing + `assetlinks.json` SHA-256. Until filled, Android App Links to `frontlinemaps.com` can't verify, so both Google OAuth return-to-app **and push notification tap-to-open** fall back to opening Chrome instead of the app (confirmed 2026-08-07 via a real push test on emulator). → `capacitor-scoping-2026-08-04.md`, `new-machine-setup-2026-08-06.md`, `android-release-checklist.md`
 - [ ] **Restrict Firebase Android/iOS/Browser API keys** in Google Cloud Console (GitHub flagged `google-services.json` and `GoogleService-Info.plist` keys as exposed secrets 2026-08-07 — not real secrets, but should be restricted to package/bundle ID + SHA-1 anyway). **Deliberately left unrestricted for now (2026-08-09)** — user chose to prioritize finishing Android release prep first, revisit later. Package/bundle ID for both platforms is now `com.frontlinemaps.app` (renamed from `com.frontline.app` 2026-08-08 after discovering the old name was already taken on Play Store). There are currently **two Android keys** in Cloud Console (old `com.frontline.app` app was deleted from Firebase, but its auto-created key didn't disappear the way the old iOS key's did — likely just console cache lag, unconfirmed) — check both when restricting later. Add the release keystore's SHA-1 too once it exists or signed release builds will fail the restriction. → `android-release-checklist.md`, `ios-release-checklist.md`
 - [ ] **Full Android/iOS release checklists scoped** (2026-08-07) — keystore/signing, store listing, privacy declarations, submission steps for both platforms, not yet executed. → `android-release-checklist.md`, `ios-release-checklist.md`
 - [ ] **Push notifications: prod deploy** — Edge Function not deployed, migration 062 not applied to prod, Vault secrets not armed on prod DB. → `push-notifications-prod-deploy-checklist.md`
@@ -80,7 +49,7 @@ Already done (2026-08-30)
 
 ## Modals & forms UX
 
-- [ ] **HIGH PRIORITY — Raw error messages surfaced to users across ~40 files** (noted 2026-09-10) — a network-level fetch failure (Safari/WKWebView's `TypeError: Load Failed`, Chrome's `Failed to fetch`, etc.) was showing verbatim in the partner "New offer" form after a one-off failure on the iOS app. Fixed for `PartnerDashboardClient.tsx`'s offer-create and business-edit error paths via a `friendlyErrorMessage()` helper that maps network-y error text to "Couldn't connect. Check your internet connection and try again." — other error messages (validation, `23505` slug conflicts, etc.) pass through unchanged. Same raw-`.message`-to-user pattern exists in ~40 other files (`grep -l '\.message\b' frontend/src` at time of writing) — e.g. `ContributionPanel.tsx`, `CleanupEventDetail.tsx`, `BusinessForm.tsx`, `AdminPanel.tsx`, `login`/`signup` pages, `TrackRouteScreen.tsx`, `AccountSettingsForm.tsx`, and more. Needs a proper sweep: likely worth centralizing `friendlyErrorMessage()` into a shared `lib/` helper first, then applying it (or an equivalent per-context wrapper) everywhere a Supabase/fetch error message reaches the UI.
+- [x] **Raw error messages surfaced to users across ~40 files** (noted 2026-09-10) — a network-level fetch failure (Safari/WKWebView's `TypeError: Load Failed`, Chrome's `Failed to fetch`, etc.) was showing verbatim in the partner "New offer" form after a one-off failure on the iOS app. Fixed for `PartnerDashboardClient.tsx`'s offer-create and business-edit error paths via a `friendlyErrorMessage()` helper that maps network-y error text to "Couldn't connect. Check your internet connection and try again." — other error messages (validation, `23505` slug conflicts, etc.) pass through unchanged. Same raw-`.message`-to-user pattern exists in ~40 other files (`grep -l '\.message\b' frontend/src` at time of writing) — e.g. `ContributionPanel.tsx`, `CleanupEventDetail.tsx`, `BusinessForm.tsx`, `AdminPanel.tsx`, `login`/`signup` pages, `TrackRouteScreen.tsx`, `AccountSettingsForm.tsx`, and more. Needs a proper sweep: likely worth centralizing `friendlyErrorMessage()` into a shared `lib/` helper first, then applying it (or an equivalent per-context wrapper) everywhere a Supabase/fetch error message reaches the UI.
 - [ ] **HIGH PRIORITY — Campaign "how it works" info modal overflows on mobile** (noted 2026-08-11) — Trash War's info modal still runs off-screen on mobile devices; a prior fix attempt didn't hold. Plan: give these info modals a fixed height per campaign so long content scrolls internally instead of overflowing the viewport.
 - [x] **HIGH PRIORITY — Rework campaign instructions modals to a compact grid layout** (noted 2026-08-11, done 2026-08-30) — particularly Trash War's; move off the current long-scroll layout to a denser grid so more info is visible at a glance on one page.
 - [x] **Convert multi-field modals to step-by-step wizard flow** (noted 2026-08-11, done 2026-08-20) — guided stepper + view mode toggle implemented for cleanup event forms (`6063892`, `5554f2f`, PR #72, #71).

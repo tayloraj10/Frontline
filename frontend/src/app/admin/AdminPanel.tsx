@@ -510,7 +510,6 @@ function CampaignsTab({ campaigns, setCampaigns }: {
               <select className={inputCls} value={geoUnit} onChange={e => setGeoUnit(e.target.value)}>
                 <option value="zip">zip</option>
                 <option value="uk_postcode_district">uk_postcode_district</option>
-                <option value="census_tract">census_tract</option>
                 <option value="state">state</option>
                 <option value="point">point</option>
               </select>

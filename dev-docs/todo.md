@@ -116,17 +116,17 @@ Quick checks. If it's done, delete the line. These come from your notes saying "
 - **Restrict Firebase API keys:** GitHub flagged the API keys in `google-services.json` and `GoogleService-Info.plist`. They are not real secrets, but they can be restricted to our app in Google Cloud Console. Deliberately deferred (android-release-checklist).
 - **Back up the signing keystore:** `frontline-app-signing-key.jks` has no backup. If you lose it you cannot ship Android updates. Copy it somewhere safe (password manager or encrypted drive).
 - **Audit WebView quirks:** in the Capacitor app, things like external links and clipboard can behave differently than in a browser. A one-time check pass (capacitor-testing-guide).
-- **Campaign Create Form gaps:** the `contribution_type` enum is confusing, and `census_tract` shows up in the dropdown but no data exists for it, so selecting it does nothing useful. Fix is to remove it from the dropdown or build a loader (campaign-app-scope).
+- **Campaign Create Form gaps:** `census_tract` removed from the admin dropdown (done 2026-11-06). Still open: the `contribution_type` enum is confusing (campaign-app-scope).
 - **Beta smoke-test checklist:** a 25-item manual checklist from before launch. The app has been live since 2026-06-23, so most of it is likely moot. Probably archive it (beta-launch-checklist).
 - **Cleanup Routes docs:** `cleanup-routes-handoff` says Phase 3 is not started, `campaign-app-scope` says otherwise. You say it works, so just fix the doc.
 - **External Model Imports:** a pre-launch idea about a shared schema for Groups/Cleanups/Trash Reports with other apps. `beta-launch-checklist` says open, `campaign-app-scope` says done. Closely related to the Shared Points API idea.
 
 ## Doc cleanup
 
-- [ ] `master-backlog.md` mobile/store section says the Android keystore and iOS project don't exist. They do. Reword.
-- [ ] Remove the old duplicate "Working order" lists in `master-backlog.md` (08-11, 08-27, 08-30). Only 09-13 is current.
-- [ ] Mark "Raw error messages ~40 files" in `master-backlog.md` as done (it is, on `ui-improvements-9-27-26`)
-- [ ] `branch-tracker.md`: heading `partner-apply-account-required` is really `business-submission-rework`
+- [x] `master-backlog.md` mobile/store section says the Android keystore and iOS project don't exist. They do. Reword.
+- [x] Remove the old duplicate "Working order" lists in `master-backlog.md` (08-11, 08-27, 08-30). Only 09-13 is current.
+- [x] Mark "Raw error messages ~40 files" in `master-backlog.md` as done (it is, on `ui-improvements-9-27-26`)
+- [x] `branch-tracker.md`: heading `partner-apply-account-required` is really `business-submission-rework`
 - [ ] Fix Cleanup Routes status so `cleanup-routes-handoff` and `campaign-app-scope` agree
 - [ ] External Model Imports: make `beta-launch-checklist` and `campaign-app-scope` agree
 

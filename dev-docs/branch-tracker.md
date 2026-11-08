@@ -31,12 +31,10 @@ Tracks in-progress/stale branches, their status, and what's sitting on them. Upd
 - **Description:** Adds an "adults only / 21+" flag to partner businesses, settable from all add/edit flows (admin panel, public apply, partner dashboard self-edit), with a badge/warning shown everywhere partner info displays (partner directory list/detail, campaign map popups, nearby-partners panel). Also includes unrelated manage-business UX cleanup (unsaved-changes glow + sticky top save bar + collapsible locations section on the edit form) and a map-picker initial-zoom fix (12 → 15) for editing existing locations.
 - **Migrations:** `106_partner_business_adults_only.sql`
 
-## partner-apply-account-required (merged)
+## business-submission-rework (merged)
 - **Status:** Merged to master via PR #99, migrations 103-105 applied to prod. Done.
 - **Description:** Requires a business submitting via `/partners/apply` to be signed in, records `created_by`, auto-grants business-admin access on approval, auto-flags brand-new signups from this flow as `is_business_only`, and shows a submitter their still-pending business on the Partner Dashboard. Admin review UI simplified too: no offer creation from the admin panel (offers are managed from the business's own Partner Dashboard), no "Edit" click required to review a pending business, and campaign selection defaults to Trash War.
 - **Migrations:** `103_partner_business_created_by.sql`, `104_partner_business_own_pending_select.sql`, `105_pending_business_creator_manage.sql`
-- **Note:** the actual git branch for this was named `business-submission-rework` (PR #99) — this doc section's heading predates that rename and was never corrected.
-
 ## group-event-route-tracking (merged)
 - **Status:** Merged to master via PR #98. Done.
 - **Description:** Adds route tracking to cleanup events: a "Track my route" launcher on the event page (`GroupEventTrackRoute.tsx`) that records a GPS route + photos for the event (decorative for `organizer_total` group events, recorded with value 0), a dedicated event routes map/list view (`EventRoutesMap`/`EventRoutesSection`, `/cleanup-events/[id]/routes`), R2 photo upload support (`uploadToR2.ts`), and related `ContributionPanel`/`TrackRouteScreen` changes to share the tracking flow.
