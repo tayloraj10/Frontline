@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.services.seeders import GeoUnitType
+from app.services.sponsored_cleanups import ALLOWED_GEO_UNIT_TYPES
 
 router = APIRouter(prefix="/tiles", tags=["tiles"])
 
@@ -32,6 +33,8 @@ def reset_tile_cache(unit_type: str) -> None:
     while the geo_units table was still empty) keeps serving its stale cached
     bytes forever, regardless of how much later the data actually arrives.
     """
+    for key in [k for k in _tile_cache if k[0] == "boundaries" and k[1] == unit_type]:
+        del _tile_cache[key]
     prefix = _TILE_CACHE_PREFIX_BY_UNIT_TYPE.get(unit_type)
     if prefix is None:
         return
@@ -738,3 +741,57 @@ async def get_tile(
         media_type="application/x-protobuf",
         headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"},
     )
+
+
+@router.get("/boundaries/{unit_type}/{z}/{x}/{y}.mvt")
+async def get_boundary_tile(
+    unit_type: str,
+    z: int,
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Tiles for one pickable boundary type (the sponsored-area picker). One layer called
+    `boundaries`, feature ids are geo_units.id, restricted to the types a sponsor may combine."""
+    if unit_type not in ALLOWED_GEO_UNIT_TYPES:
+        raise HTTPException(status_code=404, detail="Unknown boundary type")
+    cache_key = ("boundaries", unit_type, z, x, y)
+    headers = {"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"}
+    if cache_key in _tile_cache:
+        return Response(content=_tile_cache[cache_key], media_type="application/x-protobuf", headers=headers)
+
+    table = _SIMPLIFY_TOLERANCE_BY_UNIT_TYPE.get(GeoUnitType(unit_type))
+    tolerance = _tolerance(z, table)
+    geom_expr = f"ST_SimplifyPreserveTopology(g.geometry, {tolerance})" if tolerance > 0 else "g.geometry"
+
+    result = await db.execute(
+        text(f"""
+            WITH bounds AS (
+                SELECT
+                    ST_TileEnvelope(:z, :x, :y) AS geom_3857,
+                    ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS geom_4326
+            ),
+            mvt_geom AS (
+                SELECT
+                    g.id::text AS geo_unit_id,
+                    COALESCE(g.display_name, g.unit_id) AS display_name,
+                    ST_AsMVTGeom(ST_Transform({geom_expr}, 3857), bounds.geom_3857, 4096, 8, true) AS geom
+                FROM geo_units g
+                CROSS JOIN bounds
+                WHERE g.unit_type = :unit_type
+                  AND g.geometry && bounds.geom_4326
+                  AND ST_Intersects(g.geometry, bounds.geom_4326)
+            )
+            SELECT ST_AsMVT(mvt_geom.*, 'boundaries', 4096, 'geom')
+            FROM mvt_geom
+            WHERE mvt_geom.geom IS NOT NULL
+        """),
+        {"z": z, "x": x, "y": y, "unit_type": unit_type},
+    )
+    tile_data = result.scalar()
+    tile_bytes = bytes(tile_data) if tile_data else b""
+    if len(_tile_cache) >= _TILE_CACHE_MAX:
+        for k in list(_tile_cache.keys())[: _TILE_CACHE_MAX // 4]:
+            _tile_cache.pop(k, None)
+    _tile_cache[cache_key] = tile_bytes
+    return Response(content=tile_bytes, media_type="application/x-protobuf", headers=headers)

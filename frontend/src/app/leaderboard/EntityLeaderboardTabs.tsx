@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
 import RankBadge from "@/components/ui/RankBadge";
+import PlusFlair from "@/components/billing/PlusFlair";
 import { computeRanks } from "@/lib/ranking";
 import { mondayOf } from "@/app/groups/[slug]/stats/statsWindow";
 
@@ -15,6 +16,7 @@ interface GlobalUser {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  is_plus?: boolean;
   total_value: number;
   contribution_count: number;
 }
@@ -24,6 +26,7 @@ interface GlobalGroup {
   name: string | null;
   slug: string | null;
   logo_url: string | null;
+  is_plus?: boolean;
   total_value: number;
   contribution_count: number;
 }
@@ -73,12 +76,14 @@ function EntityRow({
   avatarUrl,
   name,
   points,
+  isPlus,
 }: {
   rank: number;
   href: string;
   avatarUrl: string | null;
   name: string;
   points: number;
+  isPlus?: boolean;
 }) {
   return (
     <li
@@ -92,6 +97,7 @@ function EntityRow({
         <span className="text-sm text-zinc-200 truncate font-medium active:text-zinc-100 transition-colors">
           {name}
         </span>
+        <PlusFlair isPlus={isPlus} className="shrink-0" />
       </Link>
       <div className="text-right shrink-0">
         <div className="text-xs font-semibold text-zinc-300 tabular-nums">{formatPoints(points)}</div>
@@ -193,6 +199,7 @@ export default function EntityLeaderboardTabs({ fastapiUrl }: { fastapiUrl: stri
                   avatarUrl={u.avatar_url}
                   name={u.display_name ?? u.username ?? "Unknown user"}
                   points={u.total_value}
+                  isPlus={u.is_plus}
                 />
               ))}
             </ul>
@@ -210,6 +217,7 @@ export default function EntityLeaderboardTabs({ fastapiUrl }: { fastapiUrl: stri
                 href={`/groups/${g.slug}`}
                 avatarUrl={g.logo_url}
                 name={g.name ?? "Unknown group"}
+                isPlus={g.is_plus}
                 points={g.total_value}
               />
             ))}

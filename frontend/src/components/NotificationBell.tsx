@@ -16,6 +16,7 @@ const TYPE_ICON: Record<string, string> = {
   claim_expired: "↺",
   offer_eligible: "🎁",
   organizer_action_needed: "📋",
+  group_event_created: "📅",
 };
 
 function timeAgo(dateStr: string) {

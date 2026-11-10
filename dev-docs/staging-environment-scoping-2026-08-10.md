@@ -2,6 +2,8 @@
 
 Status: **scoped, not started**. Nothing below has been implemented.
 
+Update 2026-10-17: the current plan, plan-tier costs and staging-specific hazards (notably the unauthenticated `admin.py` router) live in `security-lockdown-and-staging-2026-10-17.md` section 4. This doc remains the reference for the rationale.
+
 ## Goal
 
 A staging environment that lets us QA changes against a real deployed stack (not just local `supabase start`) before they reach prod users, without risking prod data or prod infra costs/quota.

@@ -20,6 +20,7 @@ import { listTeamEvents, getTeamEvent, type TeamEventDetail } from "@/lib/teamEv
 import { useGameSettings } from "@/lib/gameSettings";
 import { formatPoints } from "@/lib/formatPoints";
 import Avatar from "@/components/ui/Avatar";
+import PlusFlair from "@/components/billing/PlusFlair";
 import RankBadge from "@/components/ui/RankBadge";
 import { computeRanks } from "@/lib/ranking";
 import { cn } from "@/lib/cn";
@@ -328,6 +329,7 @@ export interface LeaderboardEntry {
   pounds?: number;
   username?: string | null;
   avatar_url?: string | null;
+  is_plus?: boolean;
 }
 
 export interface ActivityItem {
@@ -364,6 +366,7 @@ interface Props {
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
+  focusEventId?: string | null;
   bagMetrics?: { small: number; large: number; pounds: number };
   contributionCount?: number;
   totalBags?: number;
@@ -446,9 +449,13 @@ function LeaderboardRow({
       {variant === "user" && entry.username ? (
         <Link href={`/users/${encodeURIComponent(entry.username)}`} className="flex-1 min-w-0 text-xs text-zinc-200 break-words hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150">
           {entry.name}
+          <PlusFlair isPlus={entry.is_plus} />
         </Link>
       ) : (
-        <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">{entry.name}</span>
+        <span className="flex-1 min-w-0 text-xs text-zinc-200 break-words">
+          {entry.name}
+          {variant === "group" && <PlusFlair isPlus={entry.is_plus} />}
+        </span>
       )}
       <div className="text-right shrink-0">
         <div className="text-xs font-semibold text-zinc-300 tabular-nums">
@@ -924,6 +931,7 @@ export default function CampaignPageClient({
   partnerBusinesses,
   cleanupEvents,
   focusCoords,
+  focusEventId,
   bagMetrics = { small: 0, large: 0, pounds: 0 },
   contributionCount = 0,
   totalBags = 0,
@@ -1346,6 +1354,7 @@ export default function CampaignPageClient({
         removedReport={removedReport}
         userLocation={userLocation}
         focusCoords={focusCoords}
+        focusEventId={focusEventId}
         activeStyle={activeMapStyle}
         onStyleChange={setActiveMapStyle}
         nycNeighborhoodsVisible={nycNeighborhoodsVisible}
@@ -1384,7 +1393,7 @@ export default function CampaignPageClient({
 
       {/* Side panel — desktop: fixed right column. */}
       {openPanel && !pinPickerActive && !areaPickerActive && !routePickerActive && (
-        <div className="hidden sm:flex absolute right-3 top-[calc(var(--map-top,0px)+4.25rem)] bottom-3 sm:w-80 bg-zinc-950/95 backdrop-blur-md rounded-[20px] flex-col z-20 overflow-hidden shadow-elevation-4">
+        <div className="hidden sm:flex absolute right-16 top-[calc(var(--map-top,0px)+0.5rem)] bottom-[6.5rem] sm:w-80 bg-zinc-950/95 backdrop-blur-md rounded-[20px] flex-col z-20 overflow-hidden shadow-elevation-4">
           <PanelTabs openPanel={openPanel} onSelect={setOpenPanel} userId={userId} onClose={() => setOpenPanel(null)} />
           <div className="flex-1 overflow-y-auto">
             <PanelContent

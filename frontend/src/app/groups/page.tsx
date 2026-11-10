@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { Database } from "@/types/database";
+import { getPlusGroupIds } from "@/lib/plus.server";
 import GroupsListClient from "./GroupsListClient";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
@@ -51,8 +52,9 @@ const getGroupsListData = unstable_cache(
 export default async function GroupsPage() {
   const supabase = await createClient();
 
-  const [{ data: { user } }, { groups: groupsData, members: membersData, events: eventsData, cohosts: cohostsData, recentContributions: recentContributionsData }] = await Promise.all([
+  const [{ data: { user } }, plusGroupIds, { groups: groupsData, members: membersData, events: eventsData, cohosts: cohostsData, recentContributions: recentContributionsData }] = await Promise.all([
     supabase.auth.getUser(),
+    getPlusGroupIds(),
     getGroupsListData(),
   ]);
 
@@ -177,6 +179,7 @@ export default async function GroupsPage() {
           memberCountByGroup={memberCountByGroup}
           upcomingEventCountByGroup={upcomingEventCountByGroup}
           userGroupIds={userGroupIds}
+          plusGroupIds={plusGroupIds}
           isLoggedIn={!!user}
         />
       )}

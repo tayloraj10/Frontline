@@ -5,6 +5,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import IconButton from "@/components/ui/IconButton";
 import BodyPortal from "@/components/ui/BodyPortal";
+import { addRouteArrowLayers } from "./routeArrows";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -69,6 +70,11 @@ function addRouteLayers(
   m.addSource("route-preview", {
     type: "geojson",
     data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } },
+    lineMetrics: true, // required by the comet's line-gradient (routeArrows.ts)
+  });
+  m.addSource("route-preview-start", {
+    type: "geojson",
+    data: { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: coordinates[0] } },
   });
   // Matches CampaignMap's cleanup-routes-casing/-line exactly (solid, zoom-interpolated
   // width) so a route looks the same on the main map and on this detail page.
@@ -93,28 +99,16 @@ function addRouteLayers(
       "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 5],
     },
   });
-  // Directional arrows along the route (Strava-style), rendered as repeating text glyphs
-  // rather than a custom icon sprite so no extra image asset needs to be loaded/managed.
-  m.addLayer({
-    id: "route-preview-arrows",
-    type: "symbol",
+  // White chevrons + animated flow pulse, same as the main map (routeArrows.ts).
+  addRouteArrowLayers(m, {
     source: "route-preview",
-    layout: {
-      "symbol-placement": "line",
-      "symbol-spacing": 60,
-      "text-field": "▶",
-      "text-size": 14,
-      "text-rotation-alignment": "map",
-      "text-pitch-alignment": "map",
-      "text-keep-upright": false,
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
-    paint: {
-      "text-color": "#78350f",
-      "text-halo-color": "#fffbeb",
-      "text-halo-width": 1,
-    },
+    prefix: "route-preview",
+    textColor: isEvent ? "#0c4a6e" : "#78350f",
+    haloColor: isEvent ? "#ecfeff" : "#fffbeb",
+    glowColor: isEvent ? "#38bdf8" : "#fbbf24",
+    glowBefore: "route-preview-casing",
+    startSource: "route-preview-start",
+    arrowSpacing: 26, // denser than the main map: the small event-page pane needs direction readable at a glance
   });
   new maplibregl.Marker({ color: "#22c55e" }).setLngLat(coordinates[0]).addTo(m);
   new maplibregl.Marker({ color: "#ef4444" }).setLngLat(coordinates[coordinates.length - 1]).addTo(m);

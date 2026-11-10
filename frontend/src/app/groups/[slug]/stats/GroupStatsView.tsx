@@ -825,6 +825,7 @@ export default function GroupStatsView({
   groupLogoUrl,
   viewerUserId,
   isAdmin,
+  canSeePayments,
   fastapiUrl,
   slug,
 }: {
@@ -833,6 +834,7 @@ export default function GroupStatsView({
   groupLogoUrl: string | null;
   viewerUserId: string | null;
   isAdmin: boolean;
+  canSeePayments: boolean;
   fastapiUrl: string;
   slug: string;
 }) {

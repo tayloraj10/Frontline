@@ -21,6 +21,8 @@ import IconButton from "@/components/ui/IconButton";
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BodyPortal from "@/components/ui/BodyPortal";
+import { useSponsoredMapLayer } from "./useSponsoredMapLayer";
+import { addRouteArrowLayers } from "./routeArrows";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type TerritoryClaim = Database["public"]["Tables"]["territory_claims"]["Row"];
@@ -458,6 +460,8 @@ interface Props {
   removedReport?: { id: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
+  // Id of a group event or hotspot to open the card for on load (push notification deep link).
+  focusEventId?: string | null;
   activeStyle?: StyleId;
   onStyleChange?: (id: StyleId) => void;
   problemReports?: ProblemReports | null;
@@ -1896,6 +1900,7 @@ export default function CampaignMap({
   removedReport,
   userLocation,
   focusCoords,
+  focusEventId,
   activeStyle = "outdoor",
   onStyleChange,
   problemReports,
@@ -1956,6 +1961,9 @@ export default function CampaignMap({
   const [showMapEvents, setShowMapEvents] = useState(() => storedToggle("showMapEvents"));
   const [showPartners, setShowPartners] = useState(() => storedToggle("showPartners"));
   const [showBonusSpots, setShowBonusSpots] = useState(() => storedToggle("showBonusSpots"));
+  // Payments v2 sponsored areas: on by default, only offered when the viewer can see payments.
+  const [showSponsored, setShowSponsored] = useState(true);
+  const sponsoredLayer = useSponsoredMapLayer(map, showSponsored);
   // Drives the "Zip"/"Postcode" segmented-control label — reflects whichever region
   // (US vs UK) the map is currently centered over, not the campaign's static geo_unit
   // config, so a campaign spanning both regions relabels as the user pans around.
@@ -2198,10 +2206,12 @@ export default function CampaignMap({
     const src = map.current?.getSource("route-picker") as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
     const vertices = routeVerticesRef.current;
-    const features: GeoJSON.Feature[] = vertices.map((coord) => ({
+    // The first vertex is the meetup point for events (pin, directions, check-in), so it
+    // is drawn larger and green to stand apart from the amber route nodes.
+    const features: GeoJSON.Feature[] = vertices.map((coord, i) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: coord },
-      properties: {},
+      properties: { start: i === 0 },
     }));
     if (vertices.length >= 2) {
       features.push({
@@ -2728,6 +2738,21 @@ export default function CampaignMap({
           },
         })),
       });
+      const startSrc = map.current.getSource("cleanup-routes-start") as maplibregl.GeoJSONSource | undefined;
+      startSrc?.setData({
+        type: "FeatureCollection",
+        features: routes.flatMap((r) => {
+          // Pulsing start ring is for group event routes only; individual routes stay plain.
+          const ev = eventById.get(r.id);
+          if (!ev || ev.is_past) return [];
+          const g = r.route as GeoJSON.Geometry;
+          const first =
+            g.type === "LineString" ? g.coordinates[0] : g.type === "MultiLineString" ? g.coordinates[0]?.[0] : undefined;
+          return first
+            ? [{ type: "Feature" as const, geometry: { type: "Point" as const, coordinates: first }, properties: {} }]
+            : [];
+        }),
+      });
       // Server-computed geodesic buffer (ST_Buffer) around event-linked routes only,
       // mirroring the point event's CLEANUP_EVENT_RADIUS_METERS circle — a true offset
       // corridor rather than a fake line-width-based "zone" that broke on turns/loops.
@@ -2816,10 +2841,12 @@ export default function CampaignMap({
       });
   }, []);
 
-  // Midpoint marker per drawn route — a pre-planned group-event route reuses the
-  // existing event detail modal (its id matches a cleanupEvents entry); an individual/group
-  // route instead shows a lightweight popup (not a full page navigation), matching a
-  // point-based cleanup's hover-tooltip convention.
+  // One marker per drawn route — a pre-planned group-event route reuses the existing event
+  // detail modal (its id matches a cleanupEvents entry) and is anchored at the route's start,
+  // since that is the meetup point (and where the event pin / directions / check-in point
+  // are); an individual/group route has no meetup point, so it sits at the middle vertex and
+  // shows a lightweight popup (not a full page navigation), matching a point-based
+  // cleanup's hover-tooltip convention.
   const updateCleanupRouteMarkers = useCallback(
     (routes: CampaignCleanupRoute[], events: MapCleanupEvent[]) => {
       if (!map.current) return;
@@ -2839,8 +2866,8 @@ export default function CampaignMap({
       for (const r of routes) {
         const coords = r.route.coordinates;
         if (!coords || coords.length === 0) continue;
-        const mid = coords[Math.floor(coords.length / 2)];
         const event = eventById.get(r.id);
+        const mid = event ? coords[0] : coords[Math.floor(coords.length / 2)];
 
         const wrapper = document.createElement("div");
         wrapper.style.cssText = "display:inline-flex;align-items:center;cursor:pointer;";
@@ -2933,9 +2960,9 @@ export default function CampaignMap({
             { id: r.id, latitude: photo.lat, longitude: photo.lng, photo_url: photo.url },
             (p) => setSelectedPhoto(p.contentId ? p : { url: p.url }),
             36,
-            // Offset up and out of the way of the route's midpoint waypoint icon, which
-            // otherwise sits fully hidden underneath (and unclickable) when a photo happens
-            // to have been taken at that exact node.
+            // Offset up and out of the way of the route's waypoint icon (start for events,
+            // middle for ad hoc routes), which otherwise sits fully hidden underneath (and
+            // unclickable) when a photo happens to have been taken at that exact node.
             [0, -30],
             routePhotoMarkerScaleElsRef,
             map.current ? getRoutePhotoMarkerScale(map.current.getZoom()) : 1,
@@ -4052,8 +4079,8 @@ export default function CampaignMap({
       source: "route-picker",
       filter: ["==", ["geometry-type"], "Point"],
       paint: {
-        "circle-radius": 6,
-        "circle-color": "#f59e0b",
+        "circle-radius": ["case", ["==", ["get", "start"], true], 10, 6],
+        "circle-color": ["case", ["==", ["get", "start"], true], "#10b981", "#f59e0b"],
         "circle-stroke-width": 2,
         "circle-stroke-color": "#451a03",
       },
@@ -4097,6 +4124,12 @@ export default function CampaignMap({
     });
 
     m.addSource("cleanup-routes", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+      lineMetrics: true, // required by the comet's line-gradient (routeArrows.ts)
+    });
+    // One Point per non-past route start, for the subtle pulsing start ring.
+    m.addSource("cleanup-routes-start", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
     });
@@ -4151,27 +4184,18 @@ export default function CampaignMap({
         "line-opacity": ["case", ["get", "is_past"], 0.55, 1],
       },
     });
-    m.addLayer({
-      id: "cleanup-routes-arrows",
-      type: "symbol",
+    // Breathing glow, comet runner, "▶" arrows and start ring; shared with RoutePreviewMap
+    // (routeArrows.ts). Past events' routes stay static.
+    addRouteArrowLayers(m, {
       source: "cleanup-routes",
-      layout: {
-        "symbol-placement": "line",
-        "symbol-spacing": 60,
-        "text-field": "▶",
-        "text-size": 14,
-        "text-rotation-alignment": "map",
-        "text-pitch-alignment": "map",
-        "text-keep-upright": false,
-        "text-allow-overlap": true,
-        "text-ignore-placement": true,
-      },
-      paint: {
-        "text-color": ["case", ["get", "is_event"], "#0c4a6e", "#78350f"],
-        "text-halo-color": "#ecfeff",
-        "text-halo-width": 1,
-        "text-opacity": ["case", ["get", "is_past"], 0.5, 1],
-      },
+      prefix: "cleanup-routes",
+      textColor: ["case", ["get", "is_event"], "#0c4a6e", "#78350f"],
+      haloColor: "#ecfeff",
+      glowColor: ["case", ["get", "is_past"], "#71717a", ["get", "is_event"], "#38bdf8", "#fbbf24"],
+      glowBefore: "cleanup-routes-casing",
+      pastAware: true,
+      opacity: ["case", ["get", "is_past"], 0.5, 1],
+      startSource: "cleanup-routes-start",
     });
 
     applyLayerVisibility(m, layerToggleRef.current);
@@ -4536,7 +4560,16 @@ export default function CampaignMap({
     map.current
       .getContainer()
       .querySelector(".maplibregl-ctrl-attrib-button")
-      ?.addEventListener("click", () => { attribTouched = true; });
+      ?.addEventListener("click", () => {
+        attribTouched = true;
+        // Runs after the native <details> toggle so `open` reflects the new state.
+        setTimeout(() => {
+          const el = map.current?.getContainer().querySelector(".maplibregl-ctrl-attrib");
+          if (!el) return;
+          if (el.hasAttribute("open")) el.setAttribute("data-user-open", "");
+          else el.removeAttribute("data-user-open");
+        }, 0);
+      });
     collapseAttrib();
     map.current.on("idle", collapseAttrib);
 
@@ -5286,6 +5319,24 @@ export default function CampaignMap({
     }
   }, [focusCoords]);
 
+  // Open the card for a deep-linked group event or hotspot once its data is present.
+  // Runs once per id so closing the card doesn't immediately reopen it.
+  const openedFocusEventRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusEventId || openedFocusEventRef.current === focusEventId) return;
+    const cleanup = (cleanupEvents ?? []).find((e) => e.id === focusEventId);
+    if (cleanup) {
+      openedFocusEventRef.current = focusEventId;
+      setSelectedCleanupEvent(cleanup);
+      return;
+    }
+    const campaignEvent = activeEvents.find((e) => e.id === focusEventId);
+    if (campaignEvent) {
+      openedFocusEventRef.current = focusEventId;
+      setSelectedEvent(campaignEvent);
+    }
+  }, [focusEventId, cleanupEvents, activeEvents]);
+
   // Pin picker: add/remove draggable marker with ZIP boundary constraint
   useEffect(() => {
     pinPickerMarkerRef.current?.remove();
@@ -5882,11 +5933,13 @@ export default function CampaignMap({
 
       {routePickerActive && (
         <>
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md whitespace-nowrap bg-zinc-900/95 text-zinc-100 flex items-center gap-2">
+          <div className="absolute top-14 sm:top-[calc(var(--map-top,2.75rem)+0.75rem)] left-1/2 -translate-x-1/2 z-30 w-max max-w-[calc(100%-1.5rem)] px-5 py-2.5 rounded-3xl text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md bg-zinc-900/95 text-zinc-100 flex items-center gap-2">
             <span>
               {routePickerJustClosedLoop
                 ? "Route closed. Click Undo to reopen"
-                : `Click the map to draw your cleanup route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
+                : routePickerVertexCount === 0
+                  ? "Tap the map to place the meetup point (start)"
+                  : `Keep clicking to draw the route (${routePickerVertexCount} node${routePickerVertexCount === 1 ? "" : "s"})`}
             </span>
           </div>
           <div className="absolute bottom-20 left-3 right-3 sm:left-1/2 sm:right-auto sm:w-[26rem] sm:-translate-x-1/2 z-30 flex flex-col gap-2 p-2.5 rounded-3xl bg-zinc-950/95 backdrop-blur-md shadow-elevation-3 border border-zinc-700/60">
@@ -6205,6 +6258,7 @@ export default function CampaignMap({
                     setShowAdhocRoutes(true);
                     setShowReports(true);
                     setShowPartners(true);
+                    setShowSponsored(true);
                   }}
                   className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
                 >
@@ -6223,6 +6277,7 @@ export default function CampaignMap({
                     setShowAdhocRoutes(false);
                     setShowReports(false);
                     setShowPartners(false);
+                    setShowSponsored(false);
                     setShowGroupTerritory(false);
                     setShowIndividualTerritory(false);
                     setShowUnclaimedTerritory(false);
@@ -6266,6 +6321,12 @@ export default function CampaignMap({
                 </span>
                 <span className="text-zinc-300">Bonus spot</span>
               </LegendToggle>
+              {sponsoredLayer.available && (
+                <LegendToggle checked={showSponsored} onChange={setShowSponsored}>
+                  <span className="w-3 h-3 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/10 flex-shrink-0" />
+                  <span className="text-zinc-300">Sponsored areas{showSponsored && sponsoredLayer.count > 0 ? ` (${sponsoredLayer.count})` : ""}</span>
+                </LegendToggle>
+              )}
               <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>
                 <span className="w-3 h-3 rounded-full border border-sky-400 bg-sky-400/10 flex-shrink-0" />
                 <span className="text-zinc-300">Event check-in radius</span>

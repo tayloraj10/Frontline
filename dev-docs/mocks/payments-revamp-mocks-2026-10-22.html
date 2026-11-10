@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payments revamp mocks</title>
+<style>
+  :root {
+    --bg: #0b0b0d; --panel: #18181b; --panel2: #202024; --line: #2a2a30; --text: #f4f4f5; --muted: #a1a1aa; --dim: #71717a;
+    --em: #34d399; --em-bg: rgba(52,211,153,.14); --sky: #38bdf8; --sky-bg: rgba(56,189,248,.14);
+    --amber: #fcd34d; --amber-bg: rgba(252,211,77,.14); --vio: #a78bfa; --vio-bg: rgba(167,139,250,.14);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 48px 0 4px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .lede { color: var(--muted); max-width: 760px; margin: 0 0 18px; }
+  nav.top { position: sticky; top: 0; z-index: 5; background: rgba(11,11,13,.92); backdrop-filter: blur(6px); padding: 10px 0; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  nav.top a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 999px; background: var(--panel); font-size: 13px; }
+  nav.top a:hover { color: var(--text); }
+  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; margin-top: 18px; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .cap { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .phone { width: 372px; background: #09090b; border: 1px solid var(--line); border-radius: 30px; padding: 14px 14px 18px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .bar { height: 5px; width: 90px; background: var(--line); border-radius: 9px; margin: 0 auto 12px; }
+  .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--em); }
+  .title { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 2px 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .card { background: var(--panel); border-radius: 18px; padding: 14px; margin-bottom: 10px; border: 1px solid transparent; }
+  .card.em { background: linear-gradient(135deg, rgba(52,211,153,.2), rgba(52,211,153,.04) 60%, transparent); border-color: rgba(52,211,153,.3); }
+  .card.sky { background: linear-gradient(135deg, rgba(56,189,248,.2), rgba(56,189,248,.04) 60%, transparent); border-color: rgba(56,189,248,.3); }
+  .card.amber { background: linear-gradient(135deg, rgba(252,211,77,.16), rgba(252,211,77,.04) 60%, transparent); border-color: rgba(252,211,77,.3); }
+  .card h3 { margin: 0 0 2px; font-size: 15px; }
+  .muted { color: var(--muted); } .dim { color: var(--dim); } .small { font-size: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--panel2); color: var(--muted); white-space: nowrap; }
+  .pill.on { background: var(--em); color: #022c22; }
+  .pill.em { background: var(--em-bg); color: var(--em); } .pill.sky { background: var(--sky-bg); color: var(--sky); }
+  .pill.amber { background: var(--amber-bg); color: var(--amber); } .pill.vio { background: var(--vio-bg); color: var(--vio); }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .btn { display: block; width: 100%; text-align: center; padding: 12px; border-radius: 14px; font-weight: 800; background: var(--em); color: #022c22; border: 0; }
+  .btn.sec { background: var(--panel2); color: var(--text); } .btn.amber { background: var(--amber); color: #451a03; } .btn.sm { display: inline-block; width: auto; padding: 8px 14px; font-size: 13px; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--panel); border-radius: 14px; padding: 4px; gap: 4px; margin-bottom: 12px; }
+  .seg span { text-align: center; padding: 9px 4px; border-radius: 10px; font-weight: 700; font-size: 13px; color: var(--muted); }
+  .seg span.on { background: var(--panel2); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.06) inset; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .stat { background: var(--panel); border-radius: 16px; padding: 12px; }
+  .stat b { display: block; font-size: 22px; letter-spacing: -.02em; } .stat.hero b { font-size: 30px; color: var(--em); }
+  .stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .map { height: 190px; border-radius: 18px; position: relative; overflow: hidden; margin-bottom: 10px;
+    background: radial-gradient(circle at 20% 30%, #1e3a2f 0, transparent 40%), radial-gradient(circle at 75% 65%, #1b2f45 0, transparent 45%), repeating-linear-gradient(45deg, #121316 0 14px, #15161a 14px 28px); border: 1px solid var(--line); }
+  .pin { position: absolute; width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #022c22; background: var(--em); box-shadow: 0 4px 10px rgba(0,0,0,.5); }
+  .pin i { transform: rotate(45deg); font-style: normal; }
+  .pin.sk { background: var(--sky); color: #082f49; } .pin.am { background: var(--amber); color: #451a03; }
+  .mapctl { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; }
+  .search { flex: 1; background: rgba(24,24,27,.92); border-radius: 12px; padding: 9px 12px; color: var(--dim); font-size: 13px; }
+  .person { display: flex; gap: 12px; align-items: center; }
+  .av { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #fff; flex-shrink: 0; }
+  .av.lg { width: 72px; height: 72px; font-size: 24px; }
+  .a1 { background: linear-gradient(135deg, #10b981, #0ea5e9); } .a2 { background: linear-gradient(135deg, #f59e0b, #ef4444); } .a3 { background: linear-gradient(135deg, #8b5cf6, #ec4899); } .a4 { background: linear-gradient(135deg, #0ea5e9, #6366f1); }
+  .grow { flex: 1; min-width: 0; } .between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .star { color: var(--amber); font-weight: 700; }
+  .rate { font-weight: 800; font-size: 16px; } .rate small { color: var(--dim); font-weight: 600; font-size: 11px; }
+  .field { background: var(--panel); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; }
+  .field label { display: block; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+  .steps { display: flex; gap: 4px; margin-bottom: 12px; } .steps i { flex: 1; height: 4px; border-radius: 3px; background: var(--line); } .steps i.on { background: var(--em); }
+  .timeline { border-left: 2px solid var(--line); margin: 6px 0 6px 8px; padding-left: 14px; } .timeline div { position: relative; padding: 4px 0; font-size: 13px; }
+  .timeline div::before { content: ""; position: absolute; left: -21px; top: 9px; width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .timeline div.done::before { background: var(--em); } .timeline div.now::before { background: var(--amber); }
+  .stickybar { position: sticky; bottom: 0; background: linear-gradient(transparent, #09090b 30%); padding-top: 14px; }
+  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); text-align: center; font-size: 10px; color: var(--dim); }
+  .tabbar b { color: var(--em); }
+  .note { background: var(--panel); border-left: 3px solid var(--amber); border-radius: 10px; padding: 12px 14px; max-width: 760px; margin-top: 18px; color: var(--muted); }
+  .note b { color: var(--text); }
+  .desk { width: 760px; max-width: 100%; background: #09090b; border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .desk .cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  ul.tight { margin: 6px 0 0; padding-left: 18px; color: var(--muted); } ul.tight li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Payments revamp mocks</h1>
+  <p class="lede">Static design mocks for priority 2 (2026-10-22): the paid cleaner marketplace plus a revamp of the Rewards cards, Sponsorships page and Impact page. Mobile-first, dark theme, same colors as the app (emerald = earn, sky = impact, amber = Plus, violet = admin). Fake data. Nothing here is built yet. Notes under each section list the proposed changes and open questions.</p>
+  <nav class="top">
+    <a href="#rewards">1. Rewards page</a><a href="#sponsorships">2. Sponsorships</a><a href="#impact">3. Impact</a>
+    <a href="#market-home">4. Marketplace home</a><a href="#market-profile">5. Cleaner profile + booking</a><a href="#market-bookings">6. Bookings</a>
+    <a href="#market-post">7. Post a job</a><a href="#market-onboard">8. Cleaner onboarding</a><a href="#market-admin">9. Admin</a>
+  </nav>
+
+  <!-- 1. REWARDS -->
+  <h2 id="rewards">1. Rewards page: the two cards</h2>
+  <p class="lede">Today: two small cards ("Sponsored cleanups", "Impact") above the partner perks. They say nothing about what is inside, and Impact is a stat page, not an action. Proposal: one wide "Cash and funding" card with live numbers and two clear actions, so the two jobs (earn real money, see impact) are obvious. Visible to admins only for now.</p>
+  <div class="row">
+    <div class="col"><div class="cap">Today (mobile)</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Rewards</div><div class="title">Partner perks</div><p class="sub">Spend the points you earn from cleanups.</p>
+        <div class="grid2">
+          <div class="card em" style="margin:0;padding:10px"><b style="font-size:13px">Sponsored cleanups</b></div>
+          <div class="card sky" style="margin:0;padding:10px"><b style="font-size:13px">Impact</b></div>
+        </div>
+        <div class="card"><h3>Local Cafe</h3><span class="muted small">10% off any drink, 150 pts</span></div>
+        <div class="card"><h3>Green Grocer</h3><span class="muted small">Free tote bag, 300 pts</span></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Proposed (mobile)</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Rewards</div><div class="title">Points and cash</div><p class="sub">Trade points for perks, or get paid for funded cleanups.</p>
+        <div class="seg"><span class="on">Perks</span><span>Paid cleanups</span><span>Impact</span></div>
+        <div class="card em">
+          <div class="between"><h3>Paid cleanups near you</h3><span class="pill on">12 open</span></div>
+          <p class="muted small" style="margin:4px 0 10px">Funded sites you can claim. Up to $25 per cleanup.</p>
+          <div class="pills"><span class="pill em">$ Earn</span><span class="pill sky">Fund a cleanup</span></div>
+          <span class="btn sm">See the map</span>
+        </div>
+        <div class="card"><div class="between"><span class="muted small">Your balance</span><b>1,240 pts</b></div></div>
+        <div class="card"><h3>Local Cafe</h3><span class="muted small">10% off any drink, 150 pts</span></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Proposed (desktop)</div>
+      <div class="desk">
+        <div class="eyebrow">Rewards</div><div class="title">Points and cash</div>
+        <div class="cols" style="margin-top:10px">
+          <div class="card em" style="margin:0"><div class="between"><h3>Paid cleanups near you</h3><span class="pill on">12 open</span></div><p class="muted small">Claim a funded site, finish it with before and after photos, get paid after review.</p><span class="btn sm">See the map</span></div>
+          <div class="card sky" style="margin:0"><h3>Community impact</h3><p class="muted small" style="margin:2px 0 6px">1,420 bags this month. $18,400 funded all time.</p><span class="btn sm sec">View impact</span></div>
+        </div>
+        <div class="cap" style="margin-top:14px">Partner perks</div><p class="muted small">Existing perks grid unchanged below.</p>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Changes:</b> replace the two icon cards with one segmented control (Perks, Paid cleanups, Impact) so money stops competing with points on the same screen. The Paid cleanups tab teases live counts (open sites, max payout) instead of generic text. Marketplace "Hire a cleaner" would be a fourth entry here once built. <b>Open:</b> is Impact a tab or does it live under profile?</div>
+
+  <!-- 2. SPONSORSHIPS -->
+  <h2 id="sponsorships">2. Sponsorships page</h2>
+  <p class="lede">Today: four pills ("Claim sponsorship", "Fund a cleanup", plus two admin ones) and the map above. It is organized by feature, not by what a person wants. Proposal: lead with the two roles (Earn and Fund), keep admin tools tucked behind one "Admin" menu, and give the map a persistent bottom sheet.</p>
+  <div class="row">
+    <div class="col"><div class="cap">Earn (default)</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Sponsorships</div><div class="title">Paid cleanups</div>
+        <div class="seg"><span class="on">Earn</span><span>Fund</span><span>Mine</span></div>
+        <div class="map">
+          <div class="mapctl"><div class="search">Search a neighborhood</div></div>
+          <div class="pin" style="left:60px;top:70px"><i>$25</i></div><div class="pin am" style="left:170px;top:110px"><i>$15</i></div><div class="pin" style="left:250px;top:60px"><i>$40</i></div>
+        </div>
+        <div class="card"><div class="between"><div class="grow"><h3>Prospect Park entrance</h3><span class="muted small">0.4 mi, 3 bags max</span></div><div class="rate">$25</div></div>
+          <div class="pills" style="margin:8px 0 10px"><span class="pill em">Open now</span><span class="pill amber">Plus: 48h early access</span></div><span class="btn">Claim this site</span></div>
+        <div class="card"><div class="between"><div class="grow"><h3>Vacant lot on 5th Ave</h3><span class="muted small">1.1 mi, per bag</span></div><div class="rate">$3 <small>/ bag</small></div></div></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Fund</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Sponsorships</div><div class="title">Fund a cleanup</div>
+        <div class="seg"><span>Earn</span><span class="on">Fund</span><span>Mine</span></div>
+        <div class="card sky"><h3>Pick who and where</h3>
+          <div class="pills" style="margin-top:8px"><span class="pill on">A site</span><span class="pill">A group's area</span><span class="pill">General fund</span></div></div>
+        <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+        <div class="field"><label>Amount</label><b style="font-size:20px">$100</b></div>
+        <div class="pills"><span class="pill">$25</span><span class="pill">$50</span><span class="pill on">$100</span><span class="pill">$250</span></div>
+        <div class="field"><label>Payout rule</label>Per bag, $3, max 10 bags</div>
+        <div class="field"><label>Message to cleaners</label><span class="dim">Optional</span></div>
+        <div class="stickybar"><span class="btn">Continue to checkout, $100</span><p class="small dim" style="text-align:center;margin:6px 0 0">Test mode, no real money</p></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Mine (and admin)</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Sponsorships</div><div class="title">Mine</div>
+        <div class="seg"><span>Earn</span><span>Fund</span><span class="on">Mine</span></div>
+        <div class="card"><div class="between"><h3>Prospect Park entrance</h3><span class="pill em">Funded</span></div><p class="small muted" style="margin:4px 0 0">$100, $62 left, 4 cleanups so far</p></div>
+        <div class="card"><div class="between"><h3>General fund</h3><span class="pill amber">Pending</span></div><p class="small muted" style="margin:4px 0 0">$50, waiting for payment</p></div>
+        <div class="card" style="border-color:rgba(167,139,250,.35)"><div class="between"><h3>Admin</h3><span class="pill vio">Admin only</span></div>
+          <div class="pills" style="margin-top:8px"><span class="pill vio">Review payouts (3)</span><span class="pill vio">All sponsorships</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Changes:</b> three tabs (Earn, Fund, Mine) replace four pills. Admin tools collapse into one violet Admin card on Mine. Earn becomes the default with a map-first layout and cards with the payout amount big on the right. Fund becomes a short stepped form with a sticky checkout bar (kills the long scroll). The new success banner (done this session) shows at the top after Stripe. <b>Open:</b> should a business sponsor and a person sponsor see different Fund forms?</div>
+
+  <!-- 3. IMPACT -->
+  <h2 id="impact">3. Impact page</h2>
+  <p class="lede">Today: stat tiles, a bar chart, partners, and the Plus card at the bottom. It reads like an admin report. Proposal: make it a story (what we cleaned, who funded it, where it went), with a personal slice on top and one clear call to action.</p>
+  <div class="row">
+    <div class="col"><div class="cap">Proposed (mobile)</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow" style="color:var(--sky)">Impact</div><div class="title">What we cleaned together</div>
+        <div class="seg"><span class="on">Community</span><span>You</span></div>
+        <div class="card sky" style="text-align:center"><div style="font-size:44px;font-weight:800;letter-spacing:-.03em">8,420</div><div class="muted">bags collected, 312 cleanups</div><div class="pills" style="justify-content:center;margin:8px 0 0"><span class="pill sky">+18% vs last month</span></div></div>
+        <div class="grid2"><div class="stat"><b>12.4k</b><span>Pounds</span></div><div class="stat"><b>940</b><span>Participants</span></div></div>
+        <div class="cap" style="margin:8px 0">Where the money went</div>
+        <div class="card"><div style="display:flex;height:14px;border-radius:8px;overflow:hidden"><i style="flex:62;background:var(--em)"></i><i style="flex:23;background:var(--sky)"></i><i style="flex:15;background:var(--amber)"></i></div>
+          <div class="small muted" style="margin-top:8px"><span class="star" style="color:var(--em)">62%</span> paid to cleaners &nbsp; <span style="color:var(--sky)">23%</span> supplies &nbsp; <span style="color:var(--amber)">15%</span> running the app</div></div>
+        <div class="card amber"><div class="between"><div><h3>Chip in with Plus</h3><span class="small muted">$5 a month keeps this going</span></div><span class="btn amber sm">Join</span></div></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">You tab</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow" style="color:var(--sky)">Impact</div><div class="title">Your part</div>
+        <div class="seg"><span>Community</span><span class="on">You</span></div>
+        <div class="card em" style="text-align:center"><div style="font-size:44px;font-weight:800;letter-spacing:-.03em;color:var(--em)">47</div><div class="muted">bags this year</div></div>
+        <div class="grid2"><div class="stat"><b>$85</b><span>Earned</span></div><div class="stat"><b>$30</b><span>Given</span></div></div>
+        <div class="card"><div class="between"><div><h3>Monthly recap</h3><span class="small muted">October, shareable image</span></div><span class="pill amber">Plus</span></div></div>
+        <div class="card"><h3>Your sponsorships</h3><span class="small muted">2 funded, 7 cleanups done with your money</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Changes:</b> Community and You tabs. One big headline number with a month-over-month chip. A single stacked bar for "where the money went" replaces the bar chart of gifts (clearer, and builds trust). The Plus pitch shrinks to one card, since the profile already has the full card. The "You" tab hosts the monthly recap. <b>Open:</b> we need real numbers for the split (cleaners, supplies, app). Do not ship percentages until the ledger can produce them.</div>
+
+  <!-- 4. MARKETPLACE HOME -->
+  <h2 id="market-home">4. Paid cleaner marketplace: home</h2>
+  <p class="lede">Rover and Care.com style. One entry with a map and list toggle for browsing cleaners, and a "Post a job" button for the request-board direction. Customers are residents and businesses.</p>
+  <div class="row">
+    <div class="col"><div class="cap">Browse cleaners</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Hire a cleaner</div><div class="title">Cleaners near you</div>
+        <div class="seg"><span class="on">Cleaners</span><span>Open jobs</span></div>
+        <div class="map" style="height:150px"><div class="mapctl"><div class="search">Brooklyn, NY</div><span class="pill on">List</span></div>
+          <div class="pin sk" style="left:55px;top:70px"><i>$30</i></div><div class="pin sk" style="left:150px;top:95px"><i>$22</i></div><div class="pin sk" style="left:260px;top:60px"><i>$40</i></div></div>
+        <div class="pills"><span class="pill on">Litter</span><span class="pill">Lots</span><span class="pill">Sidewalks</span><span class="pill">Yard</span><span class="pill">Hauling</span></div>
+        <div class="card"><div class="person"><div class="av a1">MR</div><div class="grow"><div class="between"><h3>Maya R.</h3><div class="rate">$30<small>/hr</small></div></div><span class="small muted"><span class="star">4.9</span> (38) &middot; 0.6 mi &middot; ID verified</span></div></div>
+          <div class="pills" style="margin:8px 0 0"><span class="pill em">Litter</span><span class="pill em">Lots</span><span class="pill">Available this week</span></div></div>
+        <div class="card"><div class="person"><div class="av a2">DT</div><div class="grow"><div class="between"><h3>Devon T.</h3><div class="rate">$22<small>/hr</small></div></div><span class="small muted"><span class="star">4.7</span> (12) &middot; 1.2 mi</span></div></div></div>
+        <div class="stickybar"><span class="btn sec">Post a job instead</span></div>
+        <div class="tabbar"><span>Map</span><span>Board</span><span><b>Hire</b></span><span>Groups</span><span>Profile</span></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Open jobs (cleaner view)</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Hire a cleaner</div><div class="title">Open jobs</div>
+        <div class="seg"><span>Cleaners</span><span class="on">Open jobs</span></div>
+        <div class="card"><div class="between"><h3>Clear alley behind cafe</h3><div class="rate" style="color:var(--em)">$120</div></div><p class="small muted" style="margin:2px 0 8px">Business &middot; 0.8 mi &middot; Sat Oct 31 &middot; ~2 hrs</p><div class="pills"><span class="pill sky">Litter</span><span class="pill">Fixed price</span></div><span class="btn sm">View and offer</span></div>
+        <div class="card"><div class="between"><h3>Yard cleanup, 1 truckload</h3><div class="rate" style="color:var(--em)">$80 to $150</div></div><p class="small muted" style="margin:2px 0 0">Resident &middot; 2.0 mi &middot; flexible</p></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Desktop</div>
+      <div class="desk">
+        <div class="between"><div><div class="eyebrow">Hire a cleaner</div><div class="title">Cleaners near you</div></div><span class="btn sm">Post a job</span></div>
+        <div class="cols" style="margin-top:10px">
+          <div><div class="card"><div class="person"><div class="av a1">MR</div><div class="grow"><h3>Maya R. <span class="rate" style="float:right">$30/hr</span></h3><span class="small muted"><span class="star">4.9</span> (38) &middot; 0.6 mi</span></div></div></div>
+            <div class="card"><div class="person"><div class="av a2">DT</div><div class="grow"><h3>Devon T. <span class="rate" style="float:right">$22/hr</span></h3><span class="small muted"><span class="star">4.7</span> (12) &middot; 1.2 mi</span></div></div></div></div>
+          <div class="map" style="height:230px;margin:0"><div class="pin sk" style="left:50px;top:70px"><i>$30</i></div><div class="pin sk" style="left:140px;top:120px"><i>$22</i></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Decisions embedded:</b> both directions share one entry (Cleaners tab = directory, Open jobs tab = request board). Price on the map pin, like Rover. Filters are service types only at launch. "Hire" would replace a bottom tab or live under Rewards. <b>Open:</b> which tab loses its slot on mobile, and the allowed service list.</div>
+
+  <!-- 5. PROFILE + BOOKING -->
+  <h2 id="market-profile">5. Cleaner profile and booking request</h2>
+  <div class="row">
+    <div class="col"><div class="cap">Cleaner profile</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="person" style="margin-bottom:10px"><div class="av lg a1">MR</div><div class="grow"><div class="title" style="margin:0">Maya R.</div><span class="small muted"><span class="star">4.9</span> (38 reviews) &middot; Park Slope</span><div class="pills" style="margin:6px 0 0"><span class="pill em">ID verified</span><span class="pill sky">Frontline cleaner</span></div></div></div>
+        <div class="grid2"><div class="stat"><b>$30</b><span>Per hour</span></div><div class="stat"><b>112</b><span>Jobs done</span></div></div>
+        <div class="card"><h3>About</h3><p class="small muted" style="margin:4px 0 0">Neighborhood volunteer turned part-time cleaner. I bring my own gear. Alleys, lots and sidewalks are my specialty.</p></div>
+        <div class="card"><h3>Services</h3><div class="pills" style="margin-top:6px"><span class="pill em">Litter pickup</span><span class="pill em">Lot cleanup</span><span class="pill em">Sidewalks</span></div></div>
+        <div class="card"><h3>Before and after</h3><div style="display:flex;gap:6px;margin-top:6px"><div style="flex:1;height:70px;border-radius:10px;background:#2a2118"></div><div style="flex:1;height:70px;border-radius:10px;background:#152a1f"></div></div></div>
+        <div class="card"><div class="between"><h3>Reviews</h3><span class="small muted">See all</span></div><p class="small muted" style="margin:4px 0 0"><span class="star">5.0</span> "Spotless alley, on time, great communication."</p></div>
+        <div class="stickybar"><span class="btn">Request Maya, from $30/hr</span></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Booking request</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Request</div><div class="title">Book Maya R.</div>
+        <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+        <div class="field"><label>Where</label>Alley behind 412 5th Ave</div>
+        <div class="field"><label>What needs cleaning</label>Litter and debris, about 2 truckloads</div>
+        <div class="seg"><span>Specific time</span><span class="on">Window</span><span>Flexible</span></div>
+        <div class="field"><label>Window</label>Oct 31 to Nov 3, mornings</div><p class="small dim" style="margin:-2px 0 8px">Maya picks the exact time inside this window.</p>
+        <div class="field"><label>Photos (optional)</label><span class="dim">Add before photos</span></div>
+        <div class="card" style="margin-top:6px"><div class="between"><span class="muted">2 hrs x $30</span><b>$60.00</b></div>
+          <div class="between small muted"><span>Service fee</span><span>$6.00</span></div><div class="between" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><b>Total</b><b>$66.00</b></div></div>
+        <p class="small dim">You are only charged if Maya accepts. Funds are held until you confirm the job is done.</p>
+        <div class="stickybar"><span class="btn">Send request</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Money model shown:</b> hold at acceptance, release on confirm, fee on top for the customer (Rover charges both sides, so this is a placeholder). <b>Time options:</b> Specific time, Window (default) or Flexible (capped at about 14 days, then expires and releases the hold). Hold starts at acceptance for all three. <b>Open:</b> fee percent and who pays, cancel window, hourly versus fixed toggle, and recurring bookings (recommended: not at launch, then a capped series of independent bookings that rotate cleaners by default).</div>
+
+  <!-- 6. BOOKINGS -->
+  <h2 id="market-bookings">6. Bookings (both sides)</h2>
+  <div class="row">
+    <div class="col"><div class="cap">Customer: my bookings</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Hire a cleaner</div><div class="title">My bookings</div>
+        <div class="seg"><span class="on">Upcoming</span><span>Past</span></div>
+        <div class="card"><div class="between"><h3>Maya R.</h3><span class="pill amber">Awaiting reply</span></div><p class="small muted" style="margin:2px 0 0">Alley, Sat Oct 31 &middot; $66 held</p></div>
+        <div class="card em"><div class="between"><h3>Devon T.</h3><span class="pill em">Confirmed</span></div><p class="small muted" style="margin:2px 0 8px">Lot cleanup, Sun Nov 1</p>
+          <div class="timeline"><div class="done">Paid and held</div><div class="done">Accepted</div><div class="now">Job in progress</div><div>Confirm and release</div></div></div>
+        <div class="card sky"><h3>Job finished</h3><p class="small muted" style="margin:2px 0 8px">Review Devon's before and after photos.</p><div class="grid2" style="margin:0"><span class="btn sm">Confirm and pay</span><span class="btn sm sec">Report a problem</span></div></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Cleaner: requests and earnings</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Cleaner</div><div class="title">Requests</div>
+        <div class="seg"><span class="on">Requests</span><span>Jobs</span><span>Earnings</span></div>
+        <div class="card"><div class="between"><h3>Alley behind cafe</h3><b style="color:var(--em)">$60</b></div><p class="small muted" style="margin:2px 0 8px">Business &middot; Sat Oct 31 &middot; 0.8 mi</p><div class="grid2" style="margin:0"><span class="btn sm">Accept</span><span class="btn sm sec">Decline</span></div></div>
+        <div class="grid2"><div class="stat hero"><b>$420</b><span>Paid out</span></div><div class="stat"><b>$96</b><span>Pending</span></div></div>
+        <div class="card"><div class="between"><div><h3>Payouts</h3><span class="small muted">Bank ending 4821</span></div><span class="pill em">Active</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Notes:</b> timeline is the same shape as sponsored cleanups (photos before and after), so the existing photo flow is reused. Auto-release after N days with no dispute is a backend rule, shown to the customer as a countdown on "Job finished". <b>Open:</b> messaging (in-app thread per booking, contact hidden until booked).</div>
+
+  <!-- 7. POST A JOB -->
+  <h2 id="market-post">7. Post a job (request board)</h2>
+  <div class="row">
+    <div class="col"><div class="cap">Customer: post a job</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Request board</div><div class="title">Post a job</div>
+        <div class="steps"><i class="on"></i><i></i><i></i></div>
+        <div class="pills"><span class="pill on">Resident</span><span class="pill">Business</span></div>
+        <div class="field"><label>Job title</label>Clear alley behind cafe</div>
+        <div class="field"><label>Pin the spot</label><div class="map" style="height:90px;margin:6px 0 0"><div class="pin sk" style="left:150px;top:30px"><i></i></div></div></div>
+        <div class="field"><label>Service</label>Litter pickup</div>
+        <div class="field"><label>Budget</label><b>$120</b> <span class="dim">fixed price</span></div>
+        <div class="seg"><span>Specific time</span><span>Window</span><span class="on">Flexible</span></div>
+        <div class="field"><label>Within</label>14 days (max)</div>
+        <div class="stickybar"><span class="btn">Next: review and pay deposit</span></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Cleaner: job detail and offer</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Open job</div><div class="title">Clear alley behind cafe</div>
+        <div class="pills"><span class="pill sky">Litter</span><span class="pill">Business</span><span class="pill em">$120 fixed</span></div>
+        <div class="map" style="height:120px"><div class="pin sk" style="left:160px;top:40px"><i></i></div></div>
+        <div class="card"><h3>Details</h3><p class="small muted" style="margin:4px 0 0">Alley is about 40 ft. Mostly bottles and cardboard. Gloves and bags provided.</p></div>
+        <div class="card"><div class="between"><div class="person"><div class="av a3" style="width:36px;height:36px;font-size:13px">LC</div><span>Local Cafe</span></div><span class="pill em">Verified business</span></div></div>
+        <div class="stickybar"><span class="btn">Accept for $120</span><p class="small dim" style="text-align:center;margin:6px 0 0">Or send a counter-offer</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Notes:</b> direction A. Customer funds up front (deposit held), first cleaner to accept gets the job unless the customer chose "review offers". Businesses reuse partner records (verified badge).</div>
+
+  <!-- 8. ONBOARDING -->
+  <h2 id="market-onboard">8. Cleaner onboarding (includes Stripe Connect)</h2>
+  <div class="row">
+    <div class="col"><div class="cap">Step 1: become a cleaner</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Get paid</div><div class="title">Become a cleaner</div>
+        <div class="steps"><i class="on"></i><i></i><i></i><i></i></div>
+        <div class="card em"><h3>Turn your cleanups into income</h3><p class="small muted" style="margin:4px 0 0">Set your rate, pick your area, and get booked by neighbors and businesses.</p></div>
+        <div class="field"><label>Display name</label>Maya R.</div>
+        <div class="field"><label>Hourly rate</label><b>$30</b></div>
+        <div class="field"><label>Services</label><div class="pills" style="margin:4px 0 0"><span class="pill on">Litter</span><span class="pill on">Lots</span><span class="pill">Yard</span></div></div>
+        <div class="field"><label>Service area</label>Park Slope + 3 mi</div>
+        <div class="stickybar"><span class="btn">Continue</span></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Step 2: agreements</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Get paid</div><div class="title">Before you start</div>
+        <div class="steps"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+        <div class="card"><h3>Cleaner agreement and waiver</h3><p class="small muted" style="margin:4px 0 8px">Independent contractor terms, safety rules and a release of liability. Read to the end to continue.</p><div style="height:70px;border-radius:10px;background:var(--panel2);margin-bottom:8px"></div><div class="field"><label>Type your legal name</label>Maya Rodriguez</div></div>
+        <div class="card"><div class="small muted">&#9745; I am 18 or older<br>&#9745; I accept the cleaner agreement and release<br>&#9745; I will not handle hazardous waste or sharps</div></div>
+        <div class="stickybar"><span class="btn">Agree and continue</span></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Step 3: set up payouts</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Get paid</div><div class="title">Set up payouts</div>
+        <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+        <div class="card amber"><h3>One more step</h3><p class="small muted" style="margin:4px 0 10px">Stripe verifies your identity and connects your bank or debit card. Takes about 5 minutes. We never see your bank details.</p><span class="btn amber">Continue with Stripe</span></div>
+        <div class="card"><h3>What you need</h3><ul class="tight"><li>Legal name and date of birth</li><li>Last 4 of SSN or full ID</li><li>Bank account or debit card</li></ul></div>
+        <p class="small dim">Test mode: use Stripe's test details. No real money moves.</p>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Same Connect flow for sponsored cleanups</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow">Paid cleanups</div><div class="title">You earned $25</div>
+        <div class="card em"><h3>Prospect Park entrance</h3><p class="small muted" style="margin:2px 0 8px">Approved by an admin</p><div class="rate" style="color:var(--em);font-size:24px">$25.00</div></div>
+        <div class="card amber"><h3>Set up payouts to receive it</h3><p class="small muted" style="margin:2px 0 8px">Your money is saved for you. Finish setup to get it.</p><span class="btn amber">Set up payouts</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Notes:</b> one Connect onboarding serves both the marketplace and sponsored cleanup earners (priority 3). Sponsored cleanup money earned before setup is held and released once onboarding finishes. <b>Open:</b> minimum payout, and whether earning is allowed before setup.</div>
+
+  <!-- 9. ADMIN -->
+  <h2 id="market-admin">9. Admin: payouts and disputes</h2>
+  <div class="row">
+    <div class="col"><div class="cap">Review payouts (existing page, with Connect)</div>
+      <div class="desk">
+        <div class="between"><div class="title" style="margin:0">Review payouts</div><div class="pills" style="margin:0"><span class="pill on">Pending (3)</span><span class="pill">Approved</span><span class="pill">Disputes (1)</span></div></div>
+        <div class="card" style="margin-top:12px"><div class="between"><div class="person"><div class="av a4" style="width:38px;height:38px;font-size:13px">JS</div><div><h3>Jordan S.</h3><span class="small muted">Prospect Park entrance &middot; $25 &middot; 2 bags</span></div></div>
+          <div class="pills" style="margin:0"><span class="pill em">Payouts ready</span><span class="btn sm">Approve and pay</span><span class="btn sm sec">Reject</span></div></div>
+          <div style="display:flex;gap:6px;margin-top:10px"><div style="width:110px;height:70px;border-radius:10px;background:#2a2118"></div><div style="width:110px;height:70px;border-radius:10px;background:#152a1f"></div></div></div>
+        <div class="card"><div class="between"><div><h3>Sam P.</h3><span class="small muted">Vacant lot &middot; $15</span></div><div class="pills" style="margin:0"><span class="pill amber">Payouts not set up</span><span class="btn sm">Approve (hold funds)</span></div></div></div>
+      </div>
+    </div>
+    <div class="col"><div class="cap">Marketplace dispute</div>
+      <div class="phone"><div class="bar"></div>
+        <div class="eyebrow" style="color:var(--vio)">Admin</div><div class="title">Dispute</div>
+        <div class="card"><div class="between"><h3>Alley behind cafe</h3><span class="pill vio">$66 held</span></div><p class="small muted" style="margin:2px 0 0">Customer: "not finished". Cleaner: "done, see photos".</p></div>
+        <div class="card"><h3>Evidence</h3><div style="display:flex;gap:6px;margin-top:6px"><div style="flex:1;height:64px;border-radius:10px;background:#2a2118"></div><div style="flex:1;height:64px;border-radius:10px;background:#152a1f"></div></div></div>
+        <div class="grid2"><span class="btn sm">Pay cleaner</span><span class="btn sm sec">Refund customer</span></div>
+        <span class="btn sec">Split 50 / 50</span>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>Notes:</b> approval and transfer become one action ("Approve and pay") once Connect is live. Until then the button stays a manual flag. A violet palette marks admin-only surfaces everywhere.</div>
+
+  <h2>Shared design decisions to confirm</h2>
+  <ul class="tight" style="max-width:760px">
+    <li>Segmented tabs (Rewards, Sponsorships, Impact, Hire) instead of pill rows of features.</li>
+    <li>Money amounts are always large, right-aligned, emerald for earnings and amber for held funds.</li>
+    <li>Sticky bottom action bar on forms (mobile thumb reach).</li>
+    <li>Everything stays admin-gated (payments gate plus a new <code>marketplace_*</code> flag) until legal, tax and Connect are done.</li>
+    <li>No percentages, impact claims or fee numbers in real UI until the data can back them.</li>
+  </ul>
+</div>
+</body>
+</html>

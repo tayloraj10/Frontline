@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import ShareButton from "@/components/ShareButton";
+import PlusFlair from "@/components/billing/PlusFlair";
 import type { Database } from "@/types/database";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
@@ -12,17 +13,20 @@ export default function GroupsListClient({
   memberCountByGroup,
   upcomingEventCountByGroup,
   userGroupIds,
+  plusGroupIds,
   isLoggedIn,
 }: {
   groups: Group[];
   memberCountByGroup: Record<string, number>;
   upcomingEventCountByGroup: Record<string, number>;
   userGroupIds: string[];
+  plusGroupIds: string[];
   isLoggedIn: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
   const memberSet = useMemo(() => new Set(userGroupIds), [userGroupIds]);
+  const plusSet = useMemo(() => new Set(plusGroupIds), [plusGroupIds]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -122,6 +126,7 @@ export default function GroupsListClient({
 
                     <h2 className="font-display text-lg font-extrabold tracking-tight leading-snug text-zinc-100 group-hover:text-white">
                       {group.name}
+                      <PlusFlair isPlus={plusSet.has(group.id)} />
                     </h2>
                     {group.description && (
                       <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-zinc-500">

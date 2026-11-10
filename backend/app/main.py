@@ -2,7 +2,7 @@ import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import account, admin, admin_prod, admin_roles, campaign_dashboard, team_events, cleanup_events, content_flags, contributions, decay, device_tokens, events, geo_units, groups, health, leaderboard, partners, problem_reports, tiles, upload, users
+from app.api.routes import account, admin, admin_prod, admin_roles, campaign_dashboard, team_events, cleanup_events, content_flags, contributions, decay, device_tokens, events, geo_units, groups, health, leaderboard, marketplace, partners, payments, problem_reports, sponsorships, tiles, upload, users
 from app.core.config import settings
 
 if settings.sentry_dsn:
@@ -20,8 +20,9 @@ app.add_middleware(
     allow_origins=settings.cors_allowed_origins,
     allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    # Browsers only send these; the shared-secret header is server-to-server and never needs CORS.
+    allow_headers=["Authorization", "Content-Type", "sentry-trace", "baggage"],
 )
 
 app.include_router(health.router)
@@ -46,5 +47,8 @@ app.include_router(account.router, prefix="/api")
 app.include_router(admin_prod.router, prefix="/api")
 app.include_router(admin_roles.router, prefix="/api")
 app.include_router(team_events.router, prefix="/api")
+app.include_router(payments.router, prefix="/api")
+app.include_router(sponsorships.router, prefix="/api")
+app.include_router(marketplace.router, prefix="/api")
 if not settings.is_production:
     app.include_router(admin.router, prefix="/api")

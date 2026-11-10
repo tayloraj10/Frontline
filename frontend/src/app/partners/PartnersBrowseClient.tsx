@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import BodyPortal from "@/components/ui/BodyPortal";
 import Link from "next/link";
 import ProgressBar from "@/components/ui/ProgressBar";
 import ShareButton from "@/components/ShareButton";
@@ -66,6 +67,7 @@ export function OfferCard({
   userPoints,
   userLocation,
   onRedeemed,
+  onLocate,
 }: {
   offer: BrowseOffer;
   businessName: string;
@@ -75,9 +77,12 @@ export function OfferCard({
   userPoints: number | null;
   userLocation: { lat: number; lng: number } | null;
   onRedeemed: (offerId: string, spent: number) => void;
+  /** Only passed on the browse page's map view; shows a button that jumps to this business's pin. */
+  onLocate?: (locationId: string | null) => void;
 }) {
   const [redemptions, setRedemptions] = useState<Redemption[] | null>(null);
   const [redeeming, setRedeeming] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proof, setProof] = useState<RedemptionProof | null>(null);
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
@@ -132,7 +137,8 @@ export function OfferCard({
   const requirement = offer.redemption_mode === "spend" ? offer.points_cost ?? 0 : offer.points_threshold ?? 0;
   const eligible = offer.redemption_mode !== "event_only" && userPoints !== null && userPoints >= requirement;
   const redeemedCount = redemptions?.length ?? 0;
-  const maxedOut = offer.max_redemptions_per_user != null && redeemedCount >= offer.max_redemptions_per_user;
+  const hasUnused = (redemptions ?? []).some((r) => !r.used_at);
+  const maxedOut = hasUnused || (offer.max_redemptions_per_user != null && redeemedCount >= offer.max_redemptions_per_user);
 
   const handleMarkedUsed = (redemptionId: string, usedAt: string) => {
     setRedemptions((prev) => (prev ?? []).map((r) => (r.id === redemptionId ? { ...r, used_at: usedAt } : r)));
@@ -145,6 +151,7 @@ export function OfferCard({
       setError("Choose a location first");
       return;
     }
+    setConfirming(false);
     setRedeeming(true);
     setError(null);
     try {
@@ -241,7 +248,7 @@ export function OfferCard({
             }
             className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
-            Redeemed{redemptions[0]?.code ? ` - code ${redemptions[0].code}` : ""}
+            View my code
           </button>
         ) : offer.redemption_mode === "event_only" ? (
           <span className="text-xs text-amber-600/80">Redeemable only by checking in to a cleanup event this offer is attached to</span>
@@ -263,7 +270,7 @@ export function OfferCard({
                   ))}
                 </select>
                 {autoPicked && (
-                  <span className="text-[11px] text-zinc-600">Picked the closest one to you, change it if that's wrong.</span>
+                  <span className="text-[11px] text-zinc-600">Picked the closest one to you, change it if that&apos;s wrong.</span>
                 )}
                 {farFromPicked && (
                   <span className="text-[11px] text-amber-500">This location looks far from where you are, double check you picked the right one.</span>
@@ -271,11 +278,11 @@ export function OfferCard({
               </div>
             )}
             <button
-              onClick={handleRedeem}
+              onClick={() => setConfirming(true)}
               disabled={!eligible || redeeming || (needsLocationPicker && !pickedLocationId)}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 text-white shadow-elevation-1 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 transition-[background-color,transform] duration-150 active:scale-[0.95] touch-manipulation"
             >
-              {redeeming ? "Redeeming…" : eligible ? "Redeem" : "Not enough points"}
+              {redeeming ? "Redeeming…" : eligible ? "Redeem" : `${Math.max(0, requirement - (userPoints ?? 0))} pts to go`}
             </button>
           </>
         )}
@@ -294,11 +301,69 @@ export function OfferCard({
             }
             className="inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
           >
-            Last code: {redemptions[0].code}
+            View my code
+          </button>
+        )}
+        {onLocate && (
+          <button
+            type="button"
+            // Offer pinned to one location, else the one picked in the dropdown (auto-picked as nearest);
+            // null falls back to the whole business.
+            onClick={() => onLocate(offer.location_id ?? (pickedLocationId || null))}
+            className="ml-auto inline-flex items-center gap-1.5 min-h-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 hover:text-emerald-300 active:scale-[0.97] transition-[background-color,color,transform] duration-150 touch-manipulation"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Show on map
           </button>
         )}
       </div>
 
+      {confirming && (
+        <BodyPortal>
+          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setConfirming(false)}>
+            <div
+              role="dialog"
+              aria-label={`Redeem ${offer.title}`}
+              className="w-full max-w-sm space-y-4 rounded-t-3xl bg-zinc-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] ring-1 ring-inset ring-zinc-800 sm:rounded-3xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h3 className="text-lg font-extrabold text-zinc-100">Redeem {offer.title}?</h3>
+                <p className="text-sm text-zinc-500">{businessName}</p>
+              </div>
+              {offer.redemption_mode === "spend" ? (
+                <dl className="space-y-2 rounded-2xl bg-zinc-950 p-4 text-sm">
+                  <div className="flex justify-between"><dt className="text-zinc-400">Cost</dt><dd className="font-semibold text-zinc-100">{requirement} pts</dd></div>
+                  <div className="flex justify-between"><dt className="text-zinc-400">Balance now</dt><dd className="font-semibold text-zinc-100">{userPoints ?? 0} pts</dd></div>
+                  <div className="flex justify-between"><dt className="text-zinc-400">Balance after</dt><dd className="font-bold text-emerald-300">{(userPoints ?? 0) - requirement} pts</dd></div>
+                </dl>
+              ) : (
+                <p className="rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-300">This one is free for you. No points are spent.</p>
+              )}
+              <p className="text-xs text-zinc-500">You will get a code to show the cashier.</p>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleRedeem}
+                  className="min-h-12 w-full rounded-2xl bg-emerald-400 text-[15px] font-bold text-emerald-950 active:scale-[0.97] transition-[background-color,transform] touch-manipulation"
+                >
+                  Redeem now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="min-h-12 w-full rounded-2xl bg-zinc-800 text-[15px] font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] touch-manipulation"
+                >
+                  Not yet
+                </button>
+              </div>
+            </div>
+          </div>
+        </BodyPortal>
+      )}
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
       {proof && (
         <RedemptionConfirmationModal proof={proof} onClose={() => setProof(null)} onMarkedUsed={handleMarkedUsed} />
@@ -322,6 +387,23 @@ export default function PartnersBrowseClient({
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"list" | "map">("list");
+  const [filter, setFilter] = useState<"all" | "afford" | "event">("all");
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+
+  const handleLocate = (slug: string, locationId: string | null) => {
+    setSelectedSlug(slug);
+    setSelectedLocationId(locationId);
+    document.getElementById("partners-map")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const handleMapSelect = (slug: string | null, locationId: string | null) => {
+    setSelectedSlug(slug);
+    setSelectedLocationId(locationId);
+    if (slug) {
+      document.getElementById(`business-${slug}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
@@ -334,9 +416,15 @@ export default function PartnersBrowseClient({
 
   const filteredBusinesses = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return businesses;
     return businesses.filter((business) => {
       const businessOffers = offersByBusiness[business.id] ?? [];
+      if (filter === "event" && !businessOffers.some((o) => o.event_eligible)) return false;
+      if (
+        filter === "afford" &&
+        !businessOffers.some((o) => o.redemption_mode !== "event_only" && (points ?? 0) >= (o.redemption_mode === "spend" ? o.points_cost ?? 0 : o.points_threshold ?? 0))
+      )
+        return false;
+      if (!q) return true;
       return (
         business.name.toLowerCase().includes(q) ||
         (business.description ?? "").toLowerCase().includes(q) ||
@@ -345,7 +433,7 @@ export default function PartnersBrowseClient({
         )
       );
     });
-  }, [businesses, offersByBusiness, query]);
+  }, [businesses, offersByBusiness, query, filter, points]);
 
   const mapPoints = useMemo(
     () =>
@@ -354,6 +442,7 @@ export default function PartnersBrowseClient({
         return business.locations.map((l) => ({
           businessId: business.id,
           businessSlug: business.slug,
+          locationId: l.id,
           businessName: business.name,
           hasEventOffer,
           adultsOnly: business.adults_only,
@@ -428,18 +517,41 @@ export default function PartnersBrowseClient({
             Map
           </button>
         </div>
+        <div className="flex w-full gap-2 overflow-x-auto">
+          {(
+            [
+              ["all", "All"],
+              ...(userId ? ([["afford", "You can afford"]] as const) : []),
+              ["event", "Event perks"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={filter === id}
+              onClick={() => setFilter(id)}
+              className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold touch-manipulation transition-colors ${
+                filter === id ? "bg-emerald-400/15 text-emerald-200 ring-1 ring-inset ring-emerald-400/30" : "bg-zinc-900 text-zinc-400 ring-1 ring-inset ring-zinc-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {view === "map" && (
         mapPoints.length > 0 ? (
-          <PartnersMap points={mapPoints} userLocation={userLocation} />
+          <div id="partners-map">
+            <PartnersMap points={mapPoints} userLocation={userLocation} selectedSlug={selectedSlug} selectedLocationId={selectedLocationId} onSelect={handleMapSelect} />
+          </div>
         ) : (
           <p className="text-sm text-zinc-500">No matching businesses have a location to show on the map.</p>
         )
       )}
 
       {filteredBusinesses.length === 0 && (
-        <p className="text-sm text-zinc-500">No businesses or offers match "{query}".</p>
+        <p className="text-sm text-zinc-500">Nothing matches{query ? <> &quot;{query}&quot;</> : " that filter"}. <button type="button" className="font-semibold text-emerald-400" onClick={() => { setQuery(""); setFilter("all"); }}>Clear filters</button></p>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
@@ -450,8 +562,12 @@ export default function PartnersBrowseClient({
         <div
           key={business.id}
           id={`business-${business.slug}`}
-          className={`rounded-[20px] overflow-hidden bg-zinc-900 ${
-            hasEventOffer ? "ring-1 ring-inset ring-amber-700/50" : ""
+          className={`rounded-[20px] overflow-hidden bg-zinc-900 transition-shadow duration-200 ${
+            selectedSlug === business.slug
+              ? "ring-2 ring-inset ring-emerald-400"
+              : hasEventOffer
+                ? "ring-1 ring-inset ring-amber-700/50"
+                : ""
           }`}
         >
           <div className={`w-full px-4 py-3 flex items-center gap-3 ${hasEventOffer ? "bg-amber-950/20" : ""}`}>
@@ -508,6 +624,7 @@ export default function PartnersBrowseClient({
                 userPoints={points}
                 userLocation={userLocation}
                 onRedeemed={(_offerId, spent) => setPoints((p) => (p !== null ? p - spent : p))}
+                onLocate={view === "map" && business.locations.length > 0 ? (locationId) => handleLocate(business.slug, locationId) : undefined}
               />
             ))}
           </div>

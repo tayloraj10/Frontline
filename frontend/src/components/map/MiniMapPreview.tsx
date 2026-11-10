@@ -17,6 +17,8 @@ export default function MiniMapPreview({
   interactive = false,
   heightClassName = "h-[100px]",
   zoneCampaignId,
+  radiusM,
+  area,
 }: {
   lat: number;
   lng: number;
@@ -25,6 +27,10 @@ export default function MiniMapPreview({
   heightClassName?: string;
   /** When set, draws the campaign's zone (ZIP) boundaries from its territory tiles. */
   zoneCampaignId?: string;
+  /** Draws a circle of this many meters around the pin (a job's work radius). */
+  radiusM?: number | null;
+  /** Draws this polygon instead of the circle (a job's drawn work area). */
+  area?: GeoJSON.Polygon | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -52,6 +58,35 @@ export default function MiniMapPreview({
     });
   };
 
+  const siteRef = useRef({ lat, lng, radiusM, area });
+  useEffect(() => {
+    siteRef.current = { lat, lng, radiusM, area };
+  });
+
+  // A circle (or the drawn polygon) showing how far the work spreads. Re-added on every style load.
+  const addSite = (m: maplibregl.Map) => {
+    const { lat: la, lng: ln, radiusM: r, area: poly } = siteRef.current;
+    if (m.getSource("site")) return;
+    let geometry: GeoJSON.Polygon | null = poly ?? null;
+    if (!geometry && r && r > 0) {
+      const dLat = r / 111320;
+      const dLng = r / (111320 * Math.cos((la * Math.PI) / 180));
+      const ring = Array.from({ length: 65 }, (_, i) => {
+        const a = (i / 64) * 2 * Math.PI;
+        return [ln + dLng * Math.cos(a), la + dLat * Math.sin(a)];
+      });
+      geometry = { type: "Polygon", coordinates: [ring] };
+    }
+    if (!geometry) return;
+    m.addSource("site", { type: "geojson", data: { type: "Feature", properties: {}, geometry } });
+    m.addLayer({ id: "site-fill", type: "fill", source: "site", paint: { "fill-color": "#22c55e", "fill-opacity": 0.18 } });
+    m.addLayer({ id: "site-line", type: "line", source: "site", paint: { "line-color": "#22c55e", "line-width": 2.5 } });
+    const pts = geometry.coordinates[0];
+    const b = new maplibregl.LngLatBounds(pts[0] as [number, number], pts[0] as [number, number]);
+    pts.forEach((p) => b.extend(p as [number, number]));
+    m.fitBounds(b, { padding: 40, maxZoom: 17, duration: 0 });
+  };
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const m = new maplibregl.Map({
@@ -63,7 +98,10 @@ export default function MiniMapPreview({
       attributionControl: false,
     });
     mapRef.current = m;
-    m.on("style.load", () => addZones(m));
+    m.on("style.load", () => {
+      addZones(m);
+      addSite(m);
+    });
     if (interactive) m.addControl(new maplibregl.NavigationControl(), "top-right");
     const marker = new maplibregl.Marker({ color: "#22c55e" })
       .setLngLat([lng, lat])

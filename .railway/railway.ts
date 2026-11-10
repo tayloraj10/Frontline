@@ -50,11 +50,14 @@ export default defineRailway(() => {
 
   const decayCron = cron("decay-cron", "run_decay.py", "0 */6 * * *");
   const eventsExpiryCron = cron("events-expiry-cron", "run_events_expiry.py", "*/30 * * * *");
-  const organizerRemindersCron = cron("organizer-reminders-cron", "run_organizer_reminders.py", "0 12 * * *");
-  const organizerFollowupsCron = cron("organizer-followups-cron", "run_organizer_followups.py", "30 12 * * *");
+  const marketplaceSweepCron = cron("marketplace-sweep-cron", "run_marketplace_sweep.py", "*/15 * * * *");
+
+  // Organizer reminders, organizer followups and the admin digest in one run.
+  // 12:00 UTC = 7am or 8am US Eastern.
+  const dailyEmailsCron = cron("daily-emails-cron", "run_daily_emails.py", "0 12 * * *");
 
   return project("alluring-exploration", {
     variables: { managed: false },
-    resources: [api, decayCron, eventsExpiryCron, organizerRemindersCron, organizerFollowupsCron],
+    resources: [api, decayCron, eventsExpiryCron, marketplaceSweepCron, dailyEmailsCron],
   });
 });

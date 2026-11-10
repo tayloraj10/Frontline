@@ -25,6 +25,47 @@ class GrantRolesRequest(BaseModel):
         return v
 
 
+@router.get("")
+async def list_admins(requesting_user_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Everyone with admin powers: full site admins, and users holding scoped roles (site admins
+    who also hold rows are left out of the scoped list since they implicitly hold every role)."""
+    if not await is_site_admin(db, requesting_user_id):
+        raise HTTPException(status_code=403, detail="Only a site admin can list admins")
+    site = (
+        await db.execute(
+            text("""
+                SELECT p.id, p.username, u.email, p.admin_daily_email_opt_out AS opt_out
+                FROM profiles p JOIN auth.users u ON u.id = p.id
+                WHERE p.is_admin
+                ORDER BY lower(coalesce(p.username, u.email))
+            """)
+        )
+    ).fetchall()
+    scoped = (
+        await db.execute(
+            text("""
+                SELECT p.id, p.username, u.email, array_agg(ar.role ORDER BY ar.role) AS roles
+                FROM admin_roles ar
+                JOIN profiles p ON p.id = ar.user_id
+                JOIN auth.users u ON u.id = p.id
+                WHERE NOT p.is_admin
+                GROUP BY p.id, p.username, u.email
+                ORDER BY lower(coalesce(p.username, u.email))
+            """)
+        )
+    ).fetchall()
+    return {
+        "site_admins": [
+            {"user_id": str(r.id), "username": r.username, "email": r.email, "emails_on": not r.opt_out}
+            for r in site
+        ],
+        "scoped": [
+            {"user_id": str(r.id), "username": r.username, "email": r.email, "roles": list(r.roles)}
+            for r in scoped
+        ],
+    }
+
+
 @router.get("/{user_id}")
 async def get_user_roles(user_id: UUID, requesting_user_id: UUID, db: AsyncSession = Depends(get_db)):
     # Anyone may read their own roles (needed to gate scoped-role UI client-side,

@@ -59,12 +59,16 @@ export interface Database {
           featured: boolean;
           verified: boolean;
           status: "pending" | "approved" | "rejected";
+          open_to_sponsors: boolean;
+          sponsor_pitch: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["groups"]["Row"], "id" | "categories" | "featured" | "verified" | "status" | "created_at" | "updated_at"> & {
+        Insert: Omit<Database["public"]["Tables"]["groups"]["Row"], "id" | "categories" | "featured" | "verified" | "status" | "open_to_sponsors" | "sponsor_pitch" | "created_at" | "updated_at"> & {
           id?: string;
+          open_to_sponsors?: boolean;
+          sponsor_pitch?: string | null;
           categories?: string[];
           featured?: boolean;
           verified?: boolean;

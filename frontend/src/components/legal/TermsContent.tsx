@@ -53,6 +53,13 @@ export default function TermsContent() {
           <li>Attempting to exploit, hack, or reverse-engineer the App.</li>
           <li>Using bots, scripts, or automated tools to submit contributions.</li>
           <li>Harassing or threatening other users.</li>
+          <li>
+            Any content or conduct involving child sexual abuse or exploitation. See our{" "}
+            <a href="/legal/child-safety" className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 transition-colors duration-150">
+              Child Safety Standards
+            </a>
+            .
+          </li>
         </ul>
       </Section>
 

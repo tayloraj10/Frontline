@@ -168,6 +168,17 @@ async def redeem_offer(
             if current_points < float(offer.points_threshold):
                 raise HTTPException(status_code=409, detail="You haven't reached the points threshold for this offer")
 
+    unused_result = await db.execute(
+        text("""
+            SELECT 1 FROM partner_redemptions
+            WHERE user_id = :user_id AND offer_id = :offer_id AND used_at IS NULL
+            LIMIT 1
+        """),
+        {"user_id": str(payload.user_id), "offer_id": str(offer_id)},
+    )
+    if unused_result.first() is not None:
+        raise HTTPException(status_code=409, detail="You already have an unused code for this offer")
+
     if offer.max_redemptions_per_user is not None:
         count_result = await db.execute(
             text("""

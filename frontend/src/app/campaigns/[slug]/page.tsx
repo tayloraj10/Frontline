@@ -15,7 +15,7 @@ type CampaignEvent = Database["public"]["Tables"]["campaign_events"]["Row"];
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ lat?: string; lng?: string; zoom?: string }>;
+  searchParams: Promise<{ lat?: string; lng?: string; zoom?: string; focus?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -240,7 +240,9 @@ const getCampaignPageData = unstable_cache(
 
 export default async function CampaignPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { lat, lng, zoom } = await searchParams;
+  const { lat, lng, zoom, focus } = await searchParams;
+  // Push-notification deep link: id of a group event or hotspot to open on the map.
+  const focusEventId = focus && /^[0-9a-f-]{36}$/i.test(focus) ? focus : null;
   const focusCoords =
     lat && lng && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lng))
       ? {
@@ -449,6 +451,7 @@ export default async function CampaignPage({ params, searchParams }: Props) {
           partnerBusinesses={partnerBusinessesWithEligibility}
           cleanupEvents={cleanupEvents}
           focusCoords={focusCoords}
+          focusEventId={focusEventId}
           bagMetrics={bagMetrics}
           contributionCount={contributionCount}
           totalBags={totalBags}

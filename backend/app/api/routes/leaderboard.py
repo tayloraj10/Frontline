@@ -39,6 +39,7 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
             text("""
                 SELECT
                     c.user_id::text,
+                    EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = c.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                     COALESCE(SUM(c.value), 0)::float             AS total_value,
                     COUNT(*)::int                                 AS contribution_count
                 FROM contributions c
@@ -119,6 +120,7 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
                     g.name,
                     g.slug,
                     g.image_url AS logo_url,
+                    EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type='group' AND sb.owner_id = c.group_id AND sb.status IN ('active','trialing')) AS is_plus,
                     COALESCE(SUM(c.value), 0)::float             AS total_value,
                     COUNT(*)::int                                 AS contribution_count
                 FROM contributions c
@@ -197,6 +199,7 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
         "users": [
             {
                 "entity_id": r.user_id,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "tracts_claimed": user_tracts.get(r.user_id, 0),
@@ -213,6 +216,7 @@ async def get_campaign_leaderboard(campaign_id: UUID, db: AsyncSession = Depends
                 "name": r.name,
                 "slug": r.slug,
                 "logo_url": r.logo_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "tracts_claimed": group_tracts.get(r.group_id, 0),
@@ -245,7 +249,7 @@ async def get_campaign_leaderboard_range(
                     c.user_id::text,
                     p.username,
                     p.display_name,
-                    p.avatar_url,
+                    p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = c.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                     COALESCE(SUM(c.value), 0)::float                          AS total_value,
                     COUNT(*)::int                                             AS contribution_count,
                     COALESCE(SUM(cl.metrics_small_bags), 0)::int              AS small_bags,
@@ -277,6 +281,7 @@ async def get_campaign_leaderboard_range(
                 "username": r.username,
                 "display_name": r.display_name,
                 "avatar_url": r.avatar_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "small_bags": r.small_bags,
@@ -369,6 +374,8 @@ def _scope_filter(focus) -> tuple[str, dict]:
 async def get_campaign_geo_stats(
     campaign_id: UUID,
     interval: str = Query("all"),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     focus_geo_unit_id: UUID | None = Query(None),
     children_level: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -385,15 +392,10 @@ async def get_campaign_geo_stats(
     ST_Contains(unit.geometry, contribution.location) — contributions with no location
     point (route-only submissions) are excluded from neighborhood/borough aggregation.
     """
-    interval_unit = _interval_unit(interval)
     if children_level is not None and children_level not in _GEO_STATS_LEVELS:
         raise HTTPException(400, f"Invalid children_level: {children_level}")
 
-    start = None
-    if interval_unit:
-        start = (
-            await db.execute(text("SELECT date_trunc(:unit, now()) AS start"), {"unit": interval_unit})
-        ).fetchone().start
+    start, end = await resolve_stats_window(db, interval, start_date, end_date)
 
     focus = None
     if focus_geo_unit_id is not None:
@@ -419,9 +421,10 @@ async def get_campaign_geo_stats(
                 FROM contributions c
                 WHERE c.campaign_id = :cid
                   AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                   {scope_filter}
             """),
-            {"cid": str(campaign_id), "start": start, **scope_params},
+            {"cid": str(campaign_id), "start": start, "end": end, **scope_params},
         )
     ).fetchone()
 
@@ -441,31 +444,33 @@ async def get_campaign_geo_stats(
                     FROM contributions c
                     WHERE c.campaign_id = :cid
                       AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                       AND COALESCE(c.cleanup_id, c.cleanup_event_id) IS NOT NULL
                       {scope_filter}
                 ) dc
                 JOIN cleanups cl ON cl.id = dc.cid
             """),
-            {"cid": str(campaign_id), "start": start, **scope_params},
+            {"cid": str(campaign_id), "start": start, "end": end, **scope_params},
         )
     ).fetchone()
 
     top_users = (
         await db.execute(
             text(f"""
-                SELECT c.user_id::text, p.username, p.display_name, p.avatar_url,
+                SELECT c.user_id::text, p.username, p.display_name, p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = c.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                        COALESCE(SUM(c.value), 0)::float AS total_value,
                        COUNT(*)::int                     AS contribution_count
                 FROM contributions c
                 LEFT JOIN profiles p ON p.id = c.user_id
                 WHERE c.campaign_id = :cid AND c.user_id IS NOT NULL
                   AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                   {scope_filter}
                 GROUP BY c.user_id, p.username, p.display_name, p.avatar_url
                 ORDER BY total_value DESC, contribution_count DESC
                 LIMIT 10
             """),
-            {"cid": str(campaign_id), "start": start, **scope_params},
+            {"cid": str(campaign_id), "start": start, "end": end, **scope_params},
         )
     ).fetchall()
 
@@ -489,13 +494,14 @@ async def get_campaign_geo_stats(
                         FROM contributions c
                         WHERE c.campaign_id = :cid AND c.user_id IS NOT NULL
                           AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                           AND c.cleanup_id IS NOT NULL
                           {scope_filter}
                     ) dc
                     JOIN cleanups cl ON cl.id = dc.cid
                     GROUP BY dc.user_id
                 """),
-                {"cid": str(campaign_id), "start": start, **scope_params},
+                {"cid": str(campaign_id), "start": start, "end": end, **scope_params},
             )
         ).fetchall()
     }
@@ -504,18 +510,20 @@ async def get_campaign_geo_stats(
         await db.execute(
             text(f"""
                 SELECT c.group_id::text, g.name, g.image_url AS logo_url,
+                       EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type='group' AND sb.owner_id = c.group_id AND sb.status IN ('active','trialing')) AS is_plus,
                        COALESCE(SUM(c.value), 0)::float AS total_value,
                        COUNT(*)::int                     AS contribution_count
                 FROM contributions c
                 LEFT JOIN groups g ON g.id = c.group_id
                 WHERE c.campaign_id = :cid AND c.group_id IS NOT NULL
                   AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                   {scope_filter}
                 GROUP BY c.group_id, g.name, g.image_url
                 ORDER BY total_value DESC, contribution_count DESC
                 LIMIT 10
             """),
-            {"cid": str(campaign_id), "start": start, **scope_params},
+            {"cid": str(campaign_id), "start": start, "end": end, **scope_params},
         )
     ).fetchall()
 
@@ -534,13 +542,14 @@ async def get_campaign_geo_stats(
                         FROM contributions c
                         WHERE c.campaign_id = :cid AND c.group_id IS NOT NULL
                           AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                           AND COALESCE(c.cleanup_id, c.cleanup_event_id) IS NOT NULL
                           {scope_filter}
                     ) dc
                     JOIN cleanups cl ON cl.id = dc.cid
                     GROUP BY dc.group_id
                 """),
-                {"cid": str(campaign_id), "start": start, **scope_params},
+                {"cid": str(campaign_id), "start": start, "end": end, **scope_params},
             )
         ).fetchall()
     }
@@ -559,6 +568,7 @@ async def get_campaign_geo_stats(
                     FROM geo_units gu
                     JOIN contributions c ON c.geo_unit_id = gu.id AND c.campaign_id = :cid
                       AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                     WHERE gu.unit_type = ANY(:zip_types)
                       AND (
                         CAST(:focus_id AS uuid) IS NULL
@@ -570,7 +580,7 @@ async def get_campaign_geo_stats(
                 """),
                 {
                     "cid": str(campaign_id),
-                    "start": start,
+                    "start": start, "end": end,
                     "zip_types": list(_ZIP_UNIT_TYPES),
                     "focus_id": focus.id if focus else None,
                 },
@@ -593,6 +603,7 @@ async def get_campaign_geo_stats(
                             WHERE c.campaign_id = :cid
                               AND gu.unit_type = ANY(:zip_types)
                               AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                               AND COALESCE(c.cleanup_id, c.cleanup_event_id) IS NOT NULL
                               AND (
                                 CAST(:focus_id AS uuid) IS NULL
@@ -604,7 +615,7 @@ async def get_campaign_geo_stats(
                     """),
                     {
                         "cid": str(campaign_id),
-                        "start": start,
+                        "start": start, "end": end,
                         "zip_types": list(_ZIP_UNIT_TYPES),
                         "focus_id": focus.id if focus else None,
                     },
@@ -625,6 +636,7 @@ async def get_campaign_geo_stats(
                       AND c.location IS NOT NULL
                       AND ST_Contains(gu.geometry, c.location::geometry)
                       AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                     WHERE gu.unit_type = :level
                       AND (
                         CAST(:focus_id AS uuid) IS NULL
@@ -636,7 +648,7 @@ async def get_campaign_geo_stats(
                 """),
                 {
                     "cid": str(campaign_id),
-                    "start": start,
+                    "start": start, "end": end,
                     "level": _GEO_STATS_LEVEL_UNIT_TYPES[children_level],
                     "focus_id": focus.id if focus else None,
                 },
@@ -654,6 +666,7 @@ async def get_campaign_geo_stats(
                               AND c.location IS NOT NULL
                               AND ST_Contains(gu.geometry, c.location::geometry)
                               AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                             WHERE gu.unit_type = :level
                               AND COALESCE(c.cleanup_id, c.cleanup_event_id) IS NOT NULL
                               AND (
@@ -672,7 +685,7 @@ async def get_campaign_geo_stats(
                     """),
                     {
                         "cid": str(campaign_id),
-                        "start": start,
+                        "start": start, "end": end,
                         "level": _GEO_STATS_LEVEL_UNIT_TYPES[children_level],
                         "focus_id": focus.id if focus else None,
                     },
@@ -707,6 +720,7 @@ async def get_campaign_geo_stats(
                 "username": r.username,
                 "display_name": r.display_name,
                 "avatar_url": r.avatar_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "small_bags": user_bag_totals.get(r.user_id, {}).get("small_bags", 0),
@@ -720,6 +734,7 @@ async def get_campaign_geo_stats(
                 "group_id": r.group_id,
                 "name": r.name,
                 "logo_url": r.logo_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
                 "small_bags": group_bag_totals.get(r.group_id, {}).get("small_bags", 0),
@@ -755,6 +770,8 @@ async def get_campaign_geo_stats(
 async def get_campaign_geo_stats_trend(
     campaign_id: UUID,
     interval: str = Query("month"),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     focus_geo_unit_id: UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -764,7 +781,7 @@ async def get_campaign_geo_stats_trend(
     `today` (a single day of daily buckets isn't a useful timeline) and daily
     otherwise; `all` spans back to the campaign's first contribution.
     """
-    interval_unit = _interval_unit(interval)
+    start, end = await resolve_stats_window(db, interval, start_date, end_date)
     bucket_unit = "hour" if interval == "today" else "day"
 
     focus = None
@@ -778,12 +795,7 @@ async def get_campaign_geo_stats_trend(
         if not focus:
             raise HTTPException(404, f"Geo unit {focus_geo_unit_id} not found")
 
-    start = None
-    if interval_unit:
-        start = (
-            await db.execute(text("SELECT date_trunc(:unit, now()) AS start"), {"unit": interval_unit})
-        ).fetchone().start
-    else:
+    if interval == "all":
         start = (
             await db.execute(
                 text("SELECT MIN(date_trunc('day', submitted_at)) AS start FROM contributions WHERE campaign_id = :cid"),
@@ -801,11 +813,12 @@ async def get_campaign_geo_stats_trend(
                 FROM contributions c
                 WHERE c.campaign_id = :cid
                   AND (CAST(:start AS timestamptz) IS NULL OR c.submitted_at >= :start)
+                  AND (CAST(:end AS timestamptz) IS NULL OR c.submitted_at < :end)
                   {scope_filter}
                 GROUP BY bucket
                 ORDER BY bucket
             """),
-            {"cid": str(campaign_id), "bucket_unit": bucket_unit, "start": start, **scope_params},
+            {"cid": str(campaign_id), "bucket_unit": bucket_unit, "start": start, "end": end, **scope_params},
         )
     ).fetchall()
 
@@ -908,7 +921,7 @@ async def get_global_leaderboard(interval: str = Query("month"), db: AsyncSessio
                     c.user_id::text,
                     p.username,
                     p.display_name,
-                    p.avatar_url,
+                    p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = c.user_id AND sb.status IN ('active', 'trialing')) AS is_plus,
                     COALESCE(SUM(c.value), 0)::float AS total_value,
                     COUNT(*)::int                     AS contribution_count
                 FROM contributions c
@@ -931,6 +944,7 @@ async def get_global_leaderboard(interval: str = Query("month"), db: AsyncSessio
                     g.name,
                     g.slug,
                     g.image_url AS logo_url,
+                    EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type='group' AND sb.owner_id = c.group_id AND sb.status IN ('active','trialing')) AS is_plus,
                     COALESCE(SUM(c.value), 0)::float AS total_value,
                     COUNT(*)::int                     AS contribution_count
                 FROM contributions c
@@ -953,6 +967,7 @@ async def get_global_leaderboard(interval: str = Query("month"), db: AsyncSessio
                 "username": r.username,
                 "display_name": r.display_name,
                 "avatar_url": r.avatar_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
             }
@@ -964,6 +979,7 @@ async def get_global_leaderboard(interval: str = Query("month"), db: AsyncSessio
                 "name": r.name,
                 "slug": r.slug,
                 "logo_url": r.logo_url,
+                "is_plus": bool(r.is_plus),
                 "total_value": r.total_value,
                 "contribution_count": r.contribution_count,
             }

@@ -25,7 +25,7 @@ import {
   type CleanupEventOffer,
   type CleanupEventOfferLocation,
 } from "@/lib/cleanupEvents";
-import type { RouteLineString } from "@/lib/cleanupRoutes";
+import { distanceToRouteMeters, type RouteLineString } from "@/lib/cleanupRoutes";
 import GroupEventTrackRoute from "@/components/cleanups/GroupEventTrackRoute";
 import EventRoutesSection from "@/components/cleanups/EventRoutesSection";
 import { searchUsers, type UserSearchResult } from "@/lib/users";
@@ -43,6 +43,8 @@ import FlowGuide from "@/components/walkthrough/FlowGuide";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import BodyPortal from "@/components/ui/BodyPortal";
+import PlusFlair from "@/components/billing/PlusFlair";
+import { describeRule } from "@/app/sponsorships/SponsoredSites";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -129,13 +131,20 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+const usdText = (cents: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(
+    cents / 100,
+  );
+
 export default function CleanupEventDetail({
   initialEvent,
   userId,
+  showSponsored = false,
 }: {
   initialEvent: CleanupEventDetailData;
   userId: string | null;
   isSiteAdmin?: boolean;
+  showSponsored?: boolean;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const [rsvpLoading, setRsvpLoading] = useState(false);
@@ -199,9 +208,16 @@ export default function CleanupEventDetail({
       setLocationStatus("unavailable");
       return;
     }
+    // Route events: the check-in zone is the whole route buffer (matches the server's
+    // ST_DWithin against the route), so measure to the closest point on the route.
+    const routeCoords = event.route?.coordinates ?? null;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setDistanceMeters(haversineMeters(pos.coords.latitude, pos.coords.longitude, event.lat, event.lng));
+        setDistanceMeters(
+          routeCoords && routeCoords.length >= 2
+            ? distanceToRouteMeters(pos.coords.latitude, pos.coords.longitude, routeCoords)
+            : haversineMeters(pos.coords.latitude, pos.coords.longitude, event.lat, event.lng),
+        );
         setLocationStatus("resolved");
       },
       () => {
@@ -209,7 +225,9 @@ export default function CleanupEventDetail({
         // action (the check-in button still works on click), but still say so.
         setLocationStatus("unavailable");
       },
-      { maximumAge: 60000, timeout: 10000 }
+      // A fresh high-accuracy fix: the default coarse/cached one can be hundreds of
+      // meters off in dense areas, which reads as "too far" to people on site.
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, viewerCheckedInInitial]);
@@ -283,7 +301,8 @@ export default function CleanupEventDetail({
         setLocationDenied(geoErr.code === 1);
         setError("Couldn't get your location. Try the join code instead.");
         setCheckInLoading(false);
-      }
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
     );
   };
 
@@ -544,6 +563,34 @@ export default function CleanupEventDetail({
             </span>
           )}
         </div>
+        {showSponsored && event.sponsored && (
+          <div className="mt-3 rounded-2xl bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/30 px-4 py-3.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xl" aria-hidden="true">💚</span>
+              <p className="text-sm font-black text-emerald-300 uppercase tracking-wide">Sponsored cleanup</p>
+            </div>
+            <p className="mt-2 text-sm text-zinc-100">
+              {event.sponsored.area_name ? (
+                <>
+                  A sponsor funded cleanups in <span className="font-semibold">{event.sponsored.area_name}</span>.{" "}
+                </>
+              ) : (
+                "A sponsor funded this cleanup. "
+              )}
+              {event.group_name} can earn {describeRule(event.sponsored.payout_rule)}.
+            </p>
+            {event.sponsored.message && (
+              <p className="mt-1 text-xs italic text-zinc-400">&quot;{event.sponsored.message}&quot;</p>
+            )}
+            <p className="mt-2 text-xs font-medium text-emerald-300/90">
+              {event.sponsored.paid_cents > 0
+                ? `${usdText(event.sponsored.paid_cents)} paid out to the group.`
+                : event.sponsored.has_allocation
+                  ? `${usdText(event.sponsored.pending_cents)} earned, waiting on review and payout.`
+                  : "Reserved for the group. Paid after the event is logged and an admin approves."}
+            </p>
+          </div>
+        )}
         {!isCancelled && event.event_offers.length > 0 && (
           <div className="mt-3 rounded-2xl bg-amber-500/10 ring-1 ring-inset ring-amber-500/30 px-4 py-3.5">
             <div className="flex items-center gap-2">
@@ -963,6 +1010,7 @@ export default function CleanupEventDetail({
                       size="xs"
                     />
                     <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
+                    <PlusFlair isPlus={r.is_plus} className="shrink-0" />
                   </div>
                   {r.checked_in_at ? (
                     <span className="text-xs text-emerald-400 whitespace-nowrap shrink-0">✓ checked in</span>
@@ -1127,6 +1175,7 @@ export default function CleanupEventDetail({
                             ) : (
                               <span className="text-sm font-semibold text-zinc-100 break-words">{name}</span>
                             )}
+                            <PlusFlair isPlus={r.is_plus} className="shrink-0" />
                             {r.is_organizer && (
                               <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-400/10 rounded px-1.5 py-0.5 shrink-0">
                                 ★ Organizer

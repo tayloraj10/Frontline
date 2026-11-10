@@ -1,12 +1,12 @@
 # Frontline To-Do
 
-Last updated 2026-10-17. Move items between sections to reprioritize. Doc names in parentheses are where the details live (all in `dev-docs/` unless noted).
+Last updated 2026-10-18. Move items between sections to reprioritize. Doc names in parentheses are where the details live (all in `dev-docs/` unless noted).
 
 Legend: anything after a `!` is a note for Claude. On a task, the text after `!` is its status or a comment.
 
 ## Branches in progress
 
-- **money-and-payments**: Payments v2 (Plus, sponsorships, Impact page, sponsored cleanups). Resuming work and testing soon. Next: live Stripe test, merge master in, then you apply migrations 109-119 to prod. Has uncommitted work. Rewards fulfillment and per-event impact report are part of this branch. Docs: payments-v2-scoping-2026-10-15, payments-v2-test-plan-2026-10-15, payments-scoping-2026-08-20 (these three exist only on the branch), branch-tracker.
+- **money-and-payments**: Payments v2 (Plus, sponsorships, Impact page, sponsored cleanups). Resuming work and testing soon. Migrations 109-120 and frontend are live in prod; backend deploy waiting on the Railway outage. Next: commit the master merge, open the PR, deploy the backend, smoke test, then Stripe setup and Connect payouts. Has uncommitted work. Rewards fulfillment and per-event impact report are part of this branch. Docs: payments-v2-scoping-2026-10-15, payments-v2-test-plan-2026-10-15, payments-scoping-2026-08-20 (these three exist only on the branch), branch-tracker.
 - **ui-improvements-9-27-26**: friendly error messages, 35 files. Revisit after the big UI rework to see what is already covered and whether anything is left. Docs: master-backlog (raw error messages item), onboarding-ux-scoping.
 - **android-fixes**: version bump and manifest permission cleanup. Believed deployed to the Android store, awaiting Google Play review. Merge once approved. Docs: android-release-checklist.
 - **loading-improvements** (remote only): loading skeletons and nav spinner. Come back to it at some point. Docs: none yet.
@@ -17,14 +17,48 @@ Legend: anything after a `!` is a note for Claude. On a task, the text after `!`
 
 ## Now (high priority)
 
+- [ ] Stripe return handoff for the mobile apps (HIGH, before payments go live): after Stripe onboarding or card setup the phone opens the browser instead of the app. Build the `/marketplace/stripe-return` bounce page (widen `next` to cover Earn and group edit paths), the `com.frontlinemaps.app://` scheme in `NativeAppBridge`, the Android intent filter and iOS `Info.plist` entry, and point `connect.py` return and refresh URLs at it. Needs a native release. Docs: stripe-return-handoff-and-plus-iap-scoping-2026-10-29 (part 1).
+- [ ] Stripe go-live (HIGH): follow stripe-go-live-runbook-2026-11-01 to move from sandbox to the real account (Connect, webhooks, keys to Railway, sandbox data cleanup, live test). Admin reference: payments-admin-guide-2026-11-01.
+- [ ] Cut the Earn approval workload (HIGH): every sponsored cleanup and event needs a manual admin approval today. Decide on auto-approve for trusted cleaners plus spot checks. Scoped, not built, launch with manual approval: earn-auto-approve-scoping-2026-11-01. Admin guide: payments-admin-guide-2026-11-01 section 4.
+- [x] Built 2026-11-08, NOT yet deployed (needs migration 137 on prod, backend deploy, then `railway.exe config apply` for `daily-emails-cron` at 12:00 UTC, which replaces the organizer reminders and followups crons and deletes those two services; code is `services/admin_digest.py`, routes `POST /api/admin-prod/daily-digest/run` (short daily action list, skipped when no queue has anything) and `/weekly-digest/run` (full 7 day summary, run Mondays by the same cron), one opt out toggle in Settings, Account covers both). Admin emails (HIGH): a short daily action list plus a full Monday weekly summary to every admin. Original spec for the full summary: Include the same numbers as the site activity summary (`get_recent_activity_snapshot` in `admin.py`, new signups, groups, events, contributions over the last day), an approval summary (sponsored cleanups and events waiting in `pending_review`, oldest waiting age, auto or manually approved and rejected counts for the day, group approvals pending), and outstanding tasks (open disputes, flagged chat messages, suspended cleaners, unpaid approved allocations, failed or reversed payouts, sweep health, pending groups and partners). Send from the existing email service on a Railway cron (secret protected route like the sweep), skip the send when nothing needs attention, and add a per admin opt out in the settings.
+- [ ] Android app removed from Google Play on 2026-10-29 for a Child Safety Standards violation. Fixed by publishing `/legal/child-safety` and updating the declaration in Play Console (Monitor and improve > Policy and programs > App content), then sent for review. While it is down, the Google Play button is hidden in `frontend/src/components/AppPromoCard.tsx` (`PLAY_STORE_URL` hardcoded to `""`). WHEN THE ANDROID APP IS BACK UP: uncomment the original `PLAY_STORE_URL` lines in that file, delete the `""` line and the TEMP comment, and deploy. Also check the child safety page says "Frontline Maps" (the exact listing name) and is committed and deployed. Docs: android-release-checklist.
+- [ ] Equipment Supply Stations (HIGH): partner businesses opt in to hold free cleanup and greening supplies (bags, gloves, vests, pickers; optional shovels, mulch, soil, seeds, small plants) that individuals and groups can find and pick up on the map. Goal is lower barrier to start cleaning plus foot traffic for businesses. Next: Phase 0 validation (talk to 3 to 5 partners, price a starter kit, pick the name), then Phase 1 (item catalog, per-location stock list, partner dashboard tab, map layer, weekly "still stocked?" email). Business reward ideas (visibility, pickup pass tied to an offer, impact page, tiers, starter kit, sponsor funding) are in the doc. Docs: equipment-supply-stations-scoping-2026-10-18. Related: business-proximity-cleanup-bonus-scoping, event-redeemable-offers scoping, payments-v2-scoping (sponsorships, on `money-and-payments`).
+- [ ] Fix HEIC iPhone photos showing as blank images on desktop (HIGH). Code is written and staged on `fix/heic-photo-upload` (converts HEIC to JPEG before upload, all uploaders consolidated into `uploadToR2`), needs device testing then deploy. Then repair the HEIC photos already stored in R2 (scan, back up originals, convert with pillow-heif, overwrite same key; via Seeder + `POST /admin/seed`, dev first, prod needs your go-ahead). Docs: heic-photo-upload-fix-2026-10-17.
+- [ ] Multi-route cleanup challenge: an event's route splits into 2 or more routes and groups follow one each and compete. Needs its own scoping doc. Docs: user-gamification-scoping-2026-10-17 (item 2 outline).
+- [ ] Gamification pass for user acquisition and retention. Ideas, feedback, priorities and open questions all live in the scoping doc; next step is to pick the top few and scope each in depth. Docs: user-gamification-scoping-2026-10-17.
 - [ ] Scope new point-earning actions, especially ones that work in cold and bad weather. Two buckets: greening actions (planting, watering, composting, etc.) and winter-proof or indoor activities, since people won't pick up trash when it's cold. Needs a new scoping doc. Also ties into the plan to fold everything into one master campaign.  Docs: none yet, write a new scoping doc. Related: random-bonus-spots-scoping, hotspot-hero-challenge-scoping, campaign-app-scope.
-- [ ] Resume testing and finish `money-and-payments` (see Branches) Docs: payments-v2-test-plan-2026-10-15, branch-tracker.
+- [ ] Payments demo checklist (2026-10-24): Stripe sandbox keys to prod, ship Hire for an admin-only demo, and the extras that go with it, all in payments-demo-priorities-2026-10-24.
+- [ ] Next up after the Hire demo ships (noted 2026-10-24): schedule `expire_stale_jobs` (sweep script plus Railway cron, see payments-demo-priorities-2026-10-24 section C) and build Stripe Connect for cleaner payouts (onboarding, transfer on release, webhooks, "Set up payouts" prompt).
+- [ ] Payments work order (set 2026-10-22), do in this order:
+  1. [ ] Push `money-and-payments` (pushed) and set up Stripe sandbox config in prod so admins can run the test payment flows (steps in stripe-setup-and-cutover-2026-10-22, section 3). Payments UI stays admin-only via the payments gate. Paused 2026-10-22 on a Railway outage (env vars), progress in prod-sandbox-payments-setup-notes-2026-10-22.
+  2. [ ] Paid cleaner marketplace UI, plus a UI revamp of the existing payment pages (Rewards page two cards, Sponsorships page, Impact page). Mocks approved. Built locally 2026-10-22 and uncommitted: migration 121, marketplace backend and all screens (see marketplace scoping doc section 15); Rewards mocks (rewards-area-mocks-2026-10-22) applied 2026-10-22 to Perks, Earn, Hire home and Impact, tabs renamed Perks/Earn/Hire/Impact, How-it-works pills on all four; Hire reworked 2026-10-23 (migration 122, job-board home with map, 4-step post flow with address search/pin+radius/draw, cleaner area required, email + in-app notifications to nearby cleaners and to customers on offers). Marketplace notifications reach push through the existing user_notifications trigger (send-push now honors link_url, so taps open the job; redeploy the edge function), test data via POST /api/admin/seed/marketplace (remove=true to delete). Remaining: REDEPLOY send-push (`supabase functions deploy send-push --project-ref nvidlxyzyoxzalxbydvg`, see push-notifications-prod-deploy-checklist) and arm the Vault secrets in prod, apply migration 122 to prod, Connect payouts, tests, job detail/admin mock pass. Docs: paid-cleaner-marketplace-scoping-2026-10-22 (sections 11 to 14: time options, recurring, legal gates, decision log). Added 2026-10-23: site photos on job posts, cleaner arrive/finish flow with before/after photos and GPS check, lifecycle notifications (migration 123, apply to prod). Offers removed 2026-10-23 (take at posted price + price flags, migration 124, apply to prod); seeder now covers every job stage with sample photos. Still not built: Stripe hold and Connect payout.
+  3. [ ] Stripe Connect payouts built in test mode: cleaner onboarding, transfer on admin approval, webhooks, `paid_out` set automatically, Set up payouts prompt. Open: auto-pay on approve vs manual release.
+- [ ] Finish `money-and-payments` (see Branches): deploy backend, smoke test, Stripe setup, Connect payouts, legal and tax review. Docs: payments-v2-scoping-2026-10-15 (Deploy status, Work left and Deploy runbook), stripe-setup-and-cutover-2026-10-22, paid-cleaner-marketplace-scoping-2026-10-22 (new idea), payments-v2-test-plan-2026-10-15, branch-tracker.
 - [x] Move Railway crons to Infrastructure as Code before 2026-12-01. Done 2026-10-17: `.railway/railway.ts` applied to prod, the 5 `backend/railway*.toml` files deleted. Future config changes: edit the file, then `railway.exe config plan` and `config apply --yes` (it does not apply on git push). Left: apply the `watchPatterns` change (backend-only deploys), check Vercel skips frontend builds for backend-only pushes.
-- [ ] Lock down FastAPI auth, e.g. `/api/account/{user_id}` trusts the path id (master-backlog)
-- [ ] Fix push notifications, iOS first (push-notifications-ios-debugging)
+- [ ] Lock down the rest of the FastAPI backend (HIGH): the Earn, Hire and Impact auth pattern is proven, so roll it across every other router, one PR each. Order: P0 admin_roles, cron endpoints, account delete/export, upload presign, device_tokens, admin.py, plus the `profiles_update` RLS hole (users can edit their own points/is_admin); P1 Perks (partners), contributions, cleanup_events, team_events, groups, users; P2 problem_reports, content_flags, events; P3 public allowlist and a strict route-walk test. Progress checklist is in the doc. Docs: backend-security-plan-2026-10-30 (Phase 2 section), security-lockdown-and-staging-2026-10-17, master-backlog.
+- [ ] Stand up a staging environment (second Supabase project, Railway `staging` env, Vercel `staging` branch). Prerequisite for testing the auth lockdown. Docs: security-lockdown-and-staging-2026-10-17 (section 4), staging-environment-scoping-2026-08-10.
+- [ ] Fix push notifications, iOS first. Progress 2026-10-20: gateway JWT check, `PUSH_WEBHOOK_SECRET` auth and the iOS `AppDelegate` token forwarding fixed on `fix/push-notifications-ios-and-auth`; a test push reached an iPhone (TestFlight). Not done until fully tested on iOS (App Store build) and Android. Left: Android end-to-end test, merge the branch, tap deep link via `link_url` in `send-push` (code done 2026-10-23, needs redeploy). Docs: push-notifications-ios-debugging-2026-08-30, push-notifications-prod-deploy-checklist
+- [ ] Show push notifications while the app is in the foreground (HIGH). No `pushNotificationReceived` listener exists on iOS or Android, so a push that arrives with the app open is delivered but never shown (`NativeAppBridge.tsx`). Needs an in-app banner or `PushNotifications` `presentationOptions` for iOS. Docs: push-notifications-scoping-2026-08-06
+
+## User gamification (acquisition and retention)
+
+Everything (ideas, your feedback, priority order, open questions) is in `user-gamification-scoping-2026-10-17.md`. Task list, in the doc's priority order:
+
+- [ ] Public streak on profiles (small, do first)
+- [ ] Referral and invite rewards
+- [ ] Ebb-and-flow community goals
+- [ ] Trash collection book
+- [ ] Weekly rotating quests, incl. random bonus spots
+- [ ] Group social media content
+- [ ] Head-to-head competition, multi-route variants
+- [ ] First-cleanup guide
+- [ ] Streak expansion, return nudges via push (blocked on push fix)
+- [ ] Shareable signup cards (low)
 
 ## Next (medium)
 
+- [ ] Speed up the Capacitor app's cold launch. Measure first (baseline on a real device, Slow 4G too), then cut layout time to first byte (`getClaims`, shared profile fetch, uncached organizer call), remove the `/` double load, defer native init, images and bundle. All unmeasured so far. Docs: native-app-load-time-scoping-2026-10-18.
+- [ ] Database query performance as data grows: `EXPLAIN ANALYZE` on prod-sized data, composite indexes, replace the JS sums of `cleanups` and `territory_claims`, then materialized views for streak weeks, campaign stats, leaderboard totals and geo daily rollups. You apply prod migrations. Docs: database-performance-and-materialized-views-scoping-2026-10-18.
 - [ ] Staging environment, for both frontend and backend. Will be needed soon (staging-environment-scoping)
 - [ ] Email audit: review every email we send today, confirm they all work and read well, then decide what to add. Known gaps: partner/organizer coordination, attendee reminder blast, day-before organizer reminder Docs: app-capability-doc (external-docs), master-backlog.
 - [ ] Revisit work verification strategies, including the cleanup event anti-fraud proximity gap and the confusing pin-picker ZIP lock (campaign-app-scope) Docs: campaign-app-scope.
@@ -42,6 +76,7 @@ Legend: anything after a `!` is a note for Claude. On a task, the text after `!`
 
 ## Later (low)
 
+- [ ] Remove `marketplace_jobs.fee_on_top` (noted 2026-11-01). Every new Hire job sets it true (hirer pays the fee on top, cleaner nets the full price); it only exists for pre-migration-126 jobs that deduct the fee from the cleaner, so it is kept for now. Before dropping it, run `SELECT status, count(*) FROM marketplace_jobs WHERE fee_on_top = false GROUP BY status;` in prod. If none are unfinished, drop the column and the branches in `marketplace.py` (`get_job`), `marketplace_payments.py` (charge and payout), `JobDetail.tsx` and `CleanerFlow.tsx`; if some are, backfill them first. Docs: master-backlog.
 - [ ] "Get directions" should open Apple Maps on iOS Docs: master-backlog, ios-setup-2026-08-06.
 - [ ] React Native rewrite. Capacitor is working well, so this waits Docs: dev-plan-2026-08-03-mobile-first, capacitor-scoping-2026-08-04.
 - [ ] Hot Spot Hero: bonus for clearing a whole cluster of nearby trash reports in one outing, with a route through them (hotspot-hero-challenge-scoping)
@@ -51,6 +86,7 @@ Legend: anything after a `!` is a note for Claude. On a task, the text after `!`
 - [ ] Share card visual enhancements (low, revisit later) Docs: master-backlog (Share cards).
 - [ ] Sync Google avatar changes (about 30 lines, may not be worth it) Docs: master-backlog.
 - [ ] Geolocation shared-owner refactor; group logo on territory (cleanup-events-dev-plan)
+- [ ] Cleanup log flow, tracked routes: photos taken during the route (`pendingRoutePhotos`) don't count toward the required-photo check (`hasPhoto` in ContributionPanel only looks at `photos` and `existingPhotoUrls`), so the user must still upload one on the Photo & Notes step. Decide whether route photos should satisfy it; check the server's photo requirement first.
 - [ ] Team events Phase 2: participation hierarchy (individual vs. representing a group), event stats page, submission review page, geofencing. Version 1 is live (team-events-phase2-scoping)
 
 ## Verify, then close or keep
@@ -80,17 +116,17 @@ Quick checks. If it's done, delete the line. These come from your notes saying "
 - **Restrict Firebase API keys:** GitHub flagged the API keys in `google-services.json` and `GoogleService-Info.plist`. They are not real secrets, but they can be restricted to our app in Google Cloud Console. Deliberately deferred (android-release-checklist).
 - **Back up the signing keystore:** `frontline-app-signing-key.jks` has no backup. If you lose it you cannot ship Android updates. Copy it somewhere safe (password manager or encrypted drive).
 - **Audit WebView quirks:** in the Capacitor app, things like external links and clipboard can behave differently than in a browser. A one-time check pass (capacitor-testing-guide).
-- **Campaign Create Form gaps:** the `contribution_type` enum is confusing, and `census_tract` shows up in the dropdown but no data exists for it, so selecting it does nothing useful. Fix is to remove it from the dropdown or build a loader (campaign-app-scope).
+- **Campaign Create Form gaps:** `census_tract` removed from the admin dropdown (done 2026-11-06). Still open: the `contribution_type` enum is confusing (campaign-app-scope).
 - **Beta smoke-test checklist:** a 25-item manual checklist from before launch. The app has been live since 2026-06-23, so most of it is likely moot. Probably archive it (beta-launch-checklist).
 - **Cleanup Routes docs:** `cleanup-routes-handoff` says Phase 3 is not started, `campaign-app-scope` says otherwise. You say it works, so just fix the doc.
 - **External Model Imports:** a pre-launch idea about a shared schema for Groups/Cleanups/Trash Reports with other apps. `beta-launch-checklist` says open, `campaign-app-scope` says done. Closely related to the Shared Points API idea.
 
 ## Doc cleanup
 
-- [ ] `master-backlog.md` mobile/store section says the Android keystore and iOS project don't exist. They do. Reword.
-- [ ] Remove the old duplicate "Working order" lists in `master-backlog.md` (08-11, 08-27, 08-30). Only 09-13 is current.
-- [ ] Mark "Raw error messages ~40 files" in `master-backlog.md` as done (it is, on `ui-improvements-9-27-26`)
-- [ ] `branch-tracker.md`: heading `partner-apply-account-required` is really `business-submission-rework`
+- [x] `master-backlog.md` mobile/store section says the Android keystore and iOS project don't exist. They do. Reword.
+- [x] Remove the old duplicate "Working order" lists in `master-backlog.md` (08-11, 08-27, 08-30). Only 09-13 is current.
+- [x] Mark "Raw error messages ~40 files" in `master-backlog.md` as done (it is, on `ui-improvements-9-27-26`)
+- [x] `branch-tracker.md`: heading `partner-apply-account-required` is really `business-submission-rework`
 - [ ] Fix Cleanup Routes status so `cleanup-routes-handoff` and `campaign-app-scope` agree
 - [ ] External Model Imports: make `beta-launch-checklist` and `campaign-app-scope` agree
 
@@ -128,18 +164,11 @@ Done or shipped, nothing to track:
 - `app-store-listing-2026-08-10.md` (verify under Verify)
 
 Linked to a task above:
+- Now: `heic-photo-upload-fix-2026-10-17.md` (HEIC photo fix, test plan, R2 backfill)
 - Now: `.railway/railway.ts` (Railway IaC), `push-notifications-ios-debugging-2026-08-30.md`, `push-notifications-prod-deploy-checklist.md`
-- Next: `staging-environment-scoping-2026-08-10.md`, `maptiler-usage-reduction-scoping-2026-08-28.md`, `push-notifications-scoping-2026-08-06.md`, `instagram-flyer-event-prefill-scoping-2026-09-13.md`, `business-proximity-cleanup-bonus-scoping-2026-08-14.md`, `random-bonus-spots-scoping-2026-08-26.md`, `neighborhood-geo-unit-consolidation-scoping-2026-09-04.md`, `live-route-tracking-scoping-2026-08-22.md`
+- Next: `staging-environment-scoping-2026-08-10.md`, `maptiler-usage-reduction-scoping-2026-08-28.md`, `push-notifications-scoping-2026-08-06.md`, `instagram-flyer-event-prefill-scoping-2026-09-13.md`, `business-proximity-cleanup-bonus-scoping-2026-08-14.md`, `random-bonus-spots-scoping-2026-08-26.md`, `neighborhood-geo-unit-consolidation-scoping-2026-09-04.md`, `live-route-tracking-scoping-2026-08-22.md`, `native-app-load-time-scoping-2026-10-18.md`, `database-performance-and-materialized-views-scoping-2026-10-18.md`
+- Now: `user-gamification-scoping-2026-10-17.md` (gamification pass, multi-route challenge outline)
+- Now: `equipment-supply-stations-scoping-2026-10-18.md` (supply stations at partner businesses, business rewards)
 - Later: `hotspot-hero-challenge-scoping-2026-08-27.md`, `community-goals-scoping-2026-08-07.md`, `shared-points-api-scoping-2026-08-13.md`, `group-data-portal-scoping-2026-08-11.md`, `team-events-phase2-scoping-2026-08-29.md`
 - Verify: `event-redeemable-offers-and-nearby-business-suggestions-scoping-2026-08-26.md`, `ui-rework-handoff.md`, `walkthroughs-scoping-2026-10-15.md`, `cleanup-routes-handoff.md`, `testing-strategy-game-settings-overhaul.md`, `beta-launch-checklist.md`, `android-release-checklist.md`, `ios-release-checklist.md`
 - Parked: `supabase-backup-strategy-scoping-2026-08-28.md`, `admin-unredeem-offer-scoping-2026-09-19.md`
-
-## Uncommitted changes in git
-
-Everything currently uncommitted, and what it relates to. Nothing here is committed.
-
-- New docs (all untracked, all covered above): the 12 scoping docs listed in the index, `branch-tracker.md`, and this file
-- `.railway/railway.ts`, `.railway/package.json` and lockfile (railway SDK, run `npm install` in `.railway/` on a fresh clone), deletion of the 5 `backend/railway*.toml` files: the Railway IaC task under Now. `railway.ts` is already applied to prod
-- `dev-docs/master-backlog.md`: new working-order lists, items marked done, payments entries
-- `dev-docs/campaign-app-scope.md` and `external-docs/app-capability-doc.md`: new Payments v2 and Frontline Plus sections. Payments v2 only exists on `money-and-payments`, so these edits arguably belong on that branch rather than master
-- `.vscode/tasks.json`: one-line change, `npx supabase start` to `npx -y supabase start`. No task, harmless tooling tweak

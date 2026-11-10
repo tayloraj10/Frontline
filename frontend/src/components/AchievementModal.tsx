@@ -102,18 +102,18 @@ export default function AchievementModal({ userId }: { userId: string }) {
             <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{current.body}</p>
           )}
         </div>
-        <div className="border-t border-zinc-800 flex">
+        <div className="flex gap-2 px-4 pb-4">
           {isOffer ? (
             <>
               <button
                 onClick={dismiss}
-                className="flex-1 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
+                className="flex-1 inline-flex items-center justify-center min-h-11 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
                 Later
               </button>
               <button
                 onClick={viewOffer}
-                className="flex-1 px-4 py-3 text-sm font-semibold text-amber-400 hover:text-amber-300 active:text-amber-300 border-l border-zinc-800 transition-colors duration-150"
+                className="flex-1 min-h-11 px-4 rounded-xl bg-amber-400/15 text-sm font-semibold text-amber-300 hover:bg-amber-400/25 active:scale-[0.97] transition-[background-color,transform] duration-150"
               >
                 View offer
               </button>
@@ -121,7 +121,7 @@ export default function AchievementModal({ userId }: { userId: string }) {
           ) : (
             <button
               onClick={dismiss}
-              className="flex-1 inline-flex items-center justify-center min-h-11 px-4 rounded-full bg-zinc-100 hover:bg-white text-sm font-bold text-zinc-900 active:scale-[0.97] transition-[background-color,transform] duration-150"
+              className="flex-1 inline-flex items-center justify-center min-h-11 px-4 rounded-xl bg-zinc-100 hover:bg-white text-sm font-bold text-zinc-900 active:scale-[0.97] transition-[background-color,transform] duration-150"
             >
               Nice!
             </button>

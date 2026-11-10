@@ -1,6 +1,6 @@
 import { normalizeImageForUpload } from "@/lib/normalizeImage";
 
-export type UploadKind = "contributions" | "groups" | "profiles" | "events" | "partners" | "team_events";
+export type UploadKind = "contributions" | "groups" | "profiles" | "events" | "partners" | "team_events" | "marketplace";
 
 export async function uploadToR2(original: File, kind: UploadKind = "contributions"): Promise<string> {
   const file = await normalizeImageForUpload(original);

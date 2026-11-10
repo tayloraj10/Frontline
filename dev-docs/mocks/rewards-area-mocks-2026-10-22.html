@@ -1,0 +1,450 @@
+<title>Frontline Rewards Mocks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: sticky section nav, then grouped rows of 340x700 phone frames, each with a design note beneath. Direction "Ink": near-black, emerald = earn/go, sky = impact, amber = Plus/pending, violet = admin. */
+:root{
+  color-scheme:dark;
+  --board:#07090a; --bg:#0b0e0f; --s1:#12161a; --s2:#191f24; --line:#232b31; --line2:#2d373e;
+  --fg:#eef3f1; --mut:#8c9a96; --dim:#5d6a67;
+  --em:#34d399; --em-d:#064e3b; --sky:#38bdf8; --amb:#fbbf24; --vio:#a78bfa; --red:#f87171; --rose:#fb7185;
+  --disp:"Bricolage Grotesque","Figtree",system-ui,sans-serif; --body:"Figtree",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{background:var(--board);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.45;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:0 80px}
+a{color:inherit;text-decoration:none}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:rgba(7,9,10,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);margin-inline:calc(-1*max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px));display:flex;gap:8px 14px;flex-wrap:wrap;align-items:center}
+.top b{font-family:var(--disp);font-size:16px;margin-right:6px}
+.top nav{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.top nav a{padding:5px 11px;border-radius:99px;background:var(--s1);border:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--mut)}
+.top nav a:hover{color:var(--fg);border-color:var(--em)}
+.flagcount{font-size:12.5px;color:var(--amb);font-weight:700}
+.wrap{max-width:1500px;margin:0 auto}
+.intro{padding:36px 0 8px;max-width:780px}
+.intro h1{font-family:var(--disp);font-size:clamp(30px,5vw,46px);line-height:1.05;margin:0 0 12px;text-wrap:balance;letter-spacing:-.02em}
+.intro p{color:var(--mut);margin:0 0 10px;font-size:15px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:12.5px;color:var(--mut)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.group{padding-top:44px}
+.group>h2{font-family:var(--disp);font-size:26px;margin:0;letter-spacing:-.01em;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.group>h2 small{font-family:var(--body);font-size:12.5px;color:var(--dim);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.group>p.lead{color:var(--mut);max-width:760px;margin:6px 0 4px}
+.sub{font-family:var(--body);font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--em);font-weight:700;margin:30px 0 14px;display:flex;align-items:center;gap:10px}
+.sub:after{content:"";flex:1;height:1px;background:var(--line)}
+.row{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+.unit{width:340px;max-width:100%}
+.cap{margin-top:12px;font-size:12.5px;color:var(--mut)}
+.cap b{display:flex;align-items:center;gap:8px;color:var(--fg);font-size:13.5px;margin-bottom:3px}
+.cap .flag{margin-left:auto;background:none;border:1px solid var(--line2);color:var(--mut);border-radius:99px;font:600 11.5px var(--body);padding:3px 10px;cursor:pointer}
+.cap .flag[aria-pressed=true]{border-color:var(--amb);color:var(--amb);background:rgba(251,191,36,.1)}
+.cap ul{margin:6px 0 0;padding-left:16px}.cap li{margin:2px 0}
+
+/* phone */
+.phone{width:340px;max-width:100%;height:700px;border-radius:38px;background:#000;padding:8px;border:1px solid var(--line2);box-shadow:0 20px 50px -20px #000}
+.scr{position:relative;height:100%;border-radius:30px;background:var(--bg);overflow:hidden;display:flex;flex-direction:column}
+.sb{display:flex;justify-content:space-between;padding:10px 20px 4px;font-size:11.5px;font-weight:700;color:var(--fg);flex:none}
+.hdr{padding:6px 16px 8px;flex:none}
+.hdr .eb{font-size:11px;color:var(--mut);font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.hdr h3{font-family:var(--disp);font-size:24px;line-height:1.1;margin:2px 0 0;letter-spacing:-.01em}
+.back{display:flex;align-items:center;gap:4px;color:var(--mut);font-size:12.5px;font-weight:600;padding:2px 12px 0}
+.body{flex:1;overflow:hidden;padding:4px 16px 14px;display:flex;flex-direction:column;gap:10px;position:relative}
+.body.pad0{padding-inline:0}
+.tabs{flex:none;display:grid;grid-template-columns:repeat(5,1fr);padding:7px 8px 14px;background:var(--s1);border-top:1px solid var(--line)}
+.tabs div{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:600;color:var(--dim)}
+.tabs div.on{color:var(--em)}
+.tabs svg{width:20px;height:20px}
+/* area tabs */
+.area{display:grid;gap:3px;background:var(--s1);border:1px solid var(--line);border-radius:16px;padding:3px;margin:0 16px 8px;flex:none}
+.area div{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 2px 6px;border-radius:13px;font-size:11px;font-weight:700;color:var(--mut)}
+.area div svg{width:16px;height:16px}
+.area div.on{background:rgba(52,211,153,.14);color:#a7f3d0;box-shadow:inset 0 0 0 1px rgba(52,211,153,.3)}
+.area div .dot{position:absolute}
+/* primitives */
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.card{background:var(--s1);border:1px solid var(--line);border-radius:18px;padding:12px}
+.card.hl{background:linear-gradient(135deg,rgba(52,211,153,.2),rgba(56,189,248,.12));border-color:rgba(52,211,153,.3)}
+.card.am{background:linear-gradient(135deg,rgba(251,191,36,.16),rgba(251,191,36,.04));border-color:rgba(251,191,36,.3)}
+.card.vi{background:rgba(167,139,250,.08);border-color:rgba(167,139,250,.3)}
+.card.sk{background:linear-gradient(135deg,rgba(56,189,248,.18),rgba(52,211,153,.08));border-color:rgba(56,189,248,.3)}
+.flex{display:flex;align-items:center;gap:10px}.between{justify-content:space-between}.col{display:flex;flex-direction:column;gap:6px}.g4{gap:4px}.g8{gap:8px}
+.grow{flex:1;min-width:0}.wrapf{flex-wrap:wrap}
+.t1{font-weight:700;font-size:14.5px;line-height:1.25}.t2{font-weight:700;font-size:13px}.m{color:var(--mut);font-size:12px}.xs{font-size:11px;color:var(--dim)}
+.disp{font-family:var(--disp);font-weight:800;letter-spacing:-.01em}
+.big{font-family:var(--disp);font-weight:800;font-size:30px;line-height:1;letter-spacing:-.02em}
+.em{color:var(--em)}.sky{color:var(--sky)}.amb{color:var(--amb)}.vio{color:var(--vio)}.red{color:var(--red)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--s2);color:var(--mut);white-space:nowrap}
+.pill.em{background:rgba(52,211,153,.15);color:#6ee7b7}.pill.sky{background:rgba(56,189,248,.15);color:#7dd3fc}.pill.amb{background:rgba(251,191,36,.15);color:#fcd34d}.pill.vio{background:rgba(167,139,250,.16);color:#c4b5fd}.pill.red{background:rgba(248,113,113,.15);color:#fca5a5}
+.chips{display:flex;gap:6px;overflow:hidden;flex:none}
+.chip{padding:6px 12px;border-radius:99px;background:var(--s1);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap}
+.chip.on{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#a7f3d0}
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border-radius:15px;font-weight:700;font-size:14px;border:1px solid var(--line2);background:var(--s2);color:var(--fg);padding:0 16px}
+.btn.pri{background:var(--em);color:#04281c;border-color:var(--em)}.btn.sm{min-height:34px;font-size:12.5px;border-radius:12px;padding:0 12px}.btn.ghost{background:none}.btn.dng{background:rgba(248,113,113,.12);color:#fca5a5;border-color:rgba(248,113,113,.3)}.btn.sky{background:var(--sky);color:#032235;border-color:var(--sky)}.btn.amb{background:var(--amb);color:#2a1d00;border-color:var(--amb)}.btn.vio{background:rgba(167,139,250,.18);color:#ddd6fe;border-color:rgba(167,139,250,.4)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:3px;background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:3px;flex:none}
+.seg div{text-align:center;padding:7px 4px;border-radius:11px;font-size:12px;font-weight:700;color:var(--mut)}
+.seg div.on{background:var(--s2);color:var(--fg)}
+.search{display:flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:0 12px;min-height:42px;color:var(--dim);font-size:13px;flex:none}
+.search .f{margin-left:auto;background:var(--s2);border-radius:9px;padding:5px;color:var(--mut);display:flex}
+.av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;flex:none;background:linear-gradient(135deg,#34d399,#0ea5e9)}
+.av.b{background:linear-gradient(135deg,#fbbf24,#f43f5e)}.av.c{background:linear-gradient(135deg,#a78bfa,#ec4899)}.av.d{background:linear-gradient(135deg,#38bdf8,#6366f1)}.av.lg{width:64px;height:64px;font-size:20px}.av.sm{width:30px;height:30px;font-size:10.5px}
+.ph{background:repeating-linear-gradient(135deg,var(--s2) 0 8px,#1d252b 8px 16px);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:11px;font-weight:600}
+.stars{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:700;color:var(--amb)}.stars svg{width:13px;height:13px;fill:var(--amb);stroke:none}
+.prog{height:7px;border-radius:9px;background:var(--s2);overflow:hidden}.prog i{display:block;height:100%;background:var(--em);border-radius:9px}
+.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:12px;font-weight:700;color:var(--mut)}
+.inp{background:var(--s1);border:1px solid var(--line2);border-radius:13px;padding:11px 12px;font-size:13.5px;min-height:42px;display:flex;align-items:center;gap:8px}
+.inp.ta{align-items:flex-start;min-height:70px;color:var(--mut)}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:13px}.kv span:first-child{color:var(--mut)}.kv b{font-weight:700}
+.hr{height:1px;background:var(--line);flex:none}
+.steps{display:flex;gap:4px;flex:none}.steps i{flex:1;height:4px;border-radius:4px;background:var(--s2)}.steps i.on{background:var(--em)}
+.tl{display:flex;flex-direction:column;gap:0}.tl>div{display:flex;gap:11px;position:relative;padding-bottom:13px}.tl>div:last-child{padding-bottom:0}
+.tl>div:before{content:"";position:absolute;left:8px;top:18px;bottom:-1px;width:2px;background:var(--line2)}.tl>div:last-child:before{display:none}
+.tl .d{width:18px;height:18px;border-radius:50%;background:var(--s2);border:2px solid var(--line2);flex:none;display:flex;align-items:center;justify-content:center;color:#04281c}
+.tl .done .d{background:var(--em);border-color:var(--em)}.tl .done:before{background:var(--em)}.tl .cur .d{border-color:var(--em);box-shadow:0 0 0 4px rgba(52,211,153,.18)}
+.tl .d svg{width:10px;height:10px;stroke-width:3.5}
+.tgl{width:38px;height:22px;border-radius:99px;background:var(--s2);border:1px solid var(--line2);position:relative;flex:none}.tgl:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--mut)}.tgl.on{background:var(--em);border-color:var(--em)}.tgl.on:after{left:18px;background:#04281c}
+.chk{width:20px;height:20px;border-radius:7px;border:2px solid var(--line2);flex:none;display:flex;align-items:center;justify-content:center}.chk.on{background:var(--em);border-color:var(--em);color:#04281c}.chk svg{width:12px;height:12px;stroke-width:3.5}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.62);z-index:5}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--s1);border-top:1px solid var(--line2);border-radius:26px 26px 0 0;padding:10px 16px 18px;display:flex;flex-direction:column;gap:10px}
+.sheet:before{content:"";width:38px;height:4px;border-radius:4px;background:var(--line2);align-self:center;flex:none}
+.sheet h4{font-family:var(--disp);font-size:19px;margin:0}
+.qr{width:128px;height:128px;border-radius:14px;background:#fff;align-self:center;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);padding:10px;gap:2px}
+.qr i{background:#111;border-radius:1.5px}.qr i.o{background:#fff}
+.map{height:110px;border-radius:14px;background:linear-gradient(120deg,#10201b,#0e1a22);position:relative;overflow:hidden;border:1px solid var(--line);flex:none}
+.map:before{content:"";position:absolute;inset:0;background:linear-gradient(0deg,transparent 48%,rgba(255,255,255,.05) 49% 51%,transparent 52%),linear-gradient(90deg,transparent 30%,rgba(255,255,255,.05) 31% 33%,transparent 34%),linear-gradient(60deg,transparent 60%,rgba(255,255,255,.05) 61% 63%,transparent 64%)}
+.map b{position:absolute;width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--em);box-shadow:0 0 0 4px rgba(52,211,153,.2)}
+.banner{border-radius:14px;padding:10px 12px;font-size:12.5px;display:flex;gap:9px;align-items:flex-start}
+.banner.w{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fde68a}
+.banner.i{background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.3);color:#bae6fd}
+.banner.e{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#fecaca}
+.banner.g{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);color:#a7f3d0}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:26px 14px}
+.empty .ic{width:56px;height:56px;border-radius:18px;background:var(--s2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
+.empty .ic svg{width:26px;height:26px}
+.cover{height:96px;border-radius:14px;background:linear-gradient(135deg,#0f3d2e,#0b2a3a);display:flex;align-items:flex-end;padding:10px;position:relative;flex:none}
+.cover .logo{width:44px;height:44px;border-radius:13px;background:var(--bg);border:2px solid var(--s1);display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;color:var(--em);font-size:18px;position:absolute;left:12px;bottom:-16px}
+.names{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:16px}
+.names .card{padding:16px;border-radius:20px}
+.names .area{margin:12px 0 0}
+.names h5{margin:0;font-family:var(--disp);font-size:18px}
+.rec{outline:2px solid var(--em)}
+.deci{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:16px}
+.deci .card{padding:14px}
+.deci h5{margin:0 0 4px;font-size:14px}
+.deci p{margin:0;color:var(--mut);font-size:13px}
+@media (max-width:420px){.row{gap:20px}.top b{display:none}}
+:focus-visible{outline:2px solid var(--em);outline-offset:2px}
+.hiwrow{padding:0 16px 8px;flex:none}.hiw{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 12px;border-radius:99px;font-size:11.5px;font-weight:600;color:#d4d4d8;background:rgba(39,39,42,.6);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}.hiw b{width:15px;height:15px;border-radius:50%;background:var(--s2);display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:var(--em)}
+.wt{display:flex;flex-direction:column;gap:10px;padding-top:4px}.wt .dots{display:flex;align-items:center;justify-content:space-between}.wt .dots span{display:flex;gap:5px;align-items:center}.wt .dots i{height:6px;width:6px;border-radius:9px;background:#3f3f46}.wt .dots i.d{background:#71717a}.wt .dots i.on{width:24px;background:#f4f4f5}.wt .stp{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#71717a}.wt .stp em{font-style:normal;color:var(--em)}.wt h4{font-size:19px;font-weight:900;margin:0}.wt p{margin:0;color:#d4d4d8;font-size:13.5px;line-height:1.5}.wt ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}.wt li{display:flex;gap:9px;font-size:12px;color:#d4d4d8}.wt li b{width:18px;height:18px;border-radius:50%;background:var(--s2);color:#a1a1aa;font-size:10px;display:flex;align-items:center;justify-content:center;flex:none}.wt .vis{height:96px;border-radius:16px;background:var(--s2);display:flex;align-items:center;justify-content:center;gap:12px;color:var(--em)}.wt .vis svg{width:34px;height:34px}.wt .nav{display:flex;gap:8px;align-items:center;margin-top:4px}.wt .nav .sk{color:#a1a1aa;font-weight:600;font-size:13px;padding:0 12px}.wt .nav .bk{min-height:44px;padding:0 18px;border-radius:99px;background:#27272a;font-weight:600;font-size:13px;display:flex;align-items:center}.wt .nav .nx{flex:1;min-height:44px;border-radius:99px;background:#f4f4f5;color:#18181b;font-weight:800;font-size:13.5px;display:flex;align-items:center;justify-content:center}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></symbol>
+<symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8h14v-8M7.5 8a2.5 2.5 0 1 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 1 1 0 5"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+<symbol id="i-coins" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9a3 3 0 0 0-3-1.5c-1.7 0-3 .9-3 2.2 0 3 6 1.5 6 4.4 0 1.300-1.300 2.300-3 2.300A3.200 3.200 0 0 1 9 14.500M12 6v1.500M12 16.500V18"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.800 5.200L19 10l-5.200 1.800L12 17l-1.800-5.200L5 10l5.200-1.800zM19 16l.8 2.200L22 19l-2.200.8L19 22l-.8-2.200L16 19l2.200-.8z"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 21s-8-5-8-11a4.500 4.500 0 0 1 8-2.800A4.500 4.500 0 0 1 20 10c0 6-8 11-8 11z"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2l3 6.500 7 .8-5.200 4.800 1.500 7L12 17.500 5.700 21l1.500-7L2 9.300l7-.8z"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-6.200 7-12a7 7 0 0 0-14 0c0 5.800 7 12 7 12z"/><circle cx="12" cy="10" r="2.500"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z"/><path d="M8.500 12l2.500 2.500 4.500-5"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.500-4.500"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+<symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.500"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h13l-2 4 2 4H5"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+<symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6M5 10v8M9.500 10v8M14.500 10v8M19 10v8M3 21h18"/></symbol>
+<symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM17 9h2a2.500 2.500 0 0 1 0 5h-2M7 3v2M11 3v2"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></symbol>
+<symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</defs></svg>
+
+<div class="top">
+  <b>Frontline Rewards</b>
+  <nav>
+    <a href="#names">Tab names</a><a href="#perks">Perks</a><a href="#earn">Earn</a><a href="#hire">Hire</a><a href="#impact">Impact</a><a href="#howto">How it works</a><a href="#decide">Decisions</a>
+  </nav>
+  <span class="flagcount" id="fc"></span>
+</div>
+
+<div class="wrap">
+<header class="intro">
+  <h1>Rewards area, formal mocks</h1>
+  <p>All four pages with every sub-page and flow, in the Ink direction from the whole-app board. Mobile first, 340 wide frames. Nothing here is built yet. Tap Flag under any screen to mark it for discussion, then tell me which ones.</p>
+  <p>The Hire page is rebuilt as a real marketplace: search first, categories, trust signals, rated cleaners with photos and prices, and a fixed quote summary on every booking step.</p>
+  <div class="legend"><span><i style="background:var(--em)"></i>Earn / go</span><span><i style="background:var(--sky)"></i>Impact / give</span><span><i style="background:var(--amb)"></i>Plus / pending</span><span><i style="background:var(--vio)"></i>Admin only</span></div>
+</header>
+
+<div id="app"></div>
+</div>
+
+<script>
+/* ---------- helpers ---------- */
+var I=function(n,c){return '<svg class="i '+(c||'')+'"><use href="#i-'+n+'"/></svg>'};
+var APP=[['map','Map'],['cal','Events'],['gift','Rewards'],['users','Social'],['user','Me']];
+function appTabs(on){return '<div class="tabs">'+APP.map(function(t){return '<div class="'+(t[1]===on?'on':'')+'">'+I(t[0])+t[1]+'</div>'}).join('')+'</div>'}
+var AREA=[['gift','Perks','perks'],['coins','Earn','earn'],['spark','Hire','hire'],['heart','Impact','impact']];
+function area(on,hideHire){var a=AREA.filter(function(x){return !(hideHire&&x[2]==='hire')});return '<div class="area" style="grid-template-columns:repeat('+a.length+',1fr)">'+a.map(function(t){return '<div class="'+(t[2]===on?'on':'')+'">'+I(t[0])+t[1]+'</div>'}).join('')+'</div>'}
+function sb(){return '<div class="sb"><span>9:41</span><span>5G  100%</span></div>'}
+function hdr(eb,t,right){return '<div class="hdr flex between"><div>'+(eb?'<div class="eb">'+eb+'</div>':'')+'<h3>'+t+'</h3></div>'+(right||'')+'</div>'}
+function back(t){return '<div class="back">'+I('left')+t+'</div>'}
+var n=0,flags={};
+try{flags=JSON.parse(localStorage.getItem('rw-flags')||'{}')}catch(e){}
+function phone(o){
+  var id='s'+(++n);
+  var inner=sb()+(o.back?back(o.back):'')+(o.hdr||'')+(o.area?area(o.area,o.hideHire):'')+(o.hiw?'<div class="hiwrow"><span class="hiw"><b>?</b>'+o.hiw+'</span></div>':'')+'<div class="body '+(o.cls||'')+'">'+o.body+'</div>'+(o.sheet?'<div class="sheet-bg"></div><div class="sheet">'+o.sheet+'</div>':'')+(o.nav===false?'':appTabs(o.tab||'Rewards'));
+  var notes=(o.notes||[]).map(function(x){return '<li>'+x+'</li>'}).join('');
+  return '<div class="unit"><div class="phone"><div class="scr">'+inner+'</div></div><div class="cap"><b>'+o.title+'<button class="flag" data-id="'+id+'" aria-pressed="'+(flags[id]?'true':'false')+'">Flag</button></b>'+(o.desc||'')+(notes?'<ul>'+notes+'</ul>':'')+'</div></div>';
+}
+function group(id,title,count,lead,parts){return '<section class="group" id="'+id+'"><h2>'+title+'<small>'+count+'</small></h2><p class="lead">'+lead+'</p>'+parts.join('')+'</section>'}
+function sub(t,screens){return '<div class="sub">'+t+'</div><div class="row">'+screens.join('')+'</div>'}
+function stars(v){return '<span class="stars">'+I('star')+v+'</span>'}
+function kv(k,v){return '<div class="kv"><span>'+k+'</span><b>'+v+'</b></div>'}
+function fld(l,v,ta){return '<div class="field"><label>'+l+'</label><div class="inp'+(ta?' ta':'')+'">'+v+'</div></div>'}
+function cleaner(ini,cl,name,hl,rate,rt,jobs,loc,badge,tags){return '<div class="card col"><div class="flex"><div class="av '+cl+'">'+ini+'</div><div class="grow"><div class="flex between"><span class="t1">'+name+'</span><span class="disp em">'+rate+'</span></div><div class="m">'+hl+'</div></div></div><div class="flex g8 wrapf">'+stars(rt)+'<span class="xs">'+jobs+' jobs</span><span class="xs flex g4">'+I('pin')+loc+'</span>'+(badge?'<span class="pill em">'+I('shield')+badge+'</span>':'')+'</div>'+(tags?'<div class="flex g4 wrapf">'+tags.map(function(t){return '<span class="pill">'+t+'</span>'}).join('')+'</div>':'')+'</div>'}
+function qr(){var s='';for(var k=0;k<81;k++){var r=(k*7+Math.floor(k/9)*3)%5;s+='<i class="'+(r<2?'o':'')+'"></i>'}return '<div class="qr">'+s+'</div>'}
+function partner(l,cl,name,off,pts,dist){return '<div class="card flex"><div class="av '+cl+'" style="border-radius:14px">'+l+'</div><div class="grow"><div class="t1">'+name+'</div><div class="m">'+off+'</div><div class="xs">'+dist+'</div></div><div style="text-align:right"><div class="disp em">'+pts+'</div><div class="xs">pts</div></div></div>'}
+
+var S=[];
+
+/* ---------- NAMES ---------- */
+S.push(group('names','Tab names','locked',
+ 'The shared tab bar above every Rewards page. Names are locked for now: Perks, Earn, Hire, Impact.',
+ ['<div class="names">'+[
+  ['Decided: Perks, Earn, Hire, Impact','Perks stays, Paid becomes Earn (you earn money there), Hire stays, Impact stays. Revisit later if Impact feels too abstract.',['gift','Perks'],['coins','Earn'],['spark','Hire'],['heart','Impact'],' rec',1]
+ ].map(function(o,i){
+   var act=['perks','earn','hire','impact'];
+   var tabs=[o[2],o[3],o[4],o[5]].map(function(t,k){return '<div class="'+(k===0?'on':'')+'">'+I(t[0])+t[1]+'</div>'}).join('');
+   return '<div class="card'+o[6]+'"><h5>'+o[0]+'</h5><p class="m" style="margin:4px 0 0">'+o[1]+'</p><div class="area" style="grid-template-columns:repeat(4,1fr);margin-inline:0">'+tabs+'</div></div>';
+ }).join('')+'</div>',
+ '<div class="deci"><div class="card"><h5>Where each thing lives</h5><p>Perks: spend points at partners. Earn: sponsored cleanups you claim for money, plus funding one. Hire: pay a neighbor to clean. Impact: your Plus plan, monthly recap, receipts and group sponsoring.</p></div><div class="card"><h5>Hire as a job board too</h5><p>When someone is a cleaner, Hire opens on a Work view (requests, open jobs, earnings). Customers see the storefront. One tab, two modes.</p></div><div class="card"><h5>Tab visibility</h5><p>Perks-only users see no tab bar. Hire stays hidden until payments gate and marketplace toggle are both on.</p></div></div>']));
+
+/* ---------- PERKS ---------- */
+S.push(group('perks','1. Perks','8 screens',
+ 'Already fine, so this keeps the structure and fixes the weak spots: no search, no way to see what you can afford, a redemption that ends in a toast, and no history.',
+ [
+ sub('Browse and redeem',[
+  phone({title:'Perks home',hiw:'How do rewards work?',area:'perks',hdr:hdr('Rewards','Perks','<div class="pill em" style="font-size:12px;padding:5px 11px">'+I('bolt')+' 1,240 pts</div>'),desc:'Points balance now sits in the header. Search and category chips added. A "You can afford" row leads.',
+   notes:['Search plus category chips (Food, Shops, Fitness, Services)','Locked perks show the points still needed','Near me uses the map pin, falls back to city'],
+   body:'<div class="search">'+I('search')+'Search partners and perks<span class="f">'+I('filter')+'</span></div><div class="chips"><span class="chip on">All</span><span class="chip">Food</span><span class="chip">Shops</span><span class="chip">Fitness</span><span class="chip">Services</span></div><div class="t2" style="margin-top:2px">You can afford</div>'+partner('G','','Greenleaf Coffee','Free drip coffee',300,'0.4 mi · Williamsburg')+partner('B','b','Bike Haus','15% off any tune-up',500,'0.9 mi · Greenpoint')+'<div class="t2" style="margin-top:2px">Almost there</div><div class="card flex" style="opacity:.8"><div class="av c" style="border-radius:14px">P</div><div class="grow"><div class="t1">Patch Plant Shop</div><div class="m">$10 off a $30 order</div><div class="prog" style="margin-top:6px"><i style="width:82%"></i></div></div><div style="text-align:right"><div class="disp">1,500</div><div class="xs em">260 to go</div></div></div>'}),
+  phone({title:'Partner detail',back:'Perks',nav:true,desc:'Cover, logo, hours, map, terms, then one Redeem button. Plus-only perks show an upgrade chip instead.',
+   notes:['Hours and distance pulled from partner address','Terms collapsed, one line visible'],
+   body:'<div class="cover"><div class="logo">G</div></div><div style="padding-top:12px" class="flex between"><div><div class="t1" style="font-size:18px">Greenleaf Coffee</div><div class="m">Coffee · Open until 6 pm</div></div><span class="pill sky">'+I('pin')+'0.4 mi</span></div><div class="card"><div class="flex between"><div><div class="t2">Free drip coffee</div><div class="m">Any size, once per week</div></div><div class="disp em" style="font-size:20px">300 pts</div></div></div><div class="map"><b style="left:46%;top:42%"></b></div><div class="m">Show the code at the counter. Valid 15 minutes after you tap Redeem.</div><div class="btn pri" style="margin-top:auto">Redeem for 300 pts</div>'}),
+  phone({title:'Confirm redeem',tab:'Rewards',desc:'Bottom sheet. Shows the balance after, so no surprise.',
+   body:'<div style="opacity:.4" class="col"><div class="cover"></div><div class="t1">Greenleaf Coffee</div></div>',
+   sheet:'<h4>Redeem free coffee?</h4><div class="card col">'+kv('Cost','300 pts')+kv('Balance now','1,240 pts')+kv('Balance after','<span class="em">940 pts</span>')+'</div><div class="m">You can show the code once. It expires in 15 minutes.</div><div class="btn pri">Redeem now</div><div class="btn ghost">Not yet</div>'}),
+  phone({title:'Redeemed code',tab:'Rewards',desc:'Full-screen code with a countdown. Brightness note for scanning. The same code is kept in History.',
+   body:'<div class="empty" style="padding-top:30px"><span class="pill em">'+I('check')+' Redeemed</span><div class="disp" style="font-size:22px">Free drip coffee</div><div class="m">Greenleaf Coffee</div>'+qr()+'<div class="disp" style="font-size:26px;letter-spacing:.2em">GL-4K7P</div><div class="pill amb" style="font-size:12px">'+I('clock')+' Expires in 14:32</div></div><div class="btn" style="margin-top:auto">Done</div>'})
+ ]),
+ sub('Around Perks',[
+  phone({title:'My perks and history',back:'Perks',desc:'New. Active codes on top with a clock, past redemptions under, and total points spent.',
+   body:'<div class="seg"><div class="on">Active (1)</div><div>History</div></div><div class="card am"><div class="flex between"><div><div class="t2">Free drip coffee</div><div class="m">Greenleaf Coffee</div></div><span class="pill amb">'+I('clock')+' 14:32</span></div><div class="btn amb sm" style="margin-top:10px">Show code</div></div><div class="t2">Used</div><div class="card flex between"><div><div class="t2">15% off tune-up</div><div class="m">Bike Haus · Oct 8</div></div><span class="disp m">500</span></div><div class="card flex between"><div><div class="t2">Free bagel</div><div class="m">Corner Bagel · Sep 27</div></div><span class="disp m">250</span></div><div class="m" style="text-align:center">1,050 pts spent on perks this year</div>'}),
+  phone({title:'Plus-only perk',area:'perks',hdr:hdr('Rewards','Perks'),desc:'Some partners offer Plus members a better deal. Locked state links to Impact.',
+   body:'<div class="card am col"><div class="flex"><span class="pill amb">'+I('lock')+' Plus</span><span class="m">Members only</span></div><div class="t1">Double points at Bike Haus</div><div class="m">Plus members earn 2x points on every cleanup for the whole month.</div><div class="btn amb sm">See Plus</div></div>'+partner('B','b','Bike Haus','15% off any tune-up',500,'0.9 mi')+partner('G','','Greenleaf Coffee','Free drip coffee',300,'0.4 mi')}),
+  phone({title:'No perks nearby',area:'perks',hdr:hdr('Rewards','Perks'),desc:'Empty state offers two real actions instead of a dead end.',
+   body:'<div class="empty"><div class="ic">'+I('gift')+'</div><div class="t1">No partners in Queens yet</div><div class="m">Showing the nearest city instead, or suggest a shop and we will ask them.</div><div class="btn pri sm">Show Brooklyn perks</div><div class="btn sm">Suggest a partner</div></div>'}),
+  phone({title:'Redeem failed',tab:'Rewards',desc:'Errors say what to do. Not enough points links straight to Earn.',
+   body:'<div class="banner e">'+I('flag')+'<div><b>Not enough points.</b> You have 240 pts and this perk costs 300. Join a cleanup or claim a sponsored one to earn the rest.</div></div><div class="btn pri">Find a cleanup</div><div class="btn">Back to Perks</div>'})
+ ])
+ ]));
+
+/* ---------- EARN ---------- */
+S.push(group('earn','2. Earn','9 screens',
+ 'Formerly Paid. Two jobs on one page: claim a sponsored cleanup and get paid, or fund one. "Mine" returns as a real status page because claimants had nowhere to check progress. The Earn / Fund switch stays.',
+ [
+ sub('Earn',[
+  phone({title:'Earn: open cleanups',hiw:'How does earning work?',area:'earn',hdr:hdr('Rewards','Earn','<div class="pill em" style="font-size:12px;padding:5px 11px">'+I('coins')+' $42.50</div>'),desc:'Sticky payout total. Cards lead with the dollar amount and distance, the two things that decide a claim.',
+   notes:['Segmented: Open, My claims, Fund','Filter by distance and payout'],
+   body:'<div class="seg"><div class="on">Open</div><div>My claims <span class="pill em" style="margin-left:2px">1</span></div><div>Fund</div></div><div class="card hl col"><div class="flex between"><span class="pill em">Sponsored by Greenleaf</span><span class="big em" style="font-size:24px">$35</span></div><div class="t1">Marcy Ave lot, 2 hr cleanup</div><div class="flex g8 m">'+I('pin')+'0.6 mi · Sat 10 am · 3 of 6 spots</div></div><div class="card col"><div class="flex between"><span class="pill sky">Sponsored by a neighbor</span><span class="big em" style="font-size:24px">$20</span></div><div class="t1">Bedford Ave sidewalk sweep</div><div class="flex g8 m">'+I('pin')+'1.1 mi · Sun 9 am · 5 of 5 spots</div></div><div class="card col"><div class="flex between"><span class="pill vio">Company sponsor</span><span class="big em" style="font-size:24px">$60</span></div><div class="t1">Park edge litter, 3 hr</div><div class="flex g8 m">'+I('pin')+'2.4 mi · Oct 29 · Full</div><span class="pill red" style="align-self:flex-start">Waitlist open</span></div>'}),
+  phone({title:'Cleanup detail',back:'Earn',desc:'What you do, what you get, who pays. Safety and proof requirements are visible before you commit.',
+   notes:['Proof needed: before and after photos','Payout released after organizer approval','Sponsor name shown, tap for their page'],
+   body:'<div class="map"><b style="left:40%;top:38%"></b></div><div class="flex between"><div class="t1" style="font-size:17px">Marcy Ave lot, 2 hr cleanup</div></div><div class="card col">'+kv('Payout','<span class="em">$35.00</span>')+kv('When','Sat Oct 24 · 10 am')+kv('Spots','3 of 6 open')+kv('Sponsor','Greenleaf Coffee')+'</div><div class="banner i">'+I('camera')+'<div>You will upload a before and after photo. Payout is released when the organizer approves.</div></div><div class="btn pri" style="margin-top:auto">Claim this cleanup</div>'}),
+  phone({title:'Claim and agree',tab:'Rewards',desc:'One sheet, one agreement tick. Same cleaner agreement as Hire, so someone signs once for both.',
+   body:'<div style="opacity:.4" class="col"><div class="t1">Marcy Ave lot</div></div>',
+   sheet:'<h4>Claim $35 cleanup</h4><div class="card col">'+kv('Payout','$35.00')+kv('Arrive by','9:45 am, Sat')+'</div><div class="flex"><span class="chk on">'+I('check')+'</span><span class="m">I read the <u>cleaner agreement</u> (signed Oct 14) and the safety tips for this site.</span></div><div class="flex"><span class="chk">'+'</span><span class="m">I am 18 or older</span></div><div class="btn pri">Confirm claim</div>'}),
+  phone({title:'My claims',area:'earn',hdr:hdr('Rewards','Earn'),desc:'The status page the old Mine tab never was. Each claim has a clear next step.',
+   body:'<div class="seg"><div>Open</div><div class="on">My claims</div><div>Fund</div></div><div class="card col"><div class="flex between"><span class="t1">Marcy Ave lot</span><span class="pill amb">Upload proof</span></div><div class="m">Sat Oct 24 · $35.00</div><div class="btn pri sm">'+I('cam')+' Add before and after</div></div><div class="card col"><div class="flex between"><span class="t1">Bedford sidewalk</span><span class="pill sky">In review</span></div><div class="m">Oct 18 · $20.00 · organizer reviewing</div></div><div class="card col"><div class="flex between"><span class="t1">Park edge litter</span><span class="pill em">Paid</span></div><div class="m">Oct 10 · $60.00 · in your balance</div></div>'}),
+  phone({title:'Submit proof',back:'My claims',nav:false,desc:'Before and after, a count of bags, optional note. Photos upload in the background.',
+   body:'<div class="steps"><i class="on"></i><i class="on"></i><i></i></div><div class="t1">Add your proof</div><div class="flex g8"><div class="ph grow" style="height:100px">Before</div><div class="ph grow" style="height:100px">After</div></div>'+fld('Bags collected','4')+fld('Note (optional)','Lot looked much better',1)+'<div class="btn pri" style="margin-top:auto">Send for review</div>'})
+ ]),
+ sub('Fund and admin',[
+  phone({title:'Fund a cleanup',area:'earn',hdr:hdr('Rewards','Earn'),desc:'Neighbors and businesses put money behind a cleanup. Preview shows how many people it pays.',
+   body:'<div class="seg"><div>Open</div><div>My claims</div><div class="on">Fund</div></div><div class="t1">Choose a cleanup to back</div><div class="card col"><div class="t2">Bedford Ave sidewalk sweep</div><div class="m">5 spots · Sun 9 am</div><div class="prog"><i style="width:40%"></i></div><div class="flex between m"><span>$40 of $100 funded</span><span class="em">$60 to go</span></div></div><div class="flex g8">'+['$10','$25','$50','Custom'].map(function(a,k){return '<div class="chip'+(k===1?' on':'')+'" style="flex:1;text-align:center">'+a+'</div>'}).join('')+'</div><div class="btn pri">Fund $25</div><div class="m" style="text-align:center">Charged by Stripe. Held until the cleanup is approved.</div>'}),
+  phone({title:'Fund checkout',tab:'Rewards',desc:'Stripe payment sheet over a summary. Fee line is always shown.',
+   body:'<div style="opacity:.4"><div class="t1">Bedford Ave sidewalk sweep</div></div>',
+   sheet:'<h4>Back this cleanup</h4><div class="card col">'+kv('Your funding','$25.00')+kv('Frontline fee (8%)','$2.00')+kv('Total','<span class="em">$27.00</span>')+'</div><div class="inp">'+I('lock')+' Visa ending 4242</div><div class="flex"><span class="tgl on"></span><span class="m">Show my name as sponsor</span></div><div class="btn pri">Pay $27.00</div>'}),
+  phone({title:'Funded',tab:'Rewards',desc:'Receipt, share card, and a link to Impact for the receipt.',
+   body:'<div class="empty" style="padding-top:34px"><div class="ic" style="background:rgba(52,211,153,.15);color:var(--em)">'+I('check')+'</div><div class="disp" style="font-size:22px">You funded 1 cleanup spot</div><div class="m">Bedford Ave sidewalk sweep is 65% funded. We will tell you when it is done.</div><div class="btn pri sm">Share</div><div class="btn sm">View receipt</div></div>'}),
+  phone({title:'Admin: review claims',area:'earn',hdr:hdr('Admin','Review claims'),desc:'Violet marks admin-only tools. Approve releases payout, reject asks for a reason.',
+   body:'<div class="card vi col"><div class="flex between"><span class="t1">Marcus T. · Marcy Ave</span><span class="pill amb">Pending</span></div><div class="flex g8"><div class="ph grow" style="height:70px">Before</div><div class="ph grow" style="height:70px">After</div></div><div class="m">4 bags · "Lot looked much better"</div><div class="flex g8"><div class="btn pri sm grow">Approve $35</div><div class="btn dng sm grow">Reject</div></div></div><div class="card vi col"><div class="flex between"><span class="t1">Dee R. · Bedford</span><span class="pill amb">Pending</span></div><div class="m">No after photo uploaded</div><div class="btn vio sm">Ask for more proof</div></div>'})
+ ])
+ ]));
+
+/* ---------- HIRE ---------- */
+var hireHdr=hdr('Rewards','Hire a neighbor','<div class="av sm c">'+I('user')+'</div>');
+S.push(group('hire','3. Hire','17 screens',
+ 'The marketplace rebuilt. Search leads, trust is visible on every card (verified, rating, jobs done, price), and the booking path has a persistent quote. Customer and cleaner flows are separated. Everything stays admin-only behind the marketplace toggle.',
+ [
+ sub('Customer: find and book',[
+  phone({title:'Hire home',hiw:'How does hiring work?',area:'hire',hdr:hireHdr,desc:'Search first, then category tiles with real icons, a Request a cleanup bar, and top-rated cleaners with photos, price and badges. No more big gradient hero.',
+   notes:['Search by service, area or name','Category tiles: Litter, Lot cleanup, Sidewalk, Yard work','"Nearby" and "Top rated" rows','Trust strip: ID checked, payment held, 3-day release'],
+   body:'<div class="search">'+I('search')+'What needs cleaning?<span class="f">'+I('filter')+'</span></div><div class="flex g8">'+[['trash','Litter'],['map','Lot'],['spark','Sidewalk'],['bolt','Yard']].map(function(c){return '<div class="card grow" style="padding:10px 4px;text-align:center"><div class="em" style="display:flex;justify-content:center">'+I(c[0])+'</div><div class="xs" style="color:var(--fg);margin-top:3px;font-weight:600">'+c[1]+'</div></div>'}).join('')+'</div><div class="card hl flex"><div class="grow"><div class="t1">Post a job, get offers</div><div class="m">Free to post. Pay only when you accept.</div></div><div class="btn pri sm">Post a job</div></div><div class="flex between"><span class="t2">Top rated near you</span><span class="xs em">See all</span></div>'+cleaner('MT','','Marcus T.','Lot and sidewalk specialist','$28/hr','4.9',63,'0.8 mi','ID verified')}),
+  phone({title:'Browse cleaners',back:'Hire',nav:true,desc:'Full list with filter chips and sort. Distance, rating, price and availability filters live in a sheet.',
+   body:'<div class="search">'+I('search')+'Brooklyn<span class="f">'+I('filter')+'</span></div><div class="chips"><span class="chip on">Top rated</span><span class="chip">Under $30</span><span class="chip">This weekend</span><span class="chip">ID verified</span></div>'+cleaner('MT','','Marcus T.','Lot and sidewalk specialist','$28/hr','4.9',63,'0.8 mi','ID verified',['Litter','Sidewalk'])+cleaner('DR','b','Dee R.','Yard work and litter','$24/hr','4.8',41,'1.4 mi','ID verified')+cleaner('PS','c','Priya S.','Weekend lot cleanups','$30/hr','5.0',12,'2.0 mi','',['Lot cleanup'])}),
+  phone({title:'Filters and sort',tab:'Rewards',desc:'Bottom sheet. Applied filters show as chips above the list.',
+   body:'<div style="opacity:.35" class="col">'+cleaner('MT','','Marcus T.','','$28/hr','4.9',63,'0.8 mi','')+'</div>',
+   sheet:'<h4>Filters</h4><div class="field"><label>Sort by</label><div class="seg"><div class="on">Top rated</div><div>Nearest</div><div>Price</div></div></div><div class="field"><label>Services</label><div class="chips" style="flex-wrap:wrap"><span class="chip on">Litter</span><span class="chip">Lot cleanup</span><span class="chip on">Sidewalk</span><span class="chip">Yard work</span></div></div><div class="field"><label>Max price: $35/hr</label><div class="prog"><i style="width:60%"></i></div></div><div class="flex between"><span class="m">ID verified only</span><span class="tgl on"></span></div><div class="btn pri">Show 12 cleaners</div>'}),
+  phone({title:'Cleaner profile',back:'Cleaners',nav:true,desc:'The page that earns the booking. Photo, verified badges, rating breakdown, reviews, services with prices, area map.',
+   notes:['Sticky Book bar always visible','Report and block under the ... menu','Address and phone never shown'],
+   body:'<div class="flex"><div class="av lg">MT</div><div class="grow"><div class="t1" style="font-size:18px">Marcus T.</div><div class="m">Lot and sidewalk specialist</div><div class="flex g8" style="margin-top:4px">'+stars('4.9')+'<span class="xs">63 jobs</span><span class="xs">Since 2025</span></div></div></div><div class="flex g8 wrapf"><span class="pill em">'+I('shield')+'ID verified</span><span class="pill em">'+I('check')+'Agreement signed</span><span class="pill sky">Responds in 1 hr</span></div><div class="card col">'+kv('Rate','$28 / hr')+kv('Service area','Williamsburg, 6 mi')+kv('Works','Weekends, evenings')+'</div><div class="t2">Reviews</div><div class="card col"><div class="flex between">'+stars('5.0')+'<span class="xs">Oct 12</span></div><div class="m">Showed up on time, left the lot spotless.</div></div><div class="flex g8" style="margin-top:auto"><div class="btn">'+I('chat')+'</div><div class="btn pri grow">Book Marcus · from $28/hr</div></div>'}),
+  phone({title:'Post a job: 1 What',nav:false,back:'Cancel',desc:'Four short steps. A Quote card stays pinned at the bottom of every step.',
+   body:'<div class="steps"><i class="on"></i><i></i><i></i><i></i></div><div class="t1" style="font-size:18px">What needs cleaning?</div><div class="flex g8 wrapf">'+['Litter pickup','Lot cleanup','Sidewalk','Light yard work'].map(function(t,k){return '<div class="chip'+(k===1?' on':'')+'">'+t+'</div>'}).join('')+'</div>'+fld('Title','Vacant lot on Marcy Ave')+fld('Details',"Mostly bottles and bags, some brush near the fence. Gloves provided.",1)+'<div class="flex"><div class="ph" style="width:60px;height:60px">'+I('cam')+'</div><div class="m">Add photos so cleaners can quote accurately</div></div><div class="btn pri" style="margin-top:auto">Next: where</div>'}),
+  phone({title:'Post a job: 2 Where and when',nav:false,back:'Back',desc:'Address stays private until a cleaner is accepted. Three time modes as cards.',
+   body:'<div class="steps"><i class="on"></i><i class="on"></i><i></i><i></i></div><div class="map"><b style="left:48%;top:40%"></b></div>'+fld('Address','Marcy Ave and Myrtle, Brooklyn')+'<div class="banner i">'+I('lock')+'<div>Only the accepted cleaner sees your exact address.</div></div><div class="t2">When</div><div class="seg"><div>Exact time</div><div class="on">Window</div><div>Flexible</div></div><div class="card flex between"><div><div class="t2">Sat Oct 24</div><div class="m">Between 9 am and 1 pm</div></div>'+I('cal')+'</div><div class="btn pri" style="margin-top:auto">Next: budget</div>'}),
+  phone({title:'Post a job: 3 Budget',nav:false,back:'Back',desc:'Suggested price from similar jobs, so people are not guessing. Fee shown now.',
+   body:'<div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div><div class="seg"><div class="on">Fixed price</div><div>Hourly</div></div>'+fld('Your budget','$ 80')+'<div class="card col"><div class="m">Similar lot cleanups in Brooklyn</div><div class="prog"><i style="width:55%;background:var(--sky)"></i></div><div class="flex between xs"><span>$60</span><span class="sky" style="font-weight:700">Typical $85</span><span>$140</span></div></div><div class="seg"><div class="on">Open to offers</div><div>Pick a cleaner</div></div><div class="btn pri" style="margin-top:auto">Next: review</div>'}),
+  phone({title:'Post a job: 4 Review',nav:false,back:'Back',desc:'Safety acknowledgement is per job. Funds are authorized only after you accept an offer.',
+   body:'<div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div><div class="card col"><div class="t1">Vacant lot on Marcy Ave</div><div class="m">Lot cleanup · Sat Oct 24, 9 am to 1 pm</div><div class="hr"></div>'+kv('Budget','$80.00')+kv('Customer fees','$0.00')+kv('Held when you accept','<span class="em">$80.00</span>')+'</div><div class="flex"><span class="chk on">'+I('check')+'</span><span class="m">This site is public and safe to work on. No needles, hazardous waste or private property.</span></div><div class="banner w">'+I('shield')+'<div>Payment is held and released when you confirm, or 3 days after completion.</div></div><div class="btn pri" style="margin-top:auto">Post job</div>'})
+ ]),
+ sub('Customer: after posting',[
+  phone({title:'Job posted: offers',back:'My bookings',nav:true,desc:'Offers compare side by side with price, rating and message. Accept opens payment.',
+   body:'<div class="card col"><div class="flex between"><span class="t1">Vacant lot on Marcy Ave</span><span class="pill sky">Open · 3 offers</span></div><div class="m">Sat Oct 24 · budget $80</div></div>'+['MT|$80|4.9|Can start at 9, I bring bags and a grabber.','DR|$72|4.8|Free Saturday morning, two people.'].map(function(o){var p=o.split('|');return '<div class="card col"><div class="flex"><div class="av sm '+(p[0]==='DR'?'b':'')+'">'+p[0]+'</div><div class="grow t2">'+(p[0]==='MT'?'Marcus T.':'Dee R.')+'</div>'+stars(p[2])+'<span class="disp em">'+p[1]+'</span></div><div class="m">'+p[3]+'</div><div class="flex g8"><div class="btn sm grow">Message</div><div class="btn pri sm grow">Accept</div></div></div>'}).join('')}),
+  phone({title:'Accept and pay',tab:'Rewards',desc:'Stripe sheet. Wording is explicit that money is held, not paid out.',
+   body:'<div style="opacity:.4"><div class="t1">Marcus T. offer</div></div>',
+   sheet:'<h4>Hold payment</h4><div class="card col">'+kv('Marcus T.','$80.00')+kv('Customer fees','$0.00')+kv('Held now','<span class="em">$80.00</span>')+'</div><div class="inp">'+I('lock')+' Visa ending 4242</div><div class="m">Nothing is paid to Marcus until you confirm the work or 3 days pass after he marks it done. Cancel free until Friday 9 am.</div><div class="btn pri">Hold $80.00</div>'}),
+  phone({title:'Booking detail',back:'My bookings',nav:true,desc:'One timeline for the whole life of a booking. The next action is always the big button.',
+   notes:['Exact address unlocks after acceptance','Message thread, Report, Cancel under ...'],
+   body:'<div class="flex between"><div class="t1" style="font-size:17px">Vacant lot on Marcy Ave</div><span class="pill em">Booked</span></div><div class="card flex"><div class="av sm">MT</div><div class="grow"><div class="t2">Marcus T.</div><div class="xs">Sat Oct 24 · 9 am to 1 pm</div></div><div class="btn sm">'+I('chat')+'</div></div><div class="tl"><div class="done"><span class="d">'+I('check')+'</span><div><div class="t2">Offer accepted</div><div class="xs">$80.00 held · Oct 20</div></div></div><div class="cur"><span class="d"></span><div><div class="t2">Cleanup day</div><div class="xs">Saturday morning</div></div></div><div><span class="d"></span><div><div class="t2">Marcus marks it done</div></div></div><div><span class="d"></span><div><div class="t2">You confirm and pay</div><div class="xs">Auto-releases 3 days after</div></div></div></div><div class="btn" style="margin-top:auto">Cancel booking</div>'}),
+  phone({title:'Confirm and review',tab:'Rewards',desc:'Cleaner marked done. Customer confirms, rates, can tip. Or opens a dispute.',
+   body:'<div class="card"><div class="flex"><div class="ph" style="width:70px;height:60px">After</div><div class="grow"><div class="t2">Marcus marked it done</div><div class="xs">Oct 24 · 12:40 pm</div></div></div></div>',
+   sheet:'<h4>How did it go?</h4><div class="flex" style="justify-content:center;gap:6px;color:var(--amb)">'+[1,2,3,4,5].map(function(){return '<svg class="i" style="width:30px;height:30px;fill:var(--amb)"><use href="#i-star"/></svg>'}).join('')+'</div><div class="inp ta">Great work, left the lot spotless.</div><div class="flex g8">'+['No tip','$5','$10','$15'].map(function(t,k){return '<div class="chip'+(k===2?' on':'')+'" style="flex:1;text-align:center">'+t+'</div>'}).join('')+'</div><div class="btn pri">Confirm and release $80</div><div class="btn ghost red">Something went wrong</div>'}),
+  phone({title:'My bookings',area:'hire',hdr:hireHdr,desc:'Segmented by Active, Past. Each card shows the one thing that needs you.',
+   body:'<div class="seg"><div class="on">Active</div><div>Past</div><div>As cleaner</div></div><div class="card col"><div class="flex between"><span class="t1">Marcy Ave lot</span><span class="pill amb">Confirm work</span></div><div class="m">Marcus T. · Oct 24</div><div class="btn pri sm">Review and pay</div></div><div class="card col"><div class="flex between"><span class="t1">Bedford sidewalk</span><span class="pill sky">2 offers</span></div><div class="m">Posted Oct 21 · $40</div></div><div class="card col"><div class="flex between"><span class="t1">Yard clearing</span><span class="pill em">Booked</span></div><div class="m">Dee R. · Oct 27</div></div>'}),
+  phone({title:'Dispute and report',tab:'Rewards',desc:'Disputes freeze the release. Reports and blocks live under every profile and thread.',
+   body:'<div style="opacity:.35" class="col"><div class="t1">Marcy Ave lot</div></div>',
+   sheet:'<h4>Something went wrong</h4><div class="col g8">'+['Work was not done','Work was not as described','Cleaner did not show up','Safety or behavior problem'].map(function(t,k){return '<div class="card flex between" style="padding:10px"><span class="t2">'+t+'</span><span class="chk'+(k===1?' on':'')+'">'+(k===1?I('check'):'')+'</span></div>'}).join('')+'</div><div class="banner w">'+I('lock')+'<div>Payment stays held while we review, usually within 2 days.</div></div><div class="btn dng">Open dispute</div>'})
+ ]),
+ sub('Cleaner side',[
+  phone({title:'Become a cleaner',area:'hire',hdr:hireHdr,desc:'Entry point for anyone who wants to earn. Shows earnings potential and requirements before any form.',
+   body:'<div class="card hl col"><div class="disp" style="font-size:20px">Earn $24 to $35 an hour cleaning your own neighborhood</div><div class="m">Set your price, pick your jobs. Paid within 3 days of every job.</div></div>'+['Be 18 or older','Sign the cleaner agreement','Add a profile and your rate','We review within 2 days'].map(function(t,k){return '<div class="flex"><span class="chk on">'+I('check')+'</span><span class="t2">'+t+'</span></div>'}).join('')+'<div class="btn pri" style="margin-top:auto">Start application</div>'}),
+  phone({title:'Agreement',nav:false,back:'Back',desc:'Versioned agreement with legal name and age check. Same one is reused for Earn claims.',
+   body:'<div class="steps"><i class="on"></i><i></i><i></i></div><div class="t1" style="font-size:18px">Independent cleaner agreement</div><div class="card" style="flex:1;overflow:hidden"><div class="t2">v1.2 · Oct 2026</div><div class="m" style="margin-top:6px">You work as an independent cleaner, not an employee. You are responsible for your own safety, equipment and any insurance. Frontline holds payment and releases it after the customer confirms...</div></div>'+fld('Legal name','Marcus Thompson')+'<div class="flex"><span class="chk on">'+I('check')+'</span><span class="m">I am 18 or older and agree</span></div><div class="btn pri">Sign and continue</div>'}),
+  phone({title:'Build profile',nav:false,back:'Back',desc:'Photo and rate first. A live preview card shows what customers will see.',
+   body:'<div class="steps"><i class="on"></i><i class="on"></i><i></i></div><div class="flex"><div class="av lg">'+I('cam')+'</div><div class="m grow">Add a clear photo of your face. Customers book people they can see.</div></div>'+fld('Headline','Lot and sidewalk specialist')+'<div class="flex g8 wrapf">'+['Litter','Lot cleanup','Sidewalk','Yard'].map(function(t,k){return '<div class="chip'+(k<3?' on':'')+'">'+t+'</div>'}).join('')+'</div><div class="flex g8">'+fld('Rate','$ 28 / hr')+fld('Radius','6 mi')+'</div><div class="btn pri" style="margin-top:auto">Submit for review</div>'}),
+  phone({title:'Pending review',area:'hire',hdr:hireHdr,desc:'Clear status and what happens next. Cleaners can still browse jobs.',
+   body:'<div class="card am col"><span class="pill amb" style="align-self:flex-start">'+I('clock')+' Pending review</span><div class="t1">We are checking your profile</div><div class="m">Usually within 2 days. You will get a notification as soon as you are live.</div></div><div class="card col"><div class="t2">While you wait</div><div class="m">Set up payouts so your first job pays out right away.</div><div class="btn sm">Set up payouts</div></div>'}),
+  phone({title:'Work dashboard',area:'hire',hdr:hdr('Rewards','Work','<span class="pill em">Live</span>'),desc:'Cleaners see Work first. Requests need a reply, open jobs to offer on, and earnings summary.',
+   body:'<div class="card hl col"><div class="m">Available to cash out</div><div class="big em">$124.00</div><div class="flex between m"><span>$80 pending release</span><span class="em">Cash out</span></div></div><div class="seg"><div class="on">Requests (2)</div><div>Open jobs</div><div>Schedule</div></div><div class="card col"><div class="flex between"><span class="t1">Fence line cleanup</span><span class="disp em">$60</span></div><div class="m">Direct request · Sun 10 am</div><div class="flex g8"><div class="btn sm grow">Decline</div><div class="btn pri sm grow">Accept</div></div></div>'}),
+  phone({title:'Make an offer',tab:'Rewards',desc:'Cleaners respond to an open job with price and a short note. Customer fee is not shown here.',
+   body:'<div style="opacity:.35" class="col"><div class="t1">Vacant lot on Marcy Ave</div></div>',
+   sheet:'<h4>Offer on this job</h4><div class="card col">'+kv('Budget','$80.00')+kv('Frontline fee (15%)','-$12.00')+kv('You receive','<span class="em">$68.00</span>')+'</div>'+fld('Your price','$ 80')+'<div class="inp ta">Can start at 9, I bring bags and a grabber.</div><div class="btn pri">Send offer</div>'}),
+  phone({title:'Payouts',nav:true,back:'Work',desc:'Stripe Connect Express. Status for onboarding, balance, history. Built after test mode checkout is proven.',
+   body:'<div class="banner g">'+I('bank')+'<div>Payouts to Chase ••6612 are on.</div></div><div class="card col"><div class="m">Next payout</div><div class="big">$124.00</div><div class="xs">Arrives Oct 27</div></div><div class="t2">History</div>'+['Marcy Ave lot|$68.00|Paid','Bedford sidewalk|$34.00|Paid','Yard clearing|$61.00|Pending'].map(function(r){var p=r.split('|');return '<div class="card flex between" style="padding:10px"><div><div class="t2">'+p[0]+'</div><div class="xs">'+p[2]+'</div></div><span class="disp '+(p[2]==='Paid'?'em':'')+'">'+p[1]+'</span></div>'}).join('')})
+ ]),
+ sub('States and admin',[
+  phone({title:'Empty: no cleaners yet',area:'hire',hdr:hireHdr,desc:'Honest empty state. Two actions: post a job anyway, or become the first cleaner.',
+   body:'<div class="search">'+I('search')+'What needs cleaning?</div><div class="empty"><div class="ic">'+I('spark')+'</div><div class="t1">No cleaners in your area yet</div><div class="m">Post a job and we will notify cleaners as they join, or be the first one.</div><div class="btn pri sm">Post a job</div><div class="btn sm">Become a cleaner</div></div>'}),
+  phone({title:'Error: payment failed',nav:false,back:'Back',desc:'Errors say what happened and the fix, never a code.',
+   body:'<div class="banner e">'+I('flag')+'<div><b>Your card was declined.</b> Nothing was charged and your offer is still open. Try another card.</div></div><div class="btn pri">Use a different card</div><div class="btn">Pay later</div>'}),
+  phone({title:'Admin: moderation',area:'hire',hdr:hdr('Admin','Marketplace'),desc:'Violet admin area. Profiles to approve, reports and disputes with a freeze/release control.',
+   body:'<div class="seg"><div>Profiles 2</div><div class="on">Disputes 1</div><div>Reports 3</div></div><div class="card vi col"><div class="flex between"><span class="t1">Marcy Ave lot</span><span class="pill red">Disputed</span></div><div class="m">Customer: work not done · $80 held</div><div class="flex g8"><div class="ph grow" style="height:60px">Photos</div><div class="ph grow" style="height:60px">Thread</div></div><div class="flex g8"><div class="btn sm grow">Refund</div><div class="btn vio sm grow">Release</div></div></div>'})
+ ])
+ ]));
+
+/* ---------- GIVE ---------- */
+S.push(group('impact','4. Impact','7 screens',
+ 'Formerly Impact. Everything about giving: your Plus plan, what your money did this month, group sponsoring, receipts. Impact stays as the headline stat, but the tab says what you can do here.',
+ [
+ sub('Impact',[
+  phone({title:'Impact home',hiw:'How does Impact work?',area:'impact',hdr:hdr('Rewards','Impact'),desc:'Leads with what your money did, then a single Plus card, then group sponsoring.',
+   body:'<div class="card sk col"><div class="m">This month you helped fund</div><div class="big sky">14 cleanups</div><div class="flex g8 m"><span>182 bags</span><span>·</span><span>31 people paid</span></div></div><div class="card am col"><div class="flex between"><span class="t1">Frontline Plus</span><span class="pill amb">$8 / mo</span></div><div class="m">Half goes to cleanup pay. 2x points on every cleanup.</div><div class="btn amb sm">Manage plan</div></div><div class="card col"><div class="t1">Sponsor a group</div><div class="m">Fund cleanups for your crew or block.</div><div class="btn sm">Choose a group</div></div>'}),
+  phone({title:'Plus plans',back:'Impact',nav:true,desc:'Tiers side by side. The selected tier is clear, and the money split is plain.',
+   body:'<div class="seg"><div>Monthly</div><div class="on">Yearly -15%</div></div><div class="card am col"><div class="flex between"><span class="t1">Plus</span><span class="disp amb" style="font-size:20px">$6.80<span class="m">/mo</span></span></div>'+['2x points on cleanups','Plus-only perks','Monthly impact recap','Half of every dollar pays cleaners'].map(function(t){return '<div class="flex"><span class="amb">'+I('check')+'</span><span class="m" style="color:var(--fg)">'+t+'</span></div>'}).join('')+'</div><div class="card col"><div class="flex between"><span class="t1">Plus Crew</span><span class="disp" style="font-size:20px">$24<span class="m">/mo</span></span></div><div class="m">Up to 5 members, shared impact page.</div></div><div class="btn amb" style="margin-top:auto">Choose Plus yearly</div>'}),
+  phone({title:'Monthly recap',back:'Impact',nav:true,desc:'Shareable card, designed for the story format. One number per slide.',
+   body:'<div class="card sk col" style="padding:18px;text-align:center;gap:10px"><div class="eb m" style="letter-spacing:.1em;text-transform:uppercase;font-weight:700">October with Frontline</div><div class="big sky" style="font-size:48px">$64</div><div class="m">paid to neighbors for cleanups you backed</div><div class="hr"></div><div class="flex between"><div><div class="disp" style="font-size:22px">14</div><div class="xs">cleanups</div></div><div><div class="disp" style="font-size:22px">182</div><div class="xs">bags</div></div><div><div class="disp" style="font-size:22px">9</div><div class="xs">streets</div></div></div></div><div class="btn pri">Share recap</div>'}),
+  phone({title:'Group sponsoring',back:'Impact',nav:true,desc:'Sponsor a block, club or team. They get a public thank-you and a progress bar.',
+   body:'<div class="card col"><div class="flex"><div class="av b">NB</div><div class="grow"><div class="t1">North Brooklyn Crew</div><div class="m">42 members · 6 cleanups this month</div></div></div><div class="prog"><i style="width:70%;background:var(--sky)"></i></div><div class="flex between xs"><span>$210 of $300 monthly goal</span><span class="sky">70%</span></div></div><div class="flex g8">'+['$10','$25','$50'].map(function(a,k){return '<div class="chip'+(k===1?' on':'')+'" style="flex:1;text-align:center">'+a+'</div>'}).join('')+'</div><div class="flex"><span class="tgl"></span><span class="m">Repeat monthly</span></div><div class="btn pri sm">Sponsor $25</div>'})
+ ]),
+ sub('Account and billing',[
+  phone({title:'Billing',back:'Impact',nav:true,desc:'Plan, payment method, next charge. One row each with a plain action.',
+   body:'<div class="card col">'+kv('Plan','Plus yearly')+kv('Next charge','$81.60 on Jan 12')+kv('Card','Visa ending 4242')+'</div><div class="btn sm">Update card</div><div class="btn sm">Switch to monthly</div><div class="btn dng sm">Cancel Plus</div><div class="m" style="text-align:center">Cancel any time. You keep Plus until Jan 12.</div>'}),
+  phone({title:'Receipts and history',back:'Impact',nav:true,desc:'All money in one list: Plus, funding, hires, tips, payouts. Filter by type, download yearly summary.',
+   body:'<div class="chips"><span class="chip on">All</span><span class="chip">Plus</span><span class="chip">Funding</span><span class="chip">Hires</span></div>'+['Plus yearly|-$81.60|Oct 12','Funded Bedford sweep|-$27.00|Oct 20','Marcy Ave lot (hold)|-$80.00|Oct 20','Tip to Marcus|-$10.00|Oct 24'].map(function(r){var p=r.split('|');return '<div class="card flex between" style="padding:10px"><div><div class="t2">'+p[0]+'</div><div class="xs">'+p[2]+'</div></div><span class="disp">'+p[1]+'</span></div>'}).join('')+'<div class="btn sm" style="margin-top:auto">Download 2026 summary</div>'}),
+  phone({title:'Cancel Plus',tab:'Rewards',desc:'Confirmation sheet with what changes. No dark patterns.',
+   body:'<div style="opacity:.35"><div class="t1">Billing</div></div>',
+   sheet:'<h4>Cancel Plus?</h4><div class="m">You keep Plus until Jan 12. After that you lose 2x points, Plus-only perks and the monthly recap.</div><div class="btn pri">Keep Plus</div><div class="btn dng">Cancel at Jan 12</div>'})
+ ])
+ ]));
+
+
+/* ---------- HOW IT WORKS ---------- */
+function wt(tab,i,total,label,icons,title,body,how,finish,extra){
+  var dots='';for(var k=0;k<total;k++)dots+='<i class="'+(k===i?'on':k<i?'d':'')+'"></i>';
+  var last=i===total-1;
+  var sh='<div class="wt"><div class="dots"><span>'+dots+'</span>'+I('x')+'</div><div class="stp">Step '+(i+1)+' of '+total+(label?' <em>· '+label+'</em>':'')+'</div><div class="vis">'+icons.map(function(n){return I(n)}).join('')+'</div><h4>'+title+'</h4><p>'+body+'</p>'+(how?'<ol>'+how.map(function(h,k){return '<li><b>'+(k+1)+'</b>'+h+'</li>'}).join('')+'</ol>':'')+'<div class="nav">'+(i>0?'<span class="bk">Back</span>':'<span class="sk">Skip</span>')+'<span class="nx">'+(last?(finish||'Done'):'Next')+'</span></div></div>';
+  return phone({title:tab+': step '+(i+1),desc:extra||'',body:'<div style="opacity:.3"><div class="card"><div class="m">'+tab+' page content</div></div></div>',sheet:sh});
+}
+function wtSet(tab,steps,finish,pre){return steps.map(function(s,i){return wt(tab,i,steps.length,s[0],s[1],s[2],s[3],s[4],finish,i===0?pre:'')})}
+S.push(group('howto','How it works','17 screens',
+ 'The same FlowGuide pattern used on every other page: a "How does X work?" pill in the page header (see each home screen), opening the stepped bottom sheet with Skip/Back/Next, step dots and numbered mini-lists. It auto-opens once on first visit. Perks (rewards) and Earn (funding) already have guides today; Hire and Impact are new, and Hire gets a second, cleaner-only guide.',
+ [
+ sub('Perks (existing guide "rewards", refreshed)',wtSet('Perks',[
+   ['Earn',['bolt','coins'],'Earn points by showing up','Every cleanup you join earns points. Plus members earn double.',['Join or host a cleanup','Check in at the event','Points land after it ends']],
+   ['Pick',['gift'],'Pick a perk you like','Local shops and partners offer perks. Search, filter by category, or see what you can afford.',null],
+   ['Redeem',['pin','check'],'Redeem in store','Tap Redeem, then show the code at the counter. It lasts 15 minutes.',null]
+ ],'Got it','Auto-opens on first visit, like today.')),
+ sub('Earn (existing guide "funding", refreshed)',wtSet('Earn',[
+   ['Claim',['coins','map'],'Pick a paid cleanup','Sponsors put money behind cleanups. Claim a spot on one near you.',['Browse Open cleanups','Read the payout and proof needed','Claim and agree to the cleaner terms']],
+   ['Do it',['cam','trash'],'Show up and add proof','Do the cleanup, then upload a before and after photo.',null],
+   ['Get paid',['check','bank'],'Payout after approval','The organizer approves your proof and the money is released to you.',null],
+   ['Fund',['heart','coins'],'Or back one yourself','Switch to Fund to put money behind a cleanup and pay a neighbor.',null]
+ ],'Got it')),
+ sub('Hire, customers (new guide "hire")',wtSet('Hire',[
+   ['Post',['search','list'],'Say what needs cleaning','Post a job and get offers, or pick a cleaner from the list and book directly.',['Choose the job type and time','Set your budget','Add photos']],
+   ['Pay safely',['lock','shield'],'We hold your payment','When you accept an offer your card is charged and the money is held. The cleaner is not paid yet.',null],
+   ['Work',['cal','spark'],'Cleaner does the job','Your exact address unlocks after you accept. Message them any time.',null],
+   ['Confirm',['check','star'],'Confirm and release','Happy? Confirm and rate. Otherwise it releases 3 days after they finish, or you can open a dispute.',null]
+ ],'Got it')),
+ sub('Hire, cleaners (new guide "hire-cleaner")',wtSet('Hire (cleaner)',[
+   ['Apply',['user','shield'],'Set up your profile','Add a photo, your rate and the jobs you do. Sign the cleaner agreement. We review in about 2 days.',null],
+   ['Work',['chat','list'],'Get requests and offer on jobs','Reply to direct requests or offer on open jobs. Accepted jobs show the address.',null],
+   ['Get paid',['bank','coins'],'Paid after the customer confirms','Frontline keeps a 15% commission. The rest is paid out to your bank through Stripe.',null]
+ ],'Got it')),
+ sub('Impact (new guide "impact")',wtSet('Impact',[
+   ['See',['heart','bolt'],'See what your money did','Your monthly recap shows cleanups funded, bags collected and people paid.',null],
+   ['Plus',['spark','coins'],'Plus keeps it going','Plus is a monthly plan. Half of every dollar pays cleaners, and you get 2x points.',null],
+   ['Share',['users','bank'],'Sponsor a group, keep receipts','Fund your crew or block, and download receipts for everything in one place.',null]
+ ],'Got it'))
+ ]));
+
+/* ---------- DECISIONS ---------- */
+S.push(group('decide','Decisions','6 items',
+ 'These are the choices the mocks assume. Tell me which to change before I implement.',
+ ['<div class="deci">'+[
+  ['Tab names','Perks, Earn, Hire, Impact. Locked.'],
+  ['Hire home','Search and categories first, no large hero. Post a job is a single bar, not a banner.'],
+  ['Service fee','Cleaner pays a 15% commission, customer pays the posted price with no added fee (one-sided, the standard marketplace model). Adjustable later.'],
+  ['Cancel window','Free until 24 hours before the job. Decided.'],
+  ['Earn "My claims"','Brought back as a status page. Drops the old Mine sponsorship tab.'],
+  ['Photos','Cleaner photos are required for profiles. Decided. New work, needs image upload.']
+ ].map(function(d){return '<div class="card"><h5>'+d[0]+'</h5><p>'+d[1]+'</p></div>'}).join('')+'</div>']));
+
+document.getElementById('app').innerHTML=S.join('');
+
+/* flags */
+function paint(){var c=0;for(var k in flags)if(flags[k])c++;document.getElementById('fc').textContent=c?(c+' flagged'):''}
+document.addEventListener('click',function(e){var b=e.target.closest('.flag');if(!b)return;var id=b.getAttribute('data-id');flags[id]=!flags[id];b.setAttribute('aria-pressed',flags[id]?'true':'false');try{localStorage.setItem('rw-flags',JSON.stringify(flags))}catch(x){}paint()});
+paint();
+</script>

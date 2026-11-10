@@ -16,6 +16,12 @@ export default async function AccountSettingsPage() {
   const provider = user.app_metadata?.provider ?? "email";
   const isOAuthUser = provider !== "email";
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin, admin_daily_email_opt_out")
+    .eq("id", user.id)
+    .single();
+
   return (
     <main className="max-w-lg mx-auto px-4 sm:px-6 py-10 w-full">
       <div className="mb-8 flex items-center justify-between">
@@ -31,7 +37,14 @@ export default async function AccountSettingsPage() {
         </Link>
       </div>
 
-      <AccountSettingsForm email={user.email!} isOAuthUser={isOAuthUser} provider={provider} />
+      <AccountSettingsForm
+        email={user.email!}
+        isOAuthUser={isOAuthUser}
+        provider={provider}
+        userId={user.id}
+        isAdmin={!!profile?.is_admin}
+        adminDigestOptOut={!!profile?.admin_daily_email_opt_out}
+      />
 
       <div className="mt-12 pt-6 border-t border-zinc-800">
         <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Appearance</h2>

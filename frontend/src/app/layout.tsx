@@ -6,11 +6,13 @@ import AppHeader from "@/components/AppHeader";
 import LegalGate from "@/components/LegalGate";
 import NativeAppBridge from "@/components/NativeAppBridge";
 import PullToRefresh from "@/components/PullToRefresh";
+import PlusFlairProvider from "@/components/billing/PlusFlairProvider";
+import CheckoutNotice from "@/components/billing/CheckoutNotice";
 
 // Geist stays loaded because the campaign map page (excluded from the UI rework) still uses it.
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 const figtree = Figtree({ variable: "--font-body", subsets: ["latin"] });
-const bricolage = Bricolage_Grotesque({ variable: "--font-display-face", subsets: ["latin"], weight: ["600", "700", "800"] });
+const bricolage = Bricolage_Grotesque({ variable: "--font-display-face", subsets: ["latin"] });
 const dmMono = DM_Mono({ variable: "--font-mono-ui", subsets: ["latin"], weight: ["400", "500"] });
 
 const SITE_URL = "https://www.frontlinemaps.com";
@@ -73,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
         <NativeAppBridge />
+        <CheckoutNotice />
         <AppHeader />
         <div
           id="app-scroll-container"
@@ -80,7 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <PullToRefresh />
-          {children}
+          <PlusFlairProvider>{children}</PlusFlairProvider>
         </div>
         <LegalGate />
       </body>

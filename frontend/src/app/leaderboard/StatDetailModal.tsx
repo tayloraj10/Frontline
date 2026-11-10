@@ -305,6 +305,7 @@ export default function StatDetailModal({
   campaignId,
   fastapiUrl,
   interval,
+  windowParams,
   focusGeoUnitId,
   topUsers,
   topGroups,
@@ -318,6 +319,8 @@ export default function StatDetailModal({
   campaignId: string;
   fastapiUrl: string;
   interval: "today" | "week" | "month" | "all";
+  /** Explicit query params for the period (lets a past period be requested); defaults to `interval`. */
+  windowParams?: Record<string, string>;
   focusGeoUnitId: string | null;
   topUsers: TopUser[];
   topGroups: TopGroup[];
@@ -338,7 +341,7 @@ export default function StatDetailModal({
     if (kind !== "pts") return;
     const controller = new AbortController();
     setTrendLoading(true);
-    const params = new URLSearchParams({ interval });
+    const params = new URLSearchParams(windowParams ?? { interval });
     if (focusGeoUnitId) params.set("focus_geo_unit_id", focusGeoUnitId);
     fetch(`${fastapiUrl}/api/campaigns/${campaignId}/geo-stats/trend?${params}`, {
       signal: controller.signal,
@@ -352,7 +355,7 @@ export default function StatDetailModal({
       .catch(() => {})
       .finally(() => setTrendLoading(false));
     return () => controller.abort();
-  }, [kind, campaignId, fastapiUrl, interval, focusGeoUnitId]);
+  }, [kind, campaignId, fastapiUrl, interval, JSON.stringify(windowParams), focusGeoUnitId]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

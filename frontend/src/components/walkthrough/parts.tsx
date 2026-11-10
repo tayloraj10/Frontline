@@ -12,6 +12,8 @@ export interface WalkthroughStep {
   /** Only show this step to viewers holding this role (see FlowGuide `roles`). Omit for everyone. */
   role?: string;
   beta?: boolean;
+  /** Groups steps into a track (e.g. "I'm hiring" vs "I'm cleaning"), shown as a colored pill. Keep a track's steps together. */
+  track?: { name: string; tone: "sky" | "emerald" };
   visual: ReactNode;
 }
 

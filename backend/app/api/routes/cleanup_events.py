@@ -20,6 +20,7 @@ from app.services.event_permissions import (
     can_manage_event as _can_manage_event,
 )
 from app.services.game_settings import get_game_settings
+from app.services import sponsored_cleanups
 
 router = APIRouter(prefix="/cleanup-events", tags=["cleanup-events"])
 
@@ -65,6 +66,7 @@ class CreateCleanupEventRequest(BaseModel):
     route: dict | None = None
     cohost_group_ids: list[UUID] = []
     logging_mode: Literal["organizer_total", "individual"] = "organizer_total"
+    sponsorship_id: UUID | None = None
 
     @field_validator("max_attendees")
     @classmethod
@@ -139,6 +141,18 @@ class PatchCleanupEventRequest(BaseModel):
         if not isinstance(coords, list) or len(coords) < 2:
             raise ValueError("route must have at least 2 coordinates")
         return v
+
+
+def _snap_pin_to_route_start(payload: "CreateCleanupEventRequest | PatchCleanupEventRequest") -> None:
+    """For route events the meetup pin is the route's first point. The form only uses the
+    searched address to center the map, so left alone the pin lands wherever the search did
+    (e.g. a neighborhood centroid hundreds of meters from where the route actually starts).
+    Done server-side so every client gets it. GeoJSON coordinates are [lng, lat]."""
+    if payload.route is None:
+        return
+    lng, lat = payload.route["coordinates"][0][:2]
+    payload.longitude = float(lng)
+    payload.latitude = float(lat)
 
 
 class RsvpRequest(BaseModel):
@@ -624,7 +638,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
 
     rsvp_result = await db.execute(
         text("""
-            SELECT r.user_id, p.username, p.display_name, p.avatar_url, r.status, r.checked_in_at, r.is_organizer
+            SELECT r.user_id, p.username, p.display_name, p.avatar_url, EXISTS (SELECT 1 FROM subscriptions sb WHERE sb.owner_type = 'user' AND sb.owner_id = r.user_id AND sb.status IN ('active', 'trialing')) AS is_plus, r.status, r.checked_in_at, r.is_organizer
             FROM cleanup_rsvps r
             JOIN profiles p ON p.id = r.user_id
             WHERE r.cleanup_id = :id
@@ -727,6 +741,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             "username": r.username,
             "display_name": r.display_name,
             "avatar_url": r.avatar_url,
+            "is_plus": bool(r.is_plus),
             "status": r.status,
             "checked_in_at": r.checked_in_at.isoformat() if r.checked_in_at else None,
             "is_organizer": r.is_organizer,
@@ -852,6 +867,41 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         for r in event_offers_result.fetchall()
     ]
 
+    # Sponsored area attached at create (payments v2). The caller decides whether to show it.
+    sponsored = None
+    sp_row = (
+        await db.execute(
+            text("""
+                SELECT s.id, s.area_name, s.message, s.payout_rule
+                FROM cleanups c
+                JOIN sponsorships s ON s.id = c.sponsorship_id
+                WHERE c.id = :id
+            """),
+            {"id": str(cleanup_id)},
+        )
+    ).fetchone()
+    if sp_row:
+        alloc = (
+            await db.execute(
+                text("""
+                    SELECT COALESCE(SUM(amount_cents) FILTER (WHERE status IN ('queued', 'approved')), 0) AS pending_cents,
+                           COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid_out'), 0) AS paid_cents,
+                           COUNT(*) AS n
+                    FROM sponsorship_allocations
+                    WHERE cleanup_id = :id AND group_id IS NOT NULL
+                """),
+                {"id": str(cleanup_id)},
+            )
+        ).fetchone()
+        sponsored = {
+            "area_name": sp_row.area_name,
+            "message": sp_row.message,
+            "payout_rule": sp_row.payout_rule,
+            "pending_cents": int(alloc.pending_cents),
+            "paid_cents": int(alloc.paid_cents),
+            "has_allocation": alloc.n > 0,
+        }
+
     # Mirrors the effective-end/window logic in partners.redeem_offer so the UI can decide
     # whether to show the redemption surface at all, without duplicating the math client-side.
     effective_end = row.scheduled_end or (row.scheduled_start + EVENT_CHECKIN_DEFAULT_DURATION if row.scheduled_start else None)
@@ -921,12 +971,14 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "check_in_window_end": check_in_window_end.isoformat() if check_in_window_end else None,
         "check_in_radius_meters": settings.get("cleanup_event_proximity_meters", 150.0),
         "event_offers": event_offers,
+        "sponsored": sponsored,
         "event_offer_redemption_open": event_offer_redemption_open,
     }
 
 
 @router.post("")
 async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSession = Depends(get_db)):
+    _snap_pin_to_route_start(payload)
     if not await _is_group_admin(db, payload.group_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin can create an event for this group")
 
@@ -940,6 +992,14 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
     if camp_row[0] != "active":
         raise HTTPException(status_code=403, detail="Campaign is not accepting new events")
 
+    if payload.sponsorship_id is not None:
+        try:
+            await sponsored_cleanups.validate_event_pool(
+                db, payload.sponsorship_id, payload.group_id, payload.latitude, payload.longitude
+            )
+        except sponsored_cleanups.SponsoredError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+
     geo_unit_id = await _resolve_geo_unit_id(db, payload.campaign_id, payload.latitude, payload.longitude)
     join_code = await _generate_join_code(db)
 
@@ -950,7 +1010,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
                  title, description, location,
                  address_line1, city, state, postal_code, country,
                  route, scheduled_start, scheduled_end,
-                 status, image_urls, submitted_by_user_id, max_attendees, external_link, logging_mode)
+                 status, image_urls, submitted_by_user_id, max_attendees, external_link, logging_mode, sponsorship_id)
             VALUES
                 (:campaign_id, :geo_unit_id, :group_id, true, :join_code,
                  :title, :description,
@@ -960,7 +1020,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
                       THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
                       ELSE NULL END,
                  :scheduled_start, :scheduled_end,
-                 'scheduled', :image_urls, :organizer_user_id, :max_attendees, :external_link, :logging_mode)
+                 'scheduled', :image_urls, :organizer_user_id, :max_attendees, :external_link, :logging_mode, :sponsorship_id)
             RETURNING id, join_code
         """),
         {
@@ -985,6 +1045,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             "max_attendees": payload.max_attendees,
             "external_link": payload.external_link,
             "logging_mode": payload.logging_mode,
+            "sponsorship_id": str(payload.sponsorship_id) if payload.sponsorship_id else None,
         },
     )
     row = result.fetchone()
@@ -1007,6 +1068,32 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             {"cleanup_id": str(row.id), "group_id": cohost_group_id},
         )
 
+    # Notify every member of the host and co-host groups (except the organizer who just
+    # created it). The user_notifications insert trigger fans this out as a push.
+    group_name = (
+        await db.execute(text("SELECT name FROM groups WHERE id = :group_id"), {"group_id": str(payload.group_id)})
+    ).scalar_one()
+    campaign_slug = (
+        await db.execute(text("SELECT slug FROM campaigns WHERE id = :id"), {"id": str(payload.campaign_id)})
+    ).scalar_one()
+    await db.execute(
+        text("""
+            INSERT INTO user_notifications (user_id, type, title, body, link_url)
+            SELECT DISTINCT gm.user_id, 'group_event_created', :title, :body, :link_url
+            FROM group_members gm
+            WHERE gm.group_id = ANY(CAST(:group_ids AS uuid[]))
+              AND gm.user_id <> CAST(:organizer_user_id AS uuid)
+        """),
+        {
+            "title": f"New event: {payload.title}",
+            "body": f"{group_name} · {format_event_datetime(payload.scheduled_start)}",
+            # Deep link straight to the event on the campaign map (fly to the pin and open its card).
+            "link_url": f"/campaigns/{campaign_slug}?lat={payload.latitude}&lng={payload.longitude}&zoom=15&focus={row.id}",
+            "group_ids": [str(payload.group_id), *cohost_group_ids],
+            "organizer_user_id": str(payload.organizer_user_id),
+        },
+    )
+
     await db.commit()
 
     return {"id": str(row.id), "join_code": row.join_code, "geo_unit_id": geo_unit_id}
@@ -1015,6 +1102,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
 @router.patch("/{cleanup_id}")
 async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventRequest, db: AsyncSession = Depends(get_db)):
     event = await _get_event_or_404(db, cleanup_id)
+    _snap_pin_to_route_start(payload)
 
     if not await _can_manage_event(db, event.group_id, cleanup_id, payload.organizer_user_id):
         raise HTTPException(status_code=403, detail="Only a group admin or event organizer can edit this event")
@@ -1241,7 +1329,7 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
         prox_result = await db.execute(
             text("""
                 SELECT ST_DWithin(
-                    location,
+                    COALESCE(route, location),
                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
                     :threshold
                 ) FROM cleanups WHERE id = :id
@@ -1254,6 +1342,8 @@ async def check_in_to_cleanup_event(cleanup_id: UUID, payload: CheckInRequest, d
             },
         )
         if not prox_result.scalar():
+            # For route events the zone is the whole route (the blue area on the event map),
+            # so late arrivals anywhere along it can still check in.
             raise HTTPException(status_code=403, detail="You're too far from the event location to check in")
 
     # Only the first check-in for this attendee should award points — re-checking in
@@ -1752,6 +1842,8 @@ async def log_team_total(cleanup_id: UUID, payload: LogTeamTotalRequest, db: Asy
         },
     )
 
+    await sponsored_cleanups.queue_group_allocation(db, cleanup_id, len(pool))
+
     await db.commit()
 
     return {
@@ -1912,7 +2004,7 @@ async def send_attendee_reminder(cleanup_id: UUID, payload: AttendeeReminderRequ
 async def run_organizer_reminders(db: AsyncSession = Depends(get_db)):
     """Day-of reminder to each event's organizer(s), with current RSVP/cohost/offer
     stats. Intended to be called once each morning by a Railway cron (see
-    scripts/run_organizer_reminders.py), same pattern as decay.py's /decay/run. Gated by
+    scripts/run_daily_emails.py), same pattern as decay.py's /decay/run. Gated by
     the email_organizer_stats_reminder_enabled killswitch (defaults off) and by
     cleanups.organizer_reminder_sent_at, which this marks per-event so re-running the
     same day never double-sends."""
@@ -1997,7 +2089,7 @@ async def run_organizer_followups(db: AsyncSession = Depends(get_db)):
     """Post-event follow-up to each event's organizer(s), sent once the check-in window
     has closed: a stats summary if metrics were logged, or a nudge to log them if not.
     Also drops a user_notifications row for every admin of the hosting group. Intended
-    to be called once a day by a Railway cron (see scripts/run_organizer_followups.py),
+    to be called once a day by a Railway cron (see scripts/run_daily_emails.py),
     same pattern as organizer-reminders/run. Gated by the
     email_organizer_followup_enabled killswitch (defaults off) and by
     cleanups.organizer_followup_sent_at, which this marks per-event so re-running the

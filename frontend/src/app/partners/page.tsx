@@ -1,3 +1,6 @@
+import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { rewardsVisible } from "@/lib/paymentsVisibility";
+import RewardsTabs from "@/components/RewardsTabs";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import { createClient } from "@/lib/supabase/server";
@@ -33,9 +36,12 @@ export default async function PartnersPage() {
     supabase.schema("public").from("campaign_partner_businesses").select("business_id, campaign_id"),
     supabase.schema("public").from("campaigns").select("id").eq("status", "active"),
     user
-      ? supabase.schema("public").from("profiles").select("spendable_points, is_business_only").eq("id", user.id).single()
+      ? supabase.schema("public").from("profiles").select("spendable_points, is_business_only, is_admin, rewards_beta").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
+
+  // Payments v2 entry points live here (rewards) rather than in the main nav.
+  const showPayments = user ? rewardsVisible(await getPaymentsGate(), !!profileResult?.data?.is_admin, !!profileResult?.data?.rewards_beta) : false;
 
   const activeCampaignIds = new Set((activeCampaigns ?? []).map((c) => c.id));
   const businessIdsInActiveCampaign = new Set(
@@ -78,16 +84,18 @@ export default async function PartnersPage() {
     <PageShell width="wide">
       <PageHeader
         eyebrow="Rewards"
-        title="Partner perks"
+        title="Perks"
         subtitle="Spend the points you earn from cleanups on discounts at local businesses."
-        action={<FlowGuide id="rewards" autoOpen variant="link" label="How do rewards work?" />}
+        titleAction={<FlowGuide id="rewards" autoOpen variant="link" label="How do rewards work?" />}
       />
+
+      {showPayments && <RewardsTabs current="perks" />}
 
       <BusinessApplyPrompt />
 
       {isBusinessOnly && (
         <div className="mb-6 px-4 py-3 rounded-2xl bg-sky-950/30 text-sm text-sky-300">
-          This is what other users see for your business's listing and offers. A business
+          This is what other users see for your business&apos;s listing and offers. A business
           only appears here while it has at least one active offer, but it shows up on the
           map at all times regardless of offers.
         </div>

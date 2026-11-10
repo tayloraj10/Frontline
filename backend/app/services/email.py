@@ -54,7 +54,10 @@ def render_cta_button(href: str, label: str) -> str:
     )
 
 
-def wrap_email_html(content: str) -> str:
+def wrap_email_html(
+    content: str,
+    footer: str = "Sent by Frontline because of activity on an event you're involved with.",
+) -> str:
     """Wraps template-specific inner content in a full HTML document with a
     bulletproof table-based layout, since a bare fragment with no <html>/<body> and no
     explicit container width renders inconsistently across mail clients (fonts falling
@@ -76,7 +79,7 @@ def wrap_email_html(content: str) -> str:
               <td style="padding:8px 32px 28px 32px;">
                 <hr style="border:none; border-top:1px solid #e4e4e7; margin:16px 0;">
                 <p style="font-size:12px; color:#a1a1aa; margin:0;">
-                  Sent by Frontline because of activity on an event you're involved with.
+                  {footer}
                   Questions? Just reply to this email.
                 </p>
               </td>
