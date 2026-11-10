@@ -34,6 +34,18 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="www.frontlinemaps.com" />
             </intent-filter>
+
+            <!--
+              Custom scheme: the /stripe-return bounce page ("Return to the app" button)
+              opens com.frontlinemaps.app://<path> after Stripe hosted pages finish in the
+              system browser. See NativeAppBridge.tsx.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/custom_url_scheme" />
+            </intent-filter>
         </activity>
 
         <provider
