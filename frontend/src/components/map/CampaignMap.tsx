@@ -460,6 +460,8 @@ interface Props {
   removedReport?: { id: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
+  // Id of a group event or hotspot to open the card for on load (push notification deep link).
+  focusEventId?: string | null;
   activeStyle?: StyleId;
   onStyleChange?: (id: StyleId) => void;
   problemReports?: ProblemReports | null;
@@ -1898,6 +1900,7 @@ export default function CampaignMap({
   removedReport,
   userLocation,
   focusCoords,
+  focusEventId,
   activeStyle = "outdoor",
   onStyleChange,
   problemReports,
@@ -5315,6 +5318,24 @@ export default function CampaignMap({
       map.current.once("load", flyToFocus);
     }
   }, [focusCoords]);
+
+  // Open the card for a deep-linked group event or hotspot once its data is present.
+  // Runs once per id so closing the card doesn't immediately reopen it.
+  const openedFocusEventRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusEventId || openedFocusEventRef.current === focusEventId) return;
+    const cleanup = (cleanupEvents ?? []).find((e) => e.id === focusEventId);
+    if (cleanup) {
+      openedFocusEventRef.current = focusEventId;
+      setSelectedCleanupEvent(cleanup);
+      return;
+    }
+    const campaignEvent = activeEvents.find((e) => e.id === focusEventId);
+    if (campaignEvent) {
+      openedFocusEventRef.current = focusEventId;
+      setSelectedEvent(campaignEvent);
+    }
+  }, [focusEventId, cleanupEvents, activeEvents]);
 
   // Pin picker: add/remove draggable marker with ZIP boundary constraint
   useEffect(() => {

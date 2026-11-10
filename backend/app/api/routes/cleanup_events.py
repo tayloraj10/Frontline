@@ -1073,6 +1073,9 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
     group_name = (
         await db.execute(text("SELECT name FROM groups WHERE id = :group_id"), {"group_id": str(payload.group_id)})
     ).scalar_one()
+    campaign_slug = (
+        await db.execute(text("SELECT slug FROM campaigns WHERE id = :id"), {"id": str(payload.campaign_id)})
+    ).scalar_one()
     await db.execute(
         text("""
             INSERT INTO user_notifications (user_id, type, title, body, link_url)
@@ -1084,7 +1087,8 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
         {
             "title": f"New event: {payload.title}",
             "body": f"{group_name} · {format_event_datetime(payload.scheduled_start)}",
-            "link_url": f"/cleanup-events/{row.id}",
+            # Deep link straight to the event on the campaign map (fly to the pin and open its card).
+            "link_url": f"/campaigns/{campaign_slug}?lat={payload.latitude}&lng={payload.longitude}&zoom=15&focus={row.id}",
             "group_ids": [str(payload.group_id), *cohost_group_ids],
             "organizer_user_id": str(payload.organizer_user_id),
         },
