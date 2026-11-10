@@ -35,6 +35,7 @@ interface Props {
   removedReport?: { id: string; key: number } | null;
   userLocation?: { latitude: number; longitude: number } | null;
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
+  focusEventId?: string | null;
   activeStyle?: string;
   onStyleChange?: (id: "outdoor" | "streets" | "hybrid") => void;
   problemReports?: ProblemReports | null;

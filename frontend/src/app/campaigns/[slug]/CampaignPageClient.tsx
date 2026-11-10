@@ -366,6 +366,7 @@ interface Props {
   partnerBusinesses?: MapBusiness[];
   cleanupEvents?: MapCleanupEvent[];
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
+  focusEventId?: string | null;
   bagMetrics?: { small: number; large: number; pounds: number };
   contributionCount?: number;
   totalBags?: number;
@@ -930,6 +931,7 @@ export default function CampaignPageClient({
   partnerBusinesses,
   cleanupEvents,
   focusCoords,
+  focusEventId,
   bagMetrics = { small: 0, large: 0, pounds: 0 },
   contributionCount = 0,
   totalBags = 0,
@@ -1352,6 +1354,7 @@ export default function CampaignPageClient({
         removedReport={removedReport}
         userLocation={userLocation}
         focusCoords={focusCoords}
+        focusEventId={focusEventId}
         activeStyle={activeMapStyle}
         onStyleChange={setActiveMapStyle}
         nycNeighborhoodsVisible={nycNeighborhoodsVisible}
