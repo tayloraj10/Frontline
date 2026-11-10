@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,6 +105,8 @@ async def payouts_onboard(a: Actor = Depends(actor), db: AsyncSession = Depends(
         return await connect.create_onboarding_link(db, a.user_id, None)
     except connect.ConnectError as e:
         raise HTTPException(e.status, str(e))
+    except stripe.StripeError as e:
+        raise HTTPException(502, getattr(e, "user_message", None) or "Could not open payout setup right now. Try again in a moment.")
 
 
 @router.get("/payouts/status")

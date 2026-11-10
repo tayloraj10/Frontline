@@ -58,15 +58,22 @@ export default function NativeAppBridge() {
       // regular https deep links — push notification taps, shared campaign
       // links, etc.
       const sub = await App.addListener("appUrlOpen", async ({ url }) => {
+        const ORIGIN = "https://www.frontlinemaps.com";
+        const SCHEME = "com.frontlinemaps.app://";
+        let target = url;
+        // Custom-scheme handoff from /stripe-return: com.frontlinemaps.app://<path>
+        if (url.startsWith(SCHEME)) {
+          target = `${ORIGIN}/${url.slice(SCHEME.length).replace(/^\/+/, "")}`;
+        }
         let parsed: URL;
         try {
-          parsed = new URL(url);
+          parsed = new URL(target);
         } catch {
           return;
         }
-        if (parsed.origin !== "https://www.frontlinemaps.com") return;
+        if (parsed.origin !== ORIGIN) return;
         await Browser.close().catch(() => {});
-        window.location.href = url;
+        window.location.href = parsed.toString();
       });
       removeUrlListener = () => sub.remove();
 

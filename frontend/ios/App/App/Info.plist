@@ -48,6 +48,12 @@
 				<string>com.googleusercontent.apps.739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.frontlinemaps.app</string>
+			</array>
+		</dict>
 	</array>
 	<key>GIDClientID</key>
 	<string>739267403997-v2njpfsgr8kcmfh4lrum50ks78majf6f.apps.googleusercontent.com</string>

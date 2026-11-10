@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.services.stripe_return import stripe_return_url
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +77,8 @@ async def create_onboarding_link(db: AsyncSession, user_id: UUID, email: str | N
         params={
             "account": account_id,
             "type": "account_onboarding",
-            "refresh_url": f"{base}/marketplace/become-a-cleaner?payouts=refresh",
-            "return_url": f"{base}/marketplace/become-a-cleaner?payouts=return",
+            "refresh_url": stripe_return_url(base, "/marketplace/become-a-cleaner", "payouts=refresh"),
+            "return_url": stripe_return_url(base, "/marketplace/become-a-cleaner", "payouts=return"),
         }
     )
     return {"url": link.url}
@@ -162,8 +163,8 @@ async def create_payout_onboarding_link(db: AsyncSession, user_id: UUID, email: 
         params={
             "account": account_id,
             "type": "account_onboarding",
-            "refresh_url": f"{base}{return_path}?payouts=refresh",
-            "return_url": f"{base}{return_path}?payouts=return",
+            "refresh_url": stripe_return_url(base, return_path, "payouts=refresh"),
+            "return_url": stripe_return_url(base, return_path, "payouts=return"),
         }
     )
     return {"url": link.url}
@@ -249,8 +250,8 @@ async def create_group_onboarding_link(
         params={
             "account": account_id,
             "type": "account_onboarding",
-            "refresh_url": f"{base}{return_path}?payouts=refresh",
-            "return_url": f"{base}{return_path}?payouts=return",
+            "refresh_url": stripe_return_url(base, return_path, "payouts=refresh"),
+            "return_url": stripe_return_url(base, return_path, "payouts=return"),
         }
     )
     return {"url": link.url}

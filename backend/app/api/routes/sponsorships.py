@@ -341,6 +341,8 @@ async def payout_onboard(user: CurrentUser = Depends(require_user), db: AsyncSes
         return await connect.create_payout_onboarding_link(db, user.id, user.email, "/sponsorships")
     except connect.ConnectError as e:
         raise HTTPException(e.status, str(e))
+    except stripe.StripeError:
+        raise HTTPException(502, "Could not open payout setup right now. Try again in a moment.")
 
 
 @router.post("/payouts/dashboard", dependencies=[Depends(limit_money)])

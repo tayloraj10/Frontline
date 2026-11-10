@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.services import connect
 from app.services import payments as payments_service
+from app.services.stripe_return import stripe_return_url
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +70,8 @@ async def create_card_setup_url(db: AsyncSession, user_id: UUID, return_path: st
             "customer": customer_id,
             "currency": "usd",
             "payment_method_types": ["card"],
-            "success_url": f"{base}{return_path}",
-            "cancel_url": f"{base}{return_path}",
+            "success_url": stripe_return_url(base, return_path),
+            "cancel_url": stripe_return_url(base, return_path),
         }
     )
     if not session.url:
