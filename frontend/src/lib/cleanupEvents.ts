@@ -1,7 +1,7 @@
 import { uploadEventImage } from "@/lib/events";
 import { uploadToR2 } from "@/lib/uploadToR2";
 import type { RouteLineString } from "@/lib/cleanupRoutes";
-import type { PayoutRule } from "@/app/sponsorships/SponsoredSites";
+import type { PayoutRule } from "@/app/earn/SponsoredSites";
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api${path}`, {

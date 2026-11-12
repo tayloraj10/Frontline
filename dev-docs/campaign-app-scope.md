@@ -1066,6 +1066,17 @@ Supabase supports additional OAuth providers with minimal effort — each requir
 
 Built, admin-only until `payments_enabled` is turned on: Frontline Plus subscriptions (individual and group, Stripe Checkout and billing portal, deduped webhook), sponsorships (site, group area, general fund), sponsored cleanups with per-bag or flat payout rules and pool holds, allocation review queue, and the Impact page. Migrations 109-120.
 
+**Payments meeting batch (2026-11-10, local only, migrations 139-142 not on prod).** See `payments-meeting-notes-scoping-2026-11-10.md`.
+- [x] Earn/Hire tab split, Hire page with post a job, browse cleaners, bookings, sponsor a cleanup
+- [x] Mandatory live route tracking (native app), time on site, end photo with bags confirmation, flagged-job override
+- [x] Optional "ok to leave bags at my house" with a participants-only drop-off address
+- [x] Pooled sponsorships (migration 142): start, chip in via Stripe Checkout, auto-fund at goal, refund on expiry or cancel
+- [x] Route rename and Earn/Fund chooser (2026-11-11): `/sponsorships` to `/earn`, `/marketplace` to `/fund`, cleaner profile at `/earn/profile`, old paths redirect (307); one page each with a "What do you want to do?" chip row (`DoChooser`) that also sets the map filter (`?do=`); separate "Take a job" page removed; smaller map filter, basemap and Layers controls
+- [x] Admin "Route review" list in marketplace moderation
+- [x] Cleaner profile completeness meter and badges
+- [x] Stripe-hosted tax and ID capture, agreement updates (tracking consent, contractor and 1099 e-delivery, snow wording)
+- [x] Snow area/salt variant, re-point FlowGuide walkthroughs to Earn/Hire
+
 **Work left on payments and money flow:**
 - Stripe Connect payouts and KYC for earners. Today "Mark paid out" and "Mark released" only record state; no money moves out.
 - Legal and tax review before real money moves either direction.
@@ -1074,3 +1085,4 @@ Built, admin-only until `payments_enabled` is turned on: Frontline Plus subscrip
 - Store bag count on allocations, cap-reason reporting, allocation review paging, changing sponsorship after event create.
 
 See the Deploy runbook in `payments-v2-scoping-2026-10-15.md` and `payments-v2-verification-checklist-2026-10-16.md`.
+- [x] **Payments feedback pass (2026-11-11, migration 144 local only)**: Earn toggle between sponsored sites and neighbor jobs, condensed payouts card, two action tiles, one-line job filters, `open_to_additions` and top-ups (`topup_of`) with Add money buttons and map + markers, pools repositioned as crowdfunding, sponsor-vs-hire guide card and walkthrough steps, tab renamed to Fund (placeholder, `lib/rewardsLabels.ts`). Not done: single combined map of sites and jobs. Untested on real Stripe: top-ups.

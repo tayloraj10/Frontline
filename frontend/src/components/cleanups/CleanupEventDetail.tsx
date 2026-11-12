@@ -44,7 +44,7 @@ import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/Red
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import BodyPortal from "@/components/ui/BodyPortal";
 import PlusFlair from "@/components/billing/PlusFlair";
-import { describeRule } from "@/app/sponsorships/SponsoredSites";
+import { describeRule } from "@/app/earn/SponsoredSites";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";

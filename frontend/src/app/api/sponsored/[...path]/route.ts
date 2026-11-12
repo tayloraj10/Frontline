@@ -23,6 +23,7 @@ const USER_POST = [
   /^payouts\/dashboard$/,
   new RegExp(`^groups/${UUID}/payouts/(onboard|dashboard)$`),
   new RegExp(`^${UUID}/claim$`),
+  new RegExp(`^${UUID}/top-up$`),
   new RegExp(`^${UUID}/claim/(before-photo|after-photo|release)$`),
 ];
 const ADMIN_GET = [/^allocations$/];

@@ -2,14 +2,14 @@ import { Stage, Chip, Arrow, type WalkthroughDef } from "@/components/walkthroug
 
 export const marketplace: WalkthroughDef = {
   id: "marketplace",
-  title: "How Hire works",
+  title: "How hiring works",
   finishLabel: "Got it",
   steps: [
     {
       title: "Say what needs cleaning",
       label: "I'm hiring",
       track: { name: "I'm hiring", tone: "sky" },
-      body: "Post a job at the price you want. Cleaners near you get notified and the first one to take it gets the job.",
+      body: "Use the Fund tab to pay people to clean or shovel snow. Post a job at the price you want. Cleaners near you get notified and the first one to take it gets the job.",
       how: ["Search the address, drop a pin or draw the area", "Choose the job type and when", "Set your budget"],
       visual: (
         <Stage>
@@ -62,7 +62,7 @@ export const marketplace: WalkthroughDef = {
       title: "Set up your cleaner profile",
       label: "I'm cleaning",
       track: { name: "I'm cleaning", tone: "emerald" },
-      body: "Want to earn instead? Add your rate, the jobs you do and the area you work in, then sign the cleaner agreement. You can start taking jobs right away.",
+      body: "Want to earn instead? Open the Earn tab. Add a profile photo, your rate, the jobs you do and the area you work in, then sign the cleaner agreement and finish Stripe setup, which verifies your ID and tax details on Stripe's own pages.",
       visual: (
         <Stage>
           <span className="text-3xl">🙂</span>
@@ -92,7 +92,8 @@ export const marketplace: WalkthroughDef = {
       how: [
         "Get to the site within 2 hours of the start time, or the job goes back on the board",
         "Take a before photo, then start the job once you are at the site",
-        "Take an after photo and mark it done",
+        "Use the mobile app: your route and time on site are recorded while the job is in progress",
+        "Take an after photo showing all your bags and mark it done",
         "Backing out after the start time counts as a strike",
       ],
       visual: (

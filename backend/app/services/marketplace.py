@@ -22,11 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services import connect
 from app.services import marketplace_chat_filter as chat_filter
 from app.services import marketplace_payments as mp
+from app.services.game_settings import min_payment_cents
 
 logger = logging.getLogger(__name__)
 
 MAX_LISTING_PHOTOS = 4
-JOB_TYPES = ["litter", "lot_cleanup", "sidewalk", "light_yard_work"]
+JOB_TYPES = ["litter", "lot_cleanup", "sidewalk", "light_yard_work", "snow_shoveling"]
+# Job types that produce no bags, so the "all bags are in the photo" step does not apply.
+NO_BAG_JOB_TYPES = {"snow_shoveling"}
 JobStatus = Literal[
     "requested", "open", "accepted", "in_progress", "completed",
     "confirmed", "released", "declined", "cancelled", "expired", "disputed", "refunded",
@@ -51,7 +54,7 @@ async def pricing(db: AsyncSession) -> dict:
     """Fee percent and minimum price, shown to hirers before they post."""
     return {
         "fee_percent": await _setting(db, "marketplace_platform_fee_percent", 5.5),
-        "min_price_cents": int(await _setting(db, "marketplace_min_job_cents", 1500)),
+        "min_price_cents": await min_payment_cents(db),
     }
 
 
@@ -126,8 +129,10 @@ async def my_status(db: AsyncSession, user_id: UUID) -> dict:
             {"u": user_id, "d": days},
         )
     ).mappings().all()
+    avatar = (await db.execute(text("SELECT avatar_url FROM profiles WHERE id = :u"), {"u": user_id})).scalar_one_or_none()
     return {
         "cleaner_profile": _plain(profile) if profile else None,
+        "avatar_url": avatar,
         "strikes": {"limit": limit, "window_days": days, "items": [_plain(r) for r in rows]},
         "cleaner_agreement_accepted": await has_accepted_current(db, user_id, "cleaner"),
         "customer_terms_accepted": await has_accepted_current(db, user_id, "customer"),
@@ -149,29 +154,45 @@ async def upsert_cleaner_profile(
     latitude: float | None,
     longitude: float | None,
     area_label: str | None,
+    languages: list[str] | None = None,
+    years_experience: int | None = None,
+    equipment: list[str] | None = None,
+    availability: str | None = None,
+    preferred_size: str | None = None,
 ) -> dict:
     bad = [s for s in services if s not in JOB_TYPES]
     if bad:
         raise MarketplaceError(f"Unsupported service types: {', '.join(bad)}.")
     if not await has_accepted_current(db, user_id, "cleaner"):
         raise MarketplaceError("Accept the cleaner agreement before creating a listing.", 403)
+    avatar = (await db.execute(text("SELECT avatar_url FROM profiles WHERE id = :u"), {"u": user_id})).scalar_one_or_none()
+    if not avatar:
+        raise MarketplaceError("Add a clear profile photo of yourself to create your cleaner profile.")
+    if preferred_size not in (None, "small", "medium", "large", "any"):
+        raise MarketplaceError("Pick a valid preferred job size.")
+    clean = lambda xs: [x.strip()[:40] for x in (xs or []) if x and x.strip()][:12]  # noqa: E731
     await db.execute(
         text(
             """INSERT INTO cleaner_profiles
-                 (user_id, headline, bio, services, rate_type, rate_cents, service_radius_km, home_location, area_label, status)
+                 (user_id, headline, bio, services, rate_type, rate_cents, service_radius_km, home_location, area_label, status,
+                  languages, years_experience, equipment, availability, preferred_size)
                VALUES (:u, :h, :b, :s, :rt, :rc, :rad,
                        CASE WHEN CAST(:lat AS float8) IS NULL THEN NULL
                             ELSE ST_SetSRID(ST_MakePoint(CAST(:lng AS float8), CAST(:lat AS float8)), 4326)::geography END,
-                       :al, 'active')
+                       :al, 'active', :lang, :yrs, :eq, :av, :ps)
                ON CONFLICT (user_id) DO UPDATE SET
                  headline = EXCLUDED.headline, bio = EXCLUDED.bio, services = EXCLUDED.services,
                  rate_type = EXCLUDED.rate_type, rate_cents = EXCLUDED.rate_cents,
                  service_radius_km = EXCLUDED.service_radius_km, home_location = EXCLUDED.home_location,
-                 area_label = EXCLUDED.area_label"""
+                 area_label = EXCLUDED.area_label, languages = EXCLUDED.languages,
+                 years_experience = EXCLUDED.years_experience, equipment = EXCLUDED.equipment,
+                 availability = EXCLUDED.availability, preferred_size = EXCLUDED.preferred_size"""
         ),
         {
             "u": user_id, "h": headline.strip(), "b": bio.strip(), "s": services, "rt": rate_type,
             "rc": rate_cents, "rad": service_radius_km, "lat": latitude, "lng": longitude, "al": area_label,
+            "lang": clean(languages), "yrs": years_experience, "eq": clean(equipment),
+            "av": (availability or "").strip()[:200] or None, "ps": preferred_size,
         },
     )
     await db.commit()
@@ -194,13 +215,13 @@ async def set_cleaner_status(db: AsyncSession, user_id: UUID, status: str) -> No
         await _notify_safe(
             db, user_id, "marketplace_strike", "Your cleaner profile was suspended",
             "You cannot take jobs while it is suspended. Contact support to appeal.",
-            "/marketplace/become-a-cleaner", "View",
+            "/earn/profile", "View",
         )
     elif status != before and status == "active" and before == "suspended":
         await _notify_safe(
             db, user_id, "marketplace_strike", "Your cleaner profile is active again",
             "You can take jobs again. Your strikes still count until they drop off.",
-            "/marketplace/become-a-cleaner", "View",
+            "/earn/profile", "View",
         )
 
 
@@ -233,7 +254,8 @@ async def get_cleaner(db: AsyncSession, cleaner_id: UUID) -> dict:
         await db.execute(
             text(
                 """SELECT c.user_id, p.username, p.avatar_url, c.headline, c.bio, c.services, c.rate_type,
-                          c.rate_cents, c.service_radius_km, c.area_label, c.rating_avg, c.rating_count, c.jobs_completed
+                          c.rate_cents, c.service_radius_km, c.area_label, c.rating_avg, c.rating_count, c.jobs_completed,
+                          c.languages, c.years_experience, c.equipment, c.availability, c.preferred_size
                    FROM cleaner_profiles c JOIN profiles p ON p.id = c.user_id
                    WHERE c.user_id = :u AND c.status = 'active'"""
             ),
@@ -283,9 +305,20 @@ async def create_job(
     radius_m: int | None = None,
     polygon: list[list[float]] | None = None,
     photos: list[str] | None = None,
+    bag_dropoff_ok: bool = False,
+    bag_dropoff_address: str | None = None,
+    bag_dropoff_note: str | None = None,
 ) -> dict:
     if job_type not in JOB_TYPES:
         raise MarketplaceError("That job type is not available yet.")
+    bag_dropoff_address = (bag_dropoff_address or "").strip() or None
+    bag_dropoff_note = (bag_dropoff_note or "").strip() or None
+    if job_type in NO_BAG_JOB_TYPES:
+        bag_dropoff_ok, bag_dropoff_address, bag_dropoff_note = False, None, None
+    elif bag_dropoff_ok and not bag_dropoff_address:
+        raise MarketplaceError("Add where the cleaner can leave the bags, or turn off the bag drop-off option.")
+    elif not bag_dropoff_ok:
+        bag_dropoff_address = bag_dropoff_note = None
     if not hazards_ack:
         raise MarketplaceError("Confirm there are no hazardous materials or unsafe conditions at the site.")
     if not await has_accepted_current(db, customer_id, "customer"):
@@ -334,7 +367,7 @@ async def create_job(
     else:
         raise MarketplaceError("Invalid time option.")
 
-    min_cents = int(await _setting(db, "marketplace_min_job_cents", 1500))
+    min_cents = await min_payment_cents(db)
     if price_cents < min_cents:
         raise MarketplaceError(f"The minimum job price is ${min_cents / 100:,.0f}.")
     price_type = "fixed"  # hourly is switched off for launch; the column and enum stay for later
@@ -349,7 +382,8 @@ async def create_job(
                 """INSERT INTO marketplace_jobs
                      (customer_id, cleaner_id, origin, title, description, job_type, size, hazards_ack, address_label,
                       location, radius_m, area, time_mode, starts_at, window_start, window_end, flexible_days, expires_at,
-                      price_type, price_cents, platform_fee_cents, fee_on_top, status)
+                      price_type, price_cents, platform_fee_cents, fee_on_top, status,
+                      bag_dropoff_ok, bag_dropoff_address, bag_dropoff_note)
                    VALUES (:cu, :cl, :o, :t, :d, :jt, :sz, true, :al,
                            CASE WHEN CAST(:wkt AS text) IS NOT NULL
                                   THEN ST_Centroid(ST_GeogFromText('SRID=4326;' || CAST(:wkt AS text))::geometry)::geography
@@ -357,7 +391,8 @@ async def create_job(
                                 ELSE ST_SetSRID(ST_MakePoint(CAST(:lng AS float8), CAST(:lat AS float8)), 4326)::geography END,
                            :rm, CASE WHEN CAST(:wkt AS text) IS NULL THEN NULL
                                      ELSE ST_GeogFromText('SRID=4326;' || CAST(:wkt AS text)) END,
-                           :tm, :ss, :ws, :we, :fd, :ex, :pt, :pc, :fee, true, :st)
+                           :tm, :ss, :ws, :we, :fd, :ex, :pt, :pc, :fee, true, :st,
+                           :bdo, :bda, :bdn)
                    RETURNING id"""
             ),
             {
@@ -365,6 +400,7 @@ async def create_job(
                 "jt": job_type, "sz": size, "al": address_label, "lat": latitude, "lng": longitude, "rm": radius_m, "wkt": wkt, "tm": time_mode,
                 "ss": starts_at, "ws": window_start, "we": window_end, "fd": flexible_days, "ex": expires_at,
                 "pt": price_type, "pc": price_cents, "fee": fee_cents, "st": status,
+                "bdo": bag_dropoff_ok, "bda": bag_dropoff_address, "bdn": bag_dropoff_note,
             },
         )
     ).first()
@@ -387,7 +423,8 @@ _JOB_COLS = """j.id, j.customer_id, j.cleaner_id, j.origin, j.title, j.descripti
   j.expires_at, j.price_type, j.price_cents, j.platform_fee_cents, j.fee_on_top, j.status, j.hold_status, j.cancel_reason,
   j.accepted_at, j.arrive_by, j.started_at, j.completed_at, j.confirmed_at, j.release_after, j.created_at,
   cu.username AS customer_username, cl.username AS cleaner_username,
-  j.radius_m, j.check_in_distance_m, j.finish_distance_m, j.location_flagged,
+  j.radius_m, j.check_in_distance_m, j.finish_distance_m, j.location_flagged, j.track_flagged,
+  j.bag_dropoff_ok, j.bag_dropoff_address, j.bag_dropoff_note, j.bags_ack_at, j.bags_count,
   CASE WHEN j.area IS NULL THEN NULL ELSE ST_AsGeoJSON(j.area::geometry)::json END AS area"""
 
 
@@ -416,6 +453,14 @@ async def get_job(db: AsyncSession, job_id: UUID, viewer_id: UUID, *, is_admin: 
     # address stays private until a cleaner is assigned.
     if not (participant or is_admin):
         job["address_label"] = None
+        job["bag_dropoff_address"] = None
+        job["bag_dropoff_note"] = None
+    # Route tracking is the cleaner's own location history: only they and admins see its flag.
+    if not (viewer_id == row["cleaner_id"] or is_admin):
+        job.pop("track_flagged", None)
+    # Time on the job, from arrival check-in to the finished-photo submission (both server-set).
+    started, done = row["started_at"], row["completed_at"]
+    job["duration_seconds"] = int((done - started).total_seconds()) if started and done else None
     job["viewer_role"] = (
         "customer" if viewer_id == row["customer_id"] else "cleaner" if viewer_id == row["cleaner_id"] else "viewer"
     )
@@ -592,6 +637,8 @@ async def list_board(
         if not job["is_mine"]:
             # Exact site details unlock for the assigned cleaner. The board gets a neighborhood-level pin.
             job["address_label"] = None
+            job["bag_dropoff_address"] = None
+            job["bag_dropoff_note"] = None
             job["area"] = None
             job["radius_m"] = None
             if job.get("latitude") is not None:
@@ -653,7 +700,7 @@ async def _add_strike(db: AsyncSession, user_id: UUID, job_id: UUID, kind: str) 
         "You took jobs and did not do them, so your cleaner profile is suspended. Contact support to appeal."
         if suspended
         else f"Taking a job and not doing it earns a strike. You have {n} of {limit}; at {limit} your cleaner profile is suspended.",
-        "/marketplace/become-a-cleaner" if suspended else "/marketplace", "View" if suspended else "Hire",
+        "/earn/profile" if suspended else "/fund", "View" if suspended else "Hire",
     )
 
 
@@ -687,13 +734,13 @@ async def _lapse_unstarted_jobs(db: AsyncSession) -> int:
         lapsed += 1
         await _notify_safe(
             db, job["cleaner_id"], "marketplace_job_lapsed", "You lost a job",
-            f"You did not start \"{job['title']}\" in time, so it went back to the board.", "/marketplace/jobs", "My jobs",
+            f"You did not start \"{job['title']}\" in time, so it went back to the board.", "/fund/jobs", "My jobs",
         )
         await _notify_safe(
             db, job["customer_id"], "marketplace_job_lapsed", "Your cleaner did not arrive",
             f"The cleaner did not reach \"{job['title']}\" in time. You were refunded"
             + (", and the job is back on the board." if job["origin"] != "direct" else "."),
-            f"/marketplace/jobs/{jid}", "View job",
+            f"/fund/jobs/{jid}", "View job",
         )
     return lapsed
 
@@ -730,7 +777,7 @@ async def expire_stale_jobs(db: AsyncSession) -> int:
         released += 1
         await _notify_safe(
             db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
-            f"\"{job['title']}\" was released automatically. Your payout is on its way.", f"/marketplace/jobs/{jid}", "View job",
+            f"\"{job['title']}\" was released automatically. Your payout is on its way.", f"/fund/jobs/{jid}", "View job",
         )
     return (res.rowcount or 0) + released + lapsed
 
@@ -748,10 +795,18 @@ async def _require_cleaner_ready(db: AsyncSession, user_id: UUID) -> None:
     if not await has_accepted_current(db, user_id, "cleaner"):
         raise MarketplaceError("Accept the current cleaner agreement before taking jobs.", 403)
     ok = (
-        await db.execute(text("SELECT status, payouts_enabled FROM cleaner_profiles WHERE user_id = :u"), {"u": user_id})
+        await db.execute(
+            text(
+                """SELECT c.status, c.payouts_enabled, p.avatar_url
+                   FROM cleaner_profiles c JOIN profiles p ON p.id = c.user_id WHERE c.user_id = :u"""
+            ),
+            {"u": user_id},
+        )
     ).first()
     if not ok:
         raise MarketplaceError("Create your cleaner profile before taking jobs.", 403)
+    if not ok.avatar_url:
+        raise MarketplaceError("Add a clear profile photo of yourself before taking jobs.", 403)
     if ok.status == "suspended":
         raise MarketplaceError("Your cleaner profile is suspended, so you cannot take jobs. Contact support to appeal.", 403)
     if ok.status == "paused":
@@ -773,7 +828,7 @@ async def _charge(db: AsyncSession, job: dict) -> str | None:
 
 async def _fail_payment(db: AsyncSession, job_id: UUID, err: Exception) -> MarketplaceError:
     await db.rollback()
-    await _notify_admins(db, "marketplace_admin_payment_error", "Hire payment problem", f"Job {job_id}: {str(err)[:200]}", "/marketplace/admin")
+    await _notify_admins(db, "marketplace_admin_payment_error", "Hire payment problem", f"Job {job_id}: {str(err)[:200]}", "/fund/admin")
     await db.execute(
         text("UPDATE marketplace_jobs SET payment_error = :e WHERE id = :id"), {"e": str(err)[:500], "id": job_id}
     )
@@ -838,7 +893,7 @@ async def accept_direct_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, sa
     await _notify_safe(
         db, job["customer_id"], "marketplace_job_accepted", "Your booking request was accepted",
         f"\"{job['title']}\" was accepted. Your card has been charged and the cleaner will contact you in the job chat.",
-        f"/marketplace/jobs/{job_id}", "View job",
+        f"/fund/jobs/{job_id}", "View job",
     )
     return await get_job(db, job_id, cleaner_id)
 
@@ -852,7 +907,7 @@ async def decline_direct_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID) -
     await _notify_safe(
         db, job["customer_id"], "marketplace_job_declined", "Your booking request was declined",
         f"The cleaner could not take \"{job['title']}\". You were not charged. You can post it to the open board instead.",
-        f"/marketplace/jobs/{job_id}", "View job",
+        f"/fund/jobs/{job_id}", "View job",
     )
     return await get_job(db, job_id, cleaner_id)
 
@@ -887,7 +942,7 @@ async def take_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, safety_ack:
     await _notify_safe(
         db, job["customer_id"], "marketplace_job_taken", "A cleaner took your job",
         f"\"{job['title']}\" was taken at your price of ${job['price_cents'] / 100:,.0f}. Open it to see who is coming.",
-        f"/marketplace/jobs/{job_id}", "View job",
+        f"/fund/jobs/{job_id}", "View job",
     )
     return await get_job(db, job_id, cleaner_id)
 
@@ -919,7 +974,7 @@ async def flag_price(db: AsyncSession, job_id: UUID, cleaner_id: UUID, suggested
         await _notify_safe(
             db, job["customer_id"], "marketplace_price_flag", "A cleaner says your price is low",
             f"\"{job['title']}\" has not been taken yet. A nearby cleaner flagged the price as too low. Raising it may get it picked up.",
-            f"/marketplace/jobs/{job_id}", "Review price",
+            f"/fund/jobs/{job_id}", "Review price",
         )
     return {"ok": True, "flags": count}
 
@@ -931,7 +986,7 @@ async def update_price(db: AsyncSession, job_id: UUID, customer_id: UUID, price_
         raise MarketplaceError("Job not found.", 404)
     if job["status"] != "open":
         raise MarketplaceError("The price can only change while the job is open.", 409)
-    min_cents = int(await _setting(db, "marketplace_min_job_cents", 1500))
+    min_cents = await min_payment_cents(db)
     if price_cents < min_cents:
         raise MarketplaceError(f"The minimum job price is ${min_cents / 100:,.0f}.")
     fee_pct = await _setting(db, "marketplace_platform_fee_percent", 5.5)
@@ -995,7 +1050,7 @@ async def cancel_job(db: AsyncSession, job_id: UUID, user_id: UUID, reason: str 
         "Your cleaner backed out" if reopened else "A job was cancelled",
         (f"The cleaner backed out of \"{job['title']}\". It is back on the board." if reopened else f"\"{job['title']}\" was cancelled.")
         + (" The payment was refunded in full." if refunded else ""),
-        f"/marketplace/jobs/{job_id}", "View job",
+        f"/fund/jobs/{job_id}", "View job",
     )
     out = await get_job(db, job_id, user_id)
     out["refunded"] = refunded
@@ -1081,14 +1136,15 @@ async def start_job(
     await db.commit()
     await _notify_safe(
         db, job["customer_id"], "marketplace_job_started", "Your cleaner has started",
-        f"Work has started on \"{job['title']}\". You will be told when it is done.", f"/marketplace/jobs/{job_id}", "View job",
+        f"Work has started on \"{job['title']}\". You will be told when it is done.", f"/fund/jobs/{job_id}", "View job",
     )
     return await get_job(db, job_id, cleaner_id)
 
 
 async def complete_job(
     db: AsyncSession, job_id: UUID, cleaner_id: UUID, *, latitude: float | None = None, longitude: float | None = None,
-    override: bool = False,
+    override: bool = False, bags_ack: bool = False, bags_count: int | None = None,
+    track_override: bool = False, track_reason: str | None = None,
 ) -> dict:
     days = int(await _setting(db, "marketplace_auto_release_days", 3))
     job = await _load_for_update(db, job_id)
@@ -1096,6 +1152,11 @@ async def complete_job(
         raise MarketplaceError("Job not found.", 404)
     if job["status"] != "in_progress":
         raise MarketplaceError("Start the job before marking it complete.", 409)
+    needs_bags = job["job_type"] not in NO_BAG_JOB_TYPES
+    if needs_bags and not bags_ack:
+        raise MarketplaceError("Confirm that all the bags are in your finished photo before marking the job complete.")
+    if not needs_bags:
+        bags_ack, bags_count = False, None
     photos = (
         await db.execute(
             text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'after' AND uploader_id = :u"),
@@ -1105,21 +1166,99 @@ async def complete_job(
     if photos < 1:
         raise MarketplaceError("Add at least one after photo before marking the job complete.")
     dist, flagged = await _check_on_site(db, job_id, latitude, longitude, override, "finish")
+    # Route tracking is required, but a dead phone must never strand a cleaner without pay: with too few
+    # points they can finish through the override, which flags the job for admin review.
+    min_pts = int(await _setting(db, "marketplace_min_track_points", 3))
+    pts = (
+        await db.execute(text("SELECT count(*) FROM marketplace_job_track_points WHERE job_id = :id"), {"id": job_id})
+    ).scalar_one()
+    track_flagged = pts < min_pts
+    if track_flagged and not track_override:
+        raise MarketplaceError(
+            "We did not record your route for this job. Keep the app open while you work. "
+            "If your phone or signal failed, you can finish anyway and we will review it.",
+            422,
+        )
     await db.execute(
         text(
             """UPDATE marketplace_jobs SET status = 'completed', completed_at = now(), finish_distance_m = :d,
                  location_flagged = location_flagged OR :f,
+                 track_flagged = :tf, track_flag_reason = :tr,
+                 bags_ack_at = CASE WHEN :ack THEN now() ELSE NULL END, bags_count = :bc,
                  release_after = now() + make_interval(days => :days) WHERE id = :id"""
         ),
-        {"days": days, "d": dist, "f": flagged, "id": job_id},
+        {
+            "days": days, "d": dist, "f": flagged, "id": job_id, "ack": bags_ack, "bc": bags_count,
+            "tf": track_flagged, "tr": (track_reason or "").strip()[:300] or None if track_flagged else None,
+        },
     )
     await db.commit()
     await _notify_safe(
         db, job["customer_id"], "marketplace_job_completed", "Your job is done: please confirm",
         f"\"{job['title']}\" is finished. Check the photos, then confirm to release payment. It releases on its own in {days} days if you do nothing.",
-        f"/marketplace/jobs/{job_id}", "Review and confirm",
+        f"/fund/jobs/{job_id}", "Review and confirm",
     )
     return await get_job(db, job_id, cleaner_id)
+
+
+def _haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
+    from math import asin, cos, radians, sin, sqrt
+
+    dlat, dlng = radians(b[0] - a[0]), radians(b[1] - a[1])
+    h = sin(dlat / 2) ** 2 + cos(radians(a[0])) * cos(radians(b[0])) * sin(dlng / 2) ** 2
+    return 2 * 6371000 * asin(sqrt(h))
+
+
+async def add_track_points(db: AsyncSession, job_id: UUID, cleaner_id: UUID, points: list[dict]) -> dict:
+    """Appends a batch of device location points. Only the assigned cleaner, only while the job is in progress.
+    Re-sent points (a retry after bad signal) are ignored, so the device can safely resend its queue."""
+    job = (
+        await db.execute(text("SELECT cleaner_id, status FROM marketplace_jobs WHERE id = :id"), {"id": job_id})
+    ).mappings().first()
+    if not job or job["cleaner_id"] != cleaner_id:
+        raise MarketplaceError("Job not found.", 404)
+    if job["status"] != "in_progress":
+        raise MarketplaceError("Route points are only recorded while the job is in progress.", 409)
+    for p in points[:200]:
+        await db.execute(
+            text(
+                """INSERT INTO marketplace_job_track_points (job_id, user_id, latitude, longitude, accuracy_m, recorded_at)
+                   VALUES (:j, :u, :lat, :lng, :acc, :at) ON CONFLICT (job_id, recorded_at) DO NOTHING"""
+            ),
+            {"j": job_id, "u": cleaner_id, "lat": p["latitude"], "lng": p["longitude"], "acc": p.get("accuracy"), "at": p["recorded_at"]},
+        )
+    await db.commit()
+    n = (await db.execute(text("SELECT count(*) FROM marketplace_job_track_points WHERE job_id = :id"), {"id": job_id})).scalar_one()
+    return {"points": n}
+
+
+async def get_track(db: AsyncSession, job_id: UUID, viewer_id: UUID, *, is_admin: bool = False) -> dict:
+    """The recorded route. Visible to the cleaner and to admins only (it is the cleaner's own location history)."""
+    job = (
+        await db.execute(
+            text("SELECT cleaner_id, status, started_at, completed_at, track_flagged, track_flag_reason FROM marketplace_jobs WHERE id = :id"),
+            {"id": job_id},
+        )
+    ).mappings().first()
+    if not job or not (is_admin or job["cleaner_id"] == viewer_id):
+        raise MarketplaceError("Job not found.", 404)
+    rows = (
+        await db.execute(
+            text(
+                """SELECT latitude, longitude, accuracy_m, recorded_at FROM marketplace_job_track_points
+                   WHERE job_id = :id ORDER BY recorded_at LIMIT 5000"""
+            ),
+            {"id": job_id},
+        )
+    ).mappings().all()
+    pts = [_plain(r) for r in rows]
+    dist = sum(_haversine_m((a["latitude"], a["longitude"]), (b["latitude"], b["longitude"])) for a, b in zip(pts, pts[1:]))
+    return {
+        "points": pts,
+        "distance_m": round(dist),
+        "track_flagged": bool(job["track_flagged"]),
+        "track_flag_reason": job["track_flag_reason"],
+    }
 
 
 async def confirm_job(db: AsyncSession, job_id: UUID, customer_id: UUID) -> dict:
@@ -1131,7 +1270,7 @@ async def confirm_job(db: AsyncSession, job_id: UUID, customer_id: UUID) -> dict
     await _release(db, job, "confirmed", confirmed=True)
     await _notify_safe(
         db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
-        f"The customer confirmed \"{job['title']}\". Your payout is on its way.", f"/marketplace/jobs/{job_id}", "View job",
+        f"The customer confirmed \"{job['title']}\". Your payout is on its way.", f"/fund/jobs/{job_id}", "View job",
     )
     return await get_job(db, job_id, customer_id)
 
@@ -1163,9 +1302,9 @@ async def dispute_job(db: AsyncSession, job_id: UUID, user_id: UUID, details: st
     await _notify_safe(
         db, other, "marketplace_job_disputed", "A dispute was opened",
         f"A dispute was opened on \"{job['title']}\". Payment is on hold while Frontline reviews it.",
-        f"/marketplace/jobs/{job_id}", "View job",
+        f"/fund/jobs/{job_id}", "View job",
     )
-    await _notify_admins(db, "marketplace_admin_dispute", "Hire dispute needs review", f"\"{job['title']}\" is in dispute.", "/marketplace/admin")
+    await _notify_admins(db, "marketplace_admin_dispute", "Hire dispute needs review", f"\"{job['title']}\" is in dispute.", "/fund/admin")
     return await get_job(db, job_id, user_id)
 
 
@@ -1448,7 +1587,19 @@ async def admin_overview(db: AsyncSession) -> dict:
             {"d": days},
         )
     ).mappings().all()
+    track_review = (
+        await db.execute(
+            text(
+                """SELECT j.id, j.title, j.status, j.started_at, j.completed_at, j.track_flag_reason,
+                          cl.username AS cleaner_username,
+                          EXTRACT(EPOCH FROM (j.completed_at - j.started_at))::int AS worked_seconds
+                   FROM marketplace_jobs j LEFT JOIN profiles cl ON cl.id = j.cleaner_id
+                   WHERE j.track_flagged = true ORDER BY j.completed_at DESC NULLS LAST LIMIT 30"""
+            )
+        )
+    ).mappings().all()
     return {
+        "track_review": [_plain(r) for r in track_review],
         "flagged_messages": [_plain(r) for r in flagged],
         "chats": [_plain(r) for r in chats],
         "struck_cleaners": [_plain(r) for r in strikes],
@@ -1489,7 +1640,7 @@ async def admin_resolve_dispute(db: AsyncSession, job_id: UUID, outcome: Literal
     for uid in (job["customer_id"], job["cleaner_id"]):
         await _notify_safe(
             db, uid, "marketplace_dispute_resolved", "Your dispute was resolved",
-            f"Frontline reviewed \"{job['title']}\". The payment was {verdict}.", f"/marketplace/jobs/{job_id}", "View job",
+            f"Frontline reviewed \"{job['title']}\". The payment was {verdict}.", f"/fund/jobs/{job_id}", "View job",
         )
     return {"ok": True, "outcome": outcome}
 
@@ -1504,7 +1655,7 @@ async def admin_release_job(db: AsyncSession, job_id: UUID) -> dict:
     if job["cleaner_id"]:
         await _notify_safe(
             db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
-            f"\"{job['title']}\" was approved by Frontline. Your payout is on its way.", f"/marketplace/jobs/{job_id}", "View job",
+            f"\"{job['title']}\" was approved by Frontline. Your payout is on its way.", f"/fund/jobs/{job_id}", "View job",
         )
     return {"ok": True}
 
@@ -1591,5 +1742,5 @@ async def _notify_nearby_cleaners(db: AsyncSession, job_id: UUID, limit: int = 2
     for user_id, title in rows:
         await _notify(
             db, user_id, "marketplace_job", "New job near you", f"\"{title}\" was just posted in your area.",
-            f"/marketplace/jobs/{job_id}", "View job",
+            f"/fund/jobs/{job_id}", "View job",
         )

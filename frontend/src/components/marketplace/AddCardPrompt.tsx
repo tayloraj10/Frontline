@@ -5,6 +5,7 @@ import { CreditCard } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { mk } from "@/lib/marketplace";
+import { inNativeApp } from "@/lib/nativeApp";
 
 /** Shown before the job form when the customer has no saved card. Stripe hosts the card entry. */
 export default function AddCardPrompt({ returnPath }: { returnPath: string }) {
@@ -17,7 +18,7 @@ export default function AddCardPrompt({ returnPath }: { returnPath: string }) {
     try {
       const { url } = await mk<{ url: string }>("/payments/card/setup", {
         method: "POST",
-        body: { return_path: returnPath },
+        body: { return_path: returnPath, from_app: inNativeApp() },
       });
       window.location.href = url;
     } catch (e) {

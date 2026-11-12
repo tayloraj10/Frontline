@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { describeRule, type PayoutRule } from "@/app/sponsorships/SponsoredSites";
+import { describeRule, type PayoutRule } from "@/app/earn/SponsoredSites";
 import { cn } from "@/lib/cn";
 
 export interface SponsoredArea {

@@ -73,7 +73,7 @@ export default function JobsList({
             const s = STATUS_LABELS[j.status] ?? { label: j.status, tone: "neutral" as const };
             return (
               <li key={j.id}>
-                <Link href={`/marketplace/jobs/${j.id}`}>
+                <Link href={`/fund/jobs/${j.id}`}>
                   <Card interactive className="space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <p className="min-w-0 font-bold text-zinc-100">{j.title}</p>

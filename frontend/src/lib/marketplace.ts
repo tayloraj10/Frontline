@@ -7,7 +7,18 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
   lot_cleanup: "Lot cleanup",
   sidewalk: "Sidewalk cleanup",
   light_yard_work: "Light yard work",
+  snow_shoveling: "Snow shoveling",
 };
+
+/** Job types that produce no bags, so the "all bags are in the photo" step is skipped. */
+export const NO_BAG_JOB_TYPES = ["snow_shoveling"];
+
+/** "1h 05m" style label for a duration in seconds. */
+export function durationLabel(seconds: number): string {
+  const m = Math.max(0, Math.round(seconds / 60));
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+}
 
 export const TIME_MODE_LABELS: Record<TimeMode, string> = {
   specific: "Exact time",
@@ -54,6 +65,14 @@ export type Job = {
   check_in_distance_m?: number | null;
   finish_distance_m?: number | null;
   location_flagged?: boolean;
+  track_flagged?: boolean;
+  bag_dropoff_ok?: boolean;
+  bag_dropoff_address?: string | null;
+  bag_dropoff_note?: string | null;
+  bags_ack_at?: string | null;
+  bags_count?: number | null;
+  started_at?: string | null;
+  duration_seconds?: number | null;
   created_at: string;
   customer_username: string | null;
   cleaner_username: string | null;
@@ -80,6 +99,11 @@ export type CleanerCard = {
   rating_avg: number | null;
   rating_count: number;
   jobs_completed: number;
+  languages?: string[];
+  years_experience?: number | null;
+  equipment?: string[];
+  availability?: string | null;
+  preferred_size?: "small" | "medium" | "large" | "any" | null;
   distance_km?: number | null;
   reviews?: { rating: number; comment: string | null; created_at: string; username: string | null }[];
 };
@@ -93,6 +117,8 @@ export type BoardPin = Pick<
 
 export type MeStatus = {
   cleaner_profile: (CleanerCard & { status: string; payouts_enabled: boolean }) | null;
+  /** The user's profile photo. Cleaners must have one before creating a profile or taking jobs. */
+  avatar_url?: string | null;
   /** Strikes still inside the window, newest first. Absent on older API responses. */
   strikes?: {
     limit: number;

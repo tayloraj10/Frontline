@@ -4,11 +4,16 @@ import { useEffect, useState } from "react";
 import { getPosition } from "@/lib/getPosition";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import ProgressBar from "@/components/ui/ProgressBar";
 import { Card } from "@/components/ui/Card";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/fields";
 import { JOB_TYPE_LABELS, mk, type MeStatus } from "@/lib/marketplace";
+import Avatar from "@/components/ui/Avatar";
+import { createClient } from "@/lib/supabase/client";
+import { uploadToR2 } from "@/lib/uploadToR2";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import AgreementAccept from "./AgreementAccept";
+import { inNativeApp } from "@/lib/nativeApp";
 
 const PROFILE_STATUS: Record<string, { label: string; tone: "success" | "pending" | "error" | "neutral"; note: string }> = {
   pending_review: { label: "Pending review", tone: "pending", note: "Your profile is being set up. You can take jobs, and we notify you when one is posted near you." },
@@ -32,6 +37,34 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [languages, setLanguages] = useState((p?.languages ?? []).join(", "));
+  const [years, setYears] = useState(p?.years_experience != null ? String(p.years_experience) : "");
+  const [equipment, setEquipment] = useState((p?.equipment ?? []).join(", "));
+  const [availability, setAvailability] = useState(p?.availability ?? "");
+  const [prefSize, setPrefSize] = useState<string>(p?.preferred_size ?? "");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  async function uploadPhoto(file: File | undefined) {
+    if (!file) return;
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const url = await uploadToR2(file, "profiles");
+      const supabase = createClient();
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) throw new Error("Sign in again to update your photo.");
+      const { error: e } = await supabase.schema("public").from("profiles").update({ avatar_url: url }).eq("id", auth.user.id);
+      if (e) throw new Error(e.message);
+      setMe((m) => ({ ...m, avatar_url: url }));
+    } catch (e) {
+      setPhotoError((e as Error).message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  const splitList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
   async function reload() {
     setMe(await mk<MeStatus>("/me"));
@@ -44,7 +77,7 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
     setPayBusy(true);
     setPayError(null);
     try {
-      const { url } = await mk<{ url: string }>("/payouts/onboard", { method: "POST", body: {} });
+      const { url } = await mk<{ url: string }>("/payouts/onboard", { method: "POST", body: { from_app: inNativeApp() } });
       window.location.href = url;
     } catch (e) {
       setPayError((e as Error).message);
@@ -93,6 +126,11 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
           rate_cents: p?.rate_cents ?? null,
           service_radius_km: Math.max(1, Math.round((Number(radius) || 15) / 0.621371)),
           area_label: area || null,
+          languages: splitList(languages),
+          years_experience: years.trim() === "" ? null : Number(years),
+          equipment: splitList(equipment),
+          availability: availability.trim() || null,
+          preferred_size: prefSize || null,
           ...(coords ?? {}),
         },
       });
@@ -116,8 +154,34 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
 
   const st = p ? PROFILE_STATUS[p.status] : null;
 
+  const checklist = [
+    { label: "Profile photo", done: !!me.avatar_url },
+    { label: "Headline", done: headline.trim().length > 0 },
+    { label: "About you", done: bio.trim().length >= 20 },
+    { label: "Work you do", done: services.length > 0 },
+    { label: "Location", done: !!coords || !!p?.area_label },
+    { label: "Experience", done: years.trim() !== "" },
+    { label: "Equipment", done: splitList(equipment).length > 0 },
+    { label: "Availability", done: availability.trim().length > 0 },
+    { label: "Payouts, ID and tax with Stripe", done: !!p?.payouts_enabled },
+  ];
+  const doneCount = checklist.filter((c) => c.done).length;
+  const pct = Math.round((doneCount / checklist.length) * 100);
+
   return (
     <div className="space-y-5">
+      <Card className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-bold text-zinc-100">Profile {pct}% complete</p>
+          {pct === 100 && <Badge variant="success">Complete</Badge>}
+        </div>
+        <ProgressBar value={pct} label={`${pct}% complete`} />
+        {pct < 100 && (
+          <p className="text-sm text-zinc-400">
+            Still to add: {checklist.filter((c) => !c.done).map((c) => c.label.toLowerCase()).join(", ")}. Fuller profiles get hired more.
+          </p>
+        )}
+      </Card>
       {p?.status === "suspended" && (
         <div role="alert" className="space-y-2 rounded-2xl bg-red-500/10 p-4 ring-2 ring-inset ring-red-400/60">
           <p className="font-bold text-red-200">Your cleaner profile is suspended</p>
@@ -174,7 +238,10 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
           <p className="text-sm text-zinc-400">
             {p.payouts_enabled
               ? "You are set up to get paid. Earnings are sent to your bank through Stripe after a customer confirms a job."
-              : "Set up payouts with Stripe to take jobs. It takes a few minutes and you add your bank details on Stripe, never here."}
+              : "Set up payouts with Stripe to take jobs. It takes a few minutes. Stripe verifies your ID and collects your tax details and bank account on its own pages. Frontline never sees or stores your ID images or full tax numbers."}
+          </p>
+          <p className="text-xs text-zinc-500">
+            Tax forms such as a 1099 are delivered electronically. While you work a job in the mobile app, your route and time on site are recorded so the work can be verified.
           </p>
           {payError && <p role="alert" className="text-sm text-red-400">{payError}</p>}
           <Button variant={p.payouts_enabled ? "secondary" : "primary"} className="w-full" loading={payBusy} onClick={startPayouts}>
@@ -183,12 +250,51 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
         </Card>
       )}
 
+      <Card className={`space-y-3 ${me.avatar_url ? "" : "!ring-amber-400/40"}`}>
+        <div className="flex items-center gap-4">
+          <Avatar avatarUrl={me.avatar_url} name={headline || "Me"} size="lg" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-zinc-100">Profile photo (required)</p>
+            <p className="text-sm text-zinc-400">A clear photo of your face. Customers see it before they trust you with their site.</p>
+          </div>
+        </div>
+        {photoError && <p role="alert" className="text-sm text-red-400">{photoError}</p>}
+        <label className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-2xl bg-zinc-800 px-4 text-sm font-bold text-zinc-100 touch-manipulation hover:bg-zinc-700">
+          {photoBusy ? "Uploading..." : me.avatar_url ? "Change photo" : "Add photo"}
+          <input type="file" accept="image/*" className="sr-only" disabled={photoBusy} onChange={(e) => uploadPhoto(e.target.files?.[0])} />
+        </label>
+      </Card>
+
       <Card className="space-y-4">
         <Field label="Headline" hint="One line customers see first.">
           <TextInput value={headline} onChange={(e) => setHeadline(e.target.value)} maxLength={120} />
         </Field>
         <Field label="About you" optional>
           <TextArea rows={4} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1500} />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Years of experience" optional>
+            <TextInput inputMode="numeric" value={years} onChange={(e) => setYears(e.target.value.replace(/\D/g, ""))} maxLength={2} />
+          </Field>
+          <Field label="Preferred job size" optional>
+            <Select value={prefSize} onChange={(e) => setPrefSize(e.target.value)}>
+              <option value="">No preference</option>
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+              <option value="any">Any size</option>
+            </Select>
+          </Field>
+        </div>
+        <Field label="Languages" hint="Separate with commas." optional>
+          <TextInput value={languages} onChange={(e) => setLanguages(e.target.value)} maxLength={120} />
+        </Field>
+        <Field label="Equipment you bring" hint="Like grabbers, gloves, a truck. Separate with commas." optional>
+          <TextInput value={equipment} onChange={(e) => setEquipment(e.target.value)} maxLength={200} />
+        </Field>
+        <Field label="Usual availability" hint="Like weekday evenings and weekends." optional>
+          <TextInput value={availability} onChange={(e) => setAvailability(e.target.value)} maxLength={200} />
         </Field>
 
         <fieldset className="space-y-2">
@@ -242,7 +348,7 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
 
         {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
         {saved && <p className="text-sm text-emerald-300">Saved.</p>}
-        <Button className="w-full" loading={busy} disabled={!headline.trim() || services.length === 0 || (!coords && !p?.area_label)} onClick={save}>
+        <Button className="w-full" loading={busy} disabled={!me.avatar_url || !headline.trim() || services.length === 0 || (!coords && !p?.area_label)} onClick={save}>
           {p ? "Save changes" : "Save and start taking jobs"}
         </Button>
       </Card>

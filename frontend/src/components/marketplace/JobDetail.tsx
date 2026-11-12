@@ -8,9 +8,10 @@ import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, TextArea, TextInput } from "@/components/ui/fields";
 import { Section } from "@/components/ui/PageShell";
-import { JOB_TYPE_LABELS, STATUS_LABELS, TIME_MODE_LABELS, mk, usd, whenLabel, type Job } from "@/lib/marketplace";
+import { JOB_TYPE_LABELS, STATUS_LABELS, durationLabel, TIME_MODE_LABELS, mk, usd, whenLabel, type Job } from "@/lib/marketplace";
 import BackOutButton from "./BackOutButton";
 import CleanerFlow, { type FlowPhoto } from "./CleanerFlow";
+import JobRouteCard from "./JobRouteCard";
 import JobSiteCard from "./JobSiteCard";
 import LocalTime from "./LocalTime";
 import ReportBlock from "./ReportBlock";
@@ -122,6 +123,21 @@ export default function JobDetail({
           />
           <Info label="Location" value={job.address_label ?? "Shared once a cleaner is assigned"} />
           <Info label={role === "customer" ? "Cleaner" : "Customer"} value={other ?? "Not assigned yet"} />
+          {job.duration_seconds != null && <Info label="Time on the job" value={durationLabel(job.duration_seconds)} />}
+          {job.bags_ack_at && (
+            <Info
+              label="Bags"
+              value={job.bags_count != null ? `${job.bags_count} bagged` : "All in the photo"}
+              hint={job.bags_count != null ? "Cleaner confirmed all are in the photo" : undefined}
+            />
+          )}
+          {job.bag_dropoff_ok && (
+            <Info
+              label="Bag drop-off"
+              value={job.bag_dropoff_address ?? "Allowed"}
+              hint={job.bag_dropoff_address ? job.bag_dropoff_note ?? undefined : "Address shared once a cleaner is assigned"}
+            />
+          )}
         </dl>
         {(participant || job.status === "open") && !["cancelled", "declined", "expired"].includes(job.status) && (
           <JobSiteCard job={job} navigate={participant} />
@@ -135,10 +151,20 @@ export default function JobDetail({
             The cleaner&apos;s location did not match the job site, so our team will review this job.
           </p>
         )}
+        {job.track_flagged && (
+          <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            This job was finished without a recorded route, so our team will review it.
+          </p>
+        )}
         <p className="text-xs text-zinc-500">{HOLD_LABEL[job.hold_status] ?? job.hold_status}</p>
       </Card>
 
       {error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+      {(role === "cleaner" || role === "viewer") &&
+        ["completed", "confirmed", "released", "disputed"].includes(job.status) && (
+          <JobRouteCard jobId={job.id} durationSeconds={job.duration_seconds} />
+        )}
 
       <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} suspended={suspended} />
 
@@ -208,7 +234,7 @@ function SuspendedNotice() {
       <p className="text-sm font-bold text-red-200">Your cleaner profile is suspended</p>
       <p className="text-xs text-red-100/80">You cannot take jobs while it is suspended. See your profile for the strikes behind it and how to appeal.</p>
       <Link
-        href="/marketplace/become-a-cleaner"
+        href="/earn/profile"
         className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-red-400 px-5 text-sm font-bold text-red-950 touch-manipulation active:scale-[0.97]"
       >
         View my profile
@@ -223,7 +249,7 @@ function PayoutsNeeded() {
       <p className="text-sm font-bold text-amber-100">Set up payouts first</p>
       <p className="text-xs text-amber-100/70">We need your bank details through Stripe before you can take a job, so we can pay you.</p>
       <Link
-        href="/marketplace/become-a-cleaner"
+        href="/earn/profile"
         className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-amber-400 px-5 text-sm font-bold text-amber-950 touch-manipulation active:scale-[0.97]"
       >
         Set up payouts
@@ -323,7 +349,7 @@ function Actions({
           <div className="rounded-2xl bg-amber-500/10 p-3 text-sm text-amber-100 ring-1 ring-inset ring-amber-400/30">
             <p className="font-bold text-amber-200">Set up as a cleaner first</p>
             <p className="mt-1">You need a cleaner profile and a signed agreement before you can take jobs.</p>
-            <Link href="/marketplace/become-a-cleaner" className="mt-2 inline-flex min-h-11 items-center font-bold text-amber-300 underline underline-offset-2">
+            <Link href="/earn/profile" className="mt-2 inline-flex min-h-11 items-center font-bold text-amber-300 underline underline-offset-2">
               Set up now
             </Link>
           </div>

@@ -12,7 +12,7 @@ export default function CheckoutNotice() {
     const url = new URL(window.location.href);
     const flag = url.searchParams.get("checkout");
     // The Earn tab shows its own message for its return flag.
-    if ((flag !== "success" && flag !== "cancelled") || url.pathname.startsWith("/sponsorships")) return;
+    if ((flag !== "success" && flag !== "cancelled") || url.pathname.startsWith("/earn")) return;
     url.searchParams.delete("checkout");
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
     const show = setTimeout(() => setResult(flag), 0);

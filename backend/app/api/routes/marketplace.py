@@ -86,23 +86,28 @@ async def card(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
 
 
 class CardSetupIn(BaseModel):
-    return_path: str = Field(default="/marketplace/post", max_length=200)
+    return_path: str = Field(default="/fund/post", max_length=200)
+    from_app: bool = False
 
 
 @router.post("/payments/card/setup", dependencies=[Depends(limit_money)])
 async def card_setup(body: CardSetupIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
-    ok = body.return_path.startswith("/marketplace") and "//" not in body.return_path
-    path = body.return_path if ok else "/marketplace/post"
+    ok = body.return_path.startswith(("/fund", "/marketplace")) and "//" not in body.return_path
+    path = body.return_path if ok else "/fund/post"
     try:
-        return {"url": await mp.create_card_setup_url(db, a.user_id, path)}
+        return {"url": await mp.create_card_setup_url(db, a.user_id, path, body.from_app)}
     except mp.PaymentError as e:
         raise HTTPException(502, str(e))
 
 
+class OnboardIn(BaseModel):
+    from_app: bool = False
+
+
 @router.post("/payouts/onboard", dependencies=[Depends(limit_money)])
-async def payouts_onboard(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+async def payouts_onboard(body: OnboardIn | None = None, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
-        return await connect.create_onboarding_link(db, a.user_id, None)
+        return await connect.create_onboarding_link(db, a.user_id, None, bool(body and body.from_app))
     except connect.ConnectError as e:
         raise HTTPException(e.status, str(e))
     except stripe.StripeError as e:
@@ -127,6 +132,11 @@ class CleanerProfileIn(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     area_label: str | None = None
+    languages: list[str] = Field(default_factory=list, max_length=12)
+    years_experience: int | None = Field(default=None, ge=0, le=80)
+    equipment: list[str] = Field(default_factory=list, max_length=12)
+    availability: str | None = Field(default=None, max_length=200)
+    preferred_size: Literal["small", "medium", "large", "any"] | None = None
 
 
 @router.put("/cleaner-profile", dependencies=[Depends(limit_writes)])
@@ -179,6 +189,9 @@ class JobIn(BaseModel):
     radius_m: int | None = Field(default=None, ge=10, le=5000)
     polygon: list[list[float]] | None = None  # [[lng, lat], ...] drawn area
     photos: list[str] = Field(default_factory=list, max_length=4)  # photos of the site, uploaded first
+    bag_dropoff_ok: bool = False  # customer is fine with the cleaner leaving bags at their place
+    bag_dropoff_address: str | None = Field(default=None, max_length=300)
+    bag_dropoff_note: str | None = Field(default=None, max_length=300)
 
 
 @router.get("/pricing")
@@ -333,10 +346,48 @@ async def start_job(job_id: UUID, body: SiteCheckIn, a: Actor = Depends(actor), 
         raise _wrap(e)
 
 
+class CompleteIn(SiteCheckIn):
+    bags_ack: bool = False  # cleaner confirms every bag is visible in the finished photo
+    bags_count: int | None = Field(default=None, ge=0, le=500)
+    track_override: bool = False  # route was not recorded (phone died, no signal): finish anyway, flagged for review
+    track_reason: str | None = Field(default=None, max_length=300)
+
+
 @router.post("/jobs/{job_id}/complete", dependencies=[Depends(limit_writes)])
-async def complete_job(job_id: UUID, body: SiteCheckIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+async def complete_job(job_id: UUID, body: CompleteIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
-        return await svc.complete_job(db, job_id, a.user_id, latitude=body.latitude, longitude=body.longitude, override=body.override)
+        return await svc.complete_job(
+            db, job_id, a.user_id, latitude=body.latitude, longitude=body.longitude, override=body.override,
+            bags_ack=body.bags_ack, bags_count=body.bags_count,
+            track_override=body.track_override, track_reason=body.track_reason,
+        )
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+
+
+class TrackPoint(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy: float | None = Field(default=None, ge=0, le=100000)
+    recorded_at: datetime
+
+
+class TrackIn(BaseModel):
+    points: list[TrackPoint] = Field(min_length=1, max_length=200)
+
+
+@router.post("/jobs/{job_id}/track", dependencies=[Depends(limit_writes)])
+async def add_track(job_id: UUID, body: TrackIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    try:
+        return await svc.add_track_points(db, job_id, a.user_id, [p.model_dump() for p in body.points])
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+
+
+@router.get("/jobs/{job_id}/track")
+async def get_track(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    try:
+        return await svc.get_track(db, job_id, a.user_id, is_admin=a.is_admin)
     except svc.MarketplaceError as e:
         raise _wrap(e)
 

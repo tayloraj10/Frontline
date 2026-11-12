@@ -41,7 +41,7 @@ export function Rating({ avg, count }: { avg: number | null; count: number }) {
 /** The cleaner card from the Hire mocks: avatar, name and rate, headline, rating, jobs, place, service tags. */
 export default function CleanerRow({ c }: { c: CleanerCard }) {
   return (
-    <Link href={`/marketplace/cleaners/${c.user_id}`}>
+    <Link href={`/fund/cleaners/${c.user_id}`}>
       <Card interactive className="space-y-3">
         <div className="flex items-center gap-3">
           <Avatar name={c.username ?? "Cleaner"} url={c.avatar_url} />

@@ -1915,11 +1915,12 @@ async def resolve_content_flag_group(
 
 
 @router.post("/seed/marketplace")
-async def seed_marketplace(remove: bool = False, db: AsyncSession = Depends(get_db)):
+async def seed_marketplace(remove: bool = False, fresh_brooklyn: bool = False, db: AsyncSession = Depends(get_db)):
     """Local Hire page testing: fake customers (mk_maria, mk_devon, mk_priya), active cleaners (mk_jamal, mk_sofia, mk_theo),
-    open jobs around NYC and a few offers. Logins use password 'password'. remove=true deletes it all."""
+    open jobs around NYC and a few offers. Logins use password 'password'. remove=true deletes it all.
+    fresh_brooklyn=true also adds a few new open Brooklyn jobs dated today (the older seeded jobs expire after 14 days)."""
     try:
-        result = await MarketplaceSeeder().run(db, {"remove": remove})
+        result = await MarketplaceSeeder().run(db, {"remove": remove, "fresh_brooklyn": fresh_brooklyn})
     except Exception as exc:
         raise HTTPException(500, f"Marketplace seeder failed: {exc}")
     return {"inserted": result.inserted, "skipped": result.skipped, "errors": result.errors[:20]}

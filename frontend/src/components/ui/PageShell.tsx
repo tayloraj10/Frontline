@@ -13,20 +13,20 @@ export function PageShell({ width = "default", className, children }: { width?: 
 }
 
 /** Page title block with optional eyebrow, subtitle and right-aligned action. */
-export function PageHeader({ title, subtitle, eyebrow, action, titleAction }: { title: ReactNode; subtitle?: ReactNode; eyebrow?: string; action?: ReactNode; titleAction?: ReactNode }) {
+export function PageHeader({ title, subtitle, eyebrow, action, titleAction, compact }: { title: ReactNode; subtitle?: ReactNode; eyebrow?: string; action?: ReactNode; titleAction?: ReactNode; /** Map-first pages: tighter spacing, and the eyebrow and subtitle only show from sm up. */ compact?: boolean }) {
   return (
-    <div className="mb-6 lg:mb-8 flex items-end justify-between gap-4">
+    <div className={cn("flex items-end justify-between gap-4", compact ? "mb-2 sm:mb-6 lg:mb-8" : "mb-6 lg:mb-8")}>
       <div className={cn("min-w-0", titleAction && "flex-1")}>
-        {eyebrow && <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-emerald-400">{eyebrow}</p>}
+        {eyebrow && <p className={cn("mb-1 text-[11px] font-semibold uppercase tracking-widest text-emerald-400", compact && "hidden sm:block")}>{eyebrow}</p>}
         {titleAction ? (
           <div className="flex items-center justify-between gap-3">
-            <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-zinc-50 text-balance">{title}</h1>
+            <h1 className={cn("font-display lg:text-4xl font-extrabold tracking-tight text-zinc-50 text-balance", compact ? "text-2xl sm:text-3xl" : "text-3xl")}>{title}</h1>
             <div className="flex shrink-0 items-center gap-2">{titleAction}</div>
           </div>
         ) : (
-          <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-zinc-50 text-balance">{title}</h1>
+          <h1 className={cn("font-display lg:text-4xl font-extrabold tracking-tight text-zinc-50 text-balance", compact ? "text-2xl sm:text-3xl" : "text-3xl")}>{title}</h1>
         )}
-        {subtitle && <p className="mt-1.5 max-w-prose text-sm lg:text-base text-zinc-400">{subtitle}</p>}
+        {subtitle && <p className={cn("mt-1.5 max-w-prose text-sm lg:text-base text-zinc-400", compact && "hidden sm:block")}>{subtitle}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

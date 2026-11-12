@@ -11,6 +11,7 @@ import { mk, usd } from "@/lib/marketplace";
 export type ChatMessage = { id: string; sender_id: string; username: string | null; body: string; created_at: string; flag_reason: string | null; reviewed_at: string | null };
 
 export type AdminOverview = {
+  track_review?: { id: string; title: string; status: string; cleaner_username: string | null; track_flag_reason: string | null; worked_seconds: number | null }[];
   flagged_messages?: { id: string; job_id: string; title: string; body: string; flag_reason: string; sender: string | null; created_at: string }[];
   chats?: { job_id: string; title: string; customer_username: string | null; cleaner_username: string | null; messages: number; last_at: string }[];
   struck_cleaners?: { user_id: string; username: string | null; status: string; strikes: number; last_strike_at: string }[];
@@ -68,7 +69,7 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
             {data.awaiting_release.map((j) => (
               <li key={j.id}>
                 <Card padding="sm" className="space-y-2">
-                  <Link href={`/marketplace/jobs/${j.id}`} className="font-bold text-zinc-100 underline-offset-2 hover:underline">
+                  <Link href={`/fund/jobs/${j.id}`} className="font-bold text-zinc-100 underline-offset-2 hover:underline">
                     {j.title} · {usd(j.price_cents)}
                   </Link>
                   <p className="text-xs text-zinc-500">
@@ -127,7 +128,7 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
                   <p className="break-words text-sm text-zinc-100">&ldquo;{m.body}&rdquo;</p>
                   <p className="text-xs text-zinc-500">
                     {m.sender} on{" "}
-                    <Link href={`/marketplace/jobs/${m.job_id}`} className="underline-offset-2 hover:underline">{m.title}</Link>
+                    <Link href={`/fund/jobs/${m.job_id}`} className="underline-offset-2 hover:underline">{m.title}</Link>
                     {" "}· {new Date(m.created_at).toLocaleString()}
                   </p>
                   <Button variant="secondary" loading={busy === m.id} onClick={() => run(m.id, `/admin/messages/${m.id}/review`, {})}>
@@ -193,7 +194,7 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
             {data.disputed_jobs.map((j) => (
               <li key={j.id}>
                 <Card padding="sm" className="space-y-2">
-                  <Link href={`/marketplace/jobs/${j.id}`} className="font-bold text-zinc-100 underline-offset-2 hover:underline">
+                  <Link href={`/fund/jobs/${j.id}`} className="font-bold text-zinc-100 underline-offset-2 hover:underline">
                     {j.title} · {usd(j.price_cents)}
                   </Link>
                   <p className="text-xs text-zinc-500">
@@ -208,6 +209,32 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
                       Refund
                     </Button>
                   </div>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section
+        title={`Route review (${data.track_review?.length ?? 0})`}
+        description="Jobs finished without a usable route. Check the time worked and the photos before trusting the payout."
+      >
+        {!data.track_review?.length ? (
+          <p className="text-sm text-zinc-500">None.</p>
+        ) : (
+          <ul className="space-y-3">
+            {data.track_review.map((j) => (
+              <li key={j.id}>
+                <Card padding="sm" className="space-y-1">
+                  <Link href={`/fund/jobs/${j.id}`} className="font-bold text-zinc-100 underline-offset-2 hover:underline">
+                    {j.title}
+                  </Link>
+                  <p className="text-xs text-zinc-500">
+                    {j.cleaner_username} · {j.status}
+                    {j.worked_seconds != null ? ` · ${Math.round(j.worked_seconds / 60)} min on site` : ""}
+                  </p>
+                  {j.track_flag_reason && <p className="text-sm text-zinc-300">{j.track_flag_reason}</p>}
                 </Card>
               </li>
             ))}
@@ -231,7 +258,7 @@ export default function AdminPanel({ initial }: { initial: AdminOverview }) {
                       <>
                         {" "}
                         ·{" "}
-                        <Link href={`/marketplace/jobs/${r.job_id}`} className="underline">
+                        <Link href={`/fund/jobs/${r.job_id}`} className="underline">
                           job
                         </Link>
                       </>

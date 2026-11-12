@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LocalTime from "@/components/marketplace/LocalTime";
 import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import { Camera, Check, MapPin } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getPosition } from "@/lib/getPosition";
-import { mk, usd, type Job } from "@/lib/marketplace";
+import { durationLabel, mk, NO_BAG_JOB_TYPES, usd, type Job } from "@/lib/marketplace";
 import { uploadToR2 } from "@/lib/uploadToR2";
+import { useJobTracker, type TrackerState } from "@/lib/useJobTracker";
 
 export type FlowPhoto = { id: string; kind: string; url: string; distance_m?: number | null; created_at: string };
 
@@ -34,7 +35,12 @@ export default function CleanerFlow({
   const [problem, setProblem] = useState<string | null>(null);
   const [canOverride, setCanOverride] = useState(false);
   const [reason, setReason] = useState("");
+  const [bagsAck, setBagsAck] = useState(false);
+  const [bagsCount, setBagsCount] = useState("");
+  const [trackMissing, setTrackMissing] = useState(false);
+  const tracker = useJobTracker(job.id, job.status === "in_progress");
   const base = `/jobs/${job.id}`;
+  const needsBags = !NO_BAG_JOB_TYPES.includes(job.job_type);
 
   const before = photos.filter((p) => p.kind === "before");
   const after = photos.filter((p) => p.kind === "after");
@@ -65,9 +71,10 @@ export default function CleanerFlow({
     return { latitude: p.coords.latitude, longitude: p.coords.longitude };
   }
 
-  async function go(step: "start" | "complete", override = false) {
+  async function go(step: "start" | "complete", override = false, trackOverride = false) {
     setBusy(step);
     setProblem(null);
+    if (step === "complete") await tracker.flush();
     let c: Coords | null = null;
     try {
       c = await locate();
@@ -80,13 +87,21 @@ export default function CleanerFlow({
       }
     }
     try {
-      await mk(`${base}/${step}`, { method: "POST", body: { ...(c ?? {}), override } });
+      const extra =
+        step === "complete" && needsBags
+          ? { bags_ack: bagsAck, bags_count: bagsCount.trim() === "" ? null : Number(bagsCount) }
+          : {};
+      const trackExtra = step === "complete" && trackOverride ? { track_override: true, track_reason: reason.trim() || null } : {};
+      await mk(`${base}/${step}`, { method: "POST", body: { ...(c ?? {}), override, ...extra, ...trackExtra } });
       setCanOverride(false);
+      setTrackMissing(false);
       await refresh();
     } catch (e) {
       const m = (e as Error).message;
       setProblem(m);
-      setCanOverride(/job site|location/i.test(m));
+      const noRoute = /did not record your route/i.test(m);
+      setTrackMissing(noRoute);
+      setCanOverride(!noRoute && /job site|location/i.test(m));
     } finally {
       setBusy(null);
     }
@@ -136,6 +151,13 @@ export default function CleanerFlow({
             {job.address_label}
           </p>
         )}
+        {working && job.started_at && <JobTimer startedAt={job.started_at} />}
+        {needsBags && job.bag_dropoff_ok && job.bag_dropoff_address && (
+          <p className="mt-2 rounded-xl bg-emerald-400/10 p-2 text-sm text-emerald-100 ring-1 ring-inset ring-emerald-400/20">
+            The customer says you can leave the full bags at: {job.bag_dropoff_address}
+            {job.bag_dropoff_note ? `. ${job.bag_dropoff_note}` : ""}
+          </p>
+        )}
       </div>
 
       <ol className="space-y-3">
@@ -149,6 +171,35 @@ export default function CleanerFlow({
             <Thumbs list={after} onSiteM={onSiteM} />
           </Item>
         )}
+        {working && needsBags && (
+          <li className="space-y-2">
+            <label className="flex min-h-11 items-start gap-3 text-sm text-zinc-200 touch-manipulation">
+              <input
+                type="checkbox"
+                className="mt-1 h-5 w-5 shrink-0 accent-emerald-400"
+                checked={bagsAck}
+                onChange={(e) => setBagsAck(e.target.checked)}
+              />
+              <span>
+                All the bags are in my finished photo
+                <span className="block text-xs text-zinc-500">The customer relies on the photo to see everything you filled.</span>
+              </span>
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={500}
+              value={bagsCount}
+              onChange={(e) => setBagsCount(e.target.value)}
+              placeholder="How many bags? (optional)"
+              className="min-h-11 w-full rounded-xl bg-zinc-900 px-3 text-sm text-zinc-100 ring-1 ring-inset ring-zinc-700"
+            />
+          </li>
+        )}
+        {working && (
+          <Item done={tracker.state === "tracking"} title="Route tracking" hint={trackHint(tracker.state)} />
+        )}
         <Item
           done={false}
           title="Location check"
@@ -159,6 +210,23 @@ export default function CleanerFlow({
       {problem && (
         <div role="alert" className="space-y-2 rounded-2xl bg-amber-500/10 p-3 text-sm text-amber-100 ring-1 ring-inset ring-amber-400/20">
           <p>{problem}</p>
+          {trackMissing && (
+            <>
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="What happened? (optional)"
+                className="min-h-11 w-full rounded-xl bg-zinc-900 px-3 text-sm text-zinc-100 ring-1 ring-inset ring-zinc-700"
+              />
+              <button
+                type="button"
+                onClick={() => go("complete", false, true)}
+                className="inline-flex min-h-11 items-center text-xs font-bold text-amber-300 underline underline-offset-2"
+              >
+                My route was not recorded, finish anyway (we will review it)
+              </button>
+            </>
+          )}
           {canOverride && (
             <>
               <input
@@ -184,12 +252,38 @@ export default function CleanerFlow({
           I am here: start job
         </Button>
       ) : (
-        <Button className="w-full" disabled={after.length === 0} loading={busy === "complete"} onClick={() => go("complete")}>
+        <Button className="w-full" disabled={after.length === 0 || (needsBags && !bagsAck)} loading={busy === "complete"} onClick={() => go("complete")}>
           Mark complete
         </Button>
       )}
     </Card>
   );
+}
+
+function trackHint(s: TrackerState): string {
+  switch (s) {
+    case "tracking":
+      return "Recording your route while you work. Only you and Frontline admins can see it. Keep the app open.";
+    case "unsupported":
+      return "Route tracking needs the Frontline app. Open this job in the app on your phone to record your route.";
+    case "denied":
+      return "Location access is off. Turn it on for Frontline in your phone settings so your route can be recorded.";
+    case "error":
+      return "We could not record your route. Check location access and signal.";
+    default:
+      return "Starting route tracking...";
+  }
+}
+
+/** Running clock from arrival check-in; the final time is set by the server at the finished-photo submission. */
+function JobTimer({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const secs = Math.max(0, (now - new Date(startedAt).getTime()) / 1000);
+  return <p className="mt-1 text-sm font-semibold text-sky-200">Time on the job: {durationLabel(secs)}</p>;
 }
 
 function Item({ done, title, hint, children }: { done: boolean; title: string; hint: string; children?: React.ReactNode }) {

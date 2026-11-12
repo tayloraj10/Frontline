@@ -22,6 +22,7 @@ import ReportPhotoButton from "@/components/ReportPhotoButton";
 import AdultsOnlyBadge from "@/components/partners/AdultsOnlyBadge";
 import BodyPortal from "@/components/ui/BodyPortal";
 import { useSponsoredMapLayer } from "./useSponsoredMapLayer";
+import { useJobPinsLayer } from "./useJobPinsLayer";
 import { addRouteArrowLayers } from "./routeArrows";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -1964,6 +1965,8 @@ export default function CampaignMap({
   // Payments v2 sponsored areas: on by default, only offered when the viewer can see payments.
   const [showSponsored, setShowSponsored] = useState(true);
   const sponsoredLayer = useSponsoredMapLayer(map, showSponsored);
+  const [showJobs, setShowJobs] = useState(true);
+  const jobsLayer = useJobPinsLayer(map, showJobs);
   // Drives the "Zip"/"Postcode" segmented-control label — reflects whichever region
   // (US vs UK) the map is currently centered over, not the campaign's static geo_unit
   // config, so a campaign spanning both regions relabels as the user pans around.
@@ -6325,6 +6328,12 @@ export default function CampaignMap({
                 <LegendToggle checked={showSponsored} onChange={setShowSponsored}>
                   <span className="w-3 h-3 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/10 flex-shrink-0" />
                   <span className="text-zinc-300">Sponsored areas{showSponsored && sponsoredLayer.count > 0 ? ` (${sponsoredLayer.count})` : ""}</span>
+                </LegendToggle>
+              )}
+              {jobsLayer.available && (
+                <LegendToggle checked={showJobs} onChange={setShowJobs}>
+                  <span className="flex-shrink-0 rounded-full bg-sky-400 px-1.5 py-px text-[9px] font-black leading-none text-sky-950">$</span>
+                  <span className="text-zinc-300">Neighbor jobs{showJobs && jobsLayer.count > 0 ? ` (${jobsLayer.count})` : ""}</span>
                 </LegendToggle>
               )}
               <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>

@@ -1,19 +1,18 @@
 "use client";
 
-import PayoutSetupCard from "@/app/sponsorships/PayoutSetupCard";
+import PayoutSetupCard from "@/app/earn/PayoutSetupCard";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   ChevronRight,
-  ClipboardList,
   Crosshair,
   Fence,
   Footprints,
   MapPin,
-  Plus,
   ShieldAlert,
+  Snowflake,
   Sprout,
   Trash2,
   UserRound,
@@ -48,6 +47,7 @@ const CATEGORY_TILES = [
   { id: "lot_cleanup", label: "Lot", Icon: Fence },
   { id: "sidewalk", label: "Sidewalk", Icon: Footprints },
   { id: "light_yard_work", label: "Yard", Icon: Sprout },
+  { id: "snow_shoveling", label: "Snow", Icon: Snowflake },
 ];
 
 const PAGE_SIZE = 20;
@@ -64,17 +64,20 @@ function distanceKm(from: [number, number], lat: number, lng: number) {
 }
 
 /**
- * Hire home: open jobs on a map and a list for everyone, with buttons that point each person where
- * they need to go. Not a cleaner yet means they probably want to post a job, so that is the main button.
+ * Earn side of the marketplace: open jobs on a map and a list, with buttons that point each person to
+ * their cleaner profile and payouts. Posting a job lives on the Hire tab.
  */
 export default function MarketplaceHome({
   board,
   profileStatus,
   payoutsBlocked,
+  embedded = false,
 }: {
   board: Job[];
   profileStatus: string | null;
   payoutsBlocked: boolean;
+  /** Inside the Earn page, which already shows the payouts card and profile tiles. */
+  embedded?: boolean;
 }) {
   const isCleaner = profileStatus === "active";
   const suspended = profileStatus === "suspended";
@@ -189,21 +192,11 @@ export default function MarketplaceHome({
     }
   }
 
-  // Full width (no earnings tile beside it) it also nudges people down to the map and the list.
-  const myJobsTile = (wide: boolean) => (
-    <ActionTile
-      href="/marketplace/jobs"
-      icon={ClipboardList}
-      title="View my jobs"
-      sub={wide ? "Or pick a job on the map below and take it." : "Jobs you took or posted."}
-    />
-  );
-
   return (
     <div className="space-y-4">
       {suspended && (
         <Link
-          href="/marketplace/become-a-cleaner"
+          href="/earn/profile"
           className="flex items-center gap-3 rounded-2xl bg-red-500/10 p-4 ring-2 ring-inset ring-red-400/60 touch-manipulation active:scale-[0.98]"
         >
           <ShieldAlert className="h-5 w-5 shrink-0 text-red-300" aria-hidden="true" />
@@ -218,7 +211,7 @@ export default function MarketplaceHome({
       )}
       {payoutsBlocked && (
         <Link
-          href="/marketplace/become-a-cleaner"
+          href="/earn/profile"
           className="flex items-center gap-3 rounded-2xl bg-amber-400/10 p-4 ring-1 ring-inset ring-amber-400/40 touch-manipulation active:scale-[0.98]"
         >
           <Banknote className="h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />
@@ -232,25 +225,19 @@ export default function MarketplaceHome({
         </Link>
       )}
 
-      {isCleaner && !payoutsBlocked && <PayoutSetupCard tileSibling={myJobsTile} />}
-      {isCleaner && payoutsBlocked && myJobsTile(true)}
+      {!embedded && isCleaner && !payoutsBlocked && <PayoutSetupCard />}
 
-      <div className="grid grid-cols-2 gap-3">
-        <ActionTile
-          tone="solid"
-          href="/marketplace/post"
-          icon={Plus}
-          title="Post a job"
-          sub="Free. A neighbor takes it at your price."
-        />
+      {!embedded && (
+      <div className="grid grid-cols-1 gap-3">
         <ActionTile
           tone={suspended ? "red" : "sky"}
-          href="/marketplace/become-a-cleaner"
+          href="/earn/profile"
           icon={suspended ? ShieldAlert : profileStatus ? UserRound : Sprout}
           title={suspended ? "Profile suspended" : profileStatus ? "Cleaner profile" : "Start earning"}
           sub={suspended ? "Tap to see why." : profileStatus ? "Your area, rate and status." : "Pick jobs near you."}
         />
       </div>
+      )}
 
       <div className="flex items-center justify-between gap-2 pt-1">
         <div className="min-w-0">
@@ -279,14 +266,14 @@ export default function MarketplaceHome({
       </div>
       {locError && <p className="text-xs text-amber-300">{locError}</p>}
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-1.5">
         {CATEGORY_TILES.map(({ id, label, Icon }) => (
           <button
             key={id}
             type="button"
             aria-pressed={service === id}
             onClick={() => setService(service === id ? "" : id)}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-semibold touch-manipulation transition-[background-color,transform] active:scale-[0.97] ${
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0.5 text-[11px] font-semibold touch-manipulation transition-[background-color,transform] active:scale-[0.97] ${
               service === id
                 ? "bg-emerald-400/15 text-emerald-200 ring-1 ring-inset ring-emerald-400/30"
                 : "bg-zinc-900 text-zinc-300 ring-1 ring-inset ring-zinc-800"
@@ -298,6 +285,7 @@ export default function MarketplaceHome({
         ))}
       </div>
 
+      {!embedded && (
       <div id="jobs-map" className="scroll-mt-20">
         <JobsMap
           jobs={pins}
@@ -311,6 +299,7 @@ export default function MarketplaceHome({
           }}
         />
       </div>
+      )}
 
       {jobs.length === 0 ? (
         <EmptyState
@@ -325,7 +314,7 @@ export default function MarketplaceHome({
         <ul className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {jobs.map((j) => (
             <li key={j.id} id={`job-${j.id}`} className="scroll-mt-24">
-              <Link href={`/marketplace/jobs/${j.id}`}>
+              <Link href={`/fund/jobs/${j.id}`}>
                 <Card
                   interactive
                   className={`space-y-3 border-l-4 ${

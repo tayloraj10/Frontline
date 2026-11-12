@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/fields";
-import { JOB_TYPE_LABELS, TIME_MODE_LABELS, mk, usd, type TimeMode } from "@/lib/marketplace";
+import { JOB_TYPE_LABELS, NO_BAG_JOB_TYPES, TIME_MODE_LABELS, mk, usd, type TimeMode } from "@/lib/marketplace";
 import { uploadToR2 } from "@/lib/uploadToR2";
 import AgreementAccept from "./AgreementAccept";
 import JobLocationPicker, { EMPTY_PLACE, placeProblem, placeToPayload, type JobPlace } from "./JobLocationPicker";
@@ -30,6 +30,8 @@ const endOfDay = (d: string) => new Date(`${d}T23:59:00`).toISOString();
  * without it the job is posted to the open board. Money is held only once a cleaner accepts.
  */
 const MAX_PHOTOS = 4;
+
+const SNOW_AREAS = ["Driveway", "Sidewalk", "Steps", "Walkway", "Car"];
 
 export default function JobForm({
   cleaner,
@@ -65,7 +67,12 @@ export default function JobForm({
   const [price, setPrice] = useState(
     cleaner?.rate_type === "fixed" && cleaner.rate_cents ? String(cleaner.rate_cents / 100) : ""
   );
+  const [snowAreas, setSnowAreas] = useState<string[]>([]);
+  const [snowSalt, setSnowSalt] = useState(false);
   const [hazards, setHazards] = useState(false);
+  const [dropoffOk, setDropoffOk] = useState(false);
+  const [dropoffAddress, setDropoffAddress] = useState("");
+  const [dropoffNote, setDropoffNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,6 +108,8 @@ export default function JobForm({
     if (mode === "specific" && !startsAt) return setError("Pick a date and time.");
     if (mode === "window" && (!winStart || !winEnd || winEnd < winStart)) return setError("Pick a start and end date.");
     if (!hazards) return setError("Confirm the site safety check to continue.");
+    const dropoff = dropoffOk && !NO_BAG_JOB_TYPES.includes(jobType);
+    if (dropoff && !dropoffAddress.trim()) return setError("Add where the cleaner can leave the bags, or turn off the drop-off option.");
     setBusy(true);
     try {
       const job = await mk<{ id: string }>("/jobs", {
@@ -108,7 +117,13 @@ export default function JobForm({
         body: {
           cleaner_id: cleaner?.user_id ?? null,
           title: title.trim(),
-          description: description.trim(),
+          description: [
+            jobType === "snow_shoveling" && snowAreas.length ? `Clear: ${snowAreas.join(", ")}.` : "",
+            jobType === "snow_shoveling" && snowSalt ? "Salt or ice melt requested." : "",
+            description.trim(),
+          ]
+            .filter(Boolean)
+            .join("\n"),
           job_type: jobType,
           size: size || null,
           hazards_ack: hazards,
@@ -122,9 +137,12 @@ export default function JobForm({
           price_type: "fixed",
           price_cents: Math.round(dollars * 100),
           photos,
+          bag_dropoff_ok: dropoff,
+          bag_dropoff_address: dropoff ? dropoffAddress.trim() : null,
+          bag_dropoff_note: dropoff ? dropoffNote.trim() || null : null,
         },
       });
-      router.push(`/marketplace/jobs/${job.id}`);
+      router.push(`/fund/jobs/${job.id}`);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -196,6 +214,61 @@ export default function JobForm({
       <Field label="Details" optional hint="What needs doing, access notes, anything the cleaner should know.">
         <TextArea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
       </Field>
+
+      {jobType === "snow_shoveling" && (
+        <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
+          <p className="text-sm font-semibold text-zinc-200">What needs clearing</p>
+          <div className="flex flex-wrap gap-2">
+            {SNOW_AREAS.map((a) => {
+              const on = snowAreas.includes(a);
+              return (
+                <button
+                  key={a}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setSnowAreas(on ? snowAreas.filter((x) => x !== a) : [...snowAreas, a])}
+                  className={`min-h-11 rounded-full px-4 text-sm font-semibold touch-manipulation ${on ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40" : "bg-zinc-800 text-zinc-400"}`}
+                >
+                  {a}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex min-h-11 items-start gap-3 text-sm text-zinc-200 touch-manipulation">
+            <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-400" checked={snowSalt} onChange={(e) => setSnowSalt(e.target.checked)} />
+            <span>Add salt or ice melt after shoveling. You provide the salt unless you agree otherwise in chat.</span>
+          </label>
+        </div>
+      )}
+
+      {!NO_BAG_JOB_TYPES.includes(jobType) && (
+        <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
+          <label className="flex min-h-11 items-start gap-3 text-sm text-zinc-200 touch-manipulation">
+            <input
+              type="checkbox"
+              className="mt-1 h-5 w-5 shrink-0 accent-emerald-400"
+              checked={dropoffOk}
+              onChange={(e) => setDropoffOk(e.target.checked)}
+            />
+            <span>
+              It is OK to leave the full bags at my place
+              <span className="block text-xs text-zinc-500">
+                Only the cleaner you hire will see this address, after they take the job.
+              </span>
+            </span>
+          </label>
+          {dropoffOk && (
+            <div className="space-y-3">
+              <Field label="Where to leave the bags">
+                <TextInput value={dropoffAddress} onChange={(e) => setDropoffAddress(e.target.value)} maxLength={300} placeholder="Address or spot, e.g. 12 Oak St, by the side gate" />
+              </Field>
+              <Field label="Note" optional>
+                <TextInput value={dropoffNote} onChange={(e) => setDropoffNote(e.target.value)} maxLength={300} placeholder="Anything to know about leaving them" />
+              </Field>
+            </div>
+          )}
+        </div>
+      )}
 
       <Field label="Photos" optional hint="Show the cleaner what the site looks like now. Up to 4.">
         <div className="space-y-2">

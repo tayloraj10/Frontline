@@ -709,3 +709,18 @@ body[data-map-full] .maplibregl-ctrl-top-right {
     font-size: 16px;
   }
 }
+
+/* Sponsored site and area cards: roomier, with a touch-sized close button. */
+.sponsor-popup .maplibregl-popup-content {
+  padding: 12px 14px 12px !important;
+  border-radius: 14px !important;
+}
+.sponsor-popup .maplibregl-popup-close-button {
+  top: 6px !important;
+  right: 6px !important;
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 22px !important;
+  line-height: 36px !important;
+  border-radius: 999px !important;
+}

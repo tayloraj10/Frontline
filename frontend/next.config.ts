@@ -30,6 +30,18 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 3600,
   },
   compress: true,
+  // Old Rewards URLs (emails, Stripe return links, shipped mobile builds) keep working. Temporary (307)
+  // on purpose: the Fund tab name is still a placeholder, so browsers must not cache these forever.
+  async redirects() {
+    return [
+      { source: "/marketplace/board", destination: "/earn?do=jobs", permanent: false },
+      { source: "/marketplace/become-a-cleaner", destination: "/earn/profile", permanent: false },
+      { source: "/sponsorships/pools/:path*", destination: "/fund/pools/:path*", permanent: false },
+      { source: "/sponsorships", destination: "/earn", permanent: false },
+      { source: "/marketplace", destination: "/fund", permanent: false },
+      { source: "/marketplace/:path+", destination: "/fund/:path+", permanent: false },
+    ];
+  },
   experimental: {
     optimizePackageImports: ["maplibre-gl", "gsap"],
   },

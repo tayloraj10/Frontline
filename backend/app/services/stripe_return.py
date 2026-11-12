@@ -8,7 +8,12 @@ The page forwards to `next`, which is always a path on our own site.
 from urllib.parse import quote
 
 
-def stripe_return_url(base: str, path: str, query: str = "") -> str:
-    """https URL of the bounce page for a destination path, e.g. ('/groups/x/edit', 'payouts=return')."""
+def stripe_return_url(base: str, path: str, query: str = "", from_app: bool = False) -> str:
+    """https URL of the bounce page for a destination path, e.g. ('/groups/x/edit', 'payouts=return').
+
+    from_app is true only when the flow started in the native app; the bounce page then offers the
+    "Return to the app" button, otherwise it sends web visitors straight back to the site.
+    """
     destination = f"{path}?{query}" if query else path
-    return f"{base.rstrip('/')}/stripe-return?next={quote(destination, safe='')}"
+    url = f"{base.rstrip('/')}/stripe-return?next={quote(destination, safe='')}"
+    return f"{url}&app=1" if from_app else url
