@@ -16,6 +16,7 @@ from app.services.admin_roles import is_site_admin
 from app.services import impact as impact_service
 from app.services import payments as payments_service
 from app.services import sponsorships as sponsorships_service
+from app.services import sponsorship_pools as sponsorship_pools_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 logger = logging.getLogger(__name__)
@@ -185,7 +186,8 @@ async def stripe_webhook(request: Request, stripe_signature: str | None = Header
             subscription = client.subscriptions.retrieve(obj["subscription"])
             await payments_service.upsert_subscription_from_stripe(db, subscription.to_dict())
         elif mode == "payment":
-            await sponsorships_service.mark_funded_from_checkout_session(db, obj)
+            if not await sponsorship_pools_service.mark_contribution_paid(db, obj):
+                await sponsorships_service.mark_funded_from_checkout_session(db, obj)
     elif event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
         await payments_service.upsert_subscription_from_stripe(db, obj)
     elif event_type == "invoice.payment_failed":

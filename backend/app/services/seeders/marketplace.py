@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 import httpx
 import stripe
@@ -81,9 +82,25 @@ def photo_url(name: str) -> str:
     return f"https://picsum.photos/seed/frontline-{name}/640/480"
 
 
+# Fresh Brooklyn jobs for the optional fresh_brooklyn param. The keys carry today's date, so the jobs are new each day
+# (the fixed jobs above expire after 14 days and ON CONFLICT keeps them from being re-created) and a same-day rerun adds nothing.
+# (title, customer, type, size, price_cents, price_type, lat, lng, address, radius_m)
+FRESH_BROOKLYN = [
+    ("Clear litter from the Williamsburg waterfront lot", "mk_cust_maria", "lot_cleanup", "medium", 11000, "fixed",
+     40.7211, -73.9626, "Kent Ave, Brooklyn", 60),
+    ("Sweep the sidewalk outside the Bushwick bodega", "mk_cust_devon", "sidewalk", "small", 4000, "fixed",
+     40.7044, -73.9229, "Knickerbocker Ave, Brooklyn", None),
+    ("Pick up litter along the Prospect Park fence", "mk_cust_maria", "litter", "large", 8500, "fixed",
+     40.6602, -73.9690, "Prospect Park West, Brooklyn", 90),
+    ("Shovel the stoop and sidewalk (snow)", "mk_cust_devon", "snow_shoveling", "small", 3500, "fixed",
+     40.6782, -73.9442, "Franklin Ave, Brooklyn", None),
+]
+
+
 class MarketplaceSeeder(Seeder):
     """Local Hire page test data: fake customers, active cleaners and open jobs around NYC, plus one job in each stage of the take / arrive / finish / pay flow.
-    All seeded logins use password 'password'. Params: remove (deletes everything this seeder created)."""
+    All seeded logins use password 'password'. Params: remove (deletes everything this seeder created),
+    fresh_brooklyn (also adds a few new open Brooklyn jobs dated today, for when the older ones have expired)."""
 
     default_params: dict = {}
 
@@ -104,6 +121,13 @@ class MarketplaceSeeder(Seeder):
         for j in JOBS:
             await self._add_job(db, result, j)
         await self._add_flow_states(db, result)
+        if params.get("fresh_brooklyn"):
+            today = date.today().isoformat()
+            for i, (title, cust, jtype, size, price, ptype, lat, lng, addr, radius) in enumerate(FRESH_BROOKLYN):
+                await self._add_job(
+                    db, result,
+                    (f"fresh_{today}_{i}", cust, title, jtype, size, price, ptype, "flexible", lat, lng, addr, radius, None),
+                )
         await db.commit()
         return result
 
@@ -208,7 +232,7 @@ class MarketplaceSeeder(Seeder):
                         CASE WHEN :tm = 'window' THEN now() + interval '2 days' END,
                         CASE WHEN :tm = 'window' THEN now() + interval '6 days' END,
                         CASE WHEN :tm = 'flexible' THEN 14 END,
-                        now() + interval '14 days', :pt, :price, round(:price * 0.05), true, 'open')
+                        now() + interval '14 days', :pt, CAST(:price AS integer), round(CAST(:price AS integer) * 0.05), true, 'open')
                 ON CONFLICT (id) DO NOTHING
             """),
             {"id": _uid(f"job_{key}"), "cust": _uid(cust), "title": title, "jt": jtype, "size": size, "addr": addr, "lat": lat,

@@ -49,7 +49,7 @@ async def alert_if_stale(db: AsyncSession) -> None:
             db, "payments_admin_alert", "Marketplace sweep has stopped",
             f"The scheduled sweep last ran {int(row.minutes)} minutes ago. Payments are not being auto-released. "
             "Check the Railway cron service and ADMIN_API_SECRET.",
-            "/marketplace/admin",
+            "/fund/admin",
         )
     except Exception:
         logger.exception("sweep health check failed")

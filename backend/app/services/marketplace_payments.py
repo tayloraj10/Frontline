@@ -59,7 +59,7 @@ async def card_status(db: AsyncSession, user_id: UUID) -> dict:
     return {"configured": True, "has_card": True, "brand": card.brand, "last4": card.last4}
 
 
-async def create_card_setup_url(db: AsyncSession, user_id: UUID, return_path: str) -> str:
+async def create_card_setup_url(db: AsyncSession, user_id: UUID, return_path: str, from_app: bool = False) -> str:
     if not is_configured():
         raise PaymentError("Payments are not configured.")
     customer_id = await payments_service.get_or_create_customer(db, "user", user_id, None, None)
@@ -70,8 +70,8 @@ async def create_card_setup_url(db: AsyncSession, user_id: UUID, return_path: st
             "customer": customer_id,
             "currency": "usd",
             "payment_method_types": ["card"],
-            "success_url": stripe_return_url(base, return_path),
-            "cancel_url": stripe_return_url(base, return_path),
+            "success_url": stripe_return_url(base, return_path, "", from_app),
+            "cancel_url": stripe_return_url(base, return_path, "", from_app),
         }
     )
     if not session.url:

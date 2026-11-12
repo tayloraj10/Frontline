@@ -38,6 +38,8 @@ class CreateSponsorshipCheckoutRequest(BaseModel):
     area_name: str | None = None
     # group_support only: the group being sponsored directly
     target_group_id: UUID | None = None
+    # site / group_area: whether other people may add money onto this one (default yes)
+    open_to_additions: bool = True
 
     @model_validator(mode="after")
     def _check_one_of(self):
@@ -141,9 +143,44 @@ async def create_checkout_session(
             area_source=area_source,
             area_name=(payload.area_name or "").strip()[:80] or area_default_name,
             target_group_id=payload.target_group_id,
+            open_to_additions=payload.open_to_additions,
         )
+    except sponsorships_service.MinimumAmountError as e:
+        raise HTTPException(400, str(e)) from e
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+    except (RuntimeError, stripe.StripeError) as e:
+        raise HTTPException(400, str(e)) from e
+    return {"url": url}
+
+
+class TopUpRequest(BaseModel):
+    amount_cents: int
+    message: str | None = None
+    success_url: str
+    cancel_url: str
+
+
+@router.post("/{sponsorship_id}/top-up", dependencies=[Depends(limit_money)])
+async def top_up_sponsorship(
+    sponsorship_id: UUID,
+    payload: TopUpRequest,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add money onto a funded site or area whose sponsor left it open to additions."""
+    try:
+        url = await sponsorships_service.create_topup_checkout_session(
+            db,
+            parent_id=sponsorship_id,
+            user_id=user.id,
+            amount_cents=payload.amount_cents,
+            message=(payload.message or "").strip()[:280] or None,
+            success_url=payload.success_url,
+            cancel_url=payload.cancel_url,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     except (RuntimeError, stripe.StripeError) as e:
         raise HTTPException(400, str(e)) from e
     return {"url": url}
@@ -335,10 +372,16 @@ async def payout_status(user: CurrentUser = Depends(require_user), db: AsyncSess
         raise HTTPException(e.status, str(e))
 
 
+class PayoutOnboard(BaseModel):
+    from_app: bool = False
+
+
 @router.post("/payouts/onboard", dependencies=[Depends(limit_money)])
-async def payout_onboard(user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+async def payout_onboard(
+    body: PayoutOnboard | None = None, user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)
+):
     try:
-        return await connect.create_payout_onboarding_link(db, user.id, user.email, "/sponsorships")
+        return await connect.create_payout_onboarding_link(db, user.id, user.email, "/earn", bool(body and body.from_app))
     except connect.ConnectError as e:
         raise HTTPException(e.status, str(e))
     except stripe.StripeError:
@@ -376,6 +419,7 @@ async def group_payout_status(group_id: UUID, user: CurrentUser = Depends(requir
 
 class GroupPayoutOnboard(BaseModel):
     return_path: str = "/groups"
+    from_app: bool = False
 
 
 @router.post("/groups/{group_id}/payouts/onboard", dependencies=[Depends(limit_money)])
@@ -389,7 +433,7 @@ async def group_payout_onboard(
     # Only same-site paths: this is where Stripe sends the admin back to.
     path = payload.return_path if payload.return_path.startswith("/") and not payload.return_path.startswith("//") else "/groups"
     try:
-        return await connect.create_group_onboarding_link(db, group_id, user.id, user.email, path)
+        return await connect.create_group_onboarding_link(db, group_id, user.id, user.email, path, payload.from_app)
     except connect.ConnectError as e:
         raise HTTPException(e.status, str(e))
     except stripe.StripeError:

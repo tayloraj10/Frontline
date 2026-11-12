@@ -341,14 +341,14 @@ export default async function UserProfilePage({ params }: Props) {
       {isOwn && mkAccess?.allowed && (
         <div className="mb-6 grid grid-cols-2 gap-3">
           <Link
-            href="/marketplace/jobs"
+            href="/fund/jobs"
             className="flex min-h-14 flex-col justify-center rounded-[20px] bg-zinc-900 px-5 py-3 touch-manipulation active:scale-[0.98]"
           >
             <span className="text-sm font-extrabold text-zinc-100">My bookings</span>
             <span className="text-xs text-zinc-500">Jobs you posted or took</span>
           </Link>
           <Link
-            href="/marketplace/become-a-cleaner"
+            href="/earn/profile"
             className={`flex min-h-14 flex-col justify-center rounded-[20px] px-5 py-3 touch-manipulation active:scale-[0.98] ${
               cleanerStatus === "suspended" ? "bg-red-500/10 ring-2 ring-inset ring-red-400/60" : "bg-zinc-900"
             }`}

@@ -302,13 +302,13 @@ export default async function ImpactPage({ searchParams }: { searchParams: Promi
           Marketplace jobs only. Pending money is held until the customer confirms or the review window ends.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Link href="/sponsorships">
+          <Link href="/earn">
             <Card interactive padding="lg" className="h-full">
               <p className="font-display text-base font-extrabold text-zinc-100">Payouts and sponsored pay</p>
               <p className="mt-1 text-sm text-zinc-400">Set up or check your bank payout, and see sponsored cleanup pay.</p>
             </Card>
           </Link>
-          <Link href="/marketplace/jobs">
+          <Link href="/fund/jobs">
             <Card interactive padding="lg" className="h-full">
               <p className="font-display text-base font-extrabold text-zinc-100">My bookings</p>
               <p className="mt-1 text-sm text-zinc-400">Every job you posted or took, with its payment status.</p>

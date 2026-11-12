@@ -206,7 +206,7 @@ export default function JobsMap({
               </button>
             )}
             <Link
-              href={`/marketplace/jobs/${selectedJob.id}`}
+              href={`/fund/jobs/${selectedJob.id}`}
               className="inline-flex min-h-11 shrink-0 items-center gap-0.5 rounded-xl bg-emerald-400 px-3 text-sm font-extrabold text-emerald-950 active:scale-[0.97]"
             >
               View
@@ -230,7 +230,7 @@ export default function JobsMap({
               onClick={() => changeBasemap(b.value)}
               aria-pressed={basemap === b.value}
               className={cn(
-                "min-h-11 rounded-full px-3 text-xs font-medium touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.95]",
+                "min-h-8 rounded-full px-2.5 text-[11px] font-medium touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.95]",
                 basemap === b.value ? "bg-zinc-600 text-zinc-100" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200",
               )}
             >

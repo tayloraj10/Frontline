@@ -45,13 +45,13 @@ export default function ActiveJobView({ job }: { job: Job }) {
 
       <div className="grid grid-cols-2 gap-2">
         <Link
-          href={`/marketplace/jobs/${job.id}`}
+          href={`/fund/jobs/${job.id}`}
           className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-emerald-400 px-4 text-sm font-bold text-emerald-950 touch-manipulation active:scale-[0.97]"
         >
           {arriving ? "Open and start" : "Open job"}
         </Link>
         <Link
-          href={`/marketplace/jobs/${job.id}#messages`}
+          href={`/fund/jobs/${job.id}#messages`}
           className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-2xl bg-zinc-800 px-4 text-sm font-bold text-zinc-100 touch-manipulation active:scale-[0.97]"
         >
           <MessageSquare className="h-4 w-4" aria-hidden="true" />

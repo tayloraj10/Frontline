@@ -14,7 +14,7 @@ export default async function ActiveJobBanner({ userId, isAdmin }: { userId: str
   return (
     <HideOnHome>
     <Link
-      href={`/marketplace/jobs/${job.id}`}
+      href={`/fund/jobs/${job.id}`}
       className="mb-4 flex min-h-11 items-start gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-400/10 p-3 text-sm touch-manipulation active:scale-[0.99]"
     >
       <Hammer className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" aria-hidden="true" />

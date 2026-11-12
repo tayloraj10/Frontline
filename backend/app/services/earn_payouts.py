@@ -63,7 +63,7 @@ async def pay_allocation(db: AsyncSession, allocation_id: UUID) -> dict:
             await _tell(
                 db, a.user_id, "earn_payout_setup_needed", "Set up payouts to get paid",
                 f"Your ${a.amount_cents / 100:.2f} reward was approved. Add your bank details to receive it.",
-                "/sponsorships", "Set up payouts",
+                "/earn", "Set up payouts",
             )
         return {"status": "awaiting_payout_setup"}
 
@@ -106,7 +106,7 @@ async def pay_allocation(db: AsyncSession, allocation_id: UUID) -> dict:
         await _tell(
             db, a.user_id, "earn_paid", "You got paid",
             f"${a.amount_cents / 100:.2f} for your cleanup is on its way to your bank through Stripe.",
-            "/sponsorships", "View earnings",
+            "/earn", "View earnings",
         )
     return {"status": "paid_out"}
 
@@ -118,7 +118,7 @@ async def _tell_group_admins(db: AsyncSession, group_id: UUID, kind: str, title:
         )
     ).all()
     for r in admins:
-        await _tell(db, r.user_id, kind, title, body, "/sponsorships", "Open Earn")
+        await _tell(db, r.user_id, kind, title, body, "/earn", "Open Earn")
 
 
 async def pay_waiting_group_allocations(db: AsyncSession, group_id: UUID) -> None:

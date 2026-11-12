@@ -112,7 +112,7 @@ export default function BottomTabBar({ links }: { links: NavLink[] }) {
   // "/partners/dashboard" both prefix-match "/partners/dashboard") — only the
   // most specific (longest) match should light up, not every prefix that matches.
   // Paid cleanups, Hire and Impact are tabs of the Rewards area, so they keep Rewards lit.
-  const REWARDS_AREA = ["/sponsorships", "/marketplace", "/impact"];
+  const REWARDS_AREA = ["/earn", "/fund", "/impact"];
   function matchesHref(href: string) {
     if (href === "/") return pathname === "/";
     if (href === "/partners" && REWARDS_AREA.some((p) => pathname?.startsWith(p))) return true;

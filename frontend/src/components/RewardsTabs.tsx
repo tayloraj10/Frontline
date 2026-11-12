@@ -1,18 +1,19 @@
 import type { LucideIcon } from "lucide-react";
 import { Gift, CircleDollarSign, HeartHandshake, BriefcaseBusiness } from "lucide-react";
 import Link from "next/link";
+import { FUND_TAB_LABEL } from "@/lib/rewardsLabels";
 import { getMarketplaceAccess } from "@/lib/marketplace.server";
 
 export type RewardsTab = "perks" | "paid" | "hire" | "impact";
 
 const TABS: { id: RewardsTab; label: string; href: string; Icon: LucideIcon }[] = [
   { id: "perks", label: "Perks", href: "/partners", Icon: Gift },
-  { id: "paid", label: "Earn", href: "/sponsorships", Icon: CircleDollarSign },
-  { id: "hire", label: "Hire", href: "/marketplace", Icon: BriefcaseBusiness },
+  { id: "paid", label: "Earn", href: "/earn", Icon: CircleDollarSign },
+  { id: "hire", label: FUND_TAB_LABEL, href: "/fund", Icon: BriefcaseBusiness },
   { id: "impact", label: "Impact", href: "/impact", Icon: HeartHandshake },
 ];
 
-/** Shared tab bar for the rewards area. Only rendered when payments are visible, so perks-only users never see it. The Hire tab also needs the marketplace_enabled setting. */
+/** Shared tab bar for the rewards area. Only rendered when payments are visible, so perks-only users never see it. The Fund tab (id hire) also needs the marketplace_enabled setting. */
 export default async function RewardsTabs({ current }: { current: RewardsTab }) {
   const { allowed } = await getMarketplaceAccess();
   const tabs = TABS.filter((t) => t.id !== "hire" || allowed);

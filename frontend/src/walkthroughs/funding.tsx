@@ -2,9 +2,39 @@ import { Stage, Chip, Arrow, type WalkthroughDef } from "@/components/walkthroug
 
 export const funding: WalkthroughDef = {
   id: "funding",
-  title: "How funding works",
+  title: "How earning works",
   finishLabel: "Got it",
   steps: [
+    {
+      title: "Where the money comes from",
+      label: "Basics",
+      body: "Sponsors and neighbors put up money for cleanups, and you get paid once your work is verified. You can earn three ways, all shown on the map.",
+      how: [
+        "Cleanup site: a sponsored spot you claim and clean on your own",
+        "Group area: a sponsored region where your group hosts cleanup events",
+        "Neighbor job: someone posts a job and pays one cleaner to do it",
+        "Want to put money up instead? Sponsoring and hiring live on the Fund tab",
+      ],
+      visual: (
+        <Stage>
+          <Chip on>Cleanup site</Chip>
+          <Chip>Group area</Chip>
+          <Chip>Neighbor job</Chip>
+        </Stage>
+      ),
+    },
+    {
+      title: "Open, sole credit or pool",
+      label: "Types",
+      body: "Sponsored places are set up in a few ways. Open sites and areas let neighbors add money, and show a + on the maps. Sole credit means one sponsor funds it alone. A pool is a crowdfunded project that becomes a funded site once the goal is met.",
+      visual: (
+        <Stage>
+          <Chip on>Open +</Chip>
+          <Chip>Sole credit</Chip>
+          <Chip>Pool</Chip>
+        </Stage>
+      ),
+    },
     {
       title: "Cleanup sites",
       label: "Sites",
@@ -87,6 +117,7 @@ export const funding: WalkthroughDef = {
       how: [
         "Donate: supports Frontline overall, not tied to a place",
         "Support a group: Plus groups that are open to sponsors can be gifted directly from their page",
+        "Pool money with neighbors: crowdfund a bigger project from the Fund tab. Starting from a regular site neighbors can add to is best, since some money is already there. If the goal is met it becomes a funded site, and if not everyone is refunded",
       ],
       visual: (
         <Stage>

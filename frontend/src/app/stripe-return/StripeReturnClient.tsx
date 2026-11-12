@@ -14,10 +14,11 @@ function getMode(): Mode {
 }
 
 // Stripe hosted pages open in the system browser from the native app. This page is where Stripe
-// sends people back to: inside the app it just continues, in a phone browser it offers a button
-// that hands off to the app, and on desktop it continues on the website.
-export default function StripeReturnClient({ next }: { next: string }) {
-  const mode = useSyncExternalStore(subscribe, getMode, () => "checking" as Mode);
+// sends people back to. The app marks its links with app=1: only then does a phone browser offer the
+// button that hands off to the app. Web visitors (any device) and the in-app web view just continue.
+export default function StripeReturnClient({ next, fromApp }: { next: string; fromApp: boolean }) {
+  const detected = useSyncExternalStore(subscribe, getMode, () => "checking" as Mode);
+  const mode: Mode = detected === "mobile-browser" && !fromApp ? "desktop" : detected;
 
   useEffect(() => {
     if (mode === "in-app" || mode === "desktop") window.location.replace(next);

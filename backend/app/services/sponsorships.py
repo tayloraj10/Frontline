@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.services import connect as connect_service
 from app.services import payments as payments_service
+from app.services.game_settings import min_payment_cents, min_payment_message
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,10 @@ def _client() -> stripe.StripeClient:
     if not settings.stripe_secret_key:
         raise RuntimeError("STRIPE_SECRET_KEY is not configured.")
     return stripe.StripeClient(settings.stripe_secret_key)
+
+
+class MinimumAmountError(ValueError):
+    """Amount is under the global minimum payment."""
 
 
 async def create_sponsorship_checkout_session(
@@ -59,9 +64,11 @@ async def create_sponsorship_checkout_session(
     area_source: str | None = None,
     area_name: str | None = None,
     target_group_id: UUID | None = None,
+    open_to_additions: bool = True,
 ) -> str:
-    if amount_cents <= 0:
-        raise ValueError("amount_cents must be positive")
+    min_cents = await min_payment_cents(db)
+    if amount_cents < min_cents:
+        raise MinimumAmountError(min_payment_message(min_cents, "sponsorship"))
 
     group_name = None
     if target_type == "group":
@@ -86,7 +93,7 @@ async def create_sponsorship_checkout_session(
                      amount_cents, message, status,
                      model, payout_rule, cap_per_user_cents,
                      site_label, site_location, site_radius_meters,
-                     area_geometry, area_source, area_name)
+                     area_geometry, area_source, area_name, open_to_additions)
                 VALUES
                     (:sponsor_type, :sponsor_user_id, :sponsor_business_id,
                      :target_type, :target_cleanup_id, :target_geo_unit_id, :target_group_id,
@@ -99,7 +106,7 @@ async def create_sponsorship_checkout_session(
                      :site_radius_meters,
                      CASE WHEN CAST(:area_wkt AS text) IS NULL THEN NULL
                           ELSE ST_GeomFromEWKT(CAST(:area_wkt AS text)) END,
-                     :area_source, :area_name)
+                     :area_source, :area_name, :open_to_additions)
                 RETURNING id
             """),
             {
@@ -122,6 +129,7 @@ async def create_sponsorship_checkout_session(
                 "area_wkt": area_wkt,
                 "area_source": area_source,
                 "area_name": area_name,
+                "open_to_additions": open_to_additions,
             },
         )
     ).fetchone()
@@ -211,6 +219,39 @@ async def mark_funded_from_checkout_session(db: AsyncSession, session: dict) -> 
         logger.warning("Checkout session %s (payment mode) has no sponsorship_id metadata", session.get("id"))
         return
 
+    topup = (
+        await db.execute(
+            text("""
+            UPDATE sponsorships
+            SET status = 'funded',
+                funded_at = now(),
+                remaining_cents = 0,
+                stripe_payment_intent_id = :payment_intent_id,
+                stripe_customer_id = :customer_id
+            WHERE id = :id AND status = 'pending_funding' AND topup_of IS NOT NULL
+            RETURNING topup_of, amount_cents
+        """),
+            {
+                "id": sponsorship_id,
+                "payment_intent_id": session.get("payment_intent"),
+                "customer_id": session.get("customer"),
+            },
+        )
+    ).fetchone()
+    if topup is not None:
+        # Add the money to the parent site's balance. An exhausted parent comes back to life.
+        await db.execute(
+            text("""
+                UPDATE sponsorships
+                SET remaining_cents = COALESCE(remaining_cents, 0) + :amt,
+                    status = CASE WHEN status = 'exhausted' THEN 'funded' ELSE status END
+                WHERE id = :pid AND status IN ('funded', 'exhausted')
+            """),
+            {"amt": topup.amount_cents, "pid": str(topup.topup_of)},
+        )
+        await db.commit()
+        return
+
     funded = (
         await db.execute(
             text("""
@@ -246,6 +287,21 @@ async def mark_funded_from_checkout_session(db: AsyncSession, session: dict) -> 
 
 
 async def mark_refunded_from_payment_intent(db: AsyncSession, payment_intent_id: str) -> None:
+    topup = (
+        await db.execute(
+            text("""
+                SELECT topup_of, amount_cents FROM sponsorships
+                WHERE stripe_payment_intent_id = :pi AND topup_of IS NOT NULL
+                  AND status IN ('funded', 'released', 'exhausted')
+            """),
+            {"pi": payment_intent_id},
+        )
+    ).fetchone()
+    if topup is not None:
+        await db.execute(
+            text("UPDATE sponsorships SET remaining_cents = GREATEST(COALESCE(remaining_cents, 0) - :amt, 0) WHERE id = :pid"),
+            {"amt": topup.amount_cents, "pid": str(topup.topup_of)},
+        )
     await db.execute(
         text("""
             UPDATE sponsorships
@@ -298,3 +354,110 @@ async def list_sponsorships(db: AsyncSession, status: str | None = None) -> list
     """
     rows = (await db.execute(text(query), {"status": status})).mappings().all()
     return [dict(r) for r in rows]
+
+
+async def create_topup_checkout_session(
+    db: AsyncSession,
+    *,
+    parent_id: UUID,
+    user_id: UUID,
+    amount_cents: int,
+    message: str | None,
+    success_url: str,
+    cancel_url: str,
+) -> str:
+    """Checkout for adding money onto someone else's funded site or area. Refused when the
+    sponsor chose sole credit (open_to_additions = false)."""
+    if amount_cents < 500:
+        raise ValueError("The minimum addition is $5.")
+    parent = (
+        await db.execute(
+            text("""
+                SELECT id, model, target_type, status, open_to_additions, topup_of,
+                       site_label, site_radius_meters, area_name, area_source,
+                       ST_AsEWKT(area_geometry) AS area_wkt,
+                       ST_Y(site_location::geometry) AS lat, ST_X(site_location::geometry) AS lon,
+                       payout_rule, cap_per_user_cents
+                FROM sponsorships WHERE id = :id
+            """),
+            {"id": str(parent_id)},
+        )
+    ).mappings().fetchone()
+    if parent is None or parent["topup_of"] is not None or parent["model"] not in ("site", "group_area"):
+        raise ValueError("That site can't be added to.")
+    if parent["status"] not in ("funded", "exhausted"):
+        raise ValueError("That site is not currently funded.")
+    if not parent["open_to_additions"]:
+        raise ValueError("The sponsor kept this one as sole credit.")
+
+    row = (
+        await db.execute(
+            text("""
+                INSERT INTO sponsorships
+                    (sponsor_type, sponsor_user_id, target_type, amount_cents, message, status,
+                     model, site_label, site_location, site_radius_meters,
+                     area_geometry, area_source, area_name, payout_rule, cap_per_user_cents,
+                     open_to_additions, topup_of)
+                VALUES
+                    ('user', :uid, :target_type, :amount, :message, 'pending_funding',
+                     :model, :site_label,
+                     CASE WHEN CAST(:lat AS double precision) IS NULL THEN NULL
+                          ELSE ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision),
+                                                       CAST(:lat AS double precision)), 4326)::geography END,
+                     :radius,
+                     CASE WHEN CAST(:area_wkt AS text) IS NULL THEN NULL
+                          ELSE ST_GeomFromEWKT(CAST(:area_wkt AS text)) END,
+                     :area_source, :area_name, CAST(:payout_rule AS jsonb), :cap,
+                     false, :pid)
+                RETURNING id
+            """),
+            {
+                "uid": str(user_id),
+                "target_type": parent["target_type"],
+                "amount": amount_cents,
+                "message": message,
+                "model": parent["model"],
+                "site_label": parent["site_label"],
+                "lat": parent["lat"],
+                "lon": parent["lon"],
+                "radius": parent["site_radius_meters"],
+                "area_wkt": parent["area_wkt"],
+                "area_source": parent["area_source"],
+                "area_name": parent["area_name"],
+                "payout_rule": json.dumps(parent["payout_rule"]) if parent["payout_rule"] else None,
+                "cap": parent["cap_per_user_cents"],
+                "pid": str(parent_id),
+            },
+        )
+    ).fetchone()
+    new_id = row.id
+    await db.commit()
+
+    name = parent["site_label"] or parent["area_name"] or "a sponsored cleanup"
+    session = _client().checkout.sessions.create(
+        params={
+            "mode": "payment",
+            "line_items": [
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": amount_cents,
+                        "product_data": {"name": f"Add to: {name}", "description": message or None},
+                    },
+                    "quantity": 1,
+                }
+            ],
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+            "metadata": {"sponsorship_id": str(new_id)},
+            "payment_intent_data": {"metadata": {"sponsorship_id": str(new_id)}},
+        }
+    )
+    if not session.url:
+        raise RuntimeError("Stripe did not return a Checkout Session URL.")
+    await db.execute(
+        text("UPDATE sponsorships SET stripe_checkout_session_id = :sid WHERE id = :id"),
+        {"sid": session.id, "id": str(new_id)},
+    )
+    await db.commit()
+    return session.url

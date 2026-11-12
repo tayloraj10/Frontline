@@ -50,7 +50,7 @@ async def _profile(db: AsyncSession, user_id: UUID):
     return row
 
 
-async def create_onboarding_link(db: AsyncSession, user_id: UUID, email: str | None) -> dict:
+async def create_onboarding_link(db: AsyncSession, user_id: UUID, email: str | None, from_app: bool = False) -> dict:
     """Creates the Express account the first time, then returns a fresh hosted onboarding link
     (links are single-use, so a new one is made on every call)."""
     profile = await _profile(db, user_id)
@@ -77,8 +77,8 @@ async def create_onboarding_link(db: AsyncSession, user_id: UUID, email: str | N
         params={
             "account": account_id,
             "type": "account_onboarding",
-            "refresh_url": stripe_return_url(base, "/marketplace/become-a-cleaner", "payouts=refresh"),
-            "return_url": stripe_return_url(base, "/marketplace/become-a-cleaner", "payouts=return"),
+            "refresh_url": stripe_return_url(base, "/earn/profile", "payouts=refresh", from_app),
+            "return_url": stripe_return_url(base, "/earn/profile", "payouts=return", from_app),
         }
     )
     return {"url": link.url}
@@ -135,7 +135,9 @@ async def account_for(db: AsyncSession, user_id: UUID):
     return None, False
 
 
-async def create_payout_onboarding_link(db: AsyncSession, user_id: UUID, email: str | None, return_path: str) -> dict:
+async def create_payout_onboarding_link(
+    db: AsyncSession, user_id: UUID, email: str | None, return_path: str, from_app: bool = False
+) -> dict:
     client = _client()
     account_id, _ = await account_for(db, user_id)
     if not account_id:
@@ -163,8 +165,8 @@ async def create_payout_onboarding_link(db: AsyncSession, user_id: UUID, email: 
         params={
             "account": account_id,
             "type": "account_onboarding",
-            "refresh_url": stripe_return_url(base, return_path, "payouts=refresh"),
-            "return_url": stripe_return_url(base, return_path, "payouts=return"),
+            "refresh_url": stripe_return_url(base, return_path, "payouts=refresh", from_app),
+            "return_url": stripe_return_url(base, return_path, "payouts=return", from_app),
         }
     )
     return {"url": link.url}
@@ -221,7 +223,7 @@ async def group_payouts_ready(db: AsyncSession, group_id: UUID) -> bool:
 
 
 async def create_group_onboarding_link(
-    db: AsyncSession, group_id: UUID, user_id: UUID, email: str | None, return_path: str
+    db: AsyncSession, group_id: UUID, user_id: UUID, email: str | None, return_path: str, from_app: bool = False
 ) -> dict:
     client = _client()
     account_id, _ = await group_account_for(db, group_id)
@@ -250,8 +252,8 @@ async def create_group_onboarding_link(
         params={
             "account": account_id,
             "type": "account_onboarding",
-            "refresh_url": stripe_return_url(base, return_path, "payouts=refresh"),
-            "return_url": stripe_return_url(base, return_path, "payouts=return"),
+            "refresh_url": stripe_return_url(base, return_path, "payouts=refresh", from_app),
+            "return_url": stripe_return_url(base, return_path, "payouts=return", from_app),
         }
     )
     return {"url": link.url}

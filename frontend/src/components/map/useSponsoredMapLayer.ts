@@ -19,6 +19,7 @@ interface MapSite {
   label: string | null;
   remaining_cents: number;
   payout_rule: PayoutRule;
+  open_to_additions?: boolean;
   radius_meters?: number | null;
   latitude: number;
   longitude: number;
@@ -30,6 +31,7 @@ interface MapArea {
   area_name: string | null;
   remaining_cents: number;
   payout_rule: PayoutRule;
+  open_to_additions?: boolean;
   geometry: GeoJSON.Geometry;
 }
 
@@ -63,16 +65,34 @@ function el(tag: string, css: string, text?: string) {
   return n;
 }
 
+/**
+ * A popup with the sponsor card look. The padding and close button are set here as well as in globals.css,
+ * so the card sizing never depends on which stylesheet the page has loaded.
+ */
+function sponsorPopup(options: maplibregl.PopupOptions) {
+  const popup = new maplibregl.Popup(options);
+  popup.on("open", () => {
+    const root = popup.getElement();
+    const content = root?.querySelector<HTMLElement>(".maplibregl-popup-content");
+    const close = root?.querySelector<HTMLElement>(".maplibregl-popup-close-button");
+    const set = (node: HTMLElement | null | undefined, props: Record<string, string>) =>
+      node && Object.entries(props).forEach(([k, v]) => node.style.setProperty(k, v, "important"));
+    set(content, { padding: "12px 14px", "border-radius": "14px" });
+    set(close, { top: "6px", right: "6px", width: "36px", height: "36px", "font-size": "22px", "line-height": "36px", "border-radius": "999px" });
+  });
+  return popup;
+}
+
 /** Plain-language proximity rule shown before someone taps Claim. */
 export function claimRangeNote(radius?: number | null) {
   const m = Math.round(Number(radius) || 100);
   const ft = Math.round((m * 3.281) / 10) * 10;
-  return `Be within ${m} m (about ${ft} ft) of the site to claim it.`;
+  return `Claim range: ${m} m (about ${ft} ft).`;
 }
 
 /** One popup for several pools covering the same spot, so overlapping sponsors read as a group. */
 function overlapNode(areas: { name: string; left: number; rule: PayoutRule }[]) {
-  const root = el("div", "min-width:220px;font-family:inherit;color:#f4f4f5");
+  const root = el("div", "width:236px;max-width:100%;box-sizing:border-box;font-family:inherit;color:#f4f4f5");
   const total = areas.reduce((n, a) => n + a.left, 0);
   root.append(
     el("div", "font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#34d399", "Sponsored areas"),
@@ -92,6 +112,52 @@ function overlapNode(areas: { name: string; left: number; rule: PayoutRule }[]) 
   return root;
 }
 
+/** Metres between two points, close enough for "how far am I from this site". */
+function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number) {
+  const r = 6371000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const h = Math.sin(rad(bLat - aLat) / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(rad(bLng - aLng) / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(h));
+}
+
+const distanceText = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
+
+// Only when location is already allowed, so opening a popup never triggers a permission prompt.
+async function fillDistanceLine(target: HTMLElement, site: { lat: number; lng: number; radius?: number | null }) {
+  try {
+    const perm = await navigator.permissions?.query({ name: "geolocation" });
+    if (!perm || perm.state !== "granted") return;
+    const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, { maximumAge: 120000, timeout: 6000 }),
+    );
+    const d = metersBetween(pos.coords.latitude, pos.coords.longitude, site.lat, site.lng);
+    const range = Number(site.radius) || DEFAULT_CLAIM_RADIUS_M;
+    const inRange = d <= range;
+    target.style.color = inRange ? "#6ee7b7" : "#fbbf24";
+    target.textContent = inRange ? `In range (${distanceText(d)} away).` : `${distanceText(d)} away. Get closer to claim.`;
+  } catch {
+    /* leave blank */
+  }
+}
+
+// Same look as the job pin card: full-pill buttons, 40px tall, zinc for the quiet one.
+const PILL_BTN =
+  "display:flex;flex:1 1 0;min-width:0;align-items:center;justify-content:center;gap:5px;min-height:40px;padding:0 8px;border-radius:999px;border:0;overflow:hidden;text-overflow:ellipsis;" +
+  "font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;white-space:nowrap;font-family:inherit";
+
+const ICON_LIST =
+  '<path d="M10 12h11"/><path d="M10 18h11"/><path d="M10 6h11"/><path d="M4 10h2"/><path d="M4 6h1v4"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>';
+const ICON_PLUS = '<path d="M5 12h14"/><path d="M12 5v14"/>';
+
+/** A pill button with a small leading icon, matching the job card's buttons. */
+function pillButton(tag: "button" | "a", css: string, label: string, icon: string) {
+  const node = el(tag, PILL_BTN + ";" + css);
+  node.innerHTML =
+    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg>`;
+  node.append(document.createTextNode(label));
+  return node;
+}
+
 function popupNode(
   kind: string,
   title: string,
@@ -99,41 +165,84 @@ function popupNode(
   left: number,
   cta: { label: string; href?: string; onClick?: (btn: HTMLButtonElement, status: HTMLElement) => void } | null,
   note?: string,
+  addId?: string | null,
+  where?: { id: string; lat?: number; lng?: number; radius?: number | null },
 ) {
   const { amount, caption } = ruleParts(rule);
-  const root = el("div", "min-width:210px;font-family:inherit;color:#f4f4f5");
+  const root = el("div", "width:236px;max-width:100%;box-sizing:border-box;font-family:inherit;color:#f4f4f5");
   root.append(
     el("div", "font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#34d399", kind),
-    el("div", "font-size:15px;font-weight:700;line-height:1.25;margin-top:2px", title),
+    el("div", "font-size:16px;font-weight:700;line-height:1.25;margin-top:2px;padding-right:20px", title),
   );
   const stats = el(
     "div",
-    "display:flex;align-items:baseline;gap:6px;margin-top:8px;padding:8px 10px;border-radius:10px;" +
-      "background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)",
+    "margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)",
   );
-  stats.append(
+  const big = el("div", "display:flex;align-items:baseline;gap:6px");
+  big.append(
     el("span", "font-size:28px;font-weight:800;line-height:1;color:#6ee7b7", amount),
     el("span", "font-size:12px;color:#d4d4d8", caption),
   );
-  root.append(stats, el("div", "font-size:12px;color:#a1a1aa;margin-top:6px", `${usd(left)} left in the pool`));
-  if (note) root.append(el("div", "font-size:12px;color:#fbbf24;margin-top:6px", note));
-  if (!cta) return root;
-  const ctaCss =
-    "display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:10px;border-radius:12px;" +
-    "background:#059669;color:#fff;font-size:14px;font-weight:600;text-decoration:none;border:0;cursor:pointer";
-  if (cta.onClick) {
-    const btn = el("button", ctaCss, cta.label) as HTMLButtonElement;
-    btn.type = "button";
-    const status = el("div", "font-size:12px;margin-top:6px");
-    const limitLine = el("div", "font-size:11px;color:#a1a1aa;margin-top:6px");
+  stats.append(big, el("div", "font-size:12px;color:#a1a1aa;margin-top:4px", `${usd(left)} left in the pool`));
+  root.append(stats);
+
+  // One quiet status block instead of several stacked lines under the button.
+  const status = el("div", "margin-top:6px;display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:1.35");
+  if (note) status.append(el("div", cta ? "color:#d4d4d8" : "color:#fbbf24", note));
+  const distLine = el("div", "");
+  const limitLine = el("div", "font-size:11px;color:#a1a1aa");
+  if (cta?.onClick) {
+    status.append(distLine, limitLine);
     void fillLimitLine(limitLine);
-    btn.addEventListener("click", () => cta.onClick?.(btn, status));
-    root.append(btn, status, limitLine);
-    return root;
+    if (where?.lat != null && where.lng != null) void fillDistanceLine(distLine, { lat: where.lat, lng: where.lng, radius: where.radius });
   }
-  const a = el("a", ctaCss, cta.label) as HTMLAnchorElement;
-  a.href = cta.href ?? "/sponsorships";
-  root.append(a);
+  if (status.childNodes.length) root.append(status);
+
+  const claimStatus = el("div", "font-size:12px;margin-top:6px");
+  if (cta) {
+    const ctaCss =
+      "display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:8px;border-radius:999px;" +
+      "background:#059669;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border:0;cursor:pointer";
+    if (cta.onClick) {
+      const b = el("button", ctaCss, cta.label) as HTMLButtonElement;
+      b.type = "button";
+      b.addEventListener("click", () => cta.onClick?.(b, claimStatus));
+      root.append(b, claimStatus);
+    } else {
+      const a = el("a", ctaCss, cta.label) as HTMLAnchorElement;
+      a.href = cta.href ?? "/earn";
+      root.append(a);
+    }
+  }
+
+  // Secondary actions share one row, so the primary button stays the clear next step.
+  const row = el("div", "display:flex;gap:8px;margin-top:8px;width:100%;min-width:0");
+  if (where) {
+    // The list may render after the map, so show the button as soon as its row exists.
+    const rowId = `sponsored-row-${where.id}`;
+    const list = pillButton("button", "background:#27272a;color:#f4f4f5", "Show in list", ICON_LIST) as HTMLButtonElement;
+    list.type = "button";
+    list.addEventListener("click", () => document.getElementById(rowId)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    const sync = () => {
+      list.style.display = document.getElementById(rowId) ? "flex" : "none";
+    };
+    sync();
+    [500, 1500, 3500].forEach((ms) => setTimeout(sync, ms));
+    row.prepend(list);
+  }
+  if (addId) {
+    const a = pillButton("a", "background:rgba(52,211,153,.16);color:#6ee7b7", "Add money", ICON_PLUS) as HTMLAnchorElement;
+    a.href = `/earn?add=${addId}`;
+    row.append(a);
+  }
+  // Off the Earn page (the Trash War map), point to Earn for the full details and claim steps.
+  if (where && typeof window !== "undefined" && !window.location.pathname.startsWith("/earn")) {
+    const more = pillButton("a", "background:#059669;color:#fff", "View details", ICON_LIST) as HTMLAnchorElement;
+    more.href = "/earn";
+    row.prepend(more);
+  }
+  if (!cta && addId) root.append(el("div", "font-size:11px;color:#a1a1aa;margin-top:6px", "Open to additions. Chip in to fund more cleanups here."));
+  if (row.childNodes.length) root.append(row);
   return root;
 }
 
@@ -300,6 +409,7 @@ export function useSponsoredMapLayer(
             name: a.area_name ?? "Sponsored area",
             left: a.remaining_cents,
             rule: JSON.stringify(a.payout_rule),
+            open: a.open_to_additions ? 1 : 0,
           },
           geometry: a.geometry,
         })),
@@ -379,7 +489,7 @@ export function useSponsoredMapLayer(
         .filter((x) => !seen.has(String(x.properties?.id)) && seen.add(String(x.properties?.id)));
       if (stack.length > 1) {
         openPopup(
-          new maplibregl.Popup({ closeButton: true, maxWidth: "300px", anchor: "bottom" })
+          sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "sponsor-popup" })
             .setLngLat(e.lngLat)
             .setDOMContent(
               overlapNode(
@@ -396,11 +506,12 @@ export function useSponsoredMapLayer(
       }
       const rule = JSON.parse(String(f.properties?.rule ?? "{}")) as PayoutRule;
       openPopup(
-        new maplibregl.Popup({ closeButton: true, maxWidth: "280px", anchor: "bottom" })
+        sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "sponsor-popup" })
           .setLngLat(e.lngLat)
           .setDOMContent(
             popupNode("Sponsored area", String(f.properties?.name), rule, Number(f.properties?.left ?? 0), null,
-              "Groups: pick this area when you host a cleanup here."),
+              "Groups: pick this area when you host a cleanup here.",
+              Number(f.properties?.open) === 1 ? String(f.properties?.id) : null, { id: String(f.properties?.id) }),
           ),
         m,
       );
@@ -455,11 +566,13 @@ export function useSponsoredMapLayer(
       const amount = s.payout_rule.type === "per_bag" ? s.payout_rule.cents_per_bag ?? 0 : s.payout_rule.amount_cents ?? 0;
       const fill = s.available ? "#059669" : "#71717a";
       const tag = document.createElement("span");
-      tag.textContent = usd(amount);
+      tag.textContent = s.open_to_additions ? `${usd(amount)} +` : usd(amount);
       tag.style.cssText =
         "padding:2px 8px;border-radius:999px;background:#18181b;color:#fff;font-size:13px;font-weight:800;line-height:1.2;" +
         "border:1.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)";
       const pin = document.createElement("span");
+      // Auto margins center the pin under the (wider) price tag so the tip sits on the marker anchor.
+      pin.style.cssText = "display:block;width:34px;height:42px;margin:0 auto";
       pin.innerHTML =
         `<svg width="34" height="42" viewBox="0 0 24 30" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45))">` +
         `<path d="M12 1.5C6.2 1.5 1.5 6.1 1.5 11.8c0 7.6 10.5 17.2 10.5 17.2s10.5-9.6 10.5-17.2C22.5 6.1 17.8 1.5 12 1.5Z" fill="${fill}" stroke="#fff" stroke-width="1.5"/>` +
@@ -468,7 +581,7 @@ export function useSponsoredMapLayer(
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         openPopup(
-          new maplibregl.Popup({ closeButton: true, maxWidth: "280px", offset: 56, anchor: "bottom" })
+          sponsorPopup({ closeButton: true, maxWidth: "264px", offset: 56, anchor: "bottom", className: "sponsor-popup" })
             .setLngLat([s.longitude, s.latitude])
             .setDOMContent(
               popupNode(
@@ -480,6 +593,8 @@ export function useSponsoredMapLayer(
                   ? { label: "Claim this site", onClick: (btn, status) => claimFromPopup(s.id, btn, status) }
                   : null,
                 s.available ? claimRangeNote(s.radius_meters) : "Someone is working this site right now.",
+                s.open_to_additions ? s.id : null,
+                { id: s.id, lat: s.latitude, lng: s.longitude, radius: s.radius_meters },
               ),
             ),
           m,
@@ -601,11 +716,11 @@ export function useSponsoredMapLayer(
         const bounds = new maplibregl.LngLatBounds([Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]);
         map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
         openPopup(
-          new maplibregl.Popup({ closeButton: true, maxWidth: "280px", anchor: "bottom" })
+          sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "sponsor-popup" })
             .setLngLat(bounds.getCenter())
             .setDOMContent(
               popupNode("Sponsored area", area.area_name ?? "Sponsored area", area.payout_rule, area.remaining_cents, null,
-                "Groups: pick this area when you host a cleanup here."),
+                "Groups: pick this area when you host a cleanup here.", area.open_to_additions ? area.id : null, { id: area.id }),
             ),
           map,
         );

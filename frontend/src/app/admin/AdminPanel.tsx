@@ -3526,7 +3526,7 @@ const PAYMENT_KEY_ORDER = [
   "sponsored_claim_before_window_minutes", "sponsored_claim_work_window_minutes", "sponsored_claim_proximity_meters",
   "sponsored_default_cap_per_user_usd", "sponsored_daily_cap_per_user_usd", "sponsored_default_cap_per_group_usd",
   "plus_earning_cap_multiplier", "plus_early_access_hours",
-  "marketplace_platform_fee_percent", "marketplace_min_job_cents",
+  "marketplace_platform_fee_percent", "min_payment_cents",
   "marketplace_auto_release_days", "marketplace_flexible_max_days", "marketplace_arrive_minutes",
   "marketplace_site_radius_m", "marketplace_strike_limit", "marketplace_strike_window_days",
 ];
@@ -3803,7 +3803,7 @@ function SettingsTab({ settings, setSettings }: {
             {block.sub?.id === "hire" && block.rows.some(r => r.key === "marketplace_platform_fee_percent") && (
               <HireFeeCheck
                 feePercent={Number(drafts["marketplace_platform_fee_percent"])}
-                minCents={Number(drafts["marketplace_min_job_cents"])}
+                minCents={Number(drafts["min_payment_cents"])}
               />
             )}
           <div className="border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 shadow-elevation-1">

@@ -7,7 +7,7 @@ import DeleteGroupSection from "./DeleteGroupSection";
 import GroupSponsorSettings from "@/components/billing/GroupSponsorSettings";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible, rewardsVisible } from "@/lib/paymentsVisibility";
-import PayoutSetupCard from "@/app/sponsorships/PayoutSetupCard";
+import PayoutSetupCard from "@/app/earn/PayoutSetupCard";
 import { getPlusEntitlement } from "@/lib/plus.server";
 
 interface Props {

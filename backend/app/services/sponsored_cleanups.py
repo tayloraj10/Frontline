@@ -215,7 +215,7 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
         await db.execute(
             text(f"""
                 SELECT s.id, s.site_label, s.message, s.payout_rule, s.remaining_cents,
-                       s.cap_per_user_cents, s.site_radius_meters,
+                       s.cap_per_user_cents, s.site_radius_meters, s.open_to_additions,
                        CASE WHEN :early_hours > 0 THEN {_EARLY_UNTIL_SQL} END AS early_until,
                        ST_Y(s.site_location::geometry) AS latitude,
                        ST_X(s.site_location::geometry) AS longitude,
@@ -225,6 +225,7 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
                 LEFT JOIN sponsorship_site_claims cl
                   ON cl.sponsorship_id = s.id AND cl.status IN ('claimed', 'in_progress')
                 WHERE s.model = 'site' AND s.status = 'funded' AND s.remaining_cents > 0
+                  AND s.topup_of IS NULL
                 ORDER BY s.created_at DESC
                 LIMIT 200
             """),
@@ -242,6 +243,7 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
                 "payout_rule": r["payout_rule"],
                 "remaining_cents": r["remaining_cents"],
                 "cap_per_user_cents": r["cap_per_user_cents"],
+                "open_to_additions": r["open_to_additions"],
                 "radius_meters": r["site_radius_meters"] or fallback_radius,
                 "latitude": r["latitude"],
                 "longitude": r["longitude"],
@@ -270,14 +272,14 @@ async def list_map_features(db: AsyncSession) -> dict:
     sites = (
         await db.execute(
             text("""
-                SELECT s.id, s.site_label, s.remaining_cents, s.payout_rule, s.site_radius_meters,
+                SELECT s.id, s.site_label, s.remaining_cents, s.payout_rule, s.site_radius_meters, s.open_to_additions,
                        ST_Y(s.site_location::geometry) AS latitude,
                        ST_X(s.site_location::geometry) AS longitude,
                        EXISTS (SELECT 1 FROM sponsorship_site_claims cl
                                WHERE cl.sponsorship_id = s.id AND cl.status IN ('claimed', 'in_progress')) AS held
                 FROM sponsorships s
                 WHERE s.model = 'site' AND s.status = 'funded' AND s.remaining_cents > 0
-                  AND s.site_location IS NOT NULL
+                  AND s.site_location IS NOT NULL AND s.topup_of IS NULL
                 ORDER BY s.created_at DESC
                 LIMIT 200
             """)
@@ -286,11 +288,11 @@ async def list_map_features(db: AsyncSession) -> dict:
     areas = (
         await db.execute(
             text("""
-                SELECT s.id, s.payout_rule, s.remaining_cents, s.area_name,
+                SELECT s.id, s.payout_rule, s.remaining_cents, s.area_name, s.open_to_additions,
                        ST_AsGeoJSON(ST_SimplifyPreserveTopology(s.area_geometry, 0.0003)) AS geojson
                 FROM sponsorships s
                 WHERE s.model = 'group_area' AND s.status = 'funded' AND s.remaining_cents > 0
-                  AND s.area_geometry IS NOT NULL
+                  AND s.area_geometry IS NOT NULL AND s.topup_of IS NULL
                 ORDER BY s.created_at DESC
                 LIMIT 100
             """)
@@ -307,6 +309,7 @@ async def list_map_features(db: AsyncSession) -> dict:
                 "latitude": r["latitude"],
                 "longitude": r["longitude"],
                 "available": not r["held"],
+                "open_to_additions": r["open_to_additions"],
             }
             for r in sites
         ],
@@ -314,6 +317,7 @@ async def list_map_features(db: AsyncSession) -> dict:
             {
                 "id": str(r["id"]),
                 "area_name": r["area_name"],
+                "open_to_additions": r["open_to_additions"],
                 "remaining_cents": r["remaining_cents"],
                 "payout_rule": r["payout_rule"],
                 "geometry": json.loads(r["geojson"]),
@@ -336,7 +340,7 @@ async def list_group_areas(
     rows = (
         await db.execute(
             text(f"""
-                SELECT s.id, s.payout_rule, s.remaining_cents, s.message, s.area_name,
+                SELECT s.id, s.payout_rule, s.remaining_cents, s.message, s.area_name, s.open_to_additions,
                        CASE WHEN :early_hours > 0 THEN {_EARLY_UNTIL_SQL} END AS early_until
                 FROM sponsorships s
                 WHERE s.model = 'group_area' AND s.status = 'funded' AND s.remaining_cents > 0
@@ -355,6 +359,7 @@ async def list_group_areas(
             {
                 "id": str(r["id"]),
                 "area_name": r["area_name"],
+                "open_to_additions": r["open_to_additions"],
                 "message": r["message"],
                 "payout_rule": r["payout_rule"],
                 "remaining_cents": r["remaining_cents"],
@@ -928,7 +933,7 @@ async def _tell_recipient(db: AsyncSession, allocation_id: UUID, kind: str, titl
         await db.execute(text("SELECT user_id FROM sponsorship_allocations WHERE id = :id"), {"id": str(allocation_id)})
     ).scalar()
     if uid:
-        await _notify_safe(db, uid, kind, title, body, "/sponsorships", "Open Earn")
+        await _notify_safe(db, uid, kind, title, body, "/earn", "Open Earn")
 
 
 async def review_allocation(
