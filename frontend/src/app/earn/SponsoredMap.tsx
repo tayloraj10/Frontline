@@ -10,7 +10,8 @@ import { useSponsoredMapLayer } from "@/components/map/useSponsoredMapLayer";
 import { ExpandIcon, mapIconBtn, newGeolocateControl } from "@/components/map/sponsorMapControls";
 import { Briefcase, ListOrdered, MapPin } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { JOB_TYPE_LABELS, mk, usd, whenLabel, type BoardPin } from "@/lib/marketplace";
+import { CategoryChip, SizeBadge } from "@/components/marketplace/CategoryBits";
+import { JOB_FOCUS_EVENT, mk, usd, whenLabel, type BoardPin } from "@/lib/marketplace";
 
 export type MapView = "all" | "sites" | "jobs";
 
@@ -106,6 +107,25 @@ export default function SponsoredMap({
   );
 }
 
+const RETURN_KEY = "earn-map-return";
+type MapReturn = { id: string; c: [number, number]; z: number; t: number };
+
+/** Saved when a pin card sends you to the job page, so Back lands on the same map view. */
+function readReturn(): MapReturn | null {
+  try {
+    const raw = sessionStorage.getItem(RETURN_KEY);
+    if (!raw) return null;
+    const r = JSON.parse(raw) as MapReturn;
+    if (Date.now() - r.t > 30 * 60 * 1000) {
+      sessionStorage.removeItem(RETURN_KEY);
+      return null;
+    }
+    return r;
+  } catch {
+    return null;
+  }
+}
+
 function MapFrame({
   expanded,
   onToggleExpand,
@@ -163,6 +183,24 @@ function MapFrame({
   ];
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const selectedJob = selectedJobId ? pins.find((j) => j.id === selectedJobId) : null;
+  // Switching to the sites view drops the open job card, since no job pins are shown there.
+  useEffect(() => {
+    if (view === "sites") setSelectedJobId(null);
+  }, [view]);
+
+  // A job card's "Map" button asks this map to select that pin and fly to it.
+  useEffect(() => {
+    if (expanded) return;
+    const onFocus = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      const j = pins.find((p) => p.id === id);
+      if (!j || j.latitude == null || j.longitude == null) return;
+      setSelectedJobId(j.id);
+      map.current?.flyTo({ center: [j.longitude, j.latitude], zoom: Math.max(map.current.getZoom(), 15), duration: 600 });
+    };
+    window.addEventListener(JOB_FOCUS_EVENT, onFocus);
+    return () => window.removeEventListener(JOB_FOCUS_EVENT, onFocus);
+  }, [expanded, pins]);
 
   // Open jobs as sky price pills (amber when they are the viewer's own), so they read apart from the green site pins.
   useEffect(() => {
@@ -197,6 +235,7 @@ function MapFrame({
   const fitAll = (animate: boolean) => {
     const m = map.current;
     if (!m) return;
+    if (!expanded && readReturn()) return; // coming back from a job page: keep the saved view
     const all = allPoints();
     if (all.length === 0) return;
     const bounds = new maplibregl.LngLatBounds(all[0], all[0]);
@@ -210,6 +249,20 @@ function MapFrame({
     if (ready) fitAll(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, points, pins, view]);
+
+  // Back from a job page: put the camera and the selected pin back where they were.
+  useEffect(() => {
+    const m = map.current;
+    if (expanded || !m || !ready || pins.length === 0) return;
+    const r = readReturn();
+    if (!r) return;
+    try {
+      sessionStorage.removeItem(RETURN_KEY);
+    } catch {}
+    m.jumpTo({ center: r.c, zoom: r.z });
+    if (pins.some((p) => p.id === r.id)) setSelectedJobId(r.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, pins, expanded]);
 
   const changeBasemap = (next: Basemap) => {
     setBasemap(next);
@@ -312,6 +365,8 @@ function MapFrame({
                 </button>
               </div>
               <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Legend</p>
+              {view !== "jobs" && (
+                <>
               <div className="flex min-h-7 items-center gap-2.5 px-3 text-[13px]">
                 <span className="h-3 w-3 shrink-0 rounded-full border border-white bg-emerald-600" />
                 <span className="text-zinc-300">Cleanup site, open to claim</span>
@@ -324,16 +379,30 @@ function MapFrame({
                 <span className="h-3 w-3 shrink-0 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/15" />
                 <span className="text-zinc-300">Group area for hosted events</span>
               </div>
-              {view !== "sites" && pins.length > 0 && (
-                <div className="flex min-h-7 items-center gap-2.5 px-3 text-[13px]">
-                  <span className="shrink-0 rounded-full bg-sky-400 px-1.5 text-[10px] font-extrabold leading-4 text-sky-950">$</span>
-                  <span className="text-zinc-300">Neighbor job (amber is yours)</span>
-                </div>
-              )}
+              <div className="flex min-h-7 items-center gap-2.5 px-3 text-[13px]">
+                <span className="h-3 w-3 shrink-0 rounded-full border border-white bg-violet-600" />
+                <span className="text-zinc-300">Plus members only for now (✦)</span>
+              </div>
               <div className="flex min-h-7 items-center gap-2.5 px-3 text-[13px]">
                 <span className="shrink-0 rounded bg-emerald-600 px-1 text-[10px] font-bold leading-4 text-white">$ +</span>
                 <span className="text-zinc-300">Open to additions: tap to chip in</span>
               </div>
+                </>
+              )}
+              {view !== "sites" && (
+                <>
+                  <div className="flex min-h-7 items-center gap-2.5 px-3 text-[13px]">
+                    <span className="shrink-0 rounded-full bg-sky-400 px-1.5 text-[10px] font-extrabold leading-4 text-sky-950">$</span>
+                    <span className="text-zinc-300">Neighbor job</span>
+                  </div>
+                  <div className="flex min-h-7 items-center gap-2.5 px-3 text-[13px]">
+                    <span className="shrink-0 rounded-full bg-amber-300 px-1.5 text-[10px] font-extrabold leading-4 text-amber-950">$</span>
+                    <span className="text-zinc-300">Your job</span>
+                  </div>
+                </>
+              )}
+              {view !== "jobs" && (
+                <>
               <div className="mx-2 my-1 border-t border-zinc-800" />
               <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Show on map</p>
               <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
@@ -347,6 +416,8 @@ function MapFrame({
                   Unclaimed only ({openSiteCount})
                 </button>
               </div>
+                </>
+              )}
               <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Basemap</p>
               <div className="mx-2 mb-1.5 flex gap-0.5 rounded-full bg-zinc-800 p-1">
                 {BASEMAPS.map((b) => (
@@ -380,14 +451,14 @@ function MapFrame({
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
             </button>
-            <p className="truncate text-sm font-bold text-zinc-100">{selectedJob.title}</p>
-            <p className="truncate text-xs text-zinc-400">
-              <span className="font-extrabold text-sky-300">
+            <p className="break-words pr-4 text-sm font-bold text-zinc-100">{selectedJob.title}</p>
+            <p className="break-words text-xs leading-relaxed text-zinc-400">
+              <span className={cn("font-extrabold", selectedJob.is_mine ? "text-amber-300" : "text-sky-300")}>
                 {usd(selectedJob.price_cents)}
                 {selectedJob.price_type === "hourly" ? "/hr" : ""}
               </span>{" "}
               · {selectedJob.is_mine ? "Your job · " : ""}
-              {JOB_TYPE_LABELS[selectedJob.job_type] ?? selectedJob.job_type} · {whenLabel(selectedJob)}
+              <CategoryChip type={selectedJob.job_type} className="align-middle" /> <SizeBadge size={selectedJob.size} className="align-middle" /> · {whenLabel(selectedJob)}
             </p>
             <div className="mt-2 flex gap-2">
               {onSeeJobInList && !expanded && (
@@ -402,7 +473,18 @@ function MapFrame({
               )}
               <Link
                 href={`/fund/jobs/${selectedJob.id}`}
-                className="inline-flex min-h-10 flex-1 items-center justify-center rounded-full bg-sky-400 px-4 text-sm font-bold text-sky-950 touch-manipulation active:scale-[0.96]"
+                onClick={() => {
+                  const m = map.current;
+                  if (expanded || !m) return;
+                  try {
+                    const c = m.getCenter();
+                    sessionStorage.setItem(RETURN_KEY, JSON.stringify({ id: selectedJob.id, c: [c.lng, c.lat], z: m.getZoom(), t: Date.now() }));
+                  } catch {}
+                }}
+                className={cn(
+                  "inline-flex min-h-10 flex-1 items-center justify-center rounded-full px-4 text-sm font-bold touch-manipulation active:scale-[0.96]",
+                  selectedJob.is_mine ? "bg-amber-300 text-amber-950" : "bg-sky-400 text-sky-950",
+                )}
               >
                 View job
               </Link>

@@ -65,6 +65,7 @@ async def create_sponsorship_checkout_session(
     area_name: str | None = None,
     target_group_id: UUID | None = None,
     open_to_additions: bool = True,
+    starts_at=None,
 ) -> str:
     min_cents = await min_payment_cents(db)
     if amount_cents < min_cents:
@@ -93,7 +94,7 @@ async def create_sponsorship_checkout_session(
                      amount_cents, message, status,
                      model, payout_rule, cap_per_user_cents,
                      site_label, site_location, site_radius_meters,
-                     area_geometry, area_source, area_name, open_to_additions)
+                     area_geometry, area_source, area_name, open_to_additions, starts_at)
                 VALUES
                     (:sponsor_type, :sponsor_user_id, :sponsor_business_id,
                      :target_type, :target_cleanup_id, :target_geo_unit_id, :target_group_id,
@@ -106,7 +107,7 @@ async def create_sponsorship_checkout_session(
                      :site_radius_meters,
                      CASE WHEN CAST(:area_wkt AS text) IS NULL THEN NULL
                           ELSE ST_GeomFromEWKT(CAST(:area_wkt AS text)) END,
-                     :area_source, :area_name, :open_to_additions)
+                     :area_source, :area_name, :open_to_additions, :starts_at)
                 RETURNING id
             """),
             {
@@ -130,6 +131,7 @@ async def create_sponsorship_checkout_session(
                 "area_source": area_source,
                 "area_name": area_name,
                 "open_to_additions": open_to_additions,
+                "starts_at": starts_at,
             },
         )
     ).fetchone()
@@ -262,7 +264,7 @@ async def mark_funded_from_checkout_session(db: AsyncSession, session: dict) -> 
                 stripe_payment_intent_id = :payment_intent_id,
                 stripe_customer_id = :customer_id
             WHERE id = :id AND status = 'pending_funding'
-            RETURNING model, target_group_id, amount_cents
+            RETURNING model, target_group_id, amount_cents, sponsor_user_id, site_label, area_name
         """),
             {
                 "id": sponsorship_id,
@@ -284,6 +286,15 @@ async def mark_funded_from_checkout_session(db: AsyncSession, session: dict) -> 
             {"sid": sponsorship_id, "gid": str(funded.target_group_id), "amount": funded.amount_cents},
         )
     await db.commit()
+    if funded is not None and funded.sponsor_user_id:
+        from app.services.marketplace import _notify_safe
+
+        place = funded.site_label or funded.area_name
+        await _notify_safe(
+            db, funded.sponsor_user_id, "sponsorship_funded", "Your sponsorship is live",
+            f"Thanks. Your ${funded.amount_cents / 100:,.2f} sponsorship" + (f" for {place}" if place else "") + " is funded.",
+            "/earn", "Open Earn",
+        )
 
 
 async def mark_refunded_from_payment_intent(db: AsyncSession, payment_intent_id: str) -> None:
@@ -302,15 +313,25 @@ async def mark_refunded_from_payment_intent(db: AsyncSession, payment_intent_id:
             text("UPDATE sponsorships SET remaining_cents = GREATEST(COALESCE(remaining_cents, 0) - :amt, 0) WHERE id = :pid"),
             {"amt": topup.amount_cents, "pid": str(topup.topup_of)},
         )
-    await db.execute(
-        text("""
-            UPDATE sponsorships
-            SET status = 'refunded'
-            WHERE stripe_payment_intent_id = :pi AND status IN ('funded', 'released', 'exhausted')
-        """),
-        {"pi": payment_intent_id},
-    )
+    refunded = (
+        await db.execute(
+            text("""
+                UPDATE sponsorships
+                SET status = 'refunded'
+                WHERE stripe_payment_intent_id = :pi AND status IN ('funded', 'released', 'exhausted')
+                RETURNING sponsor_user_id, amount_cents
+            """),
+            {"pi": payment_intent_id},
+        )
+    ).fetchall()
     await db.commit()
+    from app.services.marketplace import _notify_safe
+
+    for r in refunded:
+        await _notify_safe(
+            db, r.sponsor_user_id, "sponsorship_refunded", "Your sponsorship was refunded",
+            f"${r.amount_cents / 100:,.2f} went back to your card, so the sponsorship is closed.", "/earn", "Open Earn",
+        )
 
 
 async def release_sponsorship(db: AsyncSession, sponsorship_id: UUID, released_by: UUID) -> bool:

@@ -6,16 +6,62 @@
 
 export type LngLat = [number, number];
 
-export const LIMITS = {
-  siteRadiusMin: 10,
-  siteRadiusMax: 500,
-  circleRadiusMin: 50,
-  circleRadiusMax: 1500,
-  maxGeoUnits: 10,
-  maxVertices: 60,
-  minAreaSqm: 2_000,
-  maxAreaSqm: 5_000_000,
-} as const;
+export interface Limits {
+  siteRadiusMin: number; // meters
+  siteRadiusMax: number;
+  radiusFtMin: number; // feet, for display
+  radiusFtMax: number;
+  circleRadiusMin: number; // meters
+  circleRadiusMax: number;
+  maxGeoUnits: number;
+  maxVertices: number;
+  minAreaSqm: number; // sponsored areas
+  maxAreaSqm: number;
+  jobMinAreaSqm: number; // jobs
+  jobMaxAreaSqm: number;
+}
+
+const SQM_PER_SQFT = 0.092903;
+const SQM_PER_SQMI = 2_589_988.11;
+const FT_PER_M = 3.28084;
+
+/** game_settings keys behind every limit. Admin edits them in feet, sq ft and sq mi (migration 146). */
+export const LIMIT_SETTING_KEYS = [
+  "marketplace_job_min_area_sqft",
+  "marketplace_job_max_area_sqmi",
+  "marketplace_pin_radius_min_ft",
+  "marketplace_pin_radius_max_ft",
+  "marketplace_max_vertices",
+  "sponsored_area_min_sqft",
+  "sponsored_area_max_sqmi",
+  "sponsored_max_geo_units",
+  "sponsored_circle_radius_min_ft",
+  "sponsored_circle_radius_max_ft",
+] as const;
+
+/** Build limits from the settings values, falling back to the shipped defaults for any missing key. */
+export function limitsFromSettings(v: Partial<Record<(typeof LIMIT_SETTING_KEYS)[number], number>>): Limits {
+  const ftToM = (ft: number) => Math.round(ft / FT_PER_M);
+  const pinMin = v.marketplace_pin_radius_min_ft ?? 25;
+  const pinMax = v.marketplace_pin_radius_max_ft ?? 1000;
+  return {
+    siteRadiusMin: ftToM(pinMin),
+    siteRadiusMax: ftToM(pinMax),
+    radiusFtMin: pinMin,
+    radiusFtMax: pinMax,
+    circleRadiusMin: ftToM(v.sponsored_circle_radius_min_ft ?? 100),
+    circleRadiusMax: ftToM(v.sponsored_circle_radius_max_ft ?? 1000),
+    maxGeoUnits: v.sponsored_max_geo_units ?? 10,
+    maxVertices: v.marketplace_max_vertices ?? 60,
+    minAreaSqm: (v.sponsored_area_min_sqft ?? 21528) * SQM_PER_SQFT,
+    maxAreaSqm: (v.sponsored_area_max_sqmi ?? 2) * SQM_PER_SQMI,
+    jobMinAreaSqm: (v.marketplace_job_min_area_sqft ?? 500) * SQM_PER_SQFT,
+    jobMaxAreaSqm: (v.marketplace_job_max_area_sqmi ?? 0.1) * SQM_PER_SQMI,
+  };
+}
+
+/** Defaults, used until the settings load. Same values the settings are seeded with. */
+export const LIMITS: Limits = limitsFromSettings({});
 
 const EARTH_R = 6_371_008.8;
 const RAD = Math.PI / 180;
@@ -80,17 +126,60 @@ export function selfIntersects(vertices: LngLat[]): boolean {
 }
 
 export function formatArea(sqm: number): string {
-  if (sqm >= 100_000) return `${(sqm / 1_000_000).toFixed(2)} sq km`;
-  return `${Math.round(sqm).toLocaleString("en-US")} sq m`;
+  const sqmi = sqm / SQM_PER_SQMI;
+  // Small shapes read better in square feet; switch to square miles once past 0.01 sq mi (about 28,000 sq ft).
+  if (sqmi < 0.01) {
+    const sqft = sqm / SQM_PER_SQFT;
+    const step = sqft < 1000 ? 10 : 100;
+    return `${(Math.round(sqft / step) * step).toLocaleString("en-US")} sq ft`;
+  }
+  const digits = sqmi >= 1 ? 1 : sqmi >= 0.01 ? 2 : 3;
+  const n = sqmi.toFixed(digits);
+  return `${n.endsWith(".0") ? n.slice(0, -2) : n} sq mi`;
 }
 
 /** Human message for a drawn polygon, or null when it is fine to submit. */
-export function polygonProblem(vertices: LngLat[]): string | null {
+export function polygonProblem(
+  vertices: LngLat[],
+  maxAreaSqm: number = LIMITS.maxAreaSqm,
+  minAreaSqm: number = LIMITS.minAreaSqm,
+  tooSmall: string = "That area is too small. Make it bigger.",
+  maxVertices: number = LIMITS.maxVertices,
+): string | null {
   if (vertices.length < 3) return "Tap at least 3 points on the map.";
-  if (vertices.length > LIMITS.maxVertices) return `Use at most ${LIMITS.maxVertices} points.`;
+  if (vertices.length > maxVertices) return `Use at most ${maxVertices} points.`;
   if (selfIntersects(vertices)) return "The lines cross each other. Drag a point or undo to fix it.";
   const sqm = polygonAreaSqm(vertices);
-  if (sqm < LIMITS.minAreaSqm) return "That area is too small. Make it bigger.";
-  if (sqm > LIMITS.maxAreaSqm) return `That area is too large (limit ${LIMITS.maxAreaSqm / 1_000_000} sq km).`;
+  if (sqm < minAreaSqm) return tooSmall;
+  if (sqm > maxAreaSqm) return `That area is too large (limit ${formatArea(maxAreaSqm)}).`;
   return null;
+}
+
+/**
+ * Why a corner cannot be added or moved to `next`, or null when it is fine. Used while drawing so a
+ * shape never crosses itself, runs past the point cap or grows past the size limit.
+ */
+export function drawBlocker(next: LngLat[], maxAreaSqm: number = LIMITS.maxAreaSqm, maxVertices: number = LIMITS.maxVertices): string | null {
+  if (next.length > maxVertices) return `That is the most points allowed (${maxVertices}).`;
+  if (selfIntersects(next)) return "That corner would make the lines cross. Place it somewhere else.";
+  if (next.length >= 3 && polygonAreaSqm(next) > maxAreaSqm) return `That would make the area too large (limit ${formatArea(maxAreaSqm)}).`;
+  return null;
+}
+
+/** Shown when a job area is too small to be worth drawing. */
+export const JOB_TOO_SMALL =
+  "That area is very small. For a yard, a house or one spot, switch to Drop a pin and describe the job. Drawing is for larger areas like a park or several blocks.";
+
+export { FT_PER_M };
+export const RADIUS_FT_STEP = 25;
+export const RADIUS_FT_DEFAULT = 150;
+
+/** Meters to feet, rounded to the nearest 5 for display. */
+export function metersToFeet(m: number): number {
+  return Math.round((m * FT_PER_M) / 5) * 5;
+}
+
+/** Feet to whole meters for storage and the API. */
+export function feetToMeters(ft: number): number {
+  return Math.round(ft / FT_PER_M);
 }

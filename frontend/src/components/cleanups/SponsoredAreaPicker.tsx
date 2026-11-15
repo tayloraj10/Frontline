@@ -1,5 +1,6 @@
 "use client";
 
+import { LARGE_BAG_DEFINITION, minLargeBags } from "@/lib/sponsoredBags";
 import { useEffect, useState } from "react";
 import { describeRule, type PayoutRule } from "@/app/earn/SponsoredSites";
 import { cn } from "@/lib/cn";
@@ -14,6 +15,8 @@ export interface SponsoredArea {
   early_access?: boolean;
   early_access_until?: string | null;
   early_access_locked?: boolean;
+  scheduled?: boolean;
+  opens_at?: string | null;
 }
 
 const untilText = (iso: string | null | undefined) =>
@@ -73,7 +76,7 @@ export function useSponsoredAreas({
   useEffect(() => {
     if (!value) return;
     const a = areas.find((x) => x.id === value);
-    if (!a || a.early_access_locked || (a.available_cents ?? a.remaining_cents) <= 0) onChange(null);
+    if (!a || a.early_access_locked || a.scheduled || (a.available_cents ?? a.remaining_cents) <= 0) onChange(null);
   }, [areas, value, onChange]);
 
   return areas;
@@ -105,7 +108,7 @@ export default function SponsoredAreaPicker({
         const available = a.available_cents ?? a.remaining_cents;
         const chosen = value === a.id;
         const reserved = available <= 0;
-        const blocked = !groupId || a.early_access_locked || reserved;
+        const blocked = !groupId || a.early_access_locked || a.scheduled || reserved;
         return (
           <div
             key={a.id}
@@ -117,10 +120,17 @@ export default function SponsoredAreaPicker({
             <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-300">Funded area at this location</p>
             <p className="mt-0.5 text-sm font-semibold text-zinc-100">{a.area_name ?? "Sponsored area"}</p>
             <p className="mt-1 text-sm text-zinc-300">
-              Your group can earn {describeRule(a.payout_rule)} once the event is logged and an admin approves.{" "}
+              Your group can earn {describeRule(a.payout_rule)} once the event is logged and an admin approves, once a day per area.{" "}
               <span className="text-zinc-500">{usd(Math.max(0, available))} unreserved.</span>
             </p>
+            <p className="mt-1 text-xs font-medium text-emerald-300">
+              The event needs at least {minLargeBags(a.payout_rule)} large bag{minLargeBags(a.payout_rule) === 1 ? "" : "s"} logged to be paid.{" "}
+              <span className="font-normal text-zinc-400">{LARGE_BAG_DEFINITION}</span>
+            </p>
             {a.message && <p className="mt-1 text-xs italic text-zinc-400">{a.message}</p>}
+            {a.scheduled && (
+              <p className="mt-1 text-xs text-zinc-500">Opens to everyone {untilText(a.opens_at)}.</p>
+            )}
             {a.early_access_locked && (
               <p className="mt-1 text-xs text-zinc-500">
                 Open to Frontline Plus groups until {untilText(a.early_access_until)}, then to everyone.

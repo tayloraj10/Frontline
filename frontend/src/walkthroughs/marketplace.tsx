@@ -2,14 +2,31 @@ import { Stage, Chip, Arrow, type WalkthroughDef } from "@/components/walkthroug
 
 export const marketplace: WalkthroughDef = {
   id: "marketplace",
-  title: "How hiring works",
+  title: "How funding works",
   finishLabel: "Got it",
   steps: [
     {
-      title: "Say what needs cleaning",
-      label: "I'm hiring",
-      track: { name: "I'm hiring", tone: "sky" },
-      body: "Use the Fund tab to pay people to clean or shovel snow. Post a job at the price you want. Cleaners near you get notified and the first one to take it gets the job.",
+      title: "Three ways to put money in",
+      label: "Basics",
+      body: "The Fund tab is where you pay for cleanups. Pick the one that fits. Taking jobs and claiming sites to get paid is on the Earn tab.",
+      how: [
+        "Post a job: pay one neighbor to clean or shovel snow for you",
+        "Sponsor a cleanup: fund a spot or an area, and any cleaner or group can earn it",
+        "Crowdfund: pool money with neighbors for a bigger project",
+      ],
+      visual: (
+        <Stage>
+          <Chip on>Post a job</Chip>
+          <Chip>Sponsor</Chip>
+          <Chip>Crowdfund</Chip>
+        </Stage>
+      ),
+    },
+    {
+      title: "Post a job",
+      label: "Post a job",
+      track: { name: "Hire a neighbor", tone: "sky" },
+      body: "Say what needs cleaning and set your price. Cleaners near you get notified and the first one to take it gets the job.",
       how: ["Search the address, drop a pin or draw the area", "Choose the job type and when", "Set your budget"],
       visual: (
         <Stage>
@@ -21,9 +38,9 @@ export const marketplace: WalkthroughDef = {
     },
     {
       title: "We hold your payment",
-      label: "I'm hiring",
-      track: { name: "I'm hiring", tone: "sky" },
-      body: "When a cleaner takes your job your card is charged and the money is held. Your exact address unlocks only now, and you can message the cleaner any time.",
+      label: "Post a job",
+      track: { name: "Hire a neighbor", tone: "sky" },
+      body: "When a cleaner takes your job your card is charged and the money is held. The cleaner can now see the address of the job, and you can message them any time.",
       visual: (
         <Stage>
           <span className="text-3xl">💳</span>
@@ -34,8 +51,8 @@ export const marketplace: WalkthroughDef = {
     },
     {
       title: "Confirm and release",
-      label: "I'm hiring",
-      track: { name: "I'm hiring", tone: "sky" },
+      label: "Post a job",
+      track: { name: "Hire a neighbor", tone: "sky" },
       body: "Happy with it? Confirm and rate, and the money is released. If you do nothing it releases 3 days after they finish. Not happy? Open a dispute before then.",
       visual: (
         <Stage>
@@ -47,9 +64,9 @@ export const marketplace: WalkthroughDef = {
     },
     {
       title: "Changing your mind",
-      label: "I'm hiring",
-      track: { name: "I'm hiring", tone: "sky" },
-      body: "You can cancel a job before it is finished. If no one has started it, you get a full refund and it comes off the board. If a cleaner never shows up, you are refunded and the job reopens.",
+      label: "Post a job",
+      track: { name: "Hire a neighbor", tone: "sky" },
+      body: "You can cancel any time before the cleaner starts the work, and you get a full refund. Once the work has started you cannot cancel, so open a dispute if something went wrong. If a cleaner who accepted your job backs out, you are refunded and the job goes back on the board.",
       visual: (
         <Stage>
           <span className="text-3xl">↩️</span>
@@ -59,61 +76,61 @@ export const marketplace: WalkthroughDef = {
       ),
     },
     {
-      title: "Set up your cleaner profile",
-      label: "I'm cleaning",
-      track: { name: "I'm cleaning", tone: "emerald" },
-      body: "Want to earn instead? Open the Earn tab. Add a profile photo, your rate, the jobs you do and the area you work in, then sign the cleaner agreement and finish Stripe setup, which verifies your ID and tax details on Stripe's own pages.",
+      title: "Sponsor a spot or an area",
+      label: "Sponsor",
+      track: { name: "Sponsor a cleanup", tone: "emerald" },
+      body: "Put money behind cleanups at a place. It is only paid out after the work is verified.",
+      how: [
+        "Cleanup site: one spot, shown as a pin. Any neighbor can claim it and get paid",
+        "Group area: a whole region. Groups host cleanup events there and get paid",
+        "Choose how it pays: one payout, a fixed amount, per bag, or per attendee",
+        "When the money runs out, the site or area closes",
+      ],
       visual: (
         <Stage>
-          <span className="text-3xl">🙂</span>
-          <Arrow />
-          <Chip on>Ready</Chip>
-        </Stage>
-      ),
-    },
-    {
-      title: "Get alerts and take jobs",
-      label: "I'm cleaning",
-      track: { name: "I'm cleaning", tone: "emerald" },
-      body: "We notify you when a job is posted near you. Open it and take it at the posted price, or flag the price if it is too low. The exact address unlocks once you take it.",
-      visual: (
-        <Stage>
-          <span className="text-3xl">💬</span>
+          <span className="text-3xl">📍</span>
+          <Chip on>$150</Chip>
           <Arrow />
           <span className="text-3xl">🧹</span>
         </Stage>
       ),
     },
     {
-      title: "Do the job",
-      label: "I'm cleaning",
-      track: { name: "I'm cleaning", tone: "emerald" },
-      body: "Taking a job starts a clock, so only take one you can get to. You can have one job at a time.",
-      how: [
-        "Get to the site within 2 hours of the start time, or the job goes back on the board",
-        "Take a before photo, then start the job once you are at the site",
-        "Use the mobile app: your route and time on site are recorded while the job is in progress",
-        "Take an after photo showing all your bags and mark it done",
-        "Backing out after the start time counts as a strike",
-      ],
+      title: "Let neighbors add money",
+      label: "Sponsor",
+      track: { name: "Sponsor a cleanup", tone: "emerald" },
+      body: "Leave \"Let neighbors add to this\" on and others can top it up, shown as a + on the maps. Turn it off to keep sole credit.",
       visual: (
         <Stage>
-          <Chip on>2 hrs</Chip>
-          <Arrow />
-          <span className="text-3xl">📸</span>
+          <Chip on>Open +</Chip>
+          <Chip>Sole credit</Chip>
         </Stage>
       ),
     },
     {
-      title: "Get paid",
-      label: "I'm cleaning",
-      track: { name: "I'm cleaning", tone: "emerald" },
-      body: "You are paid the full posted price after the customer confirms. The hirer pays Frontline's service fee on top, so nothing comes out of your pay. The money goes to your bank through Stripe.",
+      title: "Crowdfund a big project",
+      label: "Crowdfund",
+      body: "Start a pool with a goal and share the link. Neighbors add money until it is funded, and then it becomes a funded site. If the goal is missed or you cancel, everyone is refunded. Starting from a regular site that others can add to is easier, since some money is already there.",
       visual: (
         <Stage>
-          <Chip on>$80</Chip>
+          <Chip on>$400 goal</Chip>
           <Arrow />
-          <span className="text-3xl">💵</span>
+          <Chip>Funded</Chip>
+        </Stage>
+      ),
+    },
+    {
+      title: "Other ways to give",
+      label: "Give",
+      body: "Gifts do not have to be tied to a spot.",
+      how: [
+        "Donate: supports Frontline overall",
+        "Support a group: some groups accept gifts. If a group allows it, you will see a give button on its page",
+      ],
+      visual: (
+        <Stage>
+          <Chip>Donate</Chip>
+          <Chip>Group</Chip>
         </Stage>
       ),
     },

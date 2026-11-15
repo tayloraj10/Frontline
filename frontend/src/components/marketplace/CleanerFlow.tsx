@@ -7,7 +7,8 @@ import { Camera, Check, MapPin } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getPosition } from "@/lib/getPosition";
-import { durationLabel, mk, NO_BAG_JOB_TYPES, usd, type Job } from "@/lib/marketplace";
+import { durationLabel, mk, usd, type Job } from "@/lib/marketplace";
+import { useCategories } from "@/lib/categories";
 import { uploadToR2 } from "@/lib/uploadToR2";
 import { useJobTracker, type TrackerState } from "@/lib/useJobTracker";
 
@@ -40,7 +41,9 @@ export default function CleanerFlow({
   const [trackMissing, setTrackMissing] = useState(false);
   const tracker = useJobTracker(job.id, job.status === "in_progress");
   const base = `/jobs/${job.id}`;
-  const needsBags = !NO_BAG_JOB_TYPES.includes(job.job_type);
+  const cats = useCategories();
+  const needsBags = cats.needsBags(job.job_type);
+  const photoRequired = cats.get(job.job_type)?.after_photo_required ?? true;
 
   const before = photos.filter((p) => p.kind === "before");
   const after = photos.filter((p) => p.kind === "after");
@@ -252,7 +255,7 @@ export default function CleanerFlow({
           I am here: start job
         </Button>
       ) : (
-        <Button className="w-full" disabled={after.length === 0 || (needsBags && !bagsAck)} loading={busy === "complete"} onClick={() => go("complete")}>
+        <Button className="w-full" disabled={(photoRequired && after.length === 0) || (needsBags && !bagsAck)} loading={busy === "complete"} onClick={() => go("complete")}>
           Mark complete
         </Button>
       )}

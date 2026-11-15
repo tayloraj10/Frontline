@@ -42,7 +42,7 @@ Everything here is uncommitted on `money-and-payments` and has not been checked 
 
 ## Event creation (both forms, keep in sync)
 18. A "Sponsored area" step (after Location, before Nearby Partners) appears in both Host Event (`ContributionPanel.tsx`) and `CreateCleanupEventForm.tsx` only when the pin is inside a funded area. Not shown in edit mode.
-19. Locked areas, reserved-out pools and Plus early access (needs a pool under 48 hours old) each show their note.
+19. Locked areas, reserved-out pools and Plus early access (needs a pool under 24 hours old) each show their note.
 20. A non-group host sees the amber "only groups can earn" note.
 21. Holds: the unreserved amount drops after another group's upcoming event picks the area.
 

@@ -8,7 +8,8 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { ExpandIcon, mapIconBtn, newGeolocateControl } from "@/components/map/sponsorMapControls";
 import { cn } from "@/lib/cn";
-import { JOB_TYPE_LABELS, usd, whenLabel, type BoardPin } from "@/lib/marketplace";
+import { CategoryChip, SizeBadge } from "./CategoryBits";
+import { usd, whenLabel, type BoardPin } from "@/lib/marketplace";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -186,13 +187,13 @@ export default function JobsMap({
         {selectedJob && (
           <div className="absolute inset-x-3 bottom-3 z-20 flex items-center gap-3 rounded-2xl bg-zinc-900/95 p-3 shadow-elevation-3 ring-1 ring-inset ring-zinc-700 backdrop-blur-sm">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-zinc-100">{selectedJob.title}</p>
-              <p className="truncate text-xs text-zinc-400">
+              <p className="break-words text-sm font-bold text-zinc-100">{selectedJob.title}</p>
+              <p className="break-words text-xs leading-relaxed text-zinc-400">
                 <span className="font-extrabold text-emerald-300">
                   {usd(selectedJob.price_cents)}
                   {selectedJob.price_type === "hourly" ? "/hr" : ""}
                 </span>{" "}
-                · {selectedJob.is_mine ? "Your job · " : ""}{JOB_TYPE_LABELS[selectedJob.job_type] ?? selectedJob.job_type} · {whenLabel(selectedJob)}
+                · {selectedJob.is_mine ? "Your job · " : ""}<CategoryChip type={selectedJob.job_type} className="align-middle" /> <SizeBadge size={selectedJob.size} className="align-middle" /> · {whenLabel(selectedJob)}
               </p>
             </div>
             {onSeeInList && !expanded && (!inList || inList(selectedJob.id)) && (

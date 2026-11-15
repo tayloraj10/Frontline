@@ -5,21 +5,23 @@ import ReportBlock from "@/components/marketplace/ReportBlock";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import LoginPrompt from "@/components/ui/LoginPrompt";
 import { Section } from "@/components/ui/PageShell";
-import { JOB_TYPE_LABELS, usd, type CleanerCard } from "@/lib/marketplace";
-import { MarketplaceApiError, mkFetch, requireMarketplace } from "@/lib/marketplace.server";
+import { CategoryChip } from "@/components/marketplace/CategoryBits";
+import { usd, type CleanerCard } from "@/lib/marketplace";
+import { MarketplaceApiError, mkFetch, viewMarketplace } from "@/lib/marketplace.server";
 
 export default async function CleanerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { user, isAdmin } = await requireMarketplace();
+  const { user, isAdmin } = await viewMarketplace();
   let c: CleanerCard;
   try {
-    c = await mkFetch<CleanerCard>(user.id, isAdmin, `/cleaners/${id}`);
+    c = await mkFetch<CleanerCard>(user?.id ?? "", isAdmin, `/cleaners/${id}`);
   } catch (e) {
     if (e instanceof MarketplaceApiError && e.status === 404) notFound();
     throw e;
   }
-  const own = c.user_id === user.id;
+  const own = !!user && c.user_id === user.id;
 
   return (
     <div className="space-y-6">
@@ -47,20 +49,21 @@ export default async function CleanerPage({ params }: { params: Promise<{ id: st
           {c.jobs_completed >= 10 && <Badge>10+ jobs done</Badge>}
           {c.jobs_completed >= 1 && c.jobs_completed < 10 && <Badge>Proven on Frontline</Badge>}
           {c.services.map((s) => (
-            <Badge key={s}>{JOB_TYPE_LABELS[s] ?? s}</Badge>
+            <CategoryChip key={s} type={s} />
           ))}
         </div>
         {c.bio && <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{c.bio}</p>}
         <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           {c.years_experience != null && <Fact label="Experience" value={`${c.years_experience} ${c.years_experience === 1 ? "year" : "years"}`} />}
-          {c.preferred_size && <Fact label="Prefers" value={c.preferred_size === "any" ? "Any size job" : `${c.preferred_size} jobs`} />}
+          {c.preferred_sizes && c.preferred_sizes.length > 0 && <Fact label="Prefers" value={`${c.preferred_sizes.join(", ")} jobs`} />}
           {c.languages && c.languages.length > 0 && <Fact label="Languages" value={c.languages.join(", ")} />}
           {c.equipment && c.equipment.length > 0 && <Fact label="Brings" value={c.equipment.join(", ")} />}
           {c.availability && <Fact label="Available" value={c.availability} />}
         </dl>
       </Card>
 
-      {!own && (
+      {!user && <LoginPrompt action="request a booking" />}
+      {user && !own && (
         <Link
           href={`/fund/post?cleaner=${c.user_id}`}
           className="flex min-h-11 items-center justify-center rounded-2xl bg-emerald-400 px-5 text-sm font-bold text-emerald-950 shadow-elevation-1 touch-manipulation transition-colors hover:bg-emerald-300 active:scale-[0.97]"
@@ -89,7 +92,7 @@ export default async function CleanerPage({ params }: { params: Promise<{ id: st
         )}
       </Section>
 
-      {!own && <ReportBlock userId={c.user_id} />}
+      {user && !own && <ReportBlock userId={c.user_id} />}
     </div>
   );
 }

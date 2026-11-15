@@ -1,4 +1,4 @@
-import GuideDisclosure from "@/components/ui/GuideDisclosure";
+import InfoModal from "@/components/ui/InfoModal";
 
 const ITEMS = [
   {
@@ -18,10 +18,10 @@ const ITEMS = [
   },
 ];
 
-/** Condensed, expandable counterpart for the Earn page: the two ways to get paid. */
+/** Button that opens the two ways to get paid in a modal, so it never takes page space. */
 export default function EarnGuideCard() {
   return (
-    <GuideDisclosure className="mb-4 mt-6" title="Two ways to earn" summary="Neighbor jobs or sponsored sites, and payouts.">
+    <InfoModal className="mb-4" label="Two ways to earn. Which one is for me?" title="Two ways to earn">
       <ul className="divide-y divide-zinc-800">
         {ITEMS.map((i) => (
           <li key={i.lead} className="py-2.5 first:pt-0 last:pb-0">
@@ -33,6 +33,6 @@ export default function EarnGuideCard() {
           </li>
         ))}
       </ul>
-    </GuideDisclosure>
+    </InfoModal>
   );
 }

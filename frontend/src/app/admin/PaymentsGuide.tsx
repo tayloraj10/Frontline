@@ -86,7 +86,7 @@ const SECTIONS: Section[] = [
           <li>Sites: any signed in cleaner claims a pin, has 30 minutes for the before photo and 2 hours for the after photo. Time running out reopens the site.</li>
           <li>Areas: a group schedules a cleanup event inside the area and marks it sponsored. Once verified the group earns from the pool.</li>
           <li>You approve photos or events in Admin. Approval creates the allocation and pays out. Anything held back (cap reached, no payout account yet) is paid when it is fixed.</li>
-          <li>Caps (Settings, Payments, Earn) limit what one person can earn per cleanup, per day and per period. Plus raises them.</li>
+          <li>Everyone has a weekly earning ceiling across jobs and sponsored sites (Settings, Payments). Plus raises it. Each person can earn from a site once a day.</li>
         </UL>
         <H>Getting paid</H>
         <UL>

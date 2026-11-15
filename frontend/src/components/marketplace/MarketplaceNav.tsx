@@ -13,6 +13,7 @@ function labelFor(path: string): string {
   if (path === "/fund" || path.startsWith("/fund?")) return FUND_TAB_LABEL;
   if (path.startsWith("/impact")) return "Impact";
   if (path.startsWith("/groups")) return "Groups";
+  if (path.startsWith("/campaigns/")) return "Map";
   return "Back";
 }
 

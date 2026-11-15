@@ -5,13 +5,17 @@ import { useCallback, useEffect, useState } from "react";
 import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import LoginPrompt from "@/components/ui/LoginPrompt";
 import { Card } from "@/components/ui/Card";
 import { Field, TextArea, TextInput } from "@/components/ui/fields";
 import { Section } from "@/components/ui/PageShell";
-import { JOB_TYPE_LABELS, STATUS_LABELS, durationLabel, TIME_MODE_LABELS, mk, usd, whenLabel, type Job } from "@/lib/marketplace";
+import { CategoryChip, CategoryInfoButton, SizeBadge } from "./CategoryBits";
+import { jobSize } from "@/lib/jobSizes";
+import { STATUS_LABELS, durationLabel, TIME_MODE_LABELS, mk, usd, whenLabel, type Job } from "@/lib/marketplace";
 import BackOutButton from "./BackOutButton";
 import CleanerFlow, { type FlowPhoto } from "./CleanerFlow";
 import JobRouteCard from "./JobRouteCard";
+import DailyLimitNote from "@/components/billing/DailyLimitNote";
 import JobSiteCard from "./JobSiteCard";
 import LocalTime from "./LocalTime";
 import ReportBlock from "./ReportBlock";
@@ -32,12 +36,14 @@ export default function JobDetail({
   payoutsBlocked,
   needsSetup,
   suspended = false,
+  anon = false,
 }: {
   initial: Job;
   userId: string;
   payoutsBlocked: boolean;
   needsSetup: boolean;
   suspended?: boolean;
+  anon?: boolean;
 }) {
   const [job, setJob] = useState(initial);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -104,16 +110,27 @@ export default function JobDetail({
 
   return (
     <div className="space-y-6">
-      <Card className="space-y-3">
+      <Card className={`space-y-3 ${role === "customer" ? "!ring-2 !ring-amber-300/70" : ""}`}>
+        {role === "customer" && (
+          <p className="rounded-xl bg-amber-300/15 px-3 py-2 text-sm font-bold text-amber-200 ring-1 ring-inset ring-amber-300/40">
+            This is your job.
+          </p>
+        )}
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-2xl font-extrabold text-zinc-50">{job.title}</h1>
           <Badge variant={s.tone}>{s.label}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge>{JOB_TYPE_LABELS[job.job_type] ?? job.job_type}</Badge>
+          <CategoryChip type={job.job_type} />
+          <CategoryInfoButton type={job.job_type} className="-ml-1.5" />
           <Badge variant="info">{TIME_MODE_LABELS[job.time_mode]}</Badge>
-          {job.size && <Badge>{job.size}</Badge>}
+          <SizeBadge size={job.size} />
         </div>
+        {jobSize(job.size) && (
+          <p className="text-xs text-zinc-400">
+            <span className="font-semibold text-zinc-300">{jobSize(job.size)!.label} job.</span> {jobSize(job.size)!.description}
+          </p>
+        )}
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <Info label="When" value={whenLabel(job) || "To be agreed"} />
           <Info
@@ -166,7 +183,7 @@ export default function JobDetail({
           <JobRouteCard jobId={job.id} durationSeconds={job.duration_seconds} />
         )}
 
-      <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} suspended={suspended} />
+      {anon ? <LoginPrompt action="take or follow this job" /> : <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} suspended={suspended} />}
 
       {role === "customer" && job.status === "open" && (job.price_flag_count ?? 0) > 0 && (
         <PriceFlags job={job} busy={busy} act={act} />
@@ -331,6 +348,7 @@ function Actions({
       <Card className="space-y-3">
         <p className="text-sm font-bold text-zinc-100">Take this job for {usd(job.price_cents)}</p>
         <EarnLine job={job} />
+        <DailyLimitNote warnOnly />
         {suspended && <SuspendedNotice />}
         {payoutsBlocked && <PayoutsNeeded />}
         {safety}

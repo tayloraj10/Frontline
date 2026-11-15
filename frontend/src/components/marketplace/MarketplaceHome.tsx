@@ -8,13 +8,9 @@ import {
   Banknote,
   ChevronRight,
   Crosshair,
-  Fence,
-  Footprints,
   MapPin,
   ShieldAlert,
-  Snowflake,
   Sprout,
-  Trash2,
   UserRound,
 } from "lucide-react";
 import ActionTile from "@/components/ui/ActionTile";
@@ -23,8 +19,11 @@ import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/PageShell";
 import { getPosition } from "@/lib/getPosition";
+import { categoryColor, categoryIcon, useCategories } from "@/lib/categories";
+import { flashRow } from "@/lib/flashRow";
+import { BusinessIconBadge, CategoryDescription,CategoryChip, CategoryGuideButton, SizeBadge } from "./CategoryBits";
 import {
-  JOB_TYPE_LABELS,
+  JOB_FOCUS_EVENT,
   mk,
   TIME_MODE_LABELS,
   usd,
@@ -41,14 +40,6 @@ const JobsMap = dynamic(() => import("@/components/marketplace/JobsMap"), {
     <div className="h-72 w-full animate-pulse rounded-2xl bg-zinc-900 sm:h-96" />
   ),
 });
-
-const CATEGORY_TILES = [
-  { id: "litter", label: "Litter", Icon: Trash2 },
-  { id: "lot_cleanup", label: "Lot", Icon: Fence },
-  { id: "sidewalk", label: "Sidewalk", Icon: Footprints },
-  { id: "light_yard_work", label: "Yard", Icon: Sprout },
-  { id: "snow_shoveling", label: "Snow", Icon: Snowflake },
-];
 
 const PAGE_SIZE = 20;
 const MI_PER_KM = 0.621371;
@@ -81,6 +72,7 @@ export default function MarketplaceHome({
 }) {
   const isCleaner = profileStatus === "active";
   const suspended = profileStatus === "suspended";
+  const cats = useCategories();
   const [service, setService] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [me, setMe] = useState<[number, number] | null>(null);
@@ -247,6 +239,7 @@ export default function MarketplaceHome({
           {isCleaner ? (
             <p className="text-xs font-bold text-emerald-300">Pick a job below and take it</p>
           ) : null}
+          <CategoryGuideButton className="-ml-3 -mb-2" />
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -266,24 +259,32 @@ export default function MarketplaceHome({
       </div>
       {locError && <p className="text-xs text-amber-300">{locError}</p>}
 
-      <div className="grid grid-cols-5 gap-1.5">
-        {CATEGORY_TILES.map(({ id, label, Icon }) => (
+      <div className="grid grid-cols-4 gap-1.5">
+        {cats.categories.map((c) => ({ id: c.key, label: c.short_label, Icon: categoryIcon(c.icon), color: categoryColor(c.color), hazard: c.hazard_risk, badge: c.badge })).map(({ id, label, Icon, color, hazard, badge }) => (
           <button
             key={id}
             type="button"
             aria-pressed={service === id}
             onClick={() => setService(service === id ? "" : id)}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0.5 text-[11px] font-semibold touch-manipulation transition-[background-color,transform] active:scale-[0.97] ${
+            className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0.5 text-[11px] font-semibold touch-manipulation transition-[background-color,transform] active:scale-[0.97] ${
               service === id
                 ? "bg-emerald-400/15 text-emerald-200 ring-1 ring-inset ring-emerald-400/30"
                 : "bg-zinc-900 text-zinc-300 ring-1 ring-inset ring-zinc-800"
             }`}
           >
-            <Icon className="h-4 w-4 text-emerald-300" aria-hidden="true" />
+            <Icon className={`h-4 w-4 ${color.icon}`} aria-hidden="true" />
             {label}
+            {hazard && <span className="sr-only"> (hazard risk)</span>}
+            {badge && <BusinessIconBadge text={badge} className="absolute -right-1 -top-1" />}
           </button>
         ))}
       </div>
+      {service && cats.get(service) && (
+        <p className="-mt-1 rounded-xl bg-zinc-900 px-3 py-2 text-xs text-zinc-400 ring-1 ring-inset ring-zinc-800">
+          <span className="font-semibold text-zinc-200">{cats.get(service)!.label}.</span> <CategoryDescription text={cats.get(service)!.description ?? ""} />{" "}
+          {cats.get(service)!.rule_note}
+        </p>
+      )}
 
       {!embedded && (
       <div id="jobs-map" className="scroll-mt-20">
@@ -293,9 +294,7 @@ export default function MarketplaceHome({
           selectedId={selected}
           onSelect={setSelected}
           onSeeInList={(id) => {
-            document
-              .getElementById(`job-${id}`)
-              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+            flashRow(`job-${id}`);
           }}
         />
       </div>
@@ -311,20 +310,18 @@ export default function MarketplaceHome({
           }
         />
       ) : (
-        <ul className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid items-center gap-3 sm:grid-cols-2">
           {jobs.map((j) => (
             <li key={j.id} id={`job-${j.id}`} className="scroll-mt-24">
               <Link href={`/fund/jobs/${j.id}`}>
                 <Card
                   interactive
-                  className={`space-y-3 border-l-4 ${
-                    selected === j.id ? "!bg-sky-500/20 !ring-2 !ring-sky-400" : ""
-                  } ${
+                  className={`space-y-3 ${
                     selected === j.id
-                      ? "border-l-sky-400"
+                      ? "!bg-sky-500/20 !ring-2 !ring-sky-400"
                       : j.is_mine
-                      ? "border-l-amber-300 border-dashed"
-                      : "border-l-emerald-400/70"
+                      ? "!ring-2 !ring-amber-300/70"
+                      : ""
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -337,7 +334,8 @@ export default function MarketplaceHome({
                     <Badge variant="info">
                       {TIME_MODE_LABELS[j.time_mode]}
                     </Badge>
-                    <Badge>{JOB_TYPE_LABELS[j.job_type] ?? j.job_type}</Badge>
+                    <CategoryChip type={j.job_type} />
+                    <SizeBadge size={j.size} />
                     {j.is_mine && <Badge variant="pending">Your job</Badge>}
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
@@ -354,6 +352,12 @@ export default function MarketplaceHome({
                           onClick={(e) => {
                             e.preventDefault();
                             setSelected(j.id);
+                            if (embedded) {
+                              // The Earn page map lives outside this component; ask it to select and fly to the pin.
+                              window.dispatchEvent(new CustomEvent(JOB_FOCUS_EVENT, { detail: { id: j.id } }));
+                              document.getElementById("sponsored-map")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                              return;
+                            }
                             document
                               .getElementById("jobs-map")
                               ?.scrollIntoView({
@@ -367,8 +371,10 @@ export default function MarketplaceHome({
                           Map
                         </button>
                       )}
-                      <span className="inline-flex items-center font-semibold text-emerald-300">
-                        {isCleaner && !j.is_mine ? "View and take" : "View"}
+                      <span
+                        className={`inline-flex min-h-11 items-center gap-0.5 rounded-full px-4 font-bold ${j.is_mine ? "bg-amber-300 text-amber-950" : "bg-sky-400 text-sky-950"}`}
+                      >
+                        View
                         <ChevronRight
                           className="h-3.5 w-3.5"
                           aria-hidden="true"

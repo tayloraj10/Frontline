@@ -1,11 +1,12 @@
 "use client";
 
+import { useLimits } from "@/lib/useLimits";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Button from "@/components/ui/Button";
 import { Field, Note, TextInput } from "@/components/ui/fields";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
-import { LIMITS, type LngLat } from "@/lib/areaShape";
+import { LIMITS, RADIUS_FT_DEFAULT, RADIUS_FT_STEP, type Limits, feetToMeters, metersToFeet, type LngLat } from "@/lib/areaShape";
 import { getPosition } from "@/lib/getPosition";
 
 const ShapePickerMap = dynamic(() => import("@/components/map/ShapePickerMap"), {
@@ -19,14 +20,14 @@ export interface SitePlace {
   radius: number;
 }
 
-export const EMPTY_SITE: SitePlace = { label: "", point: null, radius: 100 };
+export const EMPTY_SITE: SitePlace = { label: "", point: null, radius: feetToMeters(RADIUS_FT_DEFAULT) };
 
 /** Returns a message when the site cannot be submitted, otherwise null. */
-export function sitePlaceProblem(site: SitePlace): string | null {
+export function sitePlaceProblem(site: SitePlace, lim: Limits = LIMITS): string | null {
   if (!site.label.trim()) return "Give the site a name.";
   if (!site.point) return "Tap the map to place the site.";
-  if (site.radius < LIMITS.siteRadiusMin || site.radius > LIMITS.siteRadiusMax) {
-    return `Radius must be ${LIMITS.siteRadiusMin} to ${LIMITS.siteRadiusMax} meters.`;
+  if (site.radius < lim.siteRadiusMin || site.radius > lim.siteRadiusMax) {
+    return `Radius must be ${lim.radiusFtMin} to ${lim.radiusFtMax} feet.`;
   }
   return null;
 }
@@ -39,6 +40,7 @@ export default function SitePlacePicker({
   value: SitePlace;
   onChange: (next: SitePlace) => void;
 }) {
+  const lim = useLimits();
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
   const [flyTo, setFlyTo] = useState<LngLat | null>(null);
@@ -83,6 +85,21 @@ export default function SitePlacePicker({
         />
       </Field>
 
+      <Field
+        label={`Claim radius: ${metersToFeet(value.radius)} ft`}
+        hint="The green circle. A cleaner must be inside it to claim the site. Around 150 ft covers a lot or a block."
+      >
+        <input
+          type="range"
+          className="h-11 w-full accent-emerald-400"
+          min={lim.radiusFtMin}
+          max={lim.radiusFtMax}
+          step={RADIUS_FT_STEP}
+          value={metersToFeet(value.radius)}
+          onChange={(e) => onChange({ ...value, radius: feetToMeters(parseInt(e.target.value, 10)) })}
+        />
+      </Field>
+
       {locError && <Note tone="warn">{locError}</Note>}
       <ShapePickerMap
         mode="point"
@@ -92,6 +109,7 @@ export default function SitePlacePicker({
         vertices={[]}
         onVertices={() => {}}
         flyTo={flyTo}
+        maxVertices={lim.maxVertices}
       />
       <p className="text-xs text-zinc-500">
         {value.point ? "Drag the pin to adjust it." : "Tap the map to drop a pin on the site."}
@@ -100,21 +118,6 @@ export default function SitePlacePicker({
       <Button variant="secondary" className="w-full" loading={locating} onClick={locateMe}>
         Put the pin where I am
       </Button>
-
-      <Field
-        label={`Claim radius: ${value.radius} m`}
-        hint={`The green circle. A cleaner has to be inside it to claim the site and take their photos. ${LIMITS.siteRadiusMin} to ${LIMITS.siteRadiusMax} m; around 100 m covers a lot or a block.`}
-      >
-        <input
-          type="range"
-          className="h-11 w-full accent-emerald-400"
-          min={LIMITS.siteRadiusMin}
-          max={LIMITS.siteRadiusMax}
-          step={10}
-          value={value.radius}
-          onChange={(e) => onChange({ ...value, radius: parseInt(e.target.value, 10) })}
-        />
-      </Field>
     </div>
   );
 }

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { MapPin, Star } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { JOB_TYPE_LABELS, usd, type CleanerCard } from "@/lib/marketplace";
+import { CategoryChip } from "./CategoryBits";
+import { usd, type CleanerCard } from "@/lib/marketplace";
 
 const AVATAR_GRADIENTS = [
   "from-emerald-400 to-sky-500",
@@ -68,7 +69,7 @@ export default function CleanerRow({ c }: { c: CleanerCard }) {
         {c.services.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {c.services.map((sv) => (
-              <Badge key={sv}>{JOB_TYPE_LABELS[sv] ?? sv}</Badge>
+              <CategoryChip key={sv} type={sv} />
             ))}
           </div>
         )}

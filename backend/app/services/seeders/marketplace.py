@@ -69,8 +69,49 @@ JOBS += [
      40.7550, -73.9200, "Broadway, Queens", 120, None),
 ]
 
+# A spread of open jobs for testing: every category, pin jobs (radius) and drawn areas (polygon), every size including
+# "Not sure" (empty), and fixed / hourly pricing across the three time modes. All around Brooklyn so they sit together on the map.
+JOBS += [
+    ("v1", "mk_cust_maria", "Litter on the corner of Lewis and Halsey", "litter", "small", 2500, "fixed", "specific",
+     40.6857, -73.9358, "Lewis Ave, Brooklyn", 40, None),
+    ("v2", "mk_cust_devon", "Trash along the Fort Greene Park edge", "litter", "large", 2000, "hourly", "window",
+     40.6904, -73.9742, "Myrtle Ave, Brooklyn", None,
+     "POLYGON((-73.9770 40.6890, -73.9720 40.6890, -73.9720 40.6920, -73.9770 40.6920, -73.9770 40.6890))"),
+    ("v3", "mk_cust_priya", "Sidewalk outside our Atlantic Ave shop", "sidewalk", "medium", 5500, "fixed", "flexible",
+     40.6860, -73.9780, "Atlantic Ave, Brooklyn", 60, None),
+    ("v4", "mk_cust_maria", "Sweep the curb on Court St", "sidewalk", "small", 3000, "fixed", "specific",
+     40.6870, -73.9930, "Court St, Brooklyn", 30, None),
+    ("v5", "mk_cust_devon", "Clear the trail edge near the Long Meadow", "park_nature", "medium", 8000, "fixed", "flexible",
+     40.6620, -73.9700, "Prospect Park, Brooklyn", None,
+     "POLYGON((-73.9730 40.6600, -73.9680 40.6600, -73.9675 40.6640, -73.9725 40.6645, -73.9730 40.6600))"),
+    ("v6", "mk_cust_priya", "Tidy the garden beds by the McCarren ballfields", "park_nature", "small", 3500, "fixed", "window",
+     40.7210, -73.9515, "McCarren Park, Brooklyn", 90, None),
+    ("v7", "mk_cust_maria", "Leaves and trash in my backyard", "light_yard_work", "", 2800, "hourly", "flexible",
+     40.6730, -73.9560, "Bergen St, Brooklyn", 40, None),
+    ("v8", "mk_cust_devon", "Overgrown vacant lot off Flushing Ave", "lot_cleanup", "large", 30000, "fixed", "window",
+     40.7003, -73.9450, "Flushing Ave, Brooklyn", None,
+     "POLYGON((-73.9462 40.6996, -73.9440 40.6996, -73.9440 40.7010, -73.9462 40.7010, -73.9462 40.6996))"),
+    ("v9", "mk_cust_priya", "Clear leaves off the storm drain at my corner", "storm_drain", "small", 2000, "fixed", "flexible",
+     40.6805, -73.9650, "Vanderbilt Ave, Brooklyn", 30, None),
+    ("v10", "mk_cust_maria", "Three clogged grates along our block", "storm_drain", "medium", 4000, "fixed", "specific",
+     40.6950, -73.9550, "Classon Ave, Brooklyn", 50, None),
+    ("v11", "mk_cust_devon", "Dry sand and boardwalk edge cleanup", "beach_lake", "medium", 7000, "fixed", "window",
+     40.5776, -73.9614, "Brighton Beach, Brooklyn", 120, None),
+    ("v12", "mk_cust_priya", "Walkable stretch of the Coney Island beach", "beach_lake", "large", 12000, "fixed", "flexible",
+     40.5740, -73.9780, "Coney Island, Brooklyn", None,
+     "POLYGON((-73.9800 40.5735, -73.9760 40.5735, -73.9760 40.5750, -73.9800 40.5750, -73.9800 40.5735))"),
+    ("v13", "mk_cust_maria", "Shovel the front steps and walk", "snow_shoveling", "small", 3000, "fixed", "specific",
+     40.6700, -73.9500, "Nostrand Ave, Brooklyn", 25, None),
+    ("v14", "mk_cust_devon", "Shovel the whole block frontage", "snow_shoveling", "medium", 2500, "hourly", "window",
+     40.6890, -73.9440, "Greene Ave, Brooklyn", None,
+     "POLYGON((-73.9455 40.6885, -73.9425 40.6885, -73.9425 40.6892, -73.9455 40.6892, -73.9455 40.6885))"),
+]
+
 # job key -> sample site photos shown on the listing
 LISTING_PHOTOS = {
+    "v5": ["park1", "park2"],
+    "v8": ["lot8", "lot9"],
+    "v12": ["beach1"],
     "j1": ["lot1", "lot2"],
     "j5": ["lot3", "lot4", "lot5"],
     "j12": ["lot6", "lot7"],
@@ -224,7 +265,7 @@ class MarketplaceSeeder(Seeder):
                 INSERT INTO marketplace_jobs (id, customer_id, origin, title, description, job_type, size, hazards_ack, address_label,
                                               location, radius_m, area, time_mode, starts_at, window_start, window_end, flexible_days,
                                               expires_at, price_type, price_cents, platform_fee_cents, fee_on_top, status)
-                VALUES (:id, :cust, 'board', :title, 'Seeded test job.', :jt, :size, true, :addr,
+                VALUES (:id, :cust, 'board', :title, 'Seeded test job.', :jt, NULLIF(CAST(:size AS text), ''), true, :addr,
                         ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :rad,
                         CASE WHEN CAST(:poly AS text) IS NULL THEN NULL ELSE ST_GeogFromText('SRID=4326;' || CAST(:poly AS text)) END,
                         :tm,

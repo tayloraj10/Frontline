@@ -2,16 +2,10 @@
 
 export type TimeMode = "specific" | "window" | "flexible";
 
-export const JOB_TYPE_LABELS: Record<string, string> = {
-  litter: "Litter pickup",
-  lot_cleanup: "Lot cleanup",
-  sidewalk: "Sidewalk cleanup",
-  light_yard_work: "Light yard work",
-  snow_shoveling: "Snow shoveling",
-};
+/** Window event: ask the Earn page map to select a job pin and fly to it. detail = { id }. */
+export const JOB_FOCUS_EVENT = "frontline:focus-job";
 
-/** Job types that produce no bags, so the "all bags are in the photo" step is skipped. */
-export const NO_BAG_JOB_TYPES = ["snow_shoveling"];
+// Job categories (labels, icons, rules) live in the database now. See lib/categories.tsx.
 
 /** "1h 05m" style label for a duration in seconds. */
 export function durationLabel(seconds: number): string {
@@ -103,7 +97,7 @@ export type CleanerCard = {
   years_experience?: number | null;
   equipment?: string[];
   availability?: string | null;
-  preferred_size?: "small" | "medium" | "large" | "any" | null;
+  preferred_sizes?: ("small" | "medium" | "large")[];
   distance_km?: number | null;
   reviews?: { rating: number; comment: string | null; created_at: string; username: string | null }[];
 };
@@ -111,7 +105,7 @@ export type CleanerCard = {
 /** What the board map needs per job. The list pages separately, so a pin may not be in the list yet. */
 export type BoardPin = Pick<
   Job,
-  | "id" | "title" | "job_type" | "price_type" | "price_cents" | "time_mode" | "starts_at" | "window_start"
+  | "id" | "title" | "job_type" | "size" | "price_type" | "price_cents" | "time_mode" | "starts_at" | "window_start"
   | "window_end" | "flexible_days" | "is_mine" | "latitude" | "longitude"
 >;
 

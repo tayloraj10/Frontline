@@ -152,7 +152,7 @@ async def get_subscription_summary(db: AsyncSession, owner_type: OwnerType, owne
     ).fetchone()
     game_settings = await get_game_settings(db)
     multiplier = max(1.0, float(game_settings.get("plus_earning_cap_multiplier", 2)))
-    early_hours = max(0, int(game_settings.get("plus_early_access_hours", 48)))
+    early_hours = max(0, int(game_settings.get("plus_early_access_hours", 24)))
     if row is None:
         return {
             "has_premium": False,

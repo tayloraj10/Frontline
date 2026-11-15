@@ -1,13 +1,17 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getPosition } from "@/lib/getPosition";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { Card } from "@/components/ui/Card";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/fields";
-import { JOB_TYPE_LABELS, mk, type MeStatus } from "@/lib/marketplace";
+import { Field, TextArea, TextInput } from "@/components/ui/fields";
+import { mk, type MeStatus } from "@/lib/marketplace";
+import { categoryColor, categoryIcon, useCategories } from "@/lib/categories";
+import { CategoryGuideButton } from "./CategoryBits";
+import { JOB_SIZES } from "@/lib/jobSizes";
 import Avatar from "@/components/ui/Avatar";
 import { createClient } from "@/lib/supabase/client";
 import { uploadToR2 } from "@/lib/uploadToR2";
@@ -23,6 +27,7 @@ const PROFILE_STATUS: Record<string, { label: string; tone: "success" | "pending
 };
 
 export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
+  const cats = useCategories();
   const [me, setMe] = useState(initial);
   const p = me.cleaner_profile;
 
@@ -36,14 +41,27 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [languages, setLanguages] = useState((p?.languages ?? []).join(", "));
   const [years, setYears] = useState(p?.years_experience != null ? String(p.years_experience) : "");
   const [equipment, setEquipment] = useState((p?.equipment ?? []).join(", "));
   const [availability, setAvailability] = useState(p?.availability ?? "");
-  const [prefSize, setPrefSize] = useState<string>(p?.preferred_size ?? "");
+  const [prefSizes, setPrefSizes] = useState<string[]>(p?.preferred_sizes ?? []);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+
+  // What the form holds right now versus what was last saved, so unsaved edits can be called out.
+  const current = JSON.stringify([
+    headline, bio, [...services].sort(), radius, area, coords, languages, years, equipment, availability, [...prefSizes].sort(),
+  ]);
+  const [baseline, setBaseline] = useState(current);
+  const dirty = current !== baseline;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   async function uploadPhoto(file: File | undefined) {
     if (!file) return;
@@ -114,7 +132,6 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
   async function save() {
     setBusy(true);
     setError(null);
-    setSaved(false);
     try {
       await mk("/cleaner-profile", {
         method: "PUT",
@@ -130,12 +147,12 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
           years_experience: years.trim() === "" ? null : Number(years),
           equipment: splitList(equipment),
           availability: availability.trim() || null,
-          preferred_size: prefSize || null,
+          preferred_sizes: prefSizes,
           ...(coords ?? {}),
         },
       });
       await reload();
-      setSaved(true);
+      setBaseline(current);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -154,11 +171,16 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
 
   const st = p ? PROFILE_STATUS[p.status] : null;
 
+  const missing = [
+    !me.avatar_url && "a profile photo",
+    !headline.trim() && "a headline",
+    !coords && !p?.area_label && "your location",
+  ].filter(Boolean) as string[];
+
   const checklist = [
     { label: "Profile photo", done: !!me.avatar_url },
     { label: "Headline", done: headline.trim().length > 0 },
     { label: "About you", done: bio.trim().length >= 20 },
-    { label: "Work you do", done: services.length > 0 },
     { label: "Location", done: !!coords || !!p?.area_label },
     { label: "Experience", done: years.trim() !== "" },
     { label: "Equipment", done: splitList(equipment).length > 0 },
@@ -169,7 +191,7 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
   const pct = Math.round((doneCount / checklist.length) * 100);
 
   return (
-    <div className="space-y-5">
+    <div className={`space-y-5 ${dirty || !p ? "pb-20" : ""}`}>
       <Card className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <p className="font-bold text-zinc-100">Profile {pct}% complete</p>
@@ -273,18 +295,61 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
           <TextArea rows={4} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1500} />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        <fieldset className="space-y-2">
+          <legend className="!mb-0 text-sm font-semibold text-zinc-200">Work you do <span className="font-normal text-zinc-500">(optional)</span></legend>
+          <p className="text-xs text-zinc-500">Pick the types of job you want alerts for. Leave all off to hear about any type.</p>
+          <CategoryGuideButton className="-ml-3 -my-2.5" label="What do the job types and sizes mean?" />
+          <div className="grid grid-cols-2 gap-2">
+            {cats.categories.map((c) => {
+              const on = services.includes(c.key);
+              const Icon = categoryIcon(c.icon);
+              const color = categoryColor(c.color);
+              return (
+                <div
+                  key={c.key}
+                  className={`flex items-center rounded-2xl ring-1 ring-inset ${on ? "bg-emerald-500/10 ring-emerald-400/50" : "bg-zinc-800/60 ring-zinc-700/60"}`}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setServices(on ? services.filter((s) => s !== c.key) : [...services, c.key])}
+                    className="flex min-h-12 min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left touch-manipulation"
+                  >
+                    <span className={`flex size-5 shrink-0 items-center justify-center rounded-md ring-1 ring-inset ${on ? "bg-emerald-400 text-emerald-950 ring-emerald-300" : "ring-zinc-600"}`}>
+                      {on && <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" />}
+                    </span>
+                    <Icon className={`h-4 w-4 shrink-0 ${color.icon}`} aria-hidden="true" />
+                    <span className={`text-sm font-semibold leading-tight ${on ? "text-emerald-100" : "text-zinc-300"}`}>{c.label}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold text-zinc-200">Job sizes you like <span className="font-normal text-zinc-500">(optional)</span></legend>
+          <div className="flex flex-wrap gap-2">
+            {JOB_SIZES.map((z) => {
+              const on = prefSizes.includes(z.key);
+              return (
+                <button
+                  key={z.key}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setPrefSizes(on ? prefSizes.filter((s) => s !== z.key) : [...prefSizes, z.key])}
+                  className={`min-h-11 rounded-full px-4 text-sm font-semibold touch-manipulation ${on ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40" : "bg-zinc-800 text-zinc-400"}`}
+                >
+                  {z.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-zinc-500">Pick any that suit you. Leave all off if you take any size.</p>
+        </fieldset>
+        <div>
           <Field label="Years of experience" optional>
             <TextInput inputMode="numeric" value={years} onChange={(e) => setYears(e.target.value.replace(/\D/g, ""))} maxLength={2} />
-          </Field>
-          <Field label="Preferred job size" optional>
-            <Select value={prefSize} onChange={(e) => setPrefSize(e.target.value)}>
-              <option value="">No preference</option>
-              <option value="small">Small</option>
-              <option value="medium">Medium</option>
-              <option value="large">Large</option>
-              <option value="any">Any size</option>
-            </Select>
           </Field>
         </div>
         <Field label="Languages" hint="Separate with commas." optional>
@@ -296,26 +361,6 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
         <Field label="Usual availability" hint="Like weekday evenings and weekends." optional>
           <TextInput value={availability} onChange={(e) => setAvailability(e.target.value)} maxLength={200} />
         </Field>
-
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-semibold text-zinc-200">Work you do</legend>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(JOB_TYPE_LABELS).map(([k, label]) => {
-              const on = services.includes(k);
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setServices(on ? services.filter((s) => s !== k) : [...services, k])}
-                  className={`min-h-11 rounded-full px-4 text-sm font-semibold touch-manipulation ${on ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40" : "bg-zinc-800 text-zinc-400"}`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
 
         <Field
           label="Where are you based out of?"
@@ -346,12 +391,31 @@ export default function CleanerOnboarding({ initial }: { initial: MeStatus }) {
         {coords && <p className="text-sm text-emerald-300">Location set. You will be notified about jobs within {Number(radius) || 15} miles.</p>}
         {!coords && p && !p.area_label && <p className="text-sm text-amber-300">Set your location to get job alerts.</p>}
 
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
-        {saved && <p className="text-sm text-emerald-300">Saved.</p>}
-        <Button className="w-full" loading={busy} disabled={!me.avatar_url || !headline.trim() || services.length === 0 || (!coords && !p?.area_label)} onClick={save}>
-          {p ? "Save changes" : "Save and start taking jobs"}
-        </Button>
       </Card>
+      {(dirty || !p) && (
+        <div
+          role="status"
+          className="fixed inset-x-3 bottom-[calc(var(--bottom-nav-h,0px)+0.75rem)] z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl bg-amber-400 px-4 py-2.5 text-amber-950 shadow-elevation-3"
+        >
+          <div className="min-w-0 text-sm font-bold" role={error ? "alert" : undefined}>
+            {error ? (
+              <span className="text-red-900">{error}</span>
+            ) : missing.length > 0 ? (
+              <span>To save, add: {missing.join(", ")}.</span>
+            ) : (
+              <span>{p ? "Unsaved changes" : "Ready to save"}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy || missing.length > 0}
+            className="min-h-9 rounded-xl bg-white px-4 text-sm font-extrabold text-zinc-900 shadow touch-manipulation disabled:bg-amber-200/70 disabled:text-amber-900/50 disabled:shadow-none active:scale-[0.97]"
+          >
+            {busy ? "Saving..." : p ? "Save" : "Save and start"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

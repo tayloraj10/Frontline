@@ -122,18 +122,16 @@ export default function SubscriptionWidget({
   const manage = () =>
     redirectTo("/api/admin/payments/portal-session", { return_url: window.location.href }, "Could not open billing.");
 
-  const perks = plusPerks(ownerType, ent?.earning_cap_multiplier, ent?.early_access_hours);
+  const perks = plusPerks(ownerType, ent?.early_access_hours);
   const since = formatDate(ent?.since);
   const renews = formatDate(ent?.current_period_end);
   const active = ent?.has_premium === true;
 
-  const multiplier = ent?.earning_cap_multiplier ?? 2;
-  const earlyHours = ent?.early_access_hours ?? 48;
-  const mult = `${Number.isInteger(multiplier) ? multiplier : multiplier.toFixed(1)}x`;
+  const earlyHours = ent?.early_access_hours ?? 24;
   const blurb =
     ownerType === "group"
-      ? `${mult} earning caps on sponsored pools, a ${earlyHours}h head start on new sponsored areas, and a Support button so sponsors can fund you directly.`
-      : `${mult} earning caps on sponsored cleanups, a ${earlyHours}h head start on new sponsored sites, and a shareable monthly recap.`;
+      ? `A higher weekly earning limit, a ${earlyHours}h head start on new sponsored areas, and a Support button so sponsors can fund you directly.`
+      : `A higher weekly earning limit, a ${earlyHours}h head start on new sponsored sites, and a shareable monthly recap.`;
 
   const perkList = (
     <ul className="space-y-2">

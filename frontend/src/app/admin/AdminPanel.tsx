@@ -29,6 +29,7 @@ import EditTeamEventView from "./team-events/[id]/edit/EditTeamEventView";
 import AdminRolesTab from "./AdminRolesTab";
 import RewardsBetaCard from "./RewardsBetaCard";
 import PaymentsGuide from "./PaymentsGuide";
+import JobCategoriesAdmin from "./JobCategoriesAdmin";
 import type { Json, Database } from "@/types/database";
 
 export type Campaign = {
@@ -3520,19 +3521,27 @@ const PAYMENT_SUBSECTIONS = [
   { id: "earn", title: "Earn (sponsored cleanups)", intro: "Claim timing, distance and how much one person or group can earn." },
   { id: "plus", title: "Frontline Plus perks", intro: "What Plus members get on top of the Earn rules." },
   { id: "hire", title: "Hire (marketplace)", intro: "Pricing and fees, job timing, on-site rules and strikes." },
+  { id: "limits", title: "Size limits (areas and pins)", intro: "How big or small a drawn area, pin radius or circle can be for Hire jobs and Earn sponsored areas. Shown to users in feet and square miles." },
 ];
 const PAYMENT_KEY_ORDER = [
   "payments_enabled", "payments_admin_preview", "marketplace_enabled",
   "sponsored_claim_before_window_minutes", "sponsored_claim_work_window_minutes", "sponsored_claim_proximity_meters",
-  "sponsored_default_cap_per_user_usd", "sponsored_daily_cap_per_user_usd", "sponsored_default_cap_per_group_usd",
-  "plus_earning_cap_multiplier", "plus_early_access_hours",
+  "earning_weekly_ceiling_usd", "earning_weekly_ceiling_plus_usd", "earning_weekly_ceiling_group_usd", "earning_weekly_ceiling_group_plus_usd",
+  "fraud_new_account_days", "plus_early_access_hours",
   "marketplace_platform_fee_percent", "min_payment_cents",
   "marketplace_auto_release_days", "marketplace_flexible_max_days", "marketplace_arrive_minutes",
   "marketplace_site_radius_m", "marketplace_strike_limit", "marketplace_strike_window_days",
+  "marketplace_pin_radius_min_ft", "marketplace_pin_radius_max_ft",
+  "marketplace_job_min_area_sqft", "marketplace_job_max_area_sqmi",
+  "sponsored_area_min_sqft", "sponsored_area_max_sqmi",
+  "sponsored_circle_radius_min_ft", "sponsored_circle_radius_max_ft",
+  "marketplace_max_vertices", "sponsored_max_geo_units",
 ];
 
 // Extra caution text shown under a setting's description.
 const SETTING_WARNINGS: Record<string, { tone: "red" | "amber"; text: string }> = {
+  sponsored_circle_radius_min_ft: { tone: "amber", text: "NOT USED. No screen in the app lets a sponsor draw a circle area, so changing this does nothing for users." },
+  sponsored_circle_radius_max_ft: { tone: "amber", text: "NOT USED. No screen in the app lets a sponsor draw a circle area, so changing this does nothing for users." },
   payments_enabled: {
     tone: "red",
     text: "Full go-live switch. Turning this on shows every money feature (sponsorships, Plus, rewards) to ALL users in production. Leave off until you are ready to launch.",
@@ -3543,7 +3552,13 @@ const SETTING_WARNINGS: Record<string, { tone: "red" | "amber"; text: string }> 
   },
 };
 
+const LIMIT_KEYS = new Set([
+  "marketplace_job_min_area_sqft", "marketplace_job_max_area_sqmi", "marketplace_pin_radius_min_ft", "marketplace_pin_radius_max_ft", "marketplace_max_vertices",
+  "sponsored_area_min_sqft", "sponsored_area_max_sqmi", "sponsored_max_geo_units", "sponsored_circle_radius_min_ft", "sponsored_circle_radius_max_ft",
+]);
+
 function paymentSection(key: string): string {
+  if (LIMIT_KEYS.has(key)) return "limits";
   if (BOOLEAN_SETTING_KEYS.has(key)) return "switches";
   if (key.startsWith("sponsored_")) return "earn";
   if (key.startsWith("plus_")) return "plus";
@@ -3568,6 +3583,16 @@ const METERS_TO_FEET = 3.28084;
 // Unit shown next to each non-proximity setting's input (proximity rows get their own
 // meters/feet split below instead). Omitted keys are plain counts/scores — no unit shown.
 const UNIT_LABELS: Record<string, string> = {
+  marketplace_job_min_area_sqft: "sq ft",
+  marketplace_job_max_area_sqmi: "sq mi",
+  marketplace_pin_radius_min_ft: "ft",
+  marketplace_pin_radius_max_ft: "ft",
+  marketplace_max_vertices: "points",
+  sponsored_area_min_sqft: "sq ft",
+  sponsored_area_max_sqmi: "sq mi",
+  sponsored_max_geo_units: "areas",
+  sponsored_circle_radius_min_ft: "ft",
+  sponsored_circle_radius_max_ft: "ft",
   claim_before_window_minutes: "min",
   claim_after_window_minutes_low: "min",
   claim_after_window_minutes_medium: "min",
@@ -3723,6 +3748,9 @@ function SettingsTab({ settings, setSettings }: {
             {CATEGORY_LABELS[category] ?? category}
           </a>
         ))}
+        <a href="#settings-job-categories" className="block text-xs text-zinc-400 hover:text-emerald-400 active:text-emerald-400 transition-colors duration-150 py-1">
+          Job categories
+        </a>
       </nav>
       <div className="flex-1 min-w-0 space-y-8">
       <PaymentsGuide />
@@ -3757,47 +3785,6 @@ function SettingsTab({ settings, setSettings }: {
                 <p className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-400">
                   Right now: payment features are visible to <span className="font-semibold text-zinc-200">{payWho}</span>, Hire is visible to <span className="font-semibold text-zinc-200">{hireWho}</span>.
                 </p>
-              );
-            })()}
-            {block.sub?.id === "plus" && (() => {
-              const n = (k: string) => Number(drafts[k]);
-              const mult = n("plus_earning_cap_multiplier");
-              const caps = [
-                ["per person, per pool", n("sponsored_default_cap_per_user_usd")],
-                ["per person, per day", n("sponsored_daily_cap_per_user_usd")],
-                ["per group, per pool", n("sponsored_default_cap_per_group_usd")],
-              ] as const;
-              if (!Number.isFinite(mult) || caps.some(([, c]) => !Number.isFinite(c))) return null;
-              const usd = (d: number) => `$${d.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-              return (
-                <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/20 px-3 py-2.5 text-xs text-zinc-400 space-y-2">
-                  <p>
-                    <span className="font-semibold text-zinc-200">Plus cap = base cap x multiplier.</span> The base caps are set
-                    in{" "}
-                    <a href="#settings-payments-earn" className="font-semibold text-emerald-300 underline underline-offset-2">
-                      Earn (sponsored cleanups)
-                    </a>{" "}
-                    above. A multiplier of 1 gives Plus members no extra room.
-                  </p>
-                  <table className="w-full text-right">
-                    <thead>
-                      <tr className="text-zinc-500">
-                        <th className="text-left font-medium">Cap</th>
-                        <th className="font-medium">Base (everyone)</th>
-                        <th className="font-medium">Plus members</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {caps.map(([label, c]) => (
-                        <tr key={label}>
-                          <td className="text-left">{label}</td>
-                          <td className="text-zinc-200">{usd(c)}</td>
-                          <td className="font-semibold text-emerald-300">{usd(c * mult)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               );
             })()}
             {block.sub?.id === "hire" && block.rows.some(r => r.key === "marketplace_platform_fee_percent") && (
@@ -3872,6 +3859,15 @@ function SettingsTab({ settings, setSettings }: {
                     {setting.description && (
                       <p className="text-xs text-zinc-500 mt-0.5">{setting.description}</p>
                     )}
+                    {SETTING_WARNINGS[setting.key] && (
+                      <p className={`mt-1.5 text-xs font-medium rounded-lg px-2.5 py-1.5 ${
+                        SETTING_WARNINGS[setting.key].tone === "red"
+                          ? "bg-red-950/40 text-red-300 border border-red-800/60"
+                          : "bg-amber-950/30 text-amber-300 border border-amber-800/50"
+                      }`}>
+                        ⚠ {SETTING_WARNINGS[setting.key].text}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <input
@@ -3925,6 +3921,7 @@ function SettingsTab({ settings, setSettings }: {
           ))}
         </div>
       ))}
+      <JobCategoriesAdmin />
       {settings.length === 0 && (
         <p className="text-sm text-zinc-500">No settings found — has migration 055_game_settings.sql been applied?</p>
       )}

@@ -1,13 +1,18 @@
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import ProgressBar from "@/components/ui/ProgressBar";
-import { daysLeft, describeRule, usd, type SponsorshipPool } from "@/lib/sponsorshipPools";
+import { daysLeft, describeRule, poolPlace, usd, type SponsorshipPool } from "@/lib/sponsorshipPools";
 
 const STATUS_LABEL: Record<SponsorshipPool["status"], string> = {
   open: "Open",
+  goal_missed: "Goal not met",
+  handoff: "Group deciding",
+  voting: "Voting",
+  choosing: "Starter choosing",
   active: "Funded",
   expired: "Refunded",
   cancelled: "Cancelled",
+  closed: "Closed",
 };
 
 /** Compact pool summary used in lists; the whole card is one tap target. */
@@ -26,7 +31,7 @@ export default function PoolCard({ pool }: { pool: SponsorshipPool }) {
         </Badge>
       </div>
       <p className="mb-3 text-xs text-zinc-400">
-        {pool.site_label}, {describeRule(pool.payout_rule)}
+        {poolPlace(pool)}, {pool.plan_kind === "group" ? `run by ${pool.handoff_group_name ?? "a group"}` : pool.plan_kind === "jobs" ? "jobs budget" : pool.plan_kind === "vote" && !pool.payout_rule ? "contributors vote" : describeRule(pool.payout_rule)}
       </p>
       <ProgressBar value={pct} label={`${pct}% of goal`} />
       <p className="mt-2 text-xs text-zinc-400">

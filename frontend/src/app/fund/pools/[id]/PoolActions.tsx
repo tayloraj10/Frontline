@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { Field, Note, TextInput } from "@/components/ui/fields";
+import LoginPrompt from "@/components/ui/LoginPrompt";
 import { usd, type SponsorshipPool } from "@/lib/sponsorshipPools";
 
 const PRESETS = [500, 1000, 2500, 5000];
@@ -13,14 +14,13 @@ async function readError(res: Response, fallback: string) {
   return typeof data?.detail === "string" ? data.detail : fallback;
 }
 
-/** Contribute (Stripe Checkout), share, and cancel for one pool. */
-export default function PoolActions({ pool }: { pool: SponsorshipPool }) {
+/** Contribute (Stripe Checkout) and cancel for one pool. Sharing lives in the page header. */
+export default function PoolActions({ pool, loggedIn = true }: { pool: SponsorshipPool; loggedIn?: boolean }) {
   const router = useRouter();
   const [cents, setCents] = useState(1000);
   const [custom, setCustom] = useState("");
   const [busy, setBusy] = useState<"pay" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const remaining = pool.goal_cents - pool.raised_cents;
   const base = `/api/sponsorship-pools/${pool.id}`;
@@ -57,21 +57,8 @@ export default function PoolActions({ pool }: { pool: SponsorshipPool }) {
     router.refresh();
   };
 
-  const share = async () => {
-    const url = `${window.location.origin}/fund/pools/${pool.id}`;
-    try {
-      if (navigator.share) await navigator.share({ title: pool.title, url });
-      else {
-        await navigator.clipboard.writeText(url);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
-    } catch {
-      /* share sheet dismissed */
-    }
-  };
-
   if (pool.status !== "open") return null;
+  if (!loggedIn) return <LoginPrompt action="chip in to this pool" />;
   return (
     <div className="space-y-4">
       {pool.my_contribution_cents ? (
@@ -112,15 +99,15 @@ export default function PoolActions({ pool }: { pool: SponsorshipPool }) {
       <Button className="w-full" loading={busy === "pay"} onClick={pay}>
         Chip in
       </Button>
-      <Button variant="secondary" className="w-full" onClick={share}>
-        {copied ? "Link copied" : "Share this pool"}
-      </Button>
       {pool.is_creator &&
         (confirmCancel ? (
           <div className="space-y-2">
             <Note tone="warn">Cancelling refunds everyone who has chipped in.</Note>
             <Button variant="destructive" className="w-full" loading={busy === "cancel"} onClick={cancel}>
               Yes, cancel and refund
+            </Button>
+            <Button variant="ghost" className="w-full" disabled={busy === "cancel"} onClick={() => setConfirmCancel(false)}>
+              Keep the pool
             </Button>
           </div>
         ) : (

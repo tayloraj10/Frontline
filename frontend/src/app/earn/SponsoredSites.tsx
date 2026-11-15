@@ -10,17 +10,18 @@ import { EmptyState, Section } from "@/components/ui/PageShell";
 import { SPONSORED_CHANGED_EVENT, SPONSORED_FOCUS_EVENT } from "@/components/map/useSponsoredMapLayer";
 import { cn } from "@/lib/cn";
 import { getPosition } from "@/lib/getPosition";
-import DailyLimitNote from "@/components/billing/DailyLimitNote";
 import { uploadToR2 } from "@/lib/uploadToR2";
+import { minBagsSentence, minBagsShort, minLargeBags } from "@/lib/sponsoredBags";
 import AddToSiteButton from "@/components/sponsorships/AddToSiteButton";
+import { ensureLoggedIn } from "@/lib/loginRedirect";
 
 const PAGE_SIZE = 6;
 type Filter = "open" | "all";
 
 export type PayoutRule =
-  | { type: "flat_per_cleanup"; amount_cents: number }
-  | { type: "per_bag"; cents_per_bag: number; max_bags: number }
-  | { type: "equal_split"; amount_cents: number };
+  | { type: "flat_per_cleanup"; amount_cents: number; one_winner?: boolean; min_large_bags?: number }
+  | { type: "per_bag"; cents_per_bag: number; max_bags: number; min_large_bags?: number }
+  | { type: "equal_split"; amount_cents: number; min_large_bags?: number };
 
 interface SiteClaim {
   id: string;
@@ -41,10 +42,14 @@ interface Site {
   longitude: number;
   available: boolean;
   claimed_by_me: boolean;
+  is_mine?: boolean;
   my_claim: SiteClaim | null;
   early_access?: boolean;
   early_access_until?: string | null;
   early_access_locked?: boolean;
+  scheduled?: boolean;
+  opens_at?: string | null;
+  plus_opens_at?: string | null;
 }
 
 interface Area {
@@ -54,8 +59,13 @@ interface Area {
   payout_rule: PayoutRule;
   remaining_cents: number;
   open_to_additions?: boolean;
+  is_mine?: boolean;
   early_access?: boolean;
   early_access_until?: string | null;
+  early_access_locked?: boolean;
+  scheduled?: boolean;
+  opens_at?: string | null;
+  plus_opens_at?: string | null;
 }
 
 type Entry = { kind: "site"; site: Site } | { kind: "area"; area: Area };
@@ -68,8 +78,9 @@ const usd = (cents: number) =>
 
 export function describeRule(rule: PayoutRule): string {
   if (rule.type === "per_bag") return `${usd(rule.cents_per_bag)} per bag, up to ${rule.max_bags}`;
-  if (rule.type === "equal_split") return `${usd(rule.amount_cents)} per attendee`;
-  return `${usd(rule.amount_cents)} per verified cleanup`;
+  if (rule.type === "equal_split") return `${usd(rule.amount_cents)} per attendee, while funds last`;
+  if (rule.one_winner) return `${usd(rule.amount_cents)} to the first verified cleanup`;
+  return `${usd(rule.amount_cents)} per verified cleanup, once a day per person`;
 }
 
 function errorText(err: unknown, fallback: string): string {
@@ -157,16 +168,18 @@ export default function SponsoredSites() {
     setError(null);
     setNotice(null);
     try {
+      if (!(await ensureLoggedIn())) return;
       const body: Record<string, unknown> = {};
       if (step !== "release") {
         const pos = await getPosition();
         body.latitude = pos.coords.latitude;
         body.longitude = pos.coords.longitude;
+        if (step === "claim") body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       }
       if (step === "before-photo" || step === "after-photo") {
         if (!photo) throw new Error("Take or choose a photo first.");
-        if (step === "after-photo" && site.payout_rule.type === "per_bag" && !(parseInt(bags, 10) > 0)) {
-          throw new Error("Enter how many bags you collected. This site pays per bag.");
+        if (step === "after-photo" && !(parseInt(bags, 10) >= minLargeBags(site.payout_rule))) {
+          throw new Error(`This site needs at least ${minLargeBags(site.payout_rule)} large bag${minLargeBags(site.payout_rule) === 1 ? "" : "s"} collected to be paid.`);
         }
         body.photo_url = await uploadToR2(photo);
         if (step === "after-photo" && bags) body.bags = parseInt(bags, 10);
@@ -207,7 +220,6 @@ export default function SponsoredSites() {
       title="Available sponsorships"
       description="Everything with money set aside. Claim a cleanup site on the map, then add your before and after photos here. Group areas pay hosts of cleanups inside them."
     >
-      <DailyLimitNote className="mb-4" />
       {error && <Note tone="warn">{error}</Note>}
       {notice && <Note tone="good">{notice}</Note>}
       {loading && <p className="text-sm text-zinc-500">Loading...</p>}
@@ -216,7 +228,7 @@ export default function SponsoredSites() {
       )}
 
       {sites.length + areas.length > PAGE_SIZE && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="mb-3 flex flex-wrap gap-1.5">
           {(
             [
               ["open", `Open to claim (${openCount})`],
@@ -247,14 +259,20 @@ export default function SponsoredSites() {
           if (entry.kind === "area") {
             const area = entry.area;
             return (
-              <Card key={area.id} id={`sponsored-row-${area.id}`} className="flex scroll-mt-24 flex-col justify-between gap-3 sm:last:odd:col-span-2">
+              <Card key={area.id} id={`sponsored-row-${area.id}`} className={cn("flex scroll-mt-24 flex-col justify-between gap-3 sm:last:odd:col-span-2", area.is_mine && "!ring-2 !ring-amber-300/70")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    {area.is_mine && <Badge variant="pending" className="mb-1">Your sponsored area</Badge>}
                     <p className="text-sm font-semibold text-zinc-100">{area.area_name ?? "Sponsored area"}</p>
                     <p className="text-xs text-zinc-400">{describeRule(area.payout_rule)}</p>
+                    <p className="mt-0.5 text-xs font-medium text-emerald-300">{minBagsShort(area.payout_rule)} per event</p>
                     {area.message && <p className="mt-0.5 text-xs text-zinc-500">&quot;{area.message}&quot;</p>}
-                    {area.early_access && (
-                      <p className="mt-1 text-xs text-amber-300">✦ Plus groups get first pick until {untilText(area.early_access_until)}.</p>
+                    {area.scheduled ? (
+                      <p className="mt-1 text-xs text-violet-300">Scheduled. Plus members see it {untilText(area.plus_opens_at)}, everyone {untilText(area.opens_at)}.</p>
+                    ) : (
+                      area.early_access && (
+                        <p className="mt-1 text-xs text-violet-300">✦ Plus members only until {untilText(area.early_access_until)}.</p>
+                      )
                     )}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
@@ -262,7 +280,9 @@ export default function SponsoredSites() {
                     <span className="text-[11px] text-zinc-500">{usd(area.remaining_cents)} left</span>
                   </div>
                 </div>
-                <p className="text-xs text-zinc-500">Groups earn this by hosting a cleanup inside the area.</p>
+                <p className="text-xs text-zinc-500">
+                  Groups earn this by hosting a cleanup inside the area. {minBagsSentence(area.payout_rule).replace("you need", "the event needs")}
+                </p>
                 <Button variant="secondary" onClick={() => showOnMap(area.id)}>
                   Show on map
                 </Button>
@@ -274,18 +294,24 @@ export default function SponsoredSites() {
           const claim = site.my_claim;
           const busy = busyId === site.id;
           return (
-            <Card key={site.id} id={`sponsored-row-${site.id}`} className="flex scroll-mt-24 flex-col justify-between gap-3 sm:last:odd:col-span-2">
+            <Card key={site.id} id={`sponsored-row-${site.id}`} className={cn("flex scroll-mt-24 flex-col justify-between gap-3 sm:last:odd:col-span-2", site.is_mine && "!ring-2 !ring-amber-300/70")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
+                  {site.is_mine && <Badge variant="pending" className="mb-1">Your sponsored site</Badge>}
                   <p className="text-sm font-semibold text-zinc-100">{site.label}</p>
                   <p className="text-xs text-zinc-400">{describeRule(site.payout_rule)}</p>
+                  <p className="mt-0.5 text-xs font-medium text-emerald-300">{minBagsShort(site.payout_rule)}</p>
                   {site.message && <p className="mt-0.5 text-xs text-zinc-500">&quot;{site.message}&quot;</p>}
-                  {site.early_access && (
-                    <p className="mt-1 text-xs text-amber-300">
-                      {site.early_access_locked
-                        ? `✦ Plus early access. Opens to everyone ${untilText(site.early_access_until)}.`
-                        : `✦ Plus early access until ${untilText(site.early_access_until)}.`}
-                    </p>
+                  {site.scheduled ? (
+                    <p className="mt-1 text-xs text-violet-300">Scheduled. Plus members see it {untilText(site.plus_opens_at)}, everyone {untilText(site.opens_at)}.</p>
+                  ) : (
+                    site.early_access && (
+                      <p className="mt-1 text-xs text-violet-300">
+                        {site.early_access_locked
+                          ? `✦ Plus members only. Opens to everyone ${untilText(site.early_access_until)}.`
+                          : `✦ Plus members only until ${untilText(site.early_access_until)}.`}
+                      </p>
+                    )
                   )}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
@@ -313,18 +339,19 @@ export default function SponsoredSites() {
                     onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
                     className="block min-h-11 w-full text-sm text-zinc-400 file:mr-3 file:min-h-11 file:rounded-2xl file:border-0 file:bg-zinc-800 file:px-4 file:text-sm file:font-bold file:text-zinc-100"
                   />
-                  {claim.status === "in_progress" && site.payout_rule.type === "per_bag" && (
+                  {claim.status === "in_progress" && (
                     <>
                       <TextInput
                         type="number"
                         inputMode="numeric"
                         min="1"
                         step="1"
-                        placeholder="Bags collected"
-                        aria-label="Bags collected"
+                        placeholder="Large bags collected"
+                        aria-label="Large bags collected"
                         value={bags}
                         onChange={(e) => setBags(e.target.value)}
                       />
+                      <p className="text-xs text-zinc-500">{minBagsSentence(site.payout_rule)}</p>
                       {site.payout_rule.type === "per_bag" && (
                         <p className="text-xs text-zinc-500">
                           {parseInt(bags, 10) > 0
@@ -338,7 +365,9 @@ export default function SponsoredSites() {
               )}
 
               {!claim && site.available && !site.early_access_locked && (
-                <p className="text-xs text-zinc-500">{claimRangeNote(site.radius_meters)}</p>
+                <p className="text-xs text-zinc-500">
+                  {claimRangeNote(site.radius_meters)} {minBagsSentence(site.payout_rule)}
+                </p>
               )}
 
               <div className="flex gap-2">

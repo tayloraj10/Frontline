@@ -1,13 +1,13 @@
 import RewardsTabs from "@/components/RewardsTabs";
 import { PageHeader } from "@/components/ui/PageShell";
 import BrowseCleaners from "@/components/marketplace/BrowseCleaners";
-import { mkFetch, requireMarketplace } from "@/lib/marketplace.server";
+import { mkFetch, viewMarketplace } from "@/lib/marketplace.server";
 import type { CleanerCard } from "@/lib/marketplace";
 
 export default async function BrowseCleanersPage() {
-  const { user, isAdmin } = await requireMarketplace();
+  const { user, isAdmin } = await viewMarketplace();
   let loadFailed = false;
-  const cleaners = await mkFetch<CleanerCard[]>(user.id, isAdmin, "/cleaners").catch(() => {
+  const cleaners = await mkFetch<CleanerCard[]>(user?.id ?? "", isAdmin, "/cleaners").catch(() => {
     loadFailed = true;
     return [] as CleanerCard[];
   });

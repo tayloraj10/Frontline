@@ -6,6 +6,7 @@ const VARIANT_CLASS = {
   pending: "bg-amber-500/15 text-amber-400 border-transparent",
   error: "bg-red-500/15 text-red-400 border-transparent",
   info: "bg-sky-500/15 text-sky-400 border-transparent",
+  violet: "bg-violet-500/15 text-violet-400 border-transparent",
   neutral: "bg-zinc-800 text-zinc-400 border-transparent",
 } as const;
 

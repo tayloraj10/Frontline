@@ -49,7 +49,7 @@ Items marked "not read" are where confidence is lowest.
 
 Flow: sponsor pays (Checkout) -> pool funded -> cleaner claims in range -> before and after photos -> admin approves -> admin pays by hand and marks "paid".
 
-**Exists:** site pools and group-area pools (map + list); four payout rules (single, flat per cleanup, per bag, equal split per attendee); caps per person/group/day with 2x Plus multiplier and 48h Plus head start; locked-row approval so a pool never goes negative; claim expiry that reopens the site and notifies; plain-language summary on the sponsor form; admin review queue; proxy with allowlist, session identity, admin-only review routes.
+**Exists:** site pools and group-area pools (map + list); four payout rules (single, flat per cleanup, per bag, equal split per attendee); caps per person/group/day with 2x Plus multiplier and 24h Plus head start; locked-row approval so a pool never goes negative; claim expiry that reopens the site and notifies; plain-language summary on the sponsor form; admin review queue; proxy with allowlist, session identity, admin-only review routes.
 
 **Missing:** any in-app way to pay the cleaner; payout method for earners; notifications for approved, rejected, paid; earnings history; terms, age, tax steps; refund path for unspent sponsor money; review that scales past one admin.
 
@@ -96,7 +96,7 @@ Interface:
 
 ## Impact (`/impact`)
 
-**Exists:** Community view (cleanups, bags, pounds, participants, group totals); Funding view (donated, sponsored, Plus supporters, paid out, 12-month gifts chart); You view (monthly, yearly, all-time, recap link); partner grid; "Sponsor a group"; Plus widget with 2x caps, 48h early access, recap, badge.
+**Exists:** Community view (cleanups, bags, pounds, participants, group totals); Funding view (donated, sponsored, Plus supporters, paid out, 12-month gifts chart); You view (monthly, yearly, all-time, recap link); partner grid; "Sponsor a group"; Plus widget with 2x caps, 24h early access, recap, badge.
 
 **Missing:** a place showing what I earned, what is pending, what was paid; iOS billing path for Plus; accessible chart labels.
 

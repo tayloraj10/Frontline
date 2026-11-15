@@ -20,6 +20,33 @@ def _uid(key: str) -> str:
     return str(uuid.uuid5(MOCK_NS, key))
 
 
+# Varied sample sponsored sites (pins with a radius): label, lat, lon, radius_m, payout_rule, amount_cents, remaining_cents,
+# cap_per_user_cents, status. Covers each payout rule, a site nearly out of money and one that is used up.
+SAMPLE_SITES = [
+    ("Domino Park lawn edge", 40.7142, -73.9672, 100, {"type": "flat_per_cleanup", "amount_cents": 1500}, 6000, 6000, None, "funded"),
+    ("Maria Hernandez Park paths", 40.7035, -73.9232, 150, {"type": "per_bag", "cents_per_bag": 300, "max_bags": 10}, 9000, 7200, 3000, "funded"),
+    ("Parade Ground fence line", 40.6595, -73.9710, 300, {"type": "equal_split", "amount_cents": 2000}, 20000, 20000, None, "funded"),
+    ("Franklin Ave corner lot", 40.6782, -73.9442, 50, {"type": "flat_per_cleanup", "amount_cents": 1000}, 3000, 1000, 1000, "funded"),
+    ("Skillman Ave block", 40.7440, -73.9100, 200, {"type": "flat_per_cleanup", "amount_cents": 2000}, 8000, 8000, 2000, "funded"),
+    ("Green-Wood gate (used up)", 40.6580, -73.9980, 100, {"type": "flat_per_cleanup", "amount_cents": 1000}, 2000, 0, None, "exhausted"),
+]
+
+# Varied sample sponsored areas. Drawn polygons and existing neighborhoods (looked up by name).
+# No circles: no screen offers circle areas.
+# (name, source, shape, payout_rule, amount_cents)
+SAMPLE_AREAS = [
+    ("Fort Greene Park perimeter", "polygon",
+     "POLYGON((-73.9775 40.6885, -73.9715 40.6885, -73.9715 40.6925, -73.9775 40.6925, -73.9775 40.6885))",
+     {"type": "flat_per_cleanup", "amount_cents": 1500}, 7500),
+    ("Bed-Stuy blocks (drawn)", "polygon",
+     "POLYGON((-73.9500 40.6820, -73.9420 40.6830, -73.9410 40.6880, -73.9490 40.6890, -73.9500 40.6820))",
+     {"type": "per_bag", "cents_per_bag": 250, "max_bags": 8}, 6000),
+    ("Park Slope", "geo_units", "Park Slope", {"type": "flat_per_cleanup", "amount_cents": 1000}, 10000),
+    ("Williamsburg", "geo_units", "Williamsburg", {"type": "equal_split", "amount_cents": 3000}, 12000),
+    ("Crown Heights (North)", "geo_units", "Crown Heights (North)", {"type": "per_bag", "cents_per_bag": 200, "max_bags": 10}, 8000),
+]
+
+
 class PaymentsMockSeeder(Seeder):
     """Local-only payments v2 test data. Marks one existing user and one existing group as
     Frontline Plus subscribers and (optionally) creates funded sponsorships, all with
@@ -66,6 +93,8 @@ class PaymentsMockSeeder(Seeder):
                 await self._add_site(db, result, sponsor_id, float(params["site_lat"]), float(params["site_lon"]))
             if params.get("geo_unit_id"):
                 await self._add_group_area(db, result, sponsor_id, str(params["geo_unit_id"]))
+            if params.get("sample_sponsored"):
+                await self._add_samples(db, result, sponsor_id)
 
         await db.commit()
         return result
@@ -135,6 +164,72 @@ class PaymentsMockSeeder(Seeder):
             result.inserted += 1
         else:
             result.skipped += 1
+
+    @staticmethod
+    async def _add_samples(db: AsyncSession, result: SeedResult, sponsor_id: str) -> None:
+        """A varied set of funded sponsored sites and areas for testing the map, claiming and payout flows."""
+        for label, lat, lon, radius, rule, amount, remaining, cap, status in SAMPLE_SITES:
+            res = await db.execute(
+                text("""
+                    INSERT INTO sponsorships (id, sponsor_type, sponsor_user_id, target_type, amount_cents, message, status,
+                                              stripe_checkout_session_id, model, payout_rule, cap_per_user_cents, remaining_cents,
+                                              site_label, site_location, site_radius_meters, funded_at)
+                    VALUES (:id, 'user', :sponsor, 'site', :amount, 'Sample sponsored site', :status, :session, 'site',
+                            CAST(:rule AS jsonb), :cap, :remaining, :label,
+                            ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :radius, now())
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {"id": _uid(f"sample_site_{label}"), "sponsor": sponsor_id, "amount": amount, "status": status,
+                 "session": f"mock_session_sample_site_{label}", "rule": json.dumps(rule), "cap": cap, "remaining": remaining,
+                 "label": label, "lat": lat, "lon": lon, "radius": radius},
+            )
+            result.inserted += res.rowcount or 0
+
+        for name, source, shape, rule, amount in SAMPLE_AREAS:
+            if source == "geo_units":
+                geom_sql = "(SELECT geometry FROM geo_units WHERE display_name = :shape AND unit_type = 'nyc_neighborhood' LIMIT 1)"
+                args = {"shape": shape}
+            elif source == "circle":
+                lat, lon, radius = shape
+                geom_sql = "ST_Multi(ST_Buffer(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :radius)::geometry)"
+                args = {"lat": lat, "lon": lon, "radius": radius}
+            else:
+                geom_sql = "ST_Multi(ST_GeomFromEWKT(CAST(:shape AS text)))"
+                args = {"shape": f"SRID=4326;{shape}"}
+            res = await db.execute(
+                text(f"""
+                    INSERT INTO sponsorships (id, sponsor_type, sponsor_user_id, target_type, amount_cents, message, status,
+                                              stripe_checkout_session_id, model, payout_rule, remaining_cents,
+                                              area_geometry, area_name, area_source, funded_at)
+                    SELECT :id, 'user', :sponsor, 'area', :amount, 'Sample sponsored area', 'funded', :session, 'group_area',
+                           CAST(:rule AS jsonb), :amount, g.geom, :name, :source, now()
+                    FROM (SELECT {geom_sql} AS geom) g
+                    WHERE g.geom IS NOT NULL
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {"id": _uid(f"sample_area_{name}"), "sponsor": sponsor_id, "amount": amount, "session": f"mock_session_sample_area_{name}",
+                 "rule": json.dumps(rule), "name": name, "source": source, **args},
+            )
+            result.inserted += res.rowcount or 0
+
+        await PaymentsMockSeeder._stage_plus_windows(db)
+
+    @staticmethod
+    async def _stage_plus_windows(db: AsyncSession) -> None:
+        """Re-time a few sample pools on every seed so the Plus-only and scheduled states are always visible.
+
+        Plus-only now: Domino Park (funded 2h ago), Franklin Ave (starts in 20h), Park Slope (funded 3h ago).
+        Scheduled, hidden from everyone but the sponsor: Skillman Ave (3 days) and Williamsburg (2 days).
+        """
+        stages = [
+            ("sample_site_Domino Park lawn edge", "funded_at = now() - interval '2 hours', starts_at = NULL"),
+            ("sample_site_Franklin Ave corner lot", "starts_at = now() + interval '20 hours'"),
+            ("sample_area_Park Slope", "funded_at = now() - interval '3 hours', starts_at = NULL"),
+            ("sample_site_Skillman Ave block", "starts_at = now() + interval '3 days'"),
+            ("sample_area_Williamsburg", "starts_at = now() + interval '2 days'"),
+        ]
+        for key, sets in stages:
+            await db.execute(text(f"UPDATE sponsorships SET {sets} WHERE id = :id"), {"id": _uid(key)})
 
     @staticmethod
     async def _add_free_user(db: AsyncSession, result: SeedResult) -> None:
