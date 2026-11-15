@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limit_money, limit_writes
-from app.core.auth import CurrentUser, require_service, require_user
+from app.core.auth import CurrentUser, optional_user, require_service, require_user
 from app.db.database import get_db
 from app.services import connect
 from app.services.admin_roles import is_site_admin
@@ -27,6 +27,17 @@ class Actor(BaseModel):
 async def actor(user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)) -> Actor:
     """Identity comes from the verified Supabase token (core/auth.py), never from caller-supplied
     headers. Admin status is read from the database on every request."""
+    return Actor(user_id=user.id, is_admin=await is_site_admin(db, user.id))
+
+
+_ANON = UUID(int=0)
+
+
+async def viewer(user: CurrentUser | None = Depends(optional_user), db: AsyncSession = Depends(get_db)) -> Actor:
+    """Like actor, but a logged-out visitor is allowed (read-only public routes). They get a nil id that
+    matches no customer, cleaner or block row, so they only ever see what any non-participant sees."""
+    if user is None:
+        return Actor(user_id=_ANON, is_admin=False)
     return Actor(user_id=user.id, is_admin=await is_site_admin(db, user.id))
 
 
@@ -75,6 +86,58 @@ async def accept_agreement(
 @router.get("/me")
 async def me(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     return await svc.my_status(db, a.user_id)
+
+
+@router.get("/categories")
+async def categories(db: AsyncSession = Depends(get_db)):
+    return await svc.list_categories(db)
+
+
+class CategoryIn(BaseModel):
+    key: str | None = Field(default=None, max_length=40)
+    label: str | None = Field(default=None, max_length=60)
+    short_label: str | None = Field(default=None, max_length=60)
+    icon: str | None = Field(default=None, max_length=30)
+    color: str | None = Field(default=None, max_length=30)
+    badge: str | None = Field(default=None, max_length=30)
+    description: str | None = Field(default=None, max_length=400)
+    rule_note: str | None = Field(default=None, max_length=400)
+    sort_order: int | None = None
+    active: bool | None = None
+    bags_required: bool | None = None
+    after_photo_required: bool | None = None
+    requires_permission: bool | None = None
+    hazard_risk: bool | None = None
+
+
+@router.get("/admin/categories")
+async def admin_categories(a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
+    return await svc.list_categories(db, include_inactive=True)
+
+
+@router.post("/admin/categories")
+async def admin_create_category(body: CategoryIn, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
+    try:
+        return await svc.save_category(db, body.key or "", body.model_dump(exclude={"key"}), create=True)
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+
+
+@router.patch("/admin/categories/{key}")
+async def admin_update_category(key: str, body: CategoryIn, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
+    try:
+        return await svc.save_category(db, key, body.model_dump(exclude={"key"}), create=False)
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+
+
+@router.delete("/admin/categories/{key}")
+async def admin_delete_category(key: str, a: Actor = Depends(admin_only), db: AsyncSession = Depends(get_db)):
+    try:
+        await svc.delete_category(db, key)
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+    return {"ok": True}
 
 
 @router.get("/payments/card")
@@ -136,7 +199,7 @@ class CleanerProfileIn(BaseModel):
     years_experience: int | None = Field(default=None, ge=0, le=80)
     equipment: list[str] = Field(default_factory=list, max_length=12)
     availability: str | None = Field(default=None, max_length=200)
-    preferred_size: Literal["small", "medium", "large", "any"] | None = None
+    preferred_sizes: list[Literal["small", "medium", "large"]] = Field(default_factory=list, max_length=3)
 
 
 @router.put("/cleaner-profile", dependencies=[Depends(limit_writes)])
@@ -152,14 +215,14 @@ async def cleaners(
     service: str | None = None,
     latitude: float | None = None,
     longitude: float | None = None,
-    a: Actor = Depends(actor),
+    a: Actor = Depends(viewer),
     db: AsyncSession = Depends(get_db),
 ):
     return await svc.list_cleaners(db, service=service, latitude=latitude, longitude=longitude)
 
 
 @router.get("/cleaners/{cleaner_id}")
-async def cleaner(cleaner_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+async def cleaner(cleaner_id: UUID, a: Actor = Depends(viewer), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.get_cleaner(db, cleaner_id)
     except svc.MarketplaceError as e:
@@ -186,7 +249,7 @@ class JobIn(BaseModel):
     flexible_days: int | None = None
     price_type: Literal["hourly", "fixed"] = "fixed"
     price_cents: int = Field(gt=0, le=1_000_000)
-    radius_m: int | None = Field(default=None, ge=10, le=5000)
+    radius_m: int | None = Field(default=None, ge=1)  # bounded by the pin radius game settings
     polygon: list[list[float]] | None = None  # [[lng, lat], ...] drawn area
     photos: list[str] = Field(default_factory=list, max_length=4)  # photos of the site, uploaded first
     bag_dropoff_ok: bool = False  # customer is fine with the cleaner leaving bags at their place
@@ -195,7 +258,7 @@ class JobIn(BaseModel):
 
 
 @router.get("/pricing")
-async def pricing(a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+async def pricing(a: Actor = Depends(viewer), db: AsyncSession = Depends(get_db)):
     return await svc.pricing(db)
 
 
@@ -234,7 +297,7 @@ async def board_pins(
     latitude: float | None = None,
     longitude: float | None = None,
     job_type: str | None = None,
-    a: Actor = Depends(actor),
+    a: Actor = Depends(viewer),
     db: AsyncSession = Depends(get_db),
 ):
     return await svc.board_pins(
@@ -250,7 +313,7 @@ async def board(
     job_type: str | None = None,
     limit: int = 20,
     offset: int = 0,
-    a: Actor = Depends(actor),
+    a: Actor = Depends(viewer),
     db: AsyncSession = Depends(get_db),
 ):
     return await svc.list_board(
@@ -260,7 +323,7 @@ async def board(
 
 
 @router.get("/jobs/{job_id}")
-async def job(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+async def job(job_id: UUID, a: Actor = Depends(viewer), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.get_job(db, job_id, a.user_id, is_admin=a.is_admin)
     except svc.MarketplaceError as e:

@@ -9,6 +9,7 @@ import FitScreen from "@/components/ui/FitScreen";
 import SponsoredMap, { type MapView } from "./SponsoredMap";
 import SponsoredSites from "./SponsoredSites";
 import SponsorshipsHub from "./SponsorshipsHub";
+import { clearFlash, flashRow } from "@/lib/flashRow";
 
 /** Earn page body: sponsored sites (or neighbor jobs behind a toggle), plus a collapsed admin tools section for site admins. */
 export default function SponsorshipsPanels({
@@ -37,6 +38,9 @@ export default function SponsorshipsPanels({
   // Tapping the active chip again goes back to the combined map.
   const pick = (id: "jobs" | "sites") => {
     const next = doId === id ? null : id;
+    // Switching views starts fresh: close any open map popups and the list highlight.
+    document.querySelectorAll<HTMLElement>(".maplibregl-popup-close-button").forEach((b) => b.click());
+    clearFlash();
     setDoId(next);
     setEarnView(next ?? "all");
     window.history.replaceState(null, "", next ? `/earn?do=${next}` : "/earn");
@@ -45,7 +49,7 @@ export default function SponsorshipsPanels({
   // Pin card "Show in list": switch to the jobs view if needed, then scroll that job row to the middle of the screen.
   const seeJobInList = (id: string) => {
     if (doId !== "jobs") pick("jobs");
-    setTimeout(() => document.getElementById(`job-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+    setTimeout(() => flashRow(`job-${id}`), 120);
   };
   const onJobs = !!jobsView && doId === "jobs";
   // Returning from Stripe Checkout: keep the default view, just drop the return flag from the URL.
@@ -63,8 +67,8 @@ export default function SponsorshipsPanels({
 
     const chips: DoChip[] = jobsView
     ? [
-        { id: "jobs", label: "Take a job", color: "emerald", sub: "Open jobs", icon: Briefcase, onSelect: () => pick("jobs") },
-        { id: "sites", label: "Claim a site", color: "sky", sub: "Sponsored sites", icon: MapPin, onSelect: () => pick("sites") },
+        { id: "jobs", label: "Take a job", color: "sky", sub: "Open jobs", icon: Briefcase, onSelect: () => pick("jobs") },
+        { id: "sites", label: "Claim a site", color: "emerald", sub: "Sponsored sites", icon: MapPin, onSelect: () => pick("sites") },
         { id: "profile", label: "Cleaner profile", color: "violet", sub: "Photo, payouts", icon: UserRound, href: "/earn/profile" },
         { id: "mine", label: "My jobs", color: "amber", sub: "Active, past", icon: ClipboardList, href: "/fund/jobs" },
       ]
@@ -84,8 +88,8 @@ export default function SponsorshipsPanels({
         <SponsoredMap compact fill withJobs={!!jobsView} view={earnView} onViewChange={setView} onSeeJobInList={seeJobInList} />
         {chips.length > 0 && <DoChooser chips={chips} active={doId} />}
       </FitScreen>
-      {onJobs && jobsView}
       {extras}
+      {onJobs && jobsView}
       {(doId === "sites" || !jobsView) && <SponsoredSites />}
       {!onJobs && !fundOnHire && (
         <div className="mt-6">

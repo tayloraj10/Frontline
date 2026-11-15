@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { Banknote, Flag, Scale, ShieldCheck, UserCheck } from "lucide-react";
 import RewardsTabs from "@/components/RewardsTabs";
+import FundingGuideCard from "@/components/marketplace/FundingGuideCard";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { PageHeader } from "@/components/ui/PageShell";
-import SponsorshipsHub from "@/app/earn/SponsorshipsHub";
-import { mkFetch, requireMarketplace } from "@/lib/marketplace.server";
-import { createClient } from "@/lib/supabase/server";
-import { getSponsorBusinesses } from "@/lib/sponsorBusinesses";
+import { mkFetch, viewMarketplace } from "@/lib/marketplace.server";
 import FundMapPanel from "./FundMapPanel";
-import FundingGuideCard from "@/components/marketplace/FundingGuideCard";
 import { FUND_TAB_LABEL } from "@/lib/rewardsLabels";
 import PoolCard from "@/components/sponsorships/PoolCard";
 import { listPools } from "@/lib/sponsorshipPools.server";
@@ -16,13 +13,10 @@ import type { AdminOverview } from "@/components/marketplace/AdminPanel";
 
 /** Fund tab: pay a neighbor to clean (post a job) or sponsor a cleanup. Taking jobs lives on the Earn tab. */
 export default async function MarketplacePage() {
-  const { user, isAdmin } = await requireMarketplace();
-  const supabase = await createClient();
-  const [overview, businesses, pools, minCents] = await Promise.all([
-    isAdmin ? mkFetch<AdminOverview>(user.id, isAdmin, "/admin/overview").catch(() => null) : Promise.resolve(null),
-    getSponsorBusinesses(supabase, user.id),
+  const { user, isAdmin } = await viewMarketplace();
+  const [overview, pools] = await Promise.all([
+    isAdmin && user ? mkFetch<AdminOverview>(user.id, isAdmin, "/admin/overview").catch(() => null) : Promise.resolve(null),
     listPools().then((r) => r?.open ?? []).catch(() => []),
-    mkFetch<{ min_price_cents: number }>(user.id, isAdmin, "/pricing").then((p) => p.min_price_cents).catch(() => 1500),
   ]);
   const queue = overview
     ? [
@@ -39,21 +33,10 @@ export default async function MarketplacePage() {
         eyebrow="Rewards"
         title={FUND_TAB_LABEL}
         subtitle="Hire a neighbor, sponsor a place, or crowdfund a big cleanup."
-        titleAction={<FlowGuide id="marketplace" variant="link" label="How does this work?" />}
+        titleAction={<FlowGuide id="marketplace" variant="link" label="How does funding work?" />}
       />
       <RewardsTabs current="hire" />
       <FundMapPanel
-        sponsor={
-          <div className="mb-6">
-            <h2 id="sponsor" className="mb-1 scroll-mt-4 text-sm font-bold text-zinc-100">Sponsor a cleanup</h2>
-            <p className="mb-2 text-sm text-zinc-400">Put money behind cleanups at a place. It is only paid out after the work is verified. Choose how it is set up:</p>
-            <ul className="mb-4 space-y-1 text-sm text-zinc-400">
-              <li><span className="font-semibold text-zinc-200">Cleanup site:</span> one spot, shown as a pin. Any neighbor can claim it and get paid.</li>
-              <li><span className="font-semibold text-zinc-200">Group area:</span> a whole region, shown as a shaded area. Groups host cleanup events there and get paid.</li>
-            </ul>
-            <SponsorshipsHub businesses={businesses} currentUserId={user.id} isAdmin={isAdmin} open="fund" minCents={minCents} />
-          </div>
-        }
         extras={
           <>
             <FundingGuideCard />

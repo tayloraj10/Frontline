@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import stripe
@@ -7,9 +8,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limit_money, limit_writes
-from app.core.auth import CurrentUser, require_admin, require_user
+from app.core.auth import CurrentUser, optional_user, require_admin, require_user
 from app.db.database import get_db
-from app.services import connect, earn_payouts, sponsored_cleanups
+from app.services import connect, earn_payouts, earning_limits, sponsored_cleanups
 from app.services import sponsorships as sponsorships_service
 
 router = APIRouter(prefix="/sponsorships", tags=["sponsorships"])
@@ -40,9 +41,21 @@ class CreateSponsorshipCheckoutRequest(BaseModel):
     target_group_id: UUID | None = None
     # site / group_area: whether other people may add money onto this one (default yes)
     open_to_additions: bool = True
+    # site / group_area: optional go-live time. Plus members see it one lead window earlier.
+    starts_at: datetime | None = None
 
     @model_validator(mode="after")
     def _check_one_of(self):
+        if self.starts_at is not None:
+            if self.model not in ("site", "group_area"):
+                raise ValueError("starts_at only applies to site and group_area sponsorships")
+            if self.starts_at.tzinfo is None:
+                raise ValueError("starts_at needs a timezone")
+            now = datetime.now(timezone.utc)
+            if self.starts_at <= now:
+                raise ValueError("starts_at must be in the future")
+            if self.starts_at > now + timedelta(days=90):
+                raise ValueError("starts_at can be at most 90 days out")
         if self.sponsor_type == "user" and not self.sponsor_user_id:
             raise ValueError("sponsor_user_id is required when sponsor_type is 'user'")
         if self.sponsor_type == "business" and not self.sponsor_business_id:
@@ -112,7 +125,7 @@ async def create_checkout_session(
         if payload.model in ("site", "group_area"):
             payout_rule = sponsored_cleanups.validate_payout_rule(payload.model, payload.payout_rule or {})
         if payload.model == "site":
-            sponsored_cleanups.validate_site_radius(payload.site_radius_meters or 0)
+            await sponsored_cleanups.validate_site_radius(db, payload.site_radius_meters or 0)
         if payload.model == "group_area":
             area_wkt, area_source, area_default_name = await sponsored_cleanups.build_area_geometry(
                 db, payload.area or {}
@@ -134,7 +147,7 @@ async def create_checkout_session(
             cancel_url=payload.cancel_url,
             model=payload.model,
             payout_rule=payout_rule,
-            cap_per_user_cents=payload.cap_per_user_cents,
+            cap_per_user_cents=None,  # retired: no per-person cap on a site
             site_label=payload.site_label,
             site_latitude=payload.site_latitude,
             site_longitude=payload.site_longitude,
@@ -144,6 +157,7 @@ async def create_checkout_session(
             area_name=(payload.area_name or "").strip()[:80] or area_default_name,
             target_group_id=payload.target_group_id,
             open_to_additions=payload.open_to_additions,
+            starts_at=payload.starts_at,
         )
     except sponsorships_service.MinimumAmountError as e:
         raise HTTPException(400, str(e)) from e
@@ -213,10 +227,10 @@ def _raise(e: sponsored_cleanups.SponsoredError):
 
 @router.get("/sites")
 async def list_sites(
-    user: CurrentUser = Depends(require_user),
+    user: CurrentUser | None = Depends(optional_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return {"sites": await sponsored_cleanups.list_sites(db, user.id)}
+    return {"sites": await sponsored_cleanups.list_sites(db, user.id if user else None)}
 
 
 @router.get("/my-limits")
@@ -229,10 +243,10 @@ async def my_limits(
 
 @router.get("/map")
 async def map_features(
-    user: CurrentUser = Depends(require_user),
+    user: CurrentUser | None = Depends(optional_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await sponsored_cleanups.list_map_features(db)
+    return await sponsored_cleanups.list_map_features(db, user.id if user else None)
 
 
 @router.get("/group-areas")
@@ -240,15 +254,16 @@ async def list_group_areas(
     group_id: UUID | None = None,
     lat: float | None = None,
     lng: float | None = None,
-    user: CurrentUser = Depends(require_user),
+    user: CurrentUser | None = Depends(optional_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return {"areas": await sponsored_cleanups.list_group_areas(db, group_id, lat, lng)}
+    return {"areas": await sponsored_cleanups.list_group_areas(db, group_id, lat, lng, user.id if user else None)}
 
 
 class SiteClaimRequest(BaseModel):
     latitude: float
     longitude: float
+    timezone: str | None = None  # IANA name from the browser, used to find the person's local midnight
 
 
 class SitePhotoRequest(SiteClaimRequest):
@@ -265,7 +280,7 @@ async def claim_site(
 ):
     try:
         return await sponsored_cleanups.claim_site(
-            db, sponsorship_id, user.id, payload.latitude, payload.longitude
+            db, sponsorship_id, user.id, payload.latitude, payload.longitude, payload.timezone
         )
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
@@ -406,6 +421,12 @@ async def _group_admin(group_id: UUID, user: CurrentUser, db: AsyncSession) -> N
 
     if not await is_group_admin(db, group_id, user.id):
         raise HTTPException(403, "Only a group admin can manage group payouts.")
+
+
+@router.get("/groups/{group_id}/earning-limit")
+async def group_earning_limit(group_id: UUID, user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    await _group_admin(group_id, user, db)
+    return await earning_limits.group_weekly_status(db, group_id)
 
 
 @router.get("/groups/{group_id}/payouts/status")

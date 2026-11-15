@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { circleRing, type LngLat } from "@/lib/areaShape";
+import { Layers } from "lucide-react";
+import { circleRing, drawBlocker, LIMITS, type LngLat } from "@/lib/areaShape";
 import { ExpandIcon, mapIconBtn, newGeolocateControl } from "./sponsorMapControls";
 import { cn } from "@/lib/cn";
 import { useSponsoredMapLayer } from "./useSponsoredMapLayer";
+import { useJobPinsLayer } from "./useJobPinsLayer";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 const SRC = "shape-picker";
@@ -39,6 +41,8 @@ export default function ShapePickerMap({
   onVertices,
   flyTo,
   invalid,
+  maxAreaSqm = LIMITS.maxAreaSqm,
+  maxVertices = LIMITS.maxVertices,
 }: {
   mode: "point" | "polygon";
   point: LngLat | null;
@@ -50,6 +54,9 @@ export default function ShapePickerMap({
   flyTo?: LngLat | null;
   /** Draws the shape red instead of green while the parent says it is not valid. */
   invalid?: boolean;
+  /** Corners that would push the drawn area past this are refused while drawing. */
+  maxAreaSqm?: number;
+  maxVertices?: number;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -62,11 +69,23 @@ export default function ShapePickerMap({
   const cornerRefs = useRef<maplibregl.Marker[]>([]);
 
   // Latest props for the long-lived map handlers.
-  const live = useRef({ mode, vertices, onPoint, onVertices });
-  live.current = { mode, vertices, onPoint, onVertices };
+  const live = useRef({ mode, vertices, onPoint, onVertices, maxAreaSqm, maxVertices });
+  live.current = { mode, vertices, onPoint, onVertices, maxAreaSqm, maxVertices };
+  const [blockMsg, setBlockMsg] = useState<string | null>(null);
+  const blockTimer = useRef<number | undefined>(undefined);
+  const flashBlock = (msg: string) => {
+    setBlockMsg(msg);
+    window.clearTimeout(blockTimer.current);
+    blockTimer.current = window.setTimeout(() => setBlockMsg(null), 3500);
+  };
+  const flashRef = useRef(flashBlock);
+  flashRef.current = flashBlock;
+  useEffect(() => () => window.clearTimeout(blockTimer.current), []);
 
   // Existing funded sites and areas, shown for context so new sponsorships do not stack on top of old ones.
   useSponsoredMapLayer(mapRef, true, { availableOnly: false, listenForFocus: false });
+  // Show open jobs too, so people see the whole ecosystem and do not stack on or duplicate an existing one.
+  useJobPinsLayer(mapRef, true);
 
   useEffect(() => {
     if (!container.current || mapRef.current) return;
@@ -102,7 +121,12 @@ export default function ShapePickerMap({
       const { mode: md, vertices: vs, onPoint: setPoint, onVertices: setVertices } = live.current;
       const p: LngLat = [e.lngLat.lng, e.lngLat.lat];
       if (md === "point") setPoint(p);
-      else setVertices([...vs, p]);
+      else {
+        const next = [...vs, p];
+        const why = drawBlocker(next, live.current.maxAreaSqm, live.current.maxVertices);
+        if (why) flashRef.current(why);
+        else setVertices(next);
+      }
     });
     mapRef.current = m;
     return () => {
@@ -183,7 +207,12 @@ export default function ShapePickerMap({
         const ll = mk.getLngLat();
         const next = live.current.vertices.slice();
         next[i] = [ll.lng, ll.lat];
-        live.current.onVertices(next);
+        const why = drawBlocker(next, live.current.maxAreaSqm, live.current.maxVertices);
+        if (why) {
+          flashRef.current(why);
+          // Snap the corner back: a fresh array re-renders the markers at their old spots.
+          live.current.onVertices(live.current.vertices.slice());
+        } else live.current.onVertices(next);
       });
       return mk;
     });
@@ -226,6 +255,11 @@ export default function ShapePickerMap({
           <div ref={container} className="h-full w-full" />
         </div>
 
+        {blockMsg && (
+          <div role="status" className="pointer-events-none absolute left-14 right-3 top-3 z-10 rounded-xl bg-red-950/90 px-3 py-2 text-center text-xs font-semibold text-red-200 ring-1 ring-red-400/40">
+            {blockMsg}
+          </div>
+        )}
         <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
           <button
             type="button"
@@ -236,24 +270,17 @@ export default function ShapePickerMap({
           >
             <ExpandIcon open={expanded} />
           </button>
+          <button
+            type="button"
+            onClick={() => changeBasemap(BASEMAPS[(BASEMAPS.findIndex((b) => b.value === basemap) + 1) % BASEMAPS.length].value)}
+            title={`Map style: ${BASEMAPS.find((b) => b.value === basemap)?.label}. Tap to switch.`}
+            aria-label="Switch map style"
+            className={mapIconBtn}
+          >
+            <Layers className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
 
-        <div className="absolute bottom-3 left-3 z-10 flex gap-0.5 rounded-full bg-zinc-900/90 p-1 shadow-elevation-3 backdrop-blur-sm">
-          {BASEMAPS.map((b) => (
-            <button
-              key={b.value}
-              type="button"
-              onClick={() => changeBasemap(b.value)}
-              aria-pressed={basemap === b.value}
-              className={cn(
-                "min-h-8 rounded-full px-3 text-xs font-medium touch-manipulation transition-[background-color,color,transform] duration-150 active:scale-[0.95]",
-                basemap === b.value ? "bg-zinc-600 text-zinc-100" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200",
-              )}
-            >
-              {b.label}
-            </button>
-          ))}
-        </div>
       </div>
       {!expanded && (
         <p className="mt-2 text-xs text-zinc-500">

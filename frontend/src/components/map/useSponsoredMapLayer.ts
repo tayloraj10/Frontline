@@ -1,9 +1,17 @@
 "use client";
 
+
+import { minLargeBags } from "@/lib/sponsoredBags";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import maplibregl from "maplibre-gl";
 import { getPosition } from "@/lib/getPosition";
 import { circleRing } from "@/lib/areaShape";
+import { saveMapReturn } from "@/lib/mapReturn";
+import { flashRow } from "@/lib/flashRow";
+import { ensureLoggedIn } from "@/lib/loginRedirect";
+
+/** The map the popups currently belong to, so a popup link can save its camera. */
+let activeMap: maplibregl.Map | null = null;
 
 /**
  * Payments v2 sponsored areas on the map. One fetch per mount from the allowlisted proxy;
@@ -12,26 +20,71 @@ import { circleRing } from "@/lib/areaShape";
  * dashed outlines with a light fill. On by default; the caller owns the toggle.
  */
 
-type PayoutRule = { type: string; amount_cents?: number; cents_per_bag?: number };
+type PayoutRule = { type: string; amount_cents?: number; cents_per_bag?: number; one_winner?: boolean };
 
-interface MapSite {
+/** Where a pool is in its Plus lead window. Scheduled ones are only returned to their sponsor. */
+interface WindowInfo {
+  early_access?: boolean;
+  early_access_until?: string | null;
+  early_access_locked?: boolean;
+  scheduled?: boolean;
+  opens_at?: string | null;
+  plus_opens_at?: string | null;
+}
+
+const whenText = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+
+/** One line for the popup and list: null when the pool is simply open to everyone. */
+function windowLine(w: WindowInfo): { text: string; color: string } | null {
+  if (w.scheduled) {
+    return { text: `Scheduled. Plus members see it ${whenText(w.plus_opens_at)}, everyone ${whenText(w.opens_at)}.`, color: "#fbbf24" };
+  }
+  if (w.early_access_locked) {
+    return { text: `✦ Plus members only until ${whenText(w.early_access_until)}, then open to everyone.`, color: "#c4b5fd" };
+  }
+  if (w.early_access) {
+    return { text: `✦ Plus early access until ${whenText(w.early_access_until)}. Opens to everyone then.`, color: "#c4b5fd" };
+  }
+  return null;
+}
+
+interface MapSite extends WindowInfo {
   id: string;
   label: string | null;
   remaining_cents: number;
   payout_rule: PayoutRule;
   open_to_additions?: boolean;
+  is_mine?: boolean;
   radius_meters?: number | null;
   latitude: number;
   longitude: number;
   available: boolean;
+  /** Set when this site was funded by a crowdfund pool. */
+  pool_id?: string | null;
 }
 
-interface MapArea {
+/** A crowdfund pool still raising its goal. Not claimable yet. */
+interface MapPool {
+  id: string;
+  title: string;
+  place: string | null;
+  model: "site" | "group_area";
+  goal_cents: number;
+  raised_cents: number;
+  deadline: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+interface MapArea extends WindowInfo {
   id: string;
   area_name: string | null;
   remaining_cents: number;
   payout_rule: PayoutRule;
   open_to_additions?: boolean;
+  is_mine?: boolean;
+  pool_id?: string | null;
   geometry: GeoJSON.Geometry;
 }
 
@@ -47,15 +100,18 @@ const RING_SOURCE_ID = "sponsored-site-rings";
 const RING_FILL_ID = "sponsored-site-rings-fill";
 const RING_LINE_ID = "sponsored-site-rings-line";
 const COLOR = "#34d399";
+// Pools you funded read yellow everywhere, matching your own job pins.
+const MINE_COLOR = "#fcd34d";
 const DEFAULT_CLAIM_RADIUS_M = 100;
 
 const usd = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
 
 function ruleParts(rule: PayoutRule): { amount: string; caption: string } {
-  if (rule.type === "per_bag") return { amount: usd(rule.cents_per_bag ?? 0), caption: "per bag" };
-  if (rule.type === "equal_split") return { amount: usd(rule.amount_cents ?? 0), caption: "split among attendees" };
-  return { amount: usd(rule.amount_cents ?? 0), caption: "per cleanup" };
+  if (rule.type === "per_bag") return { amount: usd(rule.cents_per_bag ?? 0), caption: "per bag, once a day per person" };
+  if (rule.type === "equal_split") return { amount: usd(rule.amount_cents ?? 0), caption: "per attendee, while funds last" };
+  if (rule.one_winner) return { amount: usd(rule.amount_cents ?? 0), caption: "to the first verified cleanup" };
+  return { amount: usd(rule.amount_cents ?? 0), caption: "per cleanup, once a day per person" };
 }
 
 function el(tag: string, css: string, text?: string) {
@@ -91,7 +147,7 @@ export function claimRangeNote(radius?: number | null) {
 }
 
 /** One popup for several pools covering the same spot, so overlapping sponsors read as a group. */
-function overlapNode(areas: { name: string; left: number; rule: PayoutRule }[]) {
+function overlapNode(areas: { name: string; left: number; rule: PayoutRule; mine?: boolean; win?: WindowInfo }[]) {
   const root = el("div", "width:236px;max-width:100%;box-sizing:border-box;font-family:inherit;color:#f4f4f5");
   const total = areas.reduce((n, a) => n + a.left, 0);
   root.append(
@@ -103,9 +159,12 @@ function overlapNode(areas: { name: string; left: number; rule: PayoutRule }[]) 
     const { amount, caption } = ruleParts(a.rule);
     const row = el("div", "margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)");
     row.append(
-      el("div", "font-size:13px;font-weight:700", a.name),
+      el("div", "font-size:13px;font-weight:700", a.mine ? `${a.name} (yours)` : a.name),
       el("div", "font-size:12px;color:#d4d4d8;margin-top:2px", `${amount} ${caption} · ${usd(a.left)} left`),
+      el("div", "font-size:11px;color:#6ee7b7;margin-top:2px", `Needs at least ${minLargeBags(a.rule)} large bag${minLargeBags(a.rule) === 1 ? "" : "s"}`),
     );
+    const wl = a.win ? windowLine(a.win) : null;
+    if (wl) row.append(el("div", `font-size:11px;font-weight:600;margin-top:2px;color:${wl.color}`, wl.text));
     root.append(row);
   }
   root.append(el("div", "font-size:12px;color:#fbbf24;margin-top:8px", "Groups: pick the pool you want when you host a cleanup here."));
@@ -120,7 +179,7 @@ function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number) {
   return 2 * r * Math.asin(Math.sqrt(h));
 }
 
-const distanceText = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
+const distanceText = (m: number) => (m >= 1609 ? `${(m / 1609.344).toFixed(1)} mi` : `${Math.round((m * 3.28084) / 10) * 10} ft`);
 
 // Only when location is already allowed, so opening a popup never triggers a permission prompt.
 async function fillDistanceLine(target: HTMLElement, site: { lat: number; lng: number; radius?: number | null }) {
@@ -167,30 +226,54 @@ function popupNode(
   note?: string,
   addId?: string | null,
   where?: { id: string; lat?: number; lng?: number; radius?: number | null },
+  mine?: boolean,
+  win?: WindowInfo,
 ) {
   const { amount, caption } = ruleParts(rule);
   const root = el("div", "width:236px;max-width:100%;box-sizing:border-box;font-family:inherit;color:#f4f4f5");
   root.append(
-    el("div", "font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#34d399", kind),
+    el("div", `font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${mine ? MINE_COLOR : "#34d399"}`, mine ? `Your ${kind.toLowerCase()}` : kind),
     el("div", "font-size:16px;font-weight:700;line-height:1.25;margin-top:2px;padding-right:20px", title),
   );
+  const line = win ? windowLine(win) : null;
+  if (line) {
+    root.append(
+      el(
+        "div",
+        `margin-top:6px;padding:6px 10px;border-radius:10px;background:rgba(139,92,246,.14);border:1px solid rgba(139,92,246,.4);font-size:12px;font-weight:600;line-height:1.35;color:${line.color}`,
+        line.text,
+      ),
+    );
+  }
   const stats = el(
     "div",
-    "margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)",
+    mine
+      ? "margin-top:6px;padding:6px 10px;border-radius:12px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35)"
+      : "margin-top:6px;padding:6px 10px;border-radius:12px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)",
   );
   const big = el("div", "display:flex;align-items:baseline;gap:6px");
   big.append(
-    el("span", "font-size:28px;font-weight:800;line-height:1;color:#6ee7b7", amount),
+    el("span", `font-size:26px;font-weight:800;line-height:1;color:${mine ? "#fde68a" : "#6ee7b7"}`, amount),
     el("span", "font-size:12px;color:#d4d4d8", caption),
   );
-  stats.append(big, el("div", "font-size:12px;color:#a1a1aa;margin-top:4px", `${usd(left)} left in the pool`));
+  const minBags = minLargeBags(rule);
+  stats.append(
+    big,
+    el(
+      "div",
+      "font-size:12px;margin-top:3px;color:#a1a1aa",
+      `${usd(left)} left · `,
+    ),
+  );
+  const bagsSpan = el("span", "font-weight:700;color:#6ee7b7", `needs ${minBags}+ large bag${minBags === 1 ? "" : "s"}`);
+  stats.lastElementChild?.append(bagsSpan);
   root.append(stats);
 
   // One quiet status block instead of several stacked lines under the button.
-  const status = el("div", "margin-top:6px;display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:1.35");
+  const status = el("div", "margin-top:4px;display:flex;flex-direction:column;gap:1px;font-size:12px;line-height:1.35");
   if (note) status.append(el("div", cta ? "color:#d4d4d8" : "color:#fbbf24", note));
   const distLine = el("div", "");
-  const limitLine = el("div", "font-size:11px;color:#a1a1aa");
+  const limitLine = el("div", "");
   if (cta?.onClick) {
     status.append(distLine, limitLine);
     void fillLimitLine(limitLine);
@@ -201,7 +284,7 @@ function popupNode(
   const claimStatus = el("div", "font-size:12px;margin-top:6px");
   if (cta) {
     const ctaCss =
-      "display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:8px;border-radius:999px;" +
+      "display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:6px;border-radius:999px;" +
       "background:#059669;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border:0;cursor:pointer";
     if (cta.onClick) {
       const b = el("button", ctaCss, cta.label) as HTMLButtonElement;
@@ -216,13 +299,13 @@ function popupNode(
   }
 
   // Secondary actions share one row, so the primary button stays the clear next step.
-  const row = el("div", "display:flex;gap:8px;margin-top:8px;width:100%;min-width:0");
+  const row = el("div", "display:flex;gap:8px;margin-top:6px;width:100%;min-width:0");
   if (where) {
     // The list may render after the map, so show the button as soon as its row exists.
     const rowId = `sponsored-row-${where.id}`;
     const list = pillButton("button", "background:#27272a;color:#f4f4f5", "Show in list", ICON_LIST) as HTMLButtonElement;
     list.type = "button";
-    list.addEventListener("click", () => document.getElementById(rowId)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    list.addEventListener("click", () => flashRow(rowId));
     const sync = () => {
       list.style.display = document.getElementById(rowId) ? "flex" : "none";
     };
@@ -239,6 +322,7 @@ function popupNode(
   if (where && typeof window !== "undefined" && !window.location.pathname.startsWith("/earn")) {
     const more = pillButton("a", "background:#059669;color:#fff", "View details", ICON_LIST) as HTMLAnchorElement;
     more.href = "/earn";
+    more.addEventListener("click", () => saveMapReturn(activeMap));
     row.prepend(more);
   }
   if (!cta && addId) root.append(el("div", "font-size:11px;color:#a1a1aa;margin-top:6px", "Open to additions. Chip in to fund more cleanups here."));
@@ -246,20 +330,31 @@ function popupNode(
   return root;
 }
 
-// Shows what is left of today's payout limit under the claim button, so nobody claims a site they
+// Shows what is left of this week's earning limit under the claim button, so nobody claims a site they
 // cannot be paid for. Quietly absent when the limit cannot be loaded.
+// Temporary: show the limit line in every popup so it can be reviewed; then only show it near the limit.
+const FORCE_SHOW_LIMIT = false;
+
 async function fillLimitLine(target: HTMLElement) {
   try {
     const res = await fetch("/api/sponsored/my-limits", { cache: "no-store" });
     if (!res.ok) return;
-    const l = (await res.json()) as { limit_cents: number; remaining_cents: number };
+    const l = (await res.json()) as { limit_cents: number; remaining_cents: number; locked: boolean };
     const dollars = (c: number) => `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)}`;
-    if (l.remaining_cents <= 0) {
-      target.style.color = "#fbbf24";
-      target.textContent = `You have reached today's ${dollars(l.limit_cents)} payout limit. It resets tomorrow.`;
-    } else {
-      target.textContent = `${dollars(l.remaining_cents)} left of your ${dollars(l.limit_cents)} daily payout limit.`;
-    }
+    const pct = Math.min(100, Math.round(((l.limit_cents - l.remaining_cents) / Math.max(1, l.limit_cents)) * 100));
+    const near = l.locked || pct >= 80;
+    if (!FORCE_SHOW_LIMIT && !near) return;
+    target.style.cssText = "margin-top:3px;padding:6px 10px;border-radius:10px;background:#27272a;font-size:12px;line-height:1.35;white-space:nowrap;color:" + (near ? "#fbbf24" : "#d4d4d8");
+    const text = el(
+      "div",
+      "font-weight:600",
+      l.locked
+        ? `Weekly earning limit reached (${dollars(l.limit_cents)}). You can't claim new sites until it drops.`
+        : `${dollars(l.remaining_cents)} left of ${dollars(l.limit_cents)} weekly limit`,
+    );
+    const track = el("div", "height:4px;border-radius:999px;background:#3f3f46;overflow:hidden;margin-top:4px");
+    track.append(el("div", `height:100%;width:${pct}%;border-radius:999px;background:${near ? "#fbbf24" : "#38bdf8"}`));
+    target.append(text, track);
   } catch {
     /* leave blank */
   }
@@ -276,12 +371,20 @@ async function claimFromPopup(siteId: string, btn: HTMLButtonElement, status: HT
   btn.textContent = "Checking your location...";
   status.textContent = "";
   try {
+    if (!(await ensureLoggedIn())) {
+      btn.textContent = "Taking you to log in...";
+      return;
+    }
     const pos = await getPosition();
     btn.textContent = "Claiming...";
     const res = await fetch(`/api/sponsored/${siteId}/claim`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      body: JSON.stringify({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
     });
     if (!res.ok) {
       let msg = "Could not claim this site.";
@@ -316,6 +419,12 @@ function openPopup(popup: maplibregl.Popup, m: maplibregl.Map) {
   el.style.zIndex = "100";
   const fit = () => {
     const frame = m.getContainer().getBoundingClientRect();
+    // Popups live inside the map frame and are clipped by it, so a card taller than the frame scrolls.
+    const body = el.querySelector<HTMLElement>(".maplibregl-popup-content");
+    if (body) {
+      body.style.maxHeight = `${Math.max(160, frame.height - 40)}px`;
+      body.style.overflowY = "auto";
+    }
     const card = el.getBoundingClientRect();
     const pad = 12;
     const dy = Math.max(0, frame.top + pad - card.top) - Math.max(0, card.bottom - (frame.bottom - pad));
@@ -352,7 +461,8 @@ export function useSponsoredMapLayer(
   openSiteCount: number;
   points: [number, number][];
 } {
-  const [data, setData] = useState<{ sites: MapSite[]; areas: MapArea[] } | null>(null);
+  const [data, setData] = useState<{ sites: MapSite[]; areas: MapArea[]; pools?: MapPool[] } | null>(null);
+  const poolMarkersRef = useRef<maplibregl.Marker[]>([]);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const areaLabelsRef = useRef<maplibregl.Marker[]>([]);
   const handlersRef = useRef(false);
@@ -395,7 +505,9 @@ export function useSponsoredMapLayer(
 
   useEffect(() => {
     const m = mapRef.current;
+    if (m) activeMap = m;
     if (!m || !data) return;
+    const elNode = el;
 
     const ensureAreas = () => {
       if (!m.getStyle()) return;
@@ -410,6 +522,15 @@ export function useSponsoredMapLayer(
             left: a.remaining_cents,
             rule: JSON.stringify(a.payout_rule),
             open: a.open_to_additions ? 1 : 0,
+            mine: a.is_mine ? 1 : 0,
+            win: JSON.stringify({
+              early_access: a.early_access,
+              early_access_until: a.early_access_until,
+              early_access_locked: a.early_access_locked,
+              scheduled: a.scheduled,
+              opens_at: a.opens_at,
+              plus_opens_at: a.plus_opens_at,
+            }),
           },
           geometry: a.geometry,
         })),
@@ -427,14 +548,14 @@ export function useSponsoredMapLayer(
           type: "fill",
           source: SOURCE_ID,
           layout: { visibility: vis },
-          paint: { "fill-color": COLOR, "fill-opacity": 0.12 },
+          paint: { "fill-color": ["case", ["==", ["get", "mine"], 1], MINE_COLOR, COLOR], "fill-opacity": 0.12 },
         });
         m.addLayer({
           id: LINE_ID,
           type: "line",
           source: SOURCE_ID,
           layout: { visibility: vis },
-          paint: { "line-color": COLOR, "line-width": 2, "line-dasharray": [2, 2] },
+          paint: { "line-color": ["case", ["==", ["get", "mine"], 1], MINE_COLOR, COLOR], "line-width": 2, "line-dasharray": [2, 2] },
         });
       }
     };
@@ -497,6 +618,8 @@ export function useSponsoredMapLayer(
                   name: String(x.properties?.name),
                   left: Number(x.properties?.left ?? 0),
                   rule: JSON.parse(String(x.properties?.rule ?? "{}")) as PayoutRule,
+                  mine: Number(x.properties?.mine) === 1,
+                  win: JSON.parse(String(x.properties?.win ?? "{}")) as WindowInfo,
                 })),
               ),
             ),
@@ -511,7 +634,8 @@ export function useSponsoredMapLayer(
           .setDOMContent(
             popupNode("Sponsored area", String(f.properties?.name), rule, Number(f.properties?.left ?? 0), null,
               "Groups: pick this area when you host a cleanup here.",
-              Number(f.properties?.open) === 1 ? String(f.properties?.id) : null, { id: String(f.properties?.id) }),
+              Number(f.properties?.open) === 1 ? String(f.properties?.id) : null, { id: String(f.properties?.id) }, Number(f.properties?.mine) === 1,
+              JSON.parse(String(f.properties?.win ?? "{}")) as WindowInfo),
           ),
         m,
       );
@@ -546,12 +670,19 @@ export function useSponsoredMapLayer(
       const tagEl = el(
         "div",
         "pointer-events:none;text-align:center;padding:3px 9px;border-radius:8px;background:rgba(9,9,11,.72);color:#a7f3d0;" +
-          "border:1.5px dashed #34d399;font-size:12px;font-weight:700;line-height:1.25;white-space:nowrap;",
+          "border:1.5px dashed #34d399;font-size:12px;font-weight:700;line-height:1.25;white-space:nowrap;z-index:15;",
       );
+      if (a.is_mine) {
+        tagEl.style.borderColor = MINE_COLOR;
+        tagEl.style.color = "#fde68a";
+      }
       tagEl.append(
-        el("div", "", a.area_name ?? "Sponsored area"),
+        el("div", "", a.is_mine ? `${a.area_name ?? "Sponsored area"} (yours)` : a.area_name ?? "Sponsored area"),
         el("div", "font-weight:500;color:#d4d4d8;font-size:11px", `${usd(a.remaining_cents)} left`),
       );
+      if (a.early_access || a.scheduled) {
+        tagEl.append(el("div", "font-weight:700;color:#c4b5fd;font-size:11px", a.scheduled ? "Scheduled" : "✦ Plus only"));
+      }
       tagEl.style.display = showAreasRef.current ? "" : "none";
       return new maplibregl.Marker({ element: tagEl }).setLngLat(center).addTo(m);
     });
@@ -562,13 +693,15 @@ export function useSponsoredMapLayer(
       el.type = "button";
       el.setAttribute("aria-label", `Sponsored site ${s.label ?? ""}`.trim());
       el.style.cssText =
-        "display:flex;flex-direction:column;align-items:center;gap:2px;min-width:44px;background:none;border:0;padding:0;cursor:pointer";
+        "display:flex;flex-direction:column;align-items:center;gap:2px;min-width:44px;background:none;border:0;padding:0;cursor:pointer;z-index:20";
       const amount = s.payout_rule.type === "per_bag" ? s.payout_rule.cents_per_bag ?? 0 : s.payout_rule.amount_cents ?? 0;
-      const fill = s.available ? "#059669" : "#71717a";
+      const plusOnly = !!(s.early_access || s.scheduled);
+      const fill = s.is_mine ? "#fcd34d" : plusOnly ? "#7c3aed" : s.available ? "#059669" : "#71717a";
       const tag = document.createElement("span");
-      tag.textContent = s.open_to_additions ? `${usd(amount)} +` : usd(amount);
+      const price = s.open_to_additions ? `${usd(amount)} +` : usd(amount);
+      tag.textContent = plusOnly ? `✦ ${price}` : price;
       tag.style.cssText =
-        "padding:2px 8px;border-radius:999px;background:#18181b;color:#fff;font-size:13px;font-weight:800;line-height:1.2;" +
+        `padding:2px 8px;border-radius:999px;background:${s.is_mine ? "#fcd34d" : "#18181b"};color:${s.is_mine ? "#451a03" : "#fff"};font-size:13px;font-weight:800;line-height:1.2;` +
         "border:1.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)";
       const pin = document.createElement("span");
       // Auto margins center the pin under the (wider) price tag so the tip sits on the marker anchor.
@@ -578,6 +711,14 @@ export function useSponsoredMapLayer(
         `<path d="M12 1.5C6.2 1.5 1.5 6.1 1.5 11.8c0 7.6 10.5 17.2 10.5 17.2s10.5-9.6 10.5-17.2C22.5 6.1 17.8 1.5 12 1.5Z" fill="${fill}" stroke="#fff" stroke-width="1.5"/>` +
         `<circle cx="12" cy="11.5" r="4" fill="#fff"/></svg>`;
       el.append(tag, pin);
+      if (s.pool_id) {
+        const badge = document.createElement("span");
+        badge.textContent = "Community funded";
+        badge.style.cssText =
+          "position:absolute;top:-14px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:1px 6px;border-radius:999px;background:#0e7490;color:#fff;font-size:10px;font-weight:700;border:1px solid #fff";
+        el.style.position = "relative";
+        el.append(badge);
+      }
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         openPopup(
@@ -589,12 +730,21 @@ export function useSponsoredMapLayer(
                 s.label ?? "Sponsored site",
                 s.payout_rule,
                 s.remaining_cents,
-                s.available
+                // Sponsors cannot claim their own site, so their popup has no claim button.
+                s.available && !s.is_mine && !s.early_access_locked
                   ? { label: "Claim this site", onClick: (btn, status) => claimFromPopup(s.id, btn, status) }
                   : null,
-                s.available ? claimRangeNote(s.radius_meters) : "Someone is working this site right now.",
+                s.is_mine
+                  ? "You sponsored this site."
+                  : s.early_access_locked
+                    ? "Get Frontline Plus to claim it now, or come back when it opens to everyone."
+                    : s.available
+                      ? claimRangeNote(s.radius_meters)
+                      : "Someone is working this site right now.",
                 s.open_to_additions ? s.id : null,
                 { id: s.id, lat: s.latitude, lng: s.longitude, radius: s.radius_meters },
+                s.is_mine,
+                s,
               ),
             ),
           m,
@@ -602,6 +752,67 @@ export function useSponsoredMapLayer(
       });
       const marker = new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([s.longitude, s.latitude]).addTo(m);
       marker.getElement().style.display = showSitesRef.current && !(availableOnlyRef.current && !s.available) ? "" : "none";
+      return marker;
+    });
+
+    // Open pools: a dashed-ring pin with a progress arc, linking to the pool page.
+    poolMarkersRef.current.forEach((mk) => mk.remove());
+    poolMarkersRef.current = (data.pools ?? []).map((pl) => {
+      const el = document.createElement("button");
+      el.type = "button";
+      el.setAttribute("aria-label", `Funding in progress ${pl.title}`);
+      el.style.cssText =
+        "display:flex;flex-direction:column;align-items:center;gap:2px;min-width:44px;background:none;border:0;padding:0;cursor:pointer;z-index:19";
+      const pct = Math.max(0, Math.min(1, pl.raised_cents / Math.max(1, pl.goal_cents)));
+      const C = 2 * Math.PI * 15;
+      const tag = document.createElement("span");
+      tag.textContent = `${usd(pl.raised_cents)} / ${usd(pl.goal_cents)}`;
+      tag.style.cssText =
+        "padding:2px 8px;border-radius:999px;background:#18181b;color:#fff;font-size:12px;font-weight:800;line-height:1.2;border:1.5px dashed #22d3ee;box-shadow:0 1px 4px rgba(0,0,0,.4)";
+      const ring = document.createElement("span");
+      ring.style.cssText = "display:block;width:40px;height:40px;margin:0 auto";
+      ring.innerHTML =
+        `<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45))">` +
+        `<circle cx="20" cy="20" r="15" fill="#18181b" stroke="#3f3f46" stroke-width="5"/>` +
+        `<circle cx="20" cy="20" r="15" fill="none" stroke="#22d3ee" stroke-width="5" stroke-linecap="round" ` +
+        `stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 20 20)"/>` +
+        `<text x="20" y="24" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">${Math.round(pct * 100)}%</text></svg>`;
+      el.append(tag, ring);
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const box = document.createElement("div");
+        box.style.cssText = "display:flex;flex-direction:column;gap:6px;font-family:inherit";
+        box.append(
+          elNode("div", "font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;padding-right:30px", "Funding in progress"),
+          elNode("div", "font-size:15px;font-weight:700;padding-right:30px", pl.title),
+          elNode("div", "font-size:12px;color:#d4d4d8", `${usd(pl.raised_cents)} of ${usd(pl.goal_cents)} raised`),
+        );
+        const bar = document.createElement("div");
+        bar.setAttribute("role", "progressbar");
+        bar.setAttribute("aria-valuemin", "0");
+        bar.setAttribute("aria-valuemax", "100");
+        bar.setAttribute("aria-valuenow", String(Math.round(pct * 100)));
+        bar.style.cssText = "height:8px;border-radius:999px;background:#3f3f46;overflow:hidden";
+        bar.append(elNode("div", `height:100%;width:${Math.round(pct * 100)}%;background:#22d3ee;border-radius:999px`, ""));
+        box.append(bar);
+        if (pl.deadline) {
+          box.append(elNode("div", "font-size:11px;color:#a1a1aa", `Ends ${new Date(pl.deadline).toLocaleDateString()}`));
+        }
+        const link = document.createElement("a");
+        link.href = `/fund/pools/${pl.id}`;
+        link.textContent = "See the pool";
+        link.style.cssText =
+          "display:block;text-align:center;padding:8px 10px;border-radius:8px;background:#0891b2;color:#fff;font-weight:700;font-size:13px;text-decoration:none";
+        box.append(link);
+        openPopup(
+          sponsorPopup({ closeButton: true, maxWidth: "264px", offset: 52, anchor: "bottom", className: "sponsor-popup" })
+            .setLngLat([pl.longitude, pl.latitude])
+            .setDOMContent(box),
+          m,
+        );
+      });
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([pl.longitude, pl.latitude]).addTo(m);
+      marker.getElement().style.display = showSitesRef.current ? "" : "none";
       return marker;
     });
 
@@ -619,6 +830,9 @@ export function useSponsoredMapLayer(
     });
     areaLabelsRef.current.forEach((mk) => {
       mk.getElement().style.display = showAreas ? "" : "none";
+    });
+    poolMarkersRef.current.forEach((mk) => {
+      mk.getElement().style.display = showSites ? "" : "none";
     });
     if (!m) return;
     const vis = showAreas ? "visible" : "none";
@@ -720,7 +934,7 @@ export function useSponsoredMapLayer(
             .setLngLat(bounds.getCenter())
             .setDOMContent(
               popupNode("Sponsored area", area.area_name ?? "Sponsored area", area.payout_rule, area.remaining_cents, null,
-                "Groups: pick this area when you host a cleanup here.", area.open_to_additions ? area.id : null, { id: area.id }),
+                "Groups: pick this area when you host a cleanup here.", area.open_to_additions ? area.id : null, { id: area.id }, area.is_mine, area),
             ),
           map,
         );

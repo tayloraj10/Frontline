@@ -1,13 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useLimits } from "@/lib/useLimits";
+import { useEffect, useRef, useState } from "react";
+import { scrollToTop } from "@/lib/scrollToTop";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
-import { Camera, X } from "lucide-react";
+import { Camera, Ruler, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/fields";
-import { JOB_TYPE_LABELS, NO_BAG_JOB_TYPES, TIME_MODE_LABELS, mk, usd, type TimeMode } from "@/lib/marketplace";
+import { TIME_MODE_LABELS, mk, usd, type TimeMode } from "@/lib/marketplace";
+import { categoryColor, categoryIcon, useCategories } from "@/lib/categories";
+import { CategoryFacts, CategoryGuideButton } from "./CategoryBits";
+import { jobSize } from "@/lib/jobSizes";
 import { uploadToR2 } from "@/lib/uploadToR2";
 import AgreementAccept from "./AgreementAccept";
 import JobLocationPicker, { EMPTY_PLACE, placeProblem, placeToPayload, type JobPlace } from "./JobLocationPicker";
@@ -40,6 +46,8 @@ export default function JobForm({
   flexibleMaxDays,
   feePercent,
   minPriceCents,
+  poolId,
+  poolBalanceCents,
 }: {
   cleaner?: Target;
   services: string[];
@@ -47,8 +55,13 @@ export default function JobForm({
   flexibleMaxDays: number;
   feePercent: number;
   minPriceCents: number;
+  /** Set when the job is paid from a crowdfund pool: no card, no fee, posted through the pool. */
+  poolId?: string;
+  poolBalanceCents?: number;
 }) {
+  const lim = useLimits();
   const router = useRouter();
+  const cats = useCategories();
   const [accepted, setAccepted] = useState(termsAccepted);
   const [title, setTitle] = useState("");
   const [jobType, setJobType] = useState(services[0] ?? "litter");
@@ -56,6 +69,10 @@ export default function JobForm({
   const [description, setDescription] = useState("");
   const [place, setPlace] = useState<JobPlace>(EMPTY_PLACE);
   const [step, setStep] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollToTop(rootRef.current);
+  }, [step]);
   const [photos, setPhotos] = useState<string[]>([]);
   const { open: openPhoto, viewer: photoViewer } = usePhotoViewer(photos);
   const [uploading, setUploading] = useState(false);
@@ -67,9 +84,13 @@ export default function JobForm({
   const [price, setPrice] = useState(
     cleaner?.rate_type === "fixed" && cleaner.rate_cents ? String(cleaner.rate_cents / 100) : ""
   );
+  const debouncedPrice = useDebouncedValue(price);
+  const priceTooLow = debouncedPrice !== "" && Number(debouncedPrice) > 0 && Math.round(Number(debouncedPrice) * 100) < minPriceCents;
   const [snowAreas, setSnowAreas] = useState<string[]>([]);
   const [snowSalt, setSnowSalt] = useState(false);
   const [hazards, setHazards] = useState(false);
+  const [permission, setPermission] = useState(false);
+  const [riskAck, setRiskAck] = useState(false);
   const [dropoffOk, setDropoffOk] = useState(false);
   const [dropoffAddress, setDropoffAddress] = useState("");
   const [dropoffNote, setDropoffNote] = useState("");
@@ -89,7 +110,7 @@ export default function JobForm({
     setError(null);
     let problem: string | null = null;
     if (step === 0 && !title.trim()) problem = "Add a short title.";
-    if (step === 1) problem = placeProblem(place);
+    if (step === 1) problem = placeProblem(place, lim);
     if (step === 2) {
       if (mode === "specific" && !startsAt) problem = "Pick a date and time.";
       if (mode === "window" && (!winStart || !winEnd || winEnd < winStart)) problem = "Pick a start and end date.";
@@ -101,25 +122,29 @@ export default function JobForm({
   async function submit() {
     setError(null);
     const dollars = Number(price);
-    const where = placeProblem(place);
+    const where = placeProblem(place, lim);
     if (where) return setError(where);
     if (!Number.isFinite(dollars) || dollars <= 0) return setError("Enter a price.");
     if (Math.round(dollars * 100) < minPriceCents) return setError(`The minimum price is ${usd(minPriceCents)}.`);
+    if (poolId && poolBalanceCents !== undefined && Math.round(dollars * 100) > poolBalanceCents) {
+      return setError(`Only ${usd(poolBalanceCents)} is left in the pool.`);
+    }
     if (mode === "specific" && !startsAt) return setError("Pick a date and time.");
     if (mode === "window" && (!winStart || !winEnd || winEnd < winStart)) return setError("Pick a start and end date.");
     if (!hazards) return setError("Confirm the site safety check to continue.");
-    const dropoff = dropoffOk && !NO_BAG_JOB_TYPES.includes(jobType);
+    if (cats.get(jobType)?.hazard_risk && !riskAck) return setError("Confirm you understand the safety risk for this type of job.");
+    if (cats.needsPermission(jobType) && !permission) return setError("Confirm you own this land or have permission to have it cleaned.");
+    const dropoff = dropoffOk && cats.needsBags(jobType);
     if (dropoff && !dropoffAddress.trim()) return setError("Add where the cleaner can leave the bags, or turn off the drop-off option.");
     setBusy(true);
     try {
-      const job = await mk<{ id: string }>("/jobs", {
-        method: "POST",
-        body: {
+      const body = {
           cleaner_id: cleaner?.user_id ?? null,
           title: title.trim(),
           description: [
             jobType === "snow_shoveling" && snowAreas.length ? `Clear: ${snowAreas.join(", ")}.` : "",
             jobType === "snow_shoveling" && snowSalt ? "Salt or ice melt requested." : "",
+            cats.needsPermission(jobType) ? "Poster confirmed they own this land or have permission to have it cleaned." : "",
             description.trim(),
           ]
             .filter(Boolean)
@@ -140,8 +165,16 @@ export default function JobForm({
           bag_dropoff_ok: dropoff,
           bag_dropoff_address: dropoff ? dropoffAddress.trim() : null,
           bag_dropoff_note: dropoff ? dropoffNote.trim() || null : null,
-        },
-      });
+      };
+      if (poolId) {
+        const res = await fetch(`/api/sponsorship-pools/${poolId}/jobs`, { method: "POST", body: JSON.stringify(body) });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data && typeof data.detail === "string" ? data.detail : "Something went wrong.");
+        router.push(`/fund/pools/${poolId}`);
+        router.refresh();
+        return;
+      }
+      const job = await mk<{ id: string }>("/jobs", { method: "POST", body });
       router.push(`/fund/jobs/${job.id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -165,7 +198,7 @@ export default function JobForm({
   }
 
   return (
-    <div className="space-y-5">
+    <div ref={rootRef} className="space-y-5">
       {cleaner && (
         <Card padding="sm" className="text-sm text-zinc-300">
           Booking <span className="font-bold text-zinc-100">{cleaner.username ?? "this cleaner"}</span>
@@ -191,12 +224,13 @@ export default function JobForm({
         <TextInput value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Clear litter along the lot fence" />
       </Field>
 
+      <CategoryGuideButton className="-mb-4 -ml-3" />
       <div className="grid grid-cols-2 gap-3">
         <Field label="Type of work">
           <Select value={jobType} onChange={(e) => setJobType(e.target.value)}>
-            {(services.length ? services : Object.keys(JOB_TYPE_LABELS)).map((s) => (
+            {(services.length ? services : cats.categories.map((c) => c.key)).map((s) => (
               <option key={s} value={s}>
-                {JOB_TYPE_LABELS[s] ?? s}
+                {cats.label(s)}
               </option>
             ))}
           </Select>
@@ -210,6 +244,29 @@ export default function JobForm({
           </Select>
         </Field>
       </div>
+
+      {cats.get(jobType) && (cats.get(jobType)!.description || cats.get(jobType)!.rule_note) && (
+        <div className="-mt-2 rounded-2xl bg-zinc-900 p-3 ring-1 ring-inset ring-zinc-800">
+          <p className={`flex items-center gap-2 text-sm font-semibold text-zinc-100`}>
+            {(() => {
+              const c = cats.get(jobType)!;
+              const Icon = categoryIcon(c.icon);
+              return <Icon className={`h-4 w-4 ${categoryColor(c.color).icon}`} aria-hidden="true" />;
+            })()}
+            {cats.get(jobType)!.label}
+          </p>
+          <CategoryFacts cat={cats.get(jobType)!} className="-mt-1" />
+        </div>
+      )}
+      {jobSize(size) && (
+        <div className="-mt-2 rounded-2xl bg-zinc-900 p-3 ring-1 ring-inset ring-zinc-800">
+          <p className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
+            <Ruler className="h-4 w-4 text-sky-400" aria-hidden="true" />
+            {jobSize(size)!.label} job
+          </p>
+          <p className="mt-1 text-sm text-zinc-300">{jobSize(size)!.description}</p>
+        </div>
+      )}
 
       <Field label="Details" optional hint="What needs doing, access notes, anything the cleaner should know.">
         <TextArea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
@@ -241,7 +298,22 @@ export default function JobForm({
         </div>
       )}
 
-      {!NO_BAG_JOB_TYPES.includes(jobType) && (
+      {cats.get(jobType)?.hazard_risk && (
+        <div className="space-y-2">
+          <label className="flex min-h-11 items-start gap-2 text-sm text-zinc-200">
+            <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-red-400" checked={riskAck} onChange={(e) => setRiskAck(e.target.checked)} />
+            <span>I understand the safety risk and the site is safe for a cleaner to work.</span>
+          </label>
+        </div>
+      )}
+      {cats.needsPermission(jobType) && (
+        <label className="flex min-h-11 items-start gap-3 rounded-xl border border-zinc-800 p-3 text-sm text-zinc-200 touch-manipulation">
+          <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-400" checked={permission} onChange={(e) => setPermission(e.target.checked)} />
+          <span>I own this land or have permission from the owner or manager to have it cleaned.</span>
+        </label>
+      )}
+
+      {cats.needsBags(jobType) && (
         <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
           <label className="flex min-h-11 items-start gap-3 text-sm text-zinc-200 touch-manipulation">
             <input
@@ -362,10 +434,26 @@ export default function JobForm({
       {step === 3 && (
         <div className="space-y-5">
       <Field label="Price ($)" hint={`What the cleaner receives. Minimum ${usd(minPriceCents)}.`}>
-        <TextInput inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="60" />
+        <TextInput className={priceTooLow ? "!text-amber-400" : undefined} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="60" />
+        {priceTooLow && (
+          <p role="alert" className="mt-1.5 text-xs font-medium text-amber-400">
+            Under the {usd(minPriceCents)} minimum. Raise the price to post this job.
+          </p>
+        )}
       </Field>
 
-      {Number(price) > 0 && (
+      {Number(price) > 0 && poolId && (
+        <Card padding="sm" className="space-y-1.5 text-sm">
+          <div className="flex justify-between text-zinc-300">
+            <span>Cleaner receives</span>
+            <span>{usd(Math.round(Number(price) * 100))}</span>
+          </div>
+          <p className="pt-1 text-xs text-zinc-500">
+            Paid from the pool, no fee. The cleaner is paid when someone who chipped in approves the finished work.
+          </p>
+        </Card>
+      )}
+      {Number(price) > 0 && !poolId && (
         <Card padding="sm" className="space-y-1.5 text-sm">
           <div className="flex justify-between text-zinc-300">
             <span>Cleaner receives</span>
@@ -392,7 +480,8 @@ export default function JobForm({
         <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-emerald-400" checked={hazards} onChange={(e) => setHazards(e.target.checked)} />
         <span>
           I have the right to authorize this work, I described the site honestly, and there is no hazardous waste, sharps, biohazard
-          or unsafe space involved.
+          or unsafe space involved. Hazardous work (needles, chemicals, bulk or heavy items, flooded or steep ground) is against
+          Frontline policy and is not allowed here.
         </span>
       </label>
 
@@ -412,7 +501,7 @@ export default function JobForm({
           </Button>
         ) : (
           <Button className="flex-1" loading={busy} onClick={submit}>
-            {cleaner ? "Send booking request" : "Post to the job board"}
+            {cleaner ? "Send booking request" : poolId ? "Post a pool job" : "Post to the job board"}
           </Button>
         )}
       </div>

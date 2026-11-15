@@ -6,37 +6,88 @@ export const funding: WalkthroughDef = {
   finishLabel: "Got it",
   steps: [
     {
-      title: "Where the money comes from",
+      title: "Three ways to earn",
       label: "Basics",
-      body: "Sponsors and neighbors put up money for cleanups, and you get paid once your work is verified. You can earn three ways, all shown on the map.",
+      body: "Neighbors and sponsors put up money for cleanups, and you get paid once the work is done and verified. Everything shows on the map.",
       how: [
+        "Neighbor job: someone posts a job and pays one cleaner to do it",
         "Cleanup site: a sponsored spot you claim and clean on your own",
         "Group area: a sponsored region where your group hosts cleanup events",
-        "Neighbor job: someone posts a job and pays one cleaner to do it",
-        "Want to put money up instead? Sponsoring and hiring live on the Fund tab",
+        "Want to pay for a cleanup instead? That is on the Fund tab",
       ],
       visual: (
         <Stage>
-          <Chip on>Cleanup site</Chip>
+          <Chip on>Neighbor job</Chip>
+          <Chip>Cleanup site</Chip>
           <Chip>Group area</Chip>
-          <Chip>Neighbor job</Chip>
         </Stage>
       ),
     },
     {
-      title: "Open, sole credit or pool",
-      label: "Types",
-      body: "Sponsored places are set up in a few ways. Open sites and areas let neighbors add money, and show a + on the maps. Sole credit means one sponsor funds it alone. A pool is a crowdfunded project that becomes a funded site once the goal is met.",
+      title: "Set up to get paid",
+      label: "Basics",
+      body: "Payouts go to your bank through Stripe, so set that up first. For neighbor jobs you also need a cleaner profile.",
+      how: [
+        "Payouts: finish Stripe setup, which verifies your ID and tax details on Stripe's own pages",
+        "Cleaner profile (for neighbor jobs): add a photo, your rate, the jobs you do and your area, then sign the cleaner agreement",
+      ],
       visual: (
         <Stage>
-          <Chip on>Open +</Chip>
-          <Chip>Sole credit</Chip>
-          <Chip>Pool</Chip>
+          <span className="text-3xl">🙂</span>
+          <Arrow />
+          <Chip on>Ready</Chip>
+        </Stage>
+      ),
+    },
+    {
+      title: "Take a neighbor job",
+      label: "Jobs",
+      track: { name: "Neighbor jobs", tone: "sky" },
+      body: "We notify you when a job is posted near you. Open it and take it at the posted price, or flag the price if it is too low. You see the address of the job once you take it.",
+      visual: (
+        <Stage>
+          <span className="text-3xl">💬</span>
+          <Arrow />
+          <span className="text-3xl">🧹</span>
+        </Stage>
+      ),
+    },
+    {
+      title: "Do the job",
+      label: "Jobs",
+      track: { name: "Neighbor jobs", tone: "sky" },
+      body: "Taking a job starts a clock, so only take one you can get to. You can have one job at a time.",
+      how: [
+        "Get to the site within 2 hours of the start time, or the job goes back on the board",
+        "Take a before photo, then start the job once you are at the site",
+        "Use the mobile app: your route and time on site are recorded while the job is in progress",
+        "Take an after photo showing all your bags and mark it done",
+        "Backing out after the start time counts as a strike",
+      ],
+      visual: (
+        <Stage>
+          <Chip on>2 hrs</Chip>
+          <Arrow />
+          <span className="text-3xl">📸</span>
+        </Stage>
+      ),
+    },
+    {
+      title: "Get paid for a job",
+      label: "Jobs",
+      track: { name: "Neighbor jobs", tone: "sky" },
+      body: "You are paid the full posted price after the customer confirms. The customer pays Frontline's service fee on top, so nothing comes out of your pay.",
+      visual: (
+        <Stage>
+          <Chip on>$80</Chip>
+          <Arrow />
+          <span className="text-3xl">💵</span>
         </Stage>
       ),
     },
     {
       title: "Cleanup sites",
+      track: { name: "Sponsored sites", tone: "emerald" },
       label: "Sites",
       body: "A site is one specific spot a sponsor wants cleaned, shown as a pin on the map. Any signed-in cleaner can claim it.",
       how: [
@@ -56,6 +107,7 @@ export const funding: WalkthroughDef = {
     },
     {
       title: "Claiming a site",
+      track: { name: "Sponsored sites", tone: "emerald" },
       label: "Claim",
       body: "Claiming holds the site for you, but the clock starts right away, so claim it when you are ready to go.",
       how: [
@@ -76,6 +128,7 @@ export const funding: WalkthroughDef = {
     },
     {
       title: "Group areas",
+      track: { name: "Sponsored sites", tone: "emerald" },
       label: "Areas",
       body: "An area is a whole region, like a few neighborhoods, zip codes or a shape you draw. It is for groups hosting cleanup events.",
       how: [
@@ -92,15 +145,16 @@ export const funding: WalkthroughDef = {
       ),
     },
     {
-      title: "Pools and payout rules",
-      label: "Pools",
-      body: "A pool is the money a sponsor put in for one site or area. Each verified cleanup draws from it, and when it runs out the site or area closes.",
+      title: "How sponsored pay works",
+      label: "Pay",
+      track: { name: "Sponsored sites", tone: "emerald" },
+      body: "Each site or area has a pool of money from its sponsor. Every verified cleanup draws from it, and when it runs out the site or area closes.",
       how: [
         "One payout: the whole amount goes to the first approved cleaner (sites only)",
         "Fixed amount: the same pay for every verified cleanup or event",
         "Per bag: an amount for each bag collected",
         "Per attendee: group areas only, an amount per person who showed up",
-        "If the money does not divide evenly, the last payout gets whatever is left",
+        "Open sites show a + because neighbors can add more money",
       ],
       visual: (
         <Stage>
@@ -111,25 +165,9 @@ export const funding: WalkthroughDef = {
       ),
     },
     {
-      title: "Other ways to give",
-      label: "Give",
-      body: "Gifts do not have to be tied to a spot.",
-      how: [
-        "Donate: supports Frontline overall, not tied to a place",
-        "Support a group: Plus groups that are open to sponsors can be gifted directly from their page",
-        "Pool money with neighbors: crowdfund a bigger project from the Fund tab. Starting from a regular site neighbors can add to is best, since some money is already there. If the goal is met it becomes a funded site, and if not everyone is refunded",
-      ],
-      visual: (
-        <Stage>
-          <Chip>Donate</Chip>
-          <Chip>Group</Chip>
-        </Stage>
-      ),
-    },
-    {
       title: "Plus early access",
       label: "Plus",
-      body: "Frontline Plus members get a head start on newly funded sites and areas before they open to everyone.",
+      body: "Frontline Plus members get a one day head start on newly funded sites and areas before they open to everyone.",
       visual: (
         <Stage>
           <Chip on>Plus</Chip>

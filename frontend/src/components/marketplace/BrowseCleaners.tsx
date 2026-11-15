@@ -4,10 +4,12 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import CleanerRow from "@/components/marketplace/CleanerRow";
 import { EmptyState } from "@/components/ui/PageShell";
-import { JOB_TYPE_LABELS, type CleanerCard } from "@/lib/marketplace";
+import { type CleanerCard } from "@/lib/marketplace";
+import { useCategories } from "@/lib/categories";
 
 /** Browse cleaners, per the mocks: search plus filter chips over the full list. */
 export default function BrowseCleaners({ cleaners, loadFailed = false }: { cleaners: CleanerCard[]; loadFailed?: boolean }) {
+  const cats = useCategories();
   const [query, setQuery] = useState("");
   const [top, setTop] = useState(true);
   const [under30, setUnder30] = useState(false);
@@ -18,7 +20,7 @@ export default function BrowseCleaners({ cleaners, loadFailed = false }: { clean
     .filter(
       (c) =>
         (!q || `${c.username ?? ""} ${c.headline ?? ""} ${c.area_label ?? ""}`.toLowerCase().includes(q)) &&
-        (!service || c.services.includes(service)) &&
+        (!service || c.services.length === 0 || c.services.includes(service)) &&
         (!under30 || (c.rate_cents != null && c.rate_cents <= 3000))
     )
     .sort((a, b) => (top ? (b.rating_avg ?? 0) - (a.rating_avg ?? 0) || b.jobs_completed - a.jobs_completed : 0));
@@ -42,7 +44,7 @@ export default function BrowseCleaners({ cleaners, loadFailed = false }: { clean
         <Chip active={under30} onClick={() => setUnder30(!under30)}>
           Under $30
         </Chip>
-        {Object.entries(JOB_TYPE_LABELS).map(([id, label]) => (
+        {cats.categories.map((c) => [c.key, c.short_label] as const).map(([id, label]) => (
           <Chip key={id} active={service === id} onClick={() => setService(service === id ? "" : id)}>
             {label}
           </Chip>

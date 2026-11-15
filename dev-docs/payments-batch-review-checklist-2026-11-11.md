@@ -37,6 +37,12 @@ Use this as the list for a full pass through every flow. Tick each item as you r
 - Route recording and the "finish without route" gate.
 - Pool checkout and refunds against Stripe.
 - New pages and agreement v3 acceptance in the UI.
+- **Manual end-to-end testing is still owed (owner: user), on a phone, in Stripe test mode first.** Each flow has to be walked from both sides:
+  - Jobs, lister: post a job, add a card, a cleaner takes it, confirm or dispute, payment released.
+  - Jobs, taker: payout setup, take a job, start, route and photos, finish, get paid.
+  - Sponsorships, lister (funder): fund a site or area, top up, start or add to a pool, refunds on cancel or missed goal.
+  - Sponsorships, taker: claim a site, before and after photos, admin approval, payout.
+  - Also check the Stripe return handoff: web users land back on the site, app users get "Return to the app".
 
 ## Sample data
 - `POST /api/admin/seed/marketplace?fresh_brooklyn=true` adds four open Brooklyn jobs dated today (including a snow job). Older seeded jobs expire after 14 days. Logins `mk_maria`, `mk_devon` etc. use password `password`.

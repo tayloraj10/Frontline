@@ -257,6 +257,7 @@ export async function createCleanupEvent({
     cohost_group_ids: cohostGroupIds ?? [],
     logging_mode: loggingMode,
     sponsorship_id: sponsorshipId ?? null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
 }
 

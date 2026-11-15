@@ -385,14 +385,15 @@ async def seed_payments_mock(
     site_lon: float | None = None,
     geo_unit_id: str | None = None,
     create_free_user: bool = False,
+    sample_sponsored: bool = False,
     remove: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
-    """Local payments v2 testing: mark one user and one group as Frontline Plus (mock subscriptions) and optionally
+    """Local payments v2 testing (sample_sponsored=true adds a varied set of funded sites and areas for sponsor_username):mark one user and one group as Frontline Plus (mock subscriptions) and optionally
     create funded mock sponsorships (a site at site_lat/site_lon, a group area on geo_unit_id). create_free_user=true adds a
     non-Plus login freeuser / password. remove=true deletes it all."""
     params = {"username": username, "group_slug": group_slug, "sponsor_username": sponsor_username,
-              "site_lat": site_lat, "site_lon": site_lon, "geo_unit_id": geo_unit_id, "create_free_user": create_free_user, "remove": remove}
+              "site_lat": site_lat, "site_lon": site_lon, "geo_unit_id": geo_unit_id, "create_free_user": create_free_user, "sample_sponsored": sample_sponsored, "remove": remove}
     try:
         result = await PaymentsMockSeeder().run(db, params)
     except Exception as exc:

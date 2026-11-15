@@ -1,6 +1,7 @@
 "use client";
 
 import type { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from "react";
+import InfoModal from "@/components/ui/InfoModal";
 import { cn } from "@/lib/cn";
 
 const CONTROL =
@@ -12,18 +13,24 @@ export function Field({
   hint,
   error,
   optional,
+  info,
   children,
 }: {
   label: string;
   hint?: string;
   error?: string | null;
   optional?: boolean;
+  /** Longer explanation behind a tap-friendly info button next to the label. */
+  info?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-semibold text-zinc-200">{label}</span>
+        <span className="flex items-center gap-0.5 text-sm font-semibold text-zinc-200">
+          {label}
+          {info && <InfoModal iconOnly label={`What is ${label}?`} title={label}>{info}</InfoModal>}
+        </span>
         {optional && <span className="text-[11px] text-zinc-500">Optional</span>}
       </span>
       {children}

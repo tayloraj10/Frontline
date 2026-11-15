@@ -1,4 +1,4 @@
-import GuideDisclosure from "@/components/ui/GuideDisclosure";
+import InfoModal from "@/components/ui/InfoModal";
 
 const ITEMS = [
   {
@@ -28,10 +28,10 @@ const ITEMS = [
   },
 ];
 
-/** Condensed, expandable counterpart for the Fund page: hire versus sponsor, site versus group area, and crowdfunds. Same look as the Earn guide. */
+/** Button that opens the hire versus sponsor versus crowdfund explainer in a modal, so it never takes page space. */
 export default function FundingGuideCard() {
   return (
-    <GuideDisclosure className="mb-4 mt-6" title="Sponsor or hire?" summary="Hire, sponsor a site or area, or crowdfund.">
+    <InfoModal className="mb-4" label="Sponsor or hire? Which one do I pick?" title="Sponsor or hire?">
       <ul className="divide-y divide-zinc-800">
         {ITEMS.map((i) => (
           <li key={i.lead} className="py-2.5 first:pt-0 last:pb-0">
@@ -43,6 +43,6 @@ export default function FundingGuideCard() {
           </li>
         ))}
       </ul>
-    </GuideDisclosure>
+    </InfoModal>
   );
 }

@@ -26,15 +26,16 @@ interface Allocation {
   before_distance_m?: number | null;
   after_distance_m?: number | null;
   minutes_on_site?: number | null;
+  fraud_flags?: string[];
   payout_error?: string | null;
   stripe_transfer_id?: string | null;
 }
 
 const STATUS_VARIANT: Record<AllocationStatus, BadgeVariant> = {
   pending_review: "pending",
-  approved: "success",
+  approved: "info",
   rejected: "error",
-  paid_out: "neutral",
+  paid_out: "success",
 };
 
 const usd = (cents: number) =>
@@ -138,6 +139,14 @@ export default function AllocationReview() {
               </div>
               <Badge variant={STATUS_VARIANT[a.status]}>{a.status.replace("_", " ")}</Badge>
             </div>
+
+            {a.fraud_flags && a.fraud_flags.length > 0 && (
+              <ul className="space-y-0.5 rounded-xl border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-xs font-semibold text-amber-200">
+                {a.fraud_flags.map((f) => (
+                  <li key={f}>Check: {f}</li>
+                ))}
+              </ul>
+            )}
 
             {a.minutes_on_site != null && (
               <p className="text-xs text-zinc-400">

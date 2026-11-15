@@ -1,12 +1,13 @@
 "use client";
 
+import { useLimits } from "@/lib/useLimits";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Button from "@/components/ui/Button";
 import { ChoiceChips, Field, Note, Select, TextInput } from "@/components/ui/fields";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import { createClient } from "@/lib/supabase/client";
-import { LIMITS, formatArea, polygonAreaSqm, polygonProblem, type LngLat } from "@/lib/areaShape";
+import { LIMITS, type Limits, formatArea, polygonAreaSqm, polygonProblem, type LngLat } from "@/lib/areaShape";
 
 const BoundaryPickerMap = dynamic(() => import("@/components/map/BoundaryPickerMap"), {
   ssr: false,
@@ -58,13 +59,13 @@ interface UnitResult {
 }
 
 /** Returns a message when the area cannot be submitted, otherwise null. */
-export function areaProblem(a: AreaDraft): string | null {
+export function areaProblem(a: AreaDraft, lim: Limits = LIMITS): string | null {
   if (a.kind === "geo_units") {
     if (a.geoUnitIds.length === 0) return "Pick at least one boundary.";
     return null;
   }
   if (!a.name.trim()) return "Give the area a name.";
-  return polygonProblem(a.vertices);
+  return polygonProblem(a.vertices, lim.maxAreaSqm, lim.minAreaSqm, undefined, lim.maxVertices);
 }
 
 /** Request body fragment for POST /admin/sponsorships (matches build_area_geometry on the backend). */
@@ -81,6 +82,7 @@ export default function AreaBuilder({
   value: AreaDraft;
   onChange: (next: AreaDraft) => void;
 }) {
+  const lim = useLimits();
   const set = (patch: Partial<AreaDraft>) => onChange({ ...value, ...patch });
 
   const [query, setQuery] = useState("");
@@ -147,7 +149,7 @@ export default function AreaBuilder({
       const rest = { ...value.geoUnitLabels };
       delete rest[unit.id];
       set({ geoUnitIds: value.geoUnitIds.filter((x) => x !== unit.id), geoUnitLabels: rest });
-    } else if (value.geoUnitIds.length < LIMITS.maxGeoUnits) {
+    } else if (value.geoUnitIds.length < lim.maxGeoUnits) {
       set({
         geoUnitIds: [...value.geoUnitIds, unit.id],
         geoUnitLabels: { ...value.geoUnitLabels, [unit.id]: unit.label },
@@ -155,10 +157,10 @@ export default function AreaBuilder({
     }
   };
 
-  const polyError = value.kind === "polygon" && value.vertices.length >= 3 ? polygonProblem(value.vertices) : null;
-  const atUnitLimit = value.geoUnitIds.length >= LIMITS.maxGeoUnits;
+  const polyError = value.kind === "polygon" && value.vertices.length >= 3 ? polygonProblem(value.vertices, lim.maxAreaSqm, lim.minAreaSqm, undefined, lim.maxVertices) : null;
+  const atUnitLimit = value.geoUnitIds.length >= lim.maxGeoUnits;
   const sqm = value.vertices.length >= 3 ? polygonAreaSqm(value.vertices) : 0;
-  const sizeBar = Math.min(100, (sqm / LIMITS.maxAreaSqm) * 100);
+  const sizeBar = Math.min(100, (sqm / lim.maxAreaSqm) * 100);
 
   return (
     <div className="space-y-3">
@@ -273,7 +275,7 @@ export default function AreaBuilder({
             })}
           </div>
           <p className="text-xs text-zinc-500">
-            {value.geoUnitIds.length} of {LIMITS.maxGeoUnits} selected. The more you combine, the more ground your
+            {value.geoUnitIds.length} of {lim.maxGeoUnits} selected. The more you combine, the more ground your
             money has to cover.
           </p>
         </div>
@@ -298,6 +300,8 @@ export default function AreaBuilder({
             onVertices={(vertices) => set({ vertices })}
             flyTo={flyTo}
             invalid={polyError !== null}
+            maxAreaSqm={lim.maxAreaSqm}
+            maxVertices={lim.maxVertices}
           />
           <div className="flex items-center gap-2">
             <Button
@@ -332,14 +336,14 @@ export default function AreaBuilder({
               />
             </div>
             <div className="flex justify-between text-[11px] text-zinc-500">
-              <span>Min {formatArea(LIMITS.minAreaSqm)}</span>
-              <span>Max {formatArea(LIMITS.maxAreaSqm)}</span>
+              <span>Min {formatArea(lim.minAreaSqm)}</span>
+              <span>Max {formatArea(lim.maxAreaSqm)}</span>
             </div>
           </div>
           <p className="text-xs text-zinc-500">
             {value.vertices.length < 3
               ? "Tap the map to add corners (at least 3). Drag a corner to adjust it."
-              : `${value.vertices.length} corners. Tap the map to add more, up to ${LIMITS.maxVertices}.`}
+              : `${value.vertices.length} corners. Tap the map to add more, up to ${lim.maxVertices}.`}
           </p>
           {polyError && <Note tone="warn">{polyError}</Note>}
         </div>

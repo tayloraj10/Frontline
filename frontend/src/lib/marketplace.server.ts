@@ -13,7 +13,14 @@ export async function getMarketplaceAccess() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { user: null, isAdmin: false, allowed: false };
+  if (!user) {
+    // Logged-out visitors may browse once payments are live for everyone and the marketplace is on.
+    const [gate, { data: setting }] = await Promise.all([
+      getPaymentsGate(),
+      supabase.schema("public").from("game_settings").select("value").eq("key", "marketplace_enabled").maybeSingle(),
+    ]);
+    return { user: null, isAdmin: false, allowed: gate.preview && gate.enabled && setting?.value === 1 };
+  }
 
   const [{ data: profile }, gate, { data: setting }] = await Promise.all([
     supabase.schema("public").from("profiles").select("is_admin, rewards_beta").eq("id", user.id).single(),
@@ -30,6 +37,13 @@ export async function requireMarketplace() {
   const access = await getMarketplaceAccess();
   if (!access.user) redirect("/login");
   if (!access.allowed) redirect("/");
+  return { user: access.user, isAdmin: access.isAdmin };
+}
+
+/** Like requireMarketplace but lets logged-out visitors through (user is null) for browse-only pages. */
+export async function viewMarketplace() {
+  const access = await getMarketplaceAccess();
+  if (!access.allowed) redirect(access.user ? "/" : "/login");
   return { user: access.user, isAdmin: access.isAdmin };
 }
 
@@ -57,12 +71,13 @@ export async function mkFetch<T>(
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (!session) throw new MarketplaceApiError("Not authenticated", 401);
+  const isRead = (init.method ?? "GET") === "GET";
+  if (!session && !isRead) throw new MarketplaceApiError("Not authenticated", 401);
   const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/marketplace${path}`, {
     method: init.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     cache: "no-store",

@@ -22,14 +22,95 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services import connect
 from app.services import marketplace_chat_filter as chat_filter
 from app.services import marketplace_payments as mp
-from app.services.game_settings import min_payment_cents
+from app.services.game_settings import min_payment_cents, size_limits
 
 logger = logging.getLogger(__name__)
 
 MAX_LISTING_PHOTOS = 4
-JOB_TYPES = ["litter", "lot_cleanup", "sidewalk", "light_yard_work", "snow_shoveling"]
-# Job types that produce no bags, so the "all bags are in the photo" step does not apply.
-NO_BAG_JOB_TYPES = {"snow_shoveling"}
+CATEGORY_COLS = (
+    "key, label, short_label, icon, description, rule_note, sort_order, active, "
+    "bags_required, after_photo_required, requires_permission, hazard_risk, color, badge"
+)
+
+
+async def list_categories(db: AsyncSession, include_inactive: bool = False) -> list[dict]:
+    """Job categories in display order. Editable from admin Settings."""
+    rows = (
+        await db.execute(
+            text(
+                f"SELECT {CATEGORY_COLS} FROM job_categories "
+                + ("" if include_inactive else "WHERE active ")
+                + "ORDER BY sort_order, label"
+            )
+        )
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+async def get_category(db: AsyncSession, key: str) -> dict | None:
+    row = (
+        await db.execute(text(f"SELECT {CATEGORY_COLS} FROM job_categories WHERE key = :k"), {"k": key})
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+_CAT_FIELDS = {
+    "label": str, "short_label": str, "icon": str, "description": str, "rule_note": str, "sort_order": int,
+    "active": bool, "bags_required": bool, "after_photo_required": bool, "requires_permission": bool, "hazard_risk": bool, "color": str, "badge": str,
+}
+
+
+async def save_category(db: AsyncSession, key: str, data: dict, *, create: bool) -> dict:
+    import re
+
+    if create and not re.fullmatch(r"[a-z][a-z0-9_]{1,39}", key or ""):
+        raise MarketplaceError("Key must be lowercase letters, numbers and underscores, 2 to 40 characters.")
+    clean = {k: _CAT_FIELDS[k](v) for k, v in data.items() if k in _CAT_FIELDS and v is not None}
+    for k in ("label", "short_label"):
+        if k in clean:
+            clean[k] = clean[k].strip()[:60]
+            if not clean[k]:
+                raise MarketplaceError("Label cannot be empty.")
+    for k in ("icon", "color", "badge", "description", "rule_note"):
+        if k in clean:
+            clean[k] = clean[k].strip()[: (30 if k in ("icon", "color", "badge") else 400)]
+    exists = await get_category(db, key)
+    if create:
+        if exists:
+            raise MarketplaceError("A category with that key already exists.", 409)
+        if "label" not in clean:
+            raise MarketplaceError("Label is required.")
+        clean.setdefault("short_label", clean["label"][:20])
+        cols = ", ".join(["key", *clean])
+        vals = ", ".join([":key", *[f":{c}" for c in clean]])
+        await db.execute(text(f"INSERT INTO job_categories ({cols}) VALUES ({vals})"), {"key": key, **clean})
+    else:
+        if not exists:
+            raise MarketplaceError("Category not found.", 404)
+        if clean:
+            sets = ", ".join(f"{c} = :{c}" for c in clean)
+            await db.execute(text(f"UPDATE job_categories SET {sets}, updated_at = now() WHERE key = :key"), {"key": key, **clean})
+    await db.commit()
+    return await get_category(db, key)  # type: ignore[return-value]
+
+
+async def delete_category(db: AsyncSession, key: str) -> None:
+    """Hard delete only when nothing uses the category. Otherwise it must be turned off, so old jobs keep their type."""
+    used = (
+        await db.execute(
+            text(
+                "SELECT (SELECT count(*) FROM marketplace_jobs WHERE job_type = :k) "
+                "+ (SELECT count(*) FROM cleaner_profiles WHERE :k = ANY(services))"
+            ),
+            {"k": key},
+        )
+    ).scalar_one()
+    if used:
+        raise MarketplaceError("Jobs or cleaner profiles use this category. Turn it off instead of deleting it.", 409)
+    res = await db.execute(text("DELETE FROM job_categories WHERE key = :k"), {"k": key})
+    if not res.rowcount:
+        raise MarketplaceError("Category not found.", 404)
+    await db.commit()
 JobStatus = Literal[
     "requested", "open", "accepted", "in_progress", "completed",
     "confirmed", "released", "declined", "cancelled", "expired", "disputed", "refunded",
@@ -43,6 +124,8 @@ class MarketplaceError(Exception):
         super().__init__(message)
         self.message = message
         self.status = status
+
+
 
 
 async def _setting(db: AsyncSession, key: str, default: float) -> float:
@@ -136,7 +219,8 @@ async def my_status(db: AsyncSession, user_id: UUID) -> dict:
         "strikes": {"limit": limit, "window_days": days, "items": [_plain(r) for r in rows]},
         "cleaner_agreement_accepted": await has_accepted_current(db, user_id, "cleaner"),
         "customer_terms_accepted": await has_accepted_current(db, user_id, "customer"),
-        "job_types": JOB_TYPES,
+        "job_types": [c["key"] for c in await list_categories(db)],
+        "categories": await list_categories(db),
         "payouts_required": connect.is_configured(),
     }
 
@@ -158,9 +242,10 @@ async def upsert_cleaner_profile(
     years_experience: int | None = None,
     equipment: list[str] | None = None,
     availability: str | None = None,
-    preferred_size: str | None = None,
+    preferred_sizes: list[str] | None = None,
 ) -> dict:
-    bad = [s for s in services if s not in JOB_TYPES]
+    valid = {c["key"] for c in await list_categories(db)}
+    bad = [s for s in services if s not in valid]
     if bad:
         raise MarketplaceError(f"Unsupported service types: {', '.join(bad)}.")
     if not await has_accepted_current(db, user_id, "cleaner"):
@@ -168,14 +253,15 @@ async def upsert_cleaner_profile(
     avatar = (await db.execute(text("SELECT avatar_url FROM profiles WHERE id = :u"), {"u": user_id})).scalar_one_or_none()
     if not avatar:
         raise MarketplaceError("Add a clear profile photo of yourself to create your cleaner profile.")
-    if preferred_size not in (None, "small", "medium", "large", "any"):
-        raise MarketplaceError("Pick a valid preferred job size.")
+    sizes = list(dict.fromkeys(preferred_sizes or []))
+    if any(z not in ("small", "medium", "large") for z in sizes):
+        raise MarketplaceError("Pick valid preferred job sizes.")
     clean = lambda xs: [x.strip()[:40] for x in (xs or []) if x and x.strip()][:12]  # noqa: E731
     await db.execute(
         text(
             """INSERT INTO cleaner_profiles
                  (user_id, headline, bio, services, rate_type, rate_cents, service_radius_km, home_location, area_label, status,
-                  languages, years_experience, equipment, availability, preferred_size)
+                  languages, years_experience, equipment, availability, preferred_sizes)
                VALUES (:u, :h, :b, :s, :rt, :rc, :rad,
                        CASE WHEN CAST(:lat AS float8) IS NULL THEN NULL
                             ELSE ST_SetSRID(ST_MakePoint(CAST(:lng AS float8), CAST(:lat AS float8)), 4326)::geography END,
@@ -186,13 +272,13 @@ async def upsert_cleaner_profile(
                  service_radius_km = EXCLUDED.service_radius_km, home_location = EXCLUDED.home_location,
                  area_label = EXCLUDED.area_label, languages = EXCLUDED.languages,
                  years_experience = EXCLUDED.years_experience, equipment = EXCLUDED.equipment,
-                 availability = EXCLUDED.availability, preferred_size = EXCLUDED.preferred_size"""
+                 availability = EXCLUDED.availability, preferred_sizes = EXCLUDED.preferred_sizes"""
         ),
         {
             "u": user_id, "h": headline.strip(), "b": bio.strip(), "s": services, "rt": rate_type,
             "rc": rate_cents, "rad": service_radius_km, "lat": latitude, "lng": longitude, "al": area_label,
             "lang": clean(languages), "yrs": years_experience, "eq": clean(equipment),
-            "av": (availability or "").strip()[:200] or None, "ps": preferred_size,
+            "av": (availability or "").strip()[:200] or None, "ps": sizes,
         },
     )
     await db.commit()
@@ -239,7 +325,7 @@ async def list_cleaners(
                           END AS distance_km
                    FROM cleaner_profiles c JOIN profiles p ON p.id = c.user_id
                    WHERE c.status = 'active'
-                     AND (CAST(:svc AS text) IS NULL OR CAST(:svc AS text) = ANY(c.services))
+                     AND (CAST(:svc AS text) IS NULL OR CAST(:svc AS text) = ANY(c.services) OR cardinality(c.services) = 0)
                    ORDER BY distance_km NULLS LAST, c.rating_avg DESC NULLS LAST
                    LIMIT :lim"""
             ),
@@ -255,7 +341,7 @@ async def get_cleaner(db: AsyncSession, cleaner_id: UUID) -> dict:
             text(
                 """SELECT c.user_id, p.username, p.avatar_url, c.headline, c.bio, c.services, c.rate_type,
                           c.rate_cents, c.service_radius_km, c.area_label, c.rating_avg, c.rating_count, c.jobs_completed,
-                          c.languages, c.years_experience, c.equipment, c.availability, c.preferred_size
+                          c.languages, c.years_experience, c.equipment, c.availability, c.preferred_sizes
                    FROM cleaner_profiles c JOIN profiles p ON p.id = c.user_id
                    WHERE c.user_id = :u AND c.status = 'active'"""
             ),
@@ -308,12 +394,14 @@ async def create_job(
     bag_dropoff_ok: bool = False,
     bag_dropoff_address: str | None = None,
     bag_dropoff_note: str | None = None,
+    pool_id: UUID | None = None,
 ) -> dict:
-    if job_type not in JOB_TYPES:
+    cat = await get_category(db, job_type)
+    if not cat or not cat["active"]:
         raise MarketplaceError("That job type is not available yet.")
     bag_dropoff_address = (bag_dropoff_address or "").strip() or None
     bag_dropoff_note = (bag_dropoff_note or "").strip() or None
-    if job_type in NO_BAG_JOB_TYPES:
+    if not cat["bags_required"]:
         bag_dropoff_ok, bag_dropoff_address, bag_dropoff_note = False, None, None
     elif bag_dropoff_ok and not bag_dropoff_address:
         raise MarketplaceError("Add where the cleaner can leave the bags, or turn off the bag drop-off option.")
@@ -323,8 +411,10 @@ async def create_job(
         raise MarketplaceError("Confirm there are no hazardous materials or unsafe conditions at the site.")
     if not await has_accepted_current(db, customer_id, "customer"):
         raise MarketplaceError("Accept the customer terms before posting a job.", 403)
-    if not (await mp.card_status(db, customer_id))["has_card"]:
+    if pool_id is None and not (await mp.card_status(db, customer_id))["has_card"]:
         raise MarketplaceError("Add a payment card before posting a job. You are only charged when a cleaner takes it.", 402)
+    if pool_id is not None:
+        cleaner_id = None  # a pool job always goes on the board
     if cleaner_id is not None:
         if cleaner_id == customer_id:
             raise MarketplaceError("You cannot book yourself.")
@@ -343,10 +433,38 @@ async def create_job(
         if len(polygon) < 3 or any(len(v) != 2 for v in polygon):
             raise MarketplaceError("Draw an area with at least 3 points.")
         ring = [*polygon, polygon[0]] if polygon[0] != polygon[-1] else polygon
+        lim = await size_limits(db)
+        if len(polygon) > lim["max_vertices"]:
+            raise MarketplaceError(f"That area has too many points (limit {lim['max_vertices']}).")
+        if any(not (-180 <= float(v[0]) <= 180 and -90 <= float(v[1]) <= 90) for v in polygon):
+            raise MarketplaceError("That area has an invalid location.")
         wkt = "POLYGON((" + ",".join(f"{float(v[0])} {float(v[1])}" for v in ring) + "))"
+        shape = (
+            await db.execute(
+                text(
+                    "SELECT ST_IsValid(g) AS ok, ST_Area(g::geography) AS sqm "
+                    "FROM (SELECT ST_SetSRID(ST_GeomFromText(:w), 4326) AS g) t"
+                ),
+                {"w": wkt},
+            )
+        ).first()
+        if not shape or not shape.ok:
+            raise MarketplaceError("The drawn area crosses over itself. Redraw it without crossing lines.")
+        max_sqm = lim["job_max_area_sqm"]
+        if shape.sqm < lim["job_min_area_sqm"] - 1:
+            raise MarketplaceError("That area is very small. For a yard, a house or one spot, use a pin and describe the job instead.")
+        if shape.sqm > max_sqm + 1:
+            raise MarketplaceError(f"That area is too large (limit {max_sqm / 2_589_988.11:.2f} sq mi). Draw a smaller area.")
         latitude = longitude = None  # the centroid is computed in SQL below
     elif latitude is None or longitude is None:
         raise MarketplaceError("Pick where the job is: search an address, drop a pin, or draw the area.")
+
+    if radius_m is not None:
+        pin = await size_limits(db)
+        if not pin["pin_radius_min_m"] <= radius_m <= pin["pin_radius_max_m"]:
+            raise MarketplaceError(
+                f"Pin radius must be between {pin['pin_radius_min_ft']} and {pin['pin_radius_max_ft']} feet."
+            )
 
     now = datetime.now(timezone.utc)
     expires_at: datetime | None = None
@@ -372,7 +490,7 @@ async def create_job(
         raise MarketplaceError(f"The minimum job price is ${min_cents / 100:,.0f}.")
     price_type = "fixed"  # hourly is switched off for launch; the column and enum stay for later
     fee_pct = await _setting(db, "marketplace_platform_fee_percent", 5.5)
-    fee_cents = int(round(price_cents * fee_pct / 100))
+    fee_cents = 0 if pool_id else int(round(price_cents * fee_pct / 100))  # a pool pays the cleaner the full price
     origin = "direct" if cleaner_id else "board"
     status = "requested" if cleaner_id else "open"
 
@@ -383,7 +501,7 @@ async def create_job(
                      (customer_id, cleaner_id, origin, title, description, job_type, size, hazards_ack, address_label,
                       location, radius_m, area, time_mode, starts_at, window_start, window_end, flexible_days, expires_at,
                       price_type, price_cents, platform_fee_cents, fee_on_top, status,
-                      bag_dropoff_ok, bag_dropoff_address, bag_dropoff_note)
+                      bag_dropoff_ok, bag_dropoff_address, bag_dropoff_note, pool_id)
                    VALUES (:cu, :cl, :o, :t, :d, :jt, :sz, true, :al,
                            CASE WHEN CAST(:wkt AS text) IS NOT NULL
                                   THEN ST_Centroid(ST_GeogFromText('SRID=4326;' || CAST(:wkt AS text))::geometry)::geography
@@ -391,8 +509,8 @@ async def create_job(
                                 ELSE ST_SetSRID(ST_MakePoint(CAST(:lng AS float8), CAST(:lat AS float8)), 4326)::geography END,
                            :rm, CASE WHEN CAST(:wkt AS text) IS NULL THEN NULL
                                      ELSE ST_GeogFromText('SRID=4326;' || CAST(:wkt AS text)) END,
-                           :tm, :ss, :ws, :we, :fd, :ex, :pt, :pc, :fee, true, :st,
-                           :bdo, :bda, :bdn)
+                           :tm, :ss, :ws, :we, :fd, :ex, :pt, :pc, :fee, :fot, :st,
+                           :bdo, :bda, :bdn, :pool)
                    RETURNING id"""
             ),
             {
@@ -401,6 +519,7 @@ async def create_job(
                 "ss": starts_at, "ws": window_start, "we": window_end, "fd": flexible_days, "ex": expires_at,
                 "pt": price_type, "pc": price_cents, "fee": fee_cents, "st": status,
                 "bdo": bag_dropoff_ok, "bda": bag_dropoff_address, "bdn": bag_dropoff_note,
+                "fot": pool_id is None, "pool": pool_id,
             },
         )
     ).first()
@@ -415,6 +534,12 @@ async def create_job(
             await _notify_nearby_cleaners(db, row[0])
         except Exception:
             logger.exception("marketplace: nearby-cleaner notification failed for job %s", row[0])
+    elif cleaner_id:
+        await _notify_safe(
+            db, cleaner_id, "marketplace_job_requested", "You got a booking request",
+            f"Someone asked you to take \"{title.strip()}\". Accept or decline it before it expires.",
+            f"/fund/jobs/{row[0]}", "View request",
+        )
     return await get_job(db, row[0], customer_id)
 
 
@@ -424,7 +549,7 @@ _JOB_COLS = """j.id, j.customer_id, j.cleaner_id, j.origin, j.title, j.descripti
   j.accepted_at, j.arrive_by, j.started_at, j.completed_at, j.confirmed_at, j.release_after, j.created_at,
   cu.username AS customer_username, cl.username AS cleaner_username,
   j.radius_m, j.check_in_distance_m, j.finish_distance_m, j.location_flagged, j.track_flagged,
-  j.bag_dropoff_ok, j.bag_dropoff_address, j.bag_dropoff_note, j.bags_ack_at, j.bags_count,
+  j.bag_dropoff_ok, j.bag_dropoff_address, j.bag_dropoff_note, j.bags_ack_at, j.bags_count, j.pool_id,
   CASE WHEN j.area IS NULL THEN NULL ELSE ST_AsGeoJSON(j.area::geometry)::json END AS area"""
 
 
@@ -578,7 +703,7 @@ async def board_pins(
     rows = (
         await db.execute(
             text(
-                f"""SELECT j.id, j.title, j.job_type, j.price_type, j.price_cents, j.time_mode, j.starts_at,
+                f"""SELECT j.id, j.title, j.job_type, j.size, j.price_type, j.price_cents, j.time_mode, j.starts_at,
                            j.window_start, j.window_end, j.flexible_days, (j.customer_id = :u) AS is_mine,
                            ROUND(ST_Y(j.location::geometry)::numeric, 2)::float8 AS latitude,
                            ROUND(ST_X(j.location::geometry)::numeric, 2)::float8 AS longitude
@@ -747,13 +872,22 @@ async def _lapse_unstarted_jobs(db: AsyncSession) -> int:
 
 async def expire_stale_jobs(db: AsyncSession) -> int:
     """Expire unclaimed jobs past their deadline and auto-release completed ones past the review window."""
-    res = await db.execute(
-        text(
-            """UPDATE marketplace_jobs SET status = 'expired'
-               WHERE status IN ('open', 'requested') AND expires_at IS NOT NULL AND expires_at < now()"""
+    expired = (
+        await db.execute(
+            text(
+                """UPDATE marketplace_jobs SET status = 'expired'
+                   WHERE status IN ('open', 'requested') AND expires_at IS NOT NULL AND expires_at < now()
+                   RETURNING id, customer_id, title, cleaner_id, status"""
+            )
         )
-    )
+    ).mappings().all()
     await db.commit()
+    for j in expired:
+        await _notify_safe(
+            db, j["customer_id"], "marketplace_job_expired", "Your job expired",
+            f"Nobody took \"{j['title']}\" in time. You were not charged. Repost it, or raise the price, to try again.",
+            f"/fund/jobs/{j['id']}", "View job",
+        )
     lapsed = await _lapse_unstarted_jobs(db)
     due = (
         await db.execute(
@@ -779,7 +913,7 @@ async def expire_stale_jobs(db: AsyncSession) -> int:
             db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
             f"\"{job['title']}\" was released automatically. Your payout is on its way.", f"/fund/jobs/{jid}", "View job",
         )
-    return (res.rowcount or 0) + released + lapsed
+    return len(expired) + released + lapsed
 
 
 async def _load_for_update(db: AsyncSession, job_id: UUID) -> dict:
@@ -872,6 +1006,13 @@ async def _refund(db: AsyncSession, job: dict, status: str) -> None:
     await db.commit()
 
 
+async def _require_under_weekly_ceiling(db: AsyncSession, cleaner_id: UUID) -> None:
+    from app.services import earning_limits
+
+    if await earning_limits.is_locked(db, cleaner_id):
+        raise MarketplaceError(earning_limits.LOCKED_MESSAGE, 403)
+
+
 async def accept_direct_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, safety_ack: bool) -> dict:
     job = await _load_for_update(db, job_id)
     if job["origin"] != "direct" or job["cleaner_id"] != cleaner_id or job["status"] != "requested":
@@ -880,6 +1021,7 @@ async def accept_direct_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, sa
         raise MarketplaceError("Confirm you understand the job and will check the site for hazards on arrival.")
     await _require_cleaner_ready(db, cleaner_id)
     await _require_no_active_job(db, cleaner_id)
+    await _require_under_weekly_ceiling(db, cleaner_id)
     intent_id = await _charge(db, job)
     await db.execute(
         text(
@@ -925,10 +1067,21 @@ async def take_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, safety_ack:
         raise MarketplaceError("Confirm you understand the job and will check the site for hazards on arrival.")
     await _require_cleaner_ready(db, cleaner_id)
     await _require_no_active_job(db, cleaner_id)
-    fee_pct = await _setting(db, "marketplace_platform_fee_percent", 5.5)
-    fee = int(round(job["price_cents"] * fee_pct / 100))
-    job = {**job, "platform_fee_cents": fee}  # charge exactly what the stored fee will say
-    intent_id = await _charge(db, job)
+    await _require_under_weekly_ceiling(db, cleaner_id)
+    if job.get("pool_id"):
+        paused = (
+            await db.execute(
+                text("SELECT jobs_frozen OR status <> 'active' FROM sponsorship_pools WHERE id = :p"), {"p": job["pool_id"]}
+            )
+        ).scalar_one_or_none()
+        if paused is None or paused:
+            raise MarketplaceError("This job is paused right now.", 409)
+        fee, intent_id = 0, None  # paid from the pool's balance when released, nothing to charge
+    else:
+        fee_pct = await _setting(db, "marketplace_platform_fee_percent", 5.5)
+        fee = int(round(job["price_cents"] * fee_pct / 100))
+        job = {**job, "platform_fee_cents": fee}  # charge exactly what the stored fee will say
+        intent_id = await _charge(db, job)
     await db.execute(
         text(
             f"""UPDATE marketplace_jobs SET status = 'accepted', cleaner_id = :c, platform_fee_cents = :f,
@@ -1152,7 +1305,8 @@ async def complete_job(
         raise MarketplaceError("Job not found.", 404)
     if job["status"] != "in_progress":
         raise MarketplaceError("Start the job before marking it complete.", 409)
-    needs_bags = job["job_type"] not in NO_BAG_JOB_TYPES
+    cat = await get_category(db, job["job_type"]) or {"bags_required": True, "after_photo_required": True}
+    needs_bags = cat["bags_required"]
     if needs_bags and not bags_ack:
         raise MarketplaceError("Confirm that all the bags are in your finished photo before marking the job complete.")
     if not needs_bags:
@@ -1163,7 +1317,7 @@ async def complete_job(
             {"id": job_id, "u": cleaner_id},
         )
     ).scalar_one()
-    if photos < 1:
+    if photos < 1 and cat["after_photo_required"]:
         raise MarketplaceError("Add at least one after photo before marking the job complete.")
     dist, flagged = await _check_on_site(db, job_id, latitude, longitude, override, "finish")
     # Route tracking is required, but a dead phone must never strand a cleaner without pay: with too few
@@ -1265,6 +1419,8 @@ async def confirm_job(db: AsyncSession, job_id: UUID, customer_id: UUID) -> dict
     job = await _load_for_update(db, job_id)
     if job["customer_id"] != customer_id:
         raise MarketplaceError("Job not found.", 404)
+    if job.get("pool_id"):
+        raise MarketplaceError("This job is paid from a crowdfund pool. The people who chipped in approve the work.", 403)
     if job["status"] != "completed":
         raise MarketplaceError("The cleaner has not marked this job complete.", 409)
     await _release(db, job, "confirmed", confirmed=True)
@@ -1281,13 +1437,31 @@ async def _bump_cleaner_jobs(db: AsyncSession, cleaner_id: UUID) -> None:
     )
 
 
-async def dispute_job(db: AsyncSession, job_id: UUID, user_id: UUID, details: str) -> dict:
+async def approve_pool_job(db: AsyncSession, job_id: UUID, approver_id: UUID) -> dict:
+    """A contributor (checked by the pool service) approves finished work on a pool job. Pays the cleaner."""
     job = await _load_for_update(db, job_id)
-    if user_id not in (job["customer_id"], job["cleaner_id"]):
+    if not job.get("pool_id") or approver_id in (job["customer_id"], job["cleaner_id"]):
+        raise MarketplaceError("Job not found.", 404)
+    if job["status"] != "completed":
+        raise MarketplaceError("The cleaner has not marked this job complete.", 409)
+    await _release(db, job, "confirmed", confirmed=True)
+    await _notify_safe(
+        db, job["cleaner_id"], "marketplace_job_paid", "Payment released",
+        f"A contributor approved \"{job['title']}\". Your payout is on its way.", f"/fund/jobs/{job_id}", "View job",
+    )
+    return {"ok": True}
+
+
+async def dispute_job(db: AsyncSession, job_id: UUID, user_id: UUID, details: str, *, as_contributor: bool = False) -> dict:
+    job = await _load_for_update(db, job_id)
+    if as_contributor:
+        if not job.get("pool_id") or user_id in (job["customer_id"], job["cleaner_id"]):
+            raise MarketplaceError("Job not found.", 404)
+    elif user_id not in (job["customer_id"], job["cleaner_id"]):
         raise MarketplaceError("Job not found.", 404)
     if job["status"] not in ("accepted", "in_progress", "completed"):
         raise MarketplaceError("This job cannot be disputed now.", 409)
-    other = job["cleaner_id"] if user_id == job["customer_id"] else job["customer_id"]
+    other = job["cleaner_id"] if user_id == job["customer_id"] or as_contributor else job["customer_id"]
     await db.execute(
         text("UPDATE marketplace_jobs SET status = 'disputed', release_after = NULL WHERE id = :id"), {"id": job_id}
     )
@@ -1351,6 +1525,20 @@ async def post_message(db: AsyncSession, job_id: UUID, user_id: UUID, body: str)
         {"j": job_id, "s": user_id, "b": body[:2000], "f": chat_filter.flag_reason(body)},
     )
     await db.commit()
+    if other:
+        # Push and in-app only (chat email would be noise). One unread alert per job, so a long
+        # back-and-forth does not pile up notifications.
+        link = f"/fund/jobs/{job_id}"
+        already = (
+            await db.execute(
+                text("SELECT 1 FROM user_notifications WHERE user_id = :u AND type = 'marketplace_message' AND link_url = :l AND read IS NOT TRUE LIMIT 1"),
+                {"u": other, "l": link},
+            )
+        ).first()
+        if not already:
+            await _notify_safe(
+                db, other, "marketplace_message", "New message", f"New message about \"{job['title']}\".", link, "Open chat", email=False
+            )
     return {"ok": True}
 
 
@@ -1455,6 +1643,10 @@ async def add_review(db: AsyncSession, job_id: UUID, reviewer_id: UUID, rating: 
             {"e": reviewee},
         )
     await db.commit()
+    await _notify_safe(
+        db, reviewee, "marketplace_review", "You got a review",
+        f"You were rated {rating} out of 5 on \"{job['title']}\".", f"/fund/jobs/{job_id}", "View job", email=False,
+    )
     return {"ok": True}
 
 
@@ -1680,7 +1872,7 @@ def _plain(row) -> dict:
     return out
 
 
-async def _notify_admins(db: AsyncSession, kind: str, title: str, body: str, path: str) -> None:
+async def _notify_admins(db: AsyncSession, kind: str, title: str, body: str, path: str, email: bool = True) -> None:
     """Tells every site admin about something that needs a human (disputes, stuck payments)."""
     try:
         ids = (await db.execute(text("SELECT id FROM profiles WHERE is_admin"))).scalars().all()
@@ -1688,20 +1880,24 @@ async def _notify_admins(db: AsyncSession, kind: str, title: str, body: str, pat
         logger.exception("marketplace: admin lookup failed for %s", kind)
         return
     for uid in ids:
-        await _notify_safe(db, uid, kind, title, body, path, "Open admin")
+        await _notify_safe(db, uid, kind, title, body, path, "Open admin", email=email)
 
 
-async def _notify_safe(db: AsyncSession, user_id: UUID | None, kind: str, title: str, body: str, path: str, cta: str) -> None:
+async def _notify_safe(
+    db: AsyncSession, user_id: UUID | None, kind: str, title: str, body: str, path: str, cta: str, email: bool = True
+) -> None:
     """Lifecycle notifications must never fail the action that triggered them."""
     if not user_id:
         return
     try:
-        await _notify(db, user_id, kind, title, body, path, cta)
+        await _notify(db, user_id, kind, title, body, path, cta, email=email)
     except Exception:
         logger.exception("marketplace: notification %s failed", kind)
 
 
-async def _notify(db: AsyncSession, user_id: UUID, kind: str, title: str, body: str, path: str, cta: str) -> None:
+async def _notify(
+    db: AsyncSession, user_id: UUID, kind: str, title: str, body: str, path: str, cta: str, email: bool = True
+) -> None:
     """In-app notification plus email. Inserting into user_notifications also fires the push trigger
     (migration 062 -> send-push edge function), so link_url doubles as the push deep link."""
     from app.core.config import settings
@@ -1712,22 +1908,24 @@ async def _notify(db: AsyncSession, user_id: UUID, kind: str, title: str, body: 
         {"u": user_id, "t": kind, "ti": title, "b": body, "l": path},
     )
     await db.commit()
-    email = (await db.execute(text("SELECT email FROM auth.users WHERE id = :u"), {"u": user_id})).scalar()
     if not email:
+        return
+    address = (await db.execute(text("SELECT email FROM auth.users WHERE id = :u"), {"u": user_id})).scalar()
+    if not address:
         return
     url = f"{settings.frontend_url}{path}"
     html = wrap_email_html(f"<h2 style=\"margin:0 0 12px\">{title}</h2><p>{body}</p><p>{render_cta_button(url, cta)}</p>")
-    await send_email(db, to=[email], subject=title, html=html, kind=kind)
+    await send_email(db, to=[address], subject=title, html=html, kind=kind)
 
 
 async def _notify_nearby_cleaners(db: AsyncSession, job_id: UUID, limit: int = 25) -> None:
-    """Tell active cleaners who offer this service and whose area covers the job."""
+    """Tell active cleaners who offer this service (or set no types, meaning any) and whose area covers the job."""
     rows = (
         await db.execute(
             text(
                 """SELECT c.user_id, j.title FROM marketplace_jobs j
                    JOIN cleaner_profiles c ON c.status = 'active' AND c.user_id <> j.customer_id
-                        AND j.job_type = ANY(c.services)
+                        AND (cardinality(c.services) = 0 OR j.job_type = ANY(c.services))
                         AND c.home_location IS NOT NULL AND j.location IS NOT NULL
                         AND ST_DWithin(c.home_location, j.location, c.service_radius_km * 1000)
                    WHERE j.id = :j AND NOT EXISTS (

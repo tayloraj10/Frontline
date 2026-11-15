@@ -5,7 +5,8 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/PageShell";
-import { JOB_TYPE_LABELS, STATUS_LABELS, TIME_MODE_LABELS, usd, whenLabel, type Job, type MoneySummary } from "@/lib/marketplace";
+import { CategoryChip, SizeBadge } from "./CategoryBits";
+import { STATUS_LABELS, TIME_MODE_LABELS, usd, whenLabel, type Job, type MoneySummary } from "@/lib/marketplace";
 
 export default function JobsList({
   asCustomer,
@@ -80,7 +81,8 @@ export default function JobsList({
                       <Badge variant={s.tone}>{s.label}</Badge>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
-                      <Badge>{JOB_TYPE_LABELS[j.job_type] ?? j.job_type}</Badge>
+                      <CategoryChip type={j.job_type} />
+                      <SizeBadge size={j.size} />
                       <span>{TIME_MODE_LABELS[j.time_mode]}</span>
                       <span>{whenLabel(j)}</span>
                       <span className="ml-auto font-bold text-emerald-300">{usd(j.price_cents)}</span>

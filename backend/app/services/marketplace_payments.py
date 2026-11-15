@@ -122,7 +122,8 @@ async def charge_job(db: AsyncSession, job: dict) -> str | None:
 async def pay_out(db: AsyncSession, job: dict) -> str | None:
     """Transfers the cleaner's share. Returns the transfer id, or None when there is nothing to move
     (payments off, or a job that was never charged through Stripe)."""
-    if not is_configured() or not job.get("stripe_payment_intent_id"):
+    pool_job = bool(job.get("pool_id"))
+    if not is_configured() or not (job.get("stripe_payment_intent_id") or pool_job):
         return None
     if job.get("stripe_transfer_id"):
         return job["stripe_transfer_id"]
@@ -137,16 +138,19 @@ async def pay_out(db: AsyncSession, job: dict) -> str | None:
     payout = job["price_cents"] if job.get("fee_on_top") else job["price_cents"] - (job["platform_fee_cents"] or 0)
     try:
         client = _client()
-        charge = client.payment_intents.retrieve(job["stripe_payment_intent_id"]).latest_charge
+        params = {
+            "amount": payout,
+            "currency": "usd",
+            "destination": row.stripe_connect_account_id,
+            "transfer_group": f"job_{job['id']}",
+            "metadata": {"job_id": str(job["id"])},
+        }
+        if pool_job:  # paid from the platform balance the contributions sit in
+            params["metadata"]["pool_id"] = str(job["pool_id"])
+        else:
+            params["source_transaction"] = client.payment_intents.retrieve(job["stripe_payment_intent_id"]).latest_charge
         transfer = client.transfers.create(
-            params={
-                "amount": payout,
-                "currency": "usd",
-                "destination": row.stripe_connect_account_id,
-                "source_transaction": charge,
-                "transfer_group": f"job_{job['id']}",
-                "metadata": {"job_id": str(job["id"])},
-            },
+            params=params,
             options={"idempotency_key": f"mk-transfer-{job['id']}"},
         )
     except stripe.StripeError as e:

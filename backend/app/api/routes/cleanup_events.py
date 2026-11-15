@@ -67,6 +67,7 @@ class CreateCleanupEventRequest(BaseModel):
     cohost_group_ids: list[UUID] = []
     logging_mode: Literal["organizer_total", "individual"] = "organizer_total"
     sponsorship_id: UUID | None = None
+    timezone: str | None = None  # browser IANA zone, so "once a day" follows the organizer's local day
 
     @field_validator("max_attendees")
     @classmethod
@@ -995,7 +996,13 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
     if payload.sponsorship_id is not None:
         try:
             await sponsored_cleanups.validate_event_pool(
-                db, payload.sponsorship_id, payload.group_id, payload.latitude, payload.longitude
+                db,
+                payload.sponsorship_id,
+                payload.group_id,
+                payload.latitude,
+                payload.longitude,
+                payload.scheduled_start,
+                payload.timezone,
             )
         except sponsored_cleanups.SponsoredError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e

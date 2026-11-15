@@ -6,12 +6,27 @@ Stripe webhooks authenticate by signature, so they are the only allowlisted exce
 
 from fastapi.routing import APIRoute
 
-from app.core.auth import require_admin, require_service, require_user
+from app.core.auth import optional_user, require_admin, require_service, require_user
 from app.main import app
 
 AUDITED_PREFIXES = ("/api/marketplace", "/api/payments", "/api/sponsorships")
 AUTH_DEPS = {require_user, require_admin, require_service}
 SIGNATURE_VERIFIED = {"/api/payments/webhooks/stripe"}
+# Static job-category catalog (labels, icons, colors): no user data, so no auth at all.
+PUBLIC_STATIC = {"/api/marketplace/categories"}
+# Read-only browse routes a logged-out visitor may call. They must use optional_user (never skip auth
+# silently); the frontend proxies also only forward them when the payments gate is on.
+PUBLIC_READS = {
+    "/api/sponsorships/sites",
+    "/api/sponsorships/map",
+    "/api/sponsorships/group-areas",
+    "/api/marketplace/cleaners",
+    "/api/marketplace/cleaners/{cleaner_id}",
+    "/api/marketplace/pricing",
+    "/api/marketplace/board",
+    "/api/marketplace/board/pins",
+    "/api/marketplace/jobs/{job_id}",
+}
 
 
 def _calls(dependant):
@@ -27,6 +42,12 @@ def test_audited_routes_have_auth():
             continue
         if route.path in SIGNATURE_VERIFIED:
             continue
-        if not AUTH_DEPS.intersection(_calls(route.dependant)):
-            missing.append(f"{sorted(route.methods)} {route.path}")
+        if route.path in PUBLIC_STATIC and route.methods == {"GET"}:
+            continue
+        deps = set(_calls(route.dependant))
+        if AUTH_DEPS & deps:
+            continue
+        if route.path in PUBLIC_READS and route.methods == {"GET"} and optional_user in deps:
+            continue
+        missing.append(f"{sorted(route.methods)} {route.path}")
     assert not missing, "Routes without an auth dependency:\n" + "\n".join(missing)

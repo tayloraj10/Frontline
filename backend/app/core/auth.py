@@ -99,6 +99,17 @@ async def require_user(authorization: str | None = Header(default=None)) -> Curr
     return CurrentUser(id=uid, email=claims.get("email"))
 
 
+async def optional_user(authorization: str | None = Header(default=None)) -> CurrentUser | None:
+    """For public read routes: the signed-in user when a valid token is sent, None for a logged-out visitor.
+    A token that is present but invalid or expired is treated as logged out, never as an error."""
+    if not authorization:
+        return None
+    try:
+        return await require_user(authorization)
+    except HTTPException:
+        return None
+
+
 async def require_admin(
     user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)
 ) -> CurrentUser:

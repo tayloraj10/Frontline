@@ -1,5 +1,6 @@
 import TodoBadge from "./TodoBadge";
 import GroupPayoutBanner from "./GroupPayoutBanner";
+import GroupEarningLimit from "./GroupEarningLimit";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -283,6 +284,7 @@ export default async function GroupProfilePage({ params }: Props) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="min-w-0 space-y-6">
           {showPayoutBanner && <GroupPayoutBanner groupId={group.id} slug={slug} />}
+          {showPayoutBanner && <GroupEarningLimit groupId={group.id} />}
           {isAdmin && (
             <div className="rounded-[20px] bg-zinc-900 p-5">
               <div className="flex items-start justify-between gap-3">

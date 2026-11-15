@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authHeader } from "@/lib/fastapiAuth";
 import { requireAdminOrPaymentsEnabled } from "@/lib/paymentsAuth";
+import { createClient } from "@/lib/supabase/server";
+import { getPaymentsGate } from "@/lib/gameSettings.server";
 
 /**
  * One allowlisted proxy for the sponsored-cleanup endpoints (payments v2). The caller's
@@ -17,6 +19,7 @@ const USER_GET = [
   /^my-limits$/,
   /^payouts\/status$/,
   new RegExp(`^groups/${UUID}/payouts/status$`),
+  new RegExp(`^groups/${UUID}/earning-limit$`),
 ];
 const USER_POST = [
   /^payouts\/onboard$/,
@@ -33,6 +36,9 @@ const ADMIN_POST = [
   new RegExp(`^allocations/${UUID}/pay$`),
 ];
 
+/** Browse-only reads that logged-out visitors may make once payments are live for everyone. */
+const PUBLIC_GET = [/^sites$/, /^group-areas$/, /^map$/];
+
 const matches = (patterns: RegExp[], path: string) => patterns.some((p) => p.test(path));
 
 async function forward(
@@ -45,6 +51,24 @@ async function forward(
   const isUserRoute = matches(method === "GET" ? USER_GET : USER_POST, path);
   if (!isAdminRoute && !isUserRoute) {
     return NextResponse.json({ detail: "Not found" }, { status: 404 });
+  }
+
+  if (method === "GET" && matches(PUBLIC_GET, path)) {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      const gate = await getPaymentsGate();
+      if (!(gate.preview && gate.enabled)) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+      const url = new URL(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/sponsorships/${path}`);
+      request.nextUrl.searchParams.forEach((value, key) => {
+        if (key !== "user_id") url.searchParams.set(key, value);
+      });
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      return NextResponse.json(data, { status: res.status });
+    }
   }
 
   const auth = await requireAdminOrPaymentsEnabled({ rewards: true });

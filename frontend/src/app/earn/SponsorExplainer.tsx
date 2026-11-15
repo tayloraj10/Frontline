@@ -9,7 +9,7 @@ const TERMS: { term: string; body: string }[] = [
   },
   {
     term: "Group area",
-    body: "A whole region a sponsor wants cleaned, like a few neighborhoods or a drawn shape. It is for groups, not solo cleaners: when a group schedules a cleanup event inside the area, it can mark the event as sponsored and the group earns from the area's money once the event is verified.",
+    body: "A whole region a sponsor wants cleaned, like a few neighborhoods or zip codes, or a shape you draw. It is for groups, not solo cleaners: when a group schedules a cleanup event inside the area, it can mark the event as sponsored and the group earns from the area's money once the event is verified.",
   },
   {
     term: "Pool",

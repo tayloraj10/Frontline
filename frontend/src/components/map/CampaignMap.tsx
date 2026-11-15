@@ -1942,6 +1942,14 @@ export default function CampaignMap({
   const [liveClaims, setLiveClaims] = useState<Record<string, TerritoryClaim>>({});
   const [eventsExpanded, setEventsExpanded] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  // Opening the Layers panel closes any open map popup, so a card never hides behind or competes with it.
+  // Clicking each popup's own close button lets MapLibre and the owning layer clean up normally.
+  useEffect(() => {
+    if (!legendOpen) return;
+    mapContainer.current
+      ?.querySelectorAll<HTMLElement>(".maplibregl-popup-close-button")
+      .forEach((b) => b.click());
+  }, [legendOpen]);
   // Safety net alongside the per-handler setLegendOpen(false) calls below: guarantees the
   // Layers menu closes whenever a stats/territory panel opens no matter which code path
   // set selectedZip, instead of relying on every future click handler to remember to do it.
@@ -3766,7 +3774,7 @@ export default function CampaignMap({
       source: "territory",
       "source-layer": "territories",
       paint: {
-        "line-color": "#facc15",
+        "line-color": "#f97316",
         "line-width": 3,
         "line-opacity": [
           "case",
@@ -4433,6 +4441,7 @@ export default function CampaignMap({
       // deep-link flyTo would immediately re-center on the user's real location instead,
       // reading as an unwanted "zoom in then back out" right after the map loads.
       const autoFlyPendingRef = { current: !focusCoords };
+      const restoredFocusRef = { current: false };
       // dragstart/zoomstart also fire for our own programmatic initial-bounds fitBounds
       // call above, so only count gestures that carry an originalEvent (i.e. actually
       // came from the mouse/touch/wheel) as real user interaction.
@@ -4450,6 +4459,17 @@ export default function CampaignMap({
         if (autoFlyPendingRef.current && !userInteracted) {
           autoFlyPendingRef.current = false;
           map.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 14, duration: 1000 });
+        } else if (focusCoords && !restoredFocusRef.current && !userInteracted) {
+          // The control itself recenters on its first fix (started by ContributionPanel or
+          // similar), which yanks a restored/deep-linked view to the user's location.
+          // Put the camera back once, right after that first fix.
+          restoredFocusRef.current = true;
+          const m = map.current;
+          setTimeout(() => {
+            if (userInteracted) return;
+            m?.stop();
+            m?.jumpTo({ center: [focusCoords.longitude, focusCoords.latitude], zoom: focusCoords.zoom ?? 15 });
+          }, 0);
         }
       });
       control.on("error", (e) => {
@@ -6119,7 +6139,7 @@ export default function CampaignMap({
             )}
           </button>
           {legendOpen && (
-            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-0.5 p-2 pt-0 bg-zinc-900/95 ring-1 ring-inset ring-white/5 rounded-[20px] backdrop-blur-md shadow-elevation-4">
+            <div className="w-full max-h-[60vh] overflow-y-auto overscroll-contain flex flex-col gap-0.5 p-2 pt-0 bg-zinc-900/95 ring-1 ring-inset ring-white/5 rounded-[20px] backdrop-blur-md shadow-elevation-4">
               <div className="sticky top-0 z-10 -mx-2 mb-1 flex items-center justify-between bg-zinc-900 px-4 pt-2.5 pb-2 border-b border-zinc-800">
                 <span className="text-sm font-semibold text-zinc-100">Layers</span>
                 <button
@@ -6326,14 +6346,28 @@ export default function CampaignMap({
               </LegendToggle>
               {sponsoredLayer.available && (
                 <LegendToggle checked={showSponsored} onChange={setShowSponsored}>
-                  <span className="w-3 h-3 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/10 flex-shrink-0" />
-                  <span className="text-zinc-300">Sponsored areas{showSponsored && sponsoredLayer.count > 0 ? ` (${sponsoredLayer.count})` : ""}</span>
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <span className="w-3 h-3 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/10 flex-shrink-0" />
+                    <span className="w-3 h-3 rounded-sm border border-dashed border-amber-300 bg-amber-300/20 flex-shrink-0" />
+                  </span>
+                  <span className="text-zinc-300 leading-tight">
+                    Sponsored areas{showSponsored && sponsoredLayer.count > 0 ? ` (${sponsoredLayer.count})` : ""}
+                    <br />
+                    <span className="text-[11px] text-zinc-500">(yellow = yours, purple ✦ = Plus only)</span>
+                  </span>
                 </LegendToggle>
               )}
               {jobsLayer.available && (
                 <LegendToggle checked={showJobs} onChange={setShowJobs}>
-                  <span className="flex-shrink-0 rounded-full bg-sky-400 px-1.5 py-px text-[9px] font-black leading-none text-sky-950">$</span>
-                  <span className="text-zinc-300">Neighbor jobs{showJobs && jobsLayer.count > 0 ? ` (${jobsLayer.count})` : ""}</span>
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <span className="rounded-full bg-sky-400 px-1.5 py-px text-[9px] font-black leading-none text-sky-950">$</span>
+                    <span className="rounded-full bg-amber-300 px-1.5 py-px text-[9px] font-black leading-none text-amber-950">$</span>
+                  </span>
+                  <span className="text-zinc-300 leading-tight">
+                    Neighbor jobs{showJobs && jobsLayer.count > 0 ? ` (${jobsLayer.count})` : ""}
+                    <br />
+                    <span className="text-[11px] text-zinc-500">(yellow = yours)</span>
+                  </span>
                 </LegendToggle>
               )}
               <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>

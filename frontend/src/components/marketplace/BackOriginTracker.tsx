@@ -23,9 +23,13 @@ export default function BackOriginTracker() {
       if (to.origin !== window.location.origin || !to.pathname.startsWith("/fund/")) return;
       const here = window.location.pathname;
       if (here.startsWith("/fund/")) return; // already inside the detail pages: keep the earlier origin
-      try {
-        sessionStorage.setItem(FUND_ORIGIN_KEY, here + window.location.search);
-      } catch {}
+      // Read the URL after the link's own handlers run: map popups write the camera into the
+      // query string on click, and that is what the back link should restore.
+      setTimeout(() => {
+        try {
+          sessionStorage.setItem(FUND_ORIGIN_KEY, here + window.location.search);
+        } catch {}
+      }, 0);
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);

@@ -1,5 +1,6 @@
 "use client";
 
+import { LARGE_BAG_DEFINITION, minLargeBags } from "@/lib/sponsoredBags";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -577,7 +578,9 @@ export default function CleanupEventDetail({
               ) : (
                 "A sponsor funded this cleanup. "
               )}
-              {event.group_name} can earn {describeRule(event.sponsored.payout_rule)}.
+              {event.group_name} can earn {describeRule(event.sponsored.payout_rule)}, as long as the event collects at least{" "}
+              {minLargeBags(event.sponsored.payout_rule)} large bag{minLargeBags(event.sponsored.payout_rule) === 1 ? "" : "s"}.{" "}
+              <span className="text-xs text-zinc-400">{LARGE_BAG_DEFINITION}</span>
             </p>
             {event.sponsored.message && (
               <p className="mt-1 text-xs italic text-zinc-400">&quot;{event.sponsored.message}&quot;</p>
