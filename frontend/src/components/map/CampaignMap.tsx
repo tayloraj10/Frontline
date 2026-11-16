@@ -5903,19 +5903,20 @@ export default function CampaignMap({
           <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full text-sm font-semibold text-center shadow-elevation-3 backdrop-blur-md whitespace-nowrap bg-zinc-900/95 text-zinc-100">
             Click areas on the map to include them in this event.
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-2">
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 p-1.5 rounded-full bg-zinc-950/95 backdrop-blur-md border border-zinc-700/60 shadow-elevation-3">
+            <button
+              onClick={onAreaPickerCancel}
+              className="min-h-11 px-5 bg-zinc-800 hover:bg-zinc-700 border-2 border-zinc-400 text-zinc-100 text-sm font-semibold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+            >
+              Cancel
+            </button>
             <button
               onClick={onAreaPickerConfirm}
               disabled={areaPickerCount === 0}
-              className="min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-11 pl-4 pr-5 inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 border-2 border-emerald-200 disabled:opacity-40 text-white text-sm font-bold rounded-full whitespace-nowrap transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
               Confirm ({areaPickerCount})
-            </button>
-            <button
-              onClick={onAreaPickerCancel}
-              className="min-h-12 px-6 bg-zinc-900/95 hover:bg-zinc-800 backdrop-blur-md text-zinc-200 text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Cancel
             </button>
           </div>
         </>
@@ -5937,18 +5938,19 @@ export default function CampaignMap({
               )
               : pinPickerLabel ?? "Drag the pin to your exact cleanup location"}
           </div>
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex gap-2">
-            <button
-              onClick={handleConfirmPin}
-              className="min-h-12 px-6 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
-            >
-              Confirm location
-            </button>
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 p-1.5 rounded-full bg-zinc-950/95 backdrop-blur-md border border-zinc-700/60 shadow-elevation-3">
             <button
               onClick={onPinCancelled}
-              className="min-h-12 px-6 bg-zinc-900/95 hover:bg-zinc-800 backdrop-blur-md text-zinc-200 text-sm font-bold rounded-full shadow-elevation-3 transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+              className="min-h-11 px-5 bg-zinc-800 hover:bg-zinc-700 border-2 border-zinc-400 text-zinc-100 text-sm font-semibold rounded-full transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
             >
               Cancel
+            </button>
+            <button
+              onClick={handleConfirmPin}
+              className="min-h-11 pl-4 pr-5 inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 border-2 border-emerald-200 text-white text-sm font-bold rounded-full whitespace-nowrap transition-[background-color,transform] duration-150 active:scale-[0.96] touch-manipulation"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              Confirm location
             </button>
           </div>
         </>

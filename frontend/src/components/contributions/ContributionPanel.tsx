@@ -3161,6 +3161,7 @@ function HostEventModal({
   const [cohostGroupIds, setCohostGroupIds] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [meetupDetails, setMeetupDetails] = useState("");
   const [scheduledStart, setScheduledStart] = useState("");
   const [scheduledEnd, setScheduledEnd] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -3290,6 +3291,7 @@ function HostEventModal({
         latitude: submitCoords.latitude,
         longitude: submitCoords.longitude,
         addressLine1: !route && addressValue.trim() ? addressValue.trim() : null,
+        meetupDetails: meetupDetails.trim() || null,
         city: !route && addressCity.trim() ? addressCity.trim() : null,
         state: !route && addressState.trim() ? addressState.trim() : null,
         postalCode: !route && addressPostalCode.trim() ? addressPostalCode.trim() : null,
@@ -3451,6 +3453,18 @@ function HostEventModal({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
+          className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">Meetup details (optional)</label>
+        <textarea
+          value={meetupDetails}
+          onChange={(e) => setMeetupDetails(e.target.value)}
+          rows={2}
+          maxLength={140}
+          placeholder="e.g. By the bagel shop on the corner, look for the green shirts"
           className="w-full min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600 resize-none"
         />
       </div>
@@ -3680,7 +3694,7 @@ function HostEventModal({
                 <label className="block text-xs text-zinc-500 mb-1.5">Street address</label>
                 <input
                   value={addressValue}
-                  onChange={(e) => setAddressValue(e.target.value)}
+                  onChange={(e) => { setShowAddressDetails(true); setAddressValue(e.target.value); }}
                   className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
                 />
               </div>
@@ -3694,7 +3708,7 @@ function HostEventModal({
                   <label className="block text-xs text-zinc-500 mb-1.5">{label}</label>
                   <input
                     value={value}
-                    onChange={(e) => set(e.target.value)}
+                    onChange={(e) => { setShowAddressDetails(true); set(e.target.value); }}
                     className="w-full min-w-0 min-h-11 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm"
                   />
                 </div>

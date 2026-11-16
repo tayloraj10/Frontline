@@ -21,6 +21,7 @@ export default function FlowGuide({
   className = "",
   size = "sm",
   roles = [],
+  filled = false,
 }: {
   id: WalkthroughId;
   autoOpen?: boolean;
@@ -34,6 +35,8 @@ export default function FlowGuide({
   size?: "sm" | "md";
   /** Roles the viewer holds. Steps tagged with a role not listed here are hidden. */
   roles?: string[];
+  /** "md" icon only: solid tinted button with no border, to match filled action rows. */
+  filled?: boolean;
 }) {
   const base = WALKTHROUGHS[id];
   const roleKey = roles.join(",");
@@ -86,7 +89,9 @@ export default function FlowGuide({
             aria-label={label}
             className={`${
               size === "md"
-                ? "w-11 h-11 text-lg border-emerald-500/30 bg-zinc-800/70 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-500/50 active:text-emerald-300 active:bg-emerald-500/10"
+                ? filled
+                  ? "w-11 h-11 text-lg border-emerald-500/30 bg-emerald-500/15 text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/25 hover:border-emerald-500/50 active:text-emerald-200 active:bg-emerald-500/25"
+                  : "w-11 h-11 text-lg border-emerald-500/30 bg-zinc-800/70 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-500/50 active:text-emerald-300 active:bg-emerald-500/10"
                 : "w-7 h-7 text-xs border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600 active:text-zinc-200 active:bg-zinc-800"
             } flex items-center justify-center font-bold rounded-full border active:scale-[0.92] transition-[background-color,border-color,color,transform] duration-150 touch-manipulation shrink-0 ${className}`}
           >

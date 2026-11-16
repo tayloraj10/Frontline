@@ -44,6 +44,7 @@ import FlowGuide from "@/components/walkthrough/FlowGuide";
 import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import BodyPortal from "@/components/ui/BodyPortal";
+import EventFlyerModal from "@/components/cleanups/EventFlyerModal";
 import PlusFlair from "@/components/billing/PlusFlair";
 import { describeRule } from "@/app/earn/SponsoredSites";
 
@@ -172,6 +173,7 @@ export default function CleanupEventDetail({
   });
   const [guidedStep, setGuidedStep] = useState(0);
   const [organizerMenuOpen, setOrganizerMenuOpen] = useState(false);
+  const [flyerOpen, setFlyerOpen] = useState(false);
   const [attendeeFilter, setAttendeeFilter] = useState<"all" | "not_checked_in">("all");
   const [moreRowId, setMoreRowId] = useState<string | null>(null);
   const [rosterOpen, setRosterOpen] = useState(false);
@@ -439,6 +441,12 @@ export default function CleanupEventDetail({
           </p>
         ) : null;
       })()}
+      {event.meetup_details && (
+        <p className="text-sm text-zinc-300 flex items-start gap-1.5">
+          <span aria-hidden="true">🧭</span>
+          <span>{event.meetup_details}</span>
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <a
           href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
@@ -506,15 +514,30 @@ export default function CleanupEventDetail({
             <h1 className="font-display font-extrabold text-2xl  text-zinc-100 leading-tight break-words">{event.title}</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0 sm:pt-1">
-            <ShareButton variant="icon" content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
-            {!effectiveIsOrganizer && <FlowGuide id="attendee" autoOpen variant="icon" size="md" label="How does this work?" />}
-            {effectiveIsOrganizer && <FlowGuide id="event-organizer" autoOpen variant="icon" size="md" label="How do I run this event?" />}
+            <ShareButton variant="icon" filled content={{ title: event.title, text: `Join ${event.group_name}'s cleanup event.` }} />
+            {!effectiveIsOrganizer && <FlowGuide id="attendee" autoOpen variant="icon" size="md" filled label="How does this work?" />}
+            {effectiveIsOrganizer && <FlowGuide id="event-organizer" autoOpen variant="icon" size="md" filled label="How do I run this event?" />}
             {effectiveIsOrganizer && (
               <>
+                {!isCancelled && (
+                  <button
+                    type="button"
+                    onClick={() => setFlyerOpen(true)}
+                    title="Event flyer"
+                    aria-label="Event flyer"
+                    className="w-11 h-11 flex items-center justify-center rounded-full border border-fuchsia-500/30 bg-fuchsia-500/15 text-fuchsia-300 hover:text-fuchsia-200 hover:bg-fuchsia-500/25 hover:border-fuchsia-500/50 active:text-fuchsia-200 active:bg-fuchsia-500/25 active:scale-[0.9] transition-[background-color,color,transform] duration-150 shrink-0 touch-manipulation"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="3" />
+                      <circle cx="9" cy="9" r="1.5" />
+                      <path d="m21 15-5-5L5 21" />
+                    </svg>
+                  </button>
+                )}
                 <Link
                   href={`/groups/${event.group_slug}/events/${event.id}/edit`}
                   title="Edit"
-                  className="w-11 h-11 flex items-center justify-center rounded-full bg-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-700 active:text-white active:bg-zinc-700 active:scale-[0.9] transition-[background-color,color,transform] duration-150 shrink-0 touch-manipulation"
+                  className="w-11 h-11 flex items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-amber-300 hover:text-amber-200 hover:bg-amber-500/25 hover:border-amber-500/50 active:text-amber-200 active:bg-amber-500/25 active:scale-[0.9] transition-[background-color,color,transform] duration-150 shrink-0 touch-manipulation"
                 >
                   <EditGlyph />
                 </Link>
@@ -523,7 +546,7 @@ export default function CleanupEventDetail({
                     onClick={() => setConfirmingCancel(true)}
                     disabled={cancelLoading}
                     title={cancelLoading ? "Cancelling…" : "Cancel event"}
-                    className="w-11 h-11 flex items-center justify-center rounded-full bg-red-950/30 text-red-400 hover:text-red-300 hover:bg-red-950/50 hover:border-red-700 active:text-red-300 active:bg-red-950/50 active:border-red-700 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation disabled:opacity-40 disabled:active:text-red-400"
+                    className="w-11 h-11 flex items-center justify-center rounded-full border border-red-500/30 bg-red-500/15 text-red-400 hover:text-red-300 hover:bg-red-500/25 hover:border-red-500/50 active:text-red-300 active:bg-red-500/25 active:border-red-500/50 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation disabled:opacity-40 disabled:active:text-red-400"
                   >
                     {cancelLoading ? (
                       <div className="w-4 h-4 border-2 border-red-400/60 border-t-red-200 rounded-full animate-spin" />
@@ -536,6 +559,7 @@ export default function CleanupEventDetail({
             )}
           </div>
         </div>
+        {flyerOpen && effectiveIsOrganizer && <EventFlyerModal event={event} onClose={() => setFlyerOpen(false)} />}
         {isCancelled && (
           <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-red-950/30 px-2.5 py-1 text-xs font-semibold text-red-400">
             Cancelled
