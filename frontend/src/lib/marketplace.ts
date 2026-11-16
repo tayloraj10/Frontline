@@ -46,6 +46,8 @@ export type Job = {
   arrive_by?: string | null;
   arrive_minutes?: number;
   arrive_deadline?: string;
+  /** Set when the viewer gave this job up and is frozen out of it until then. */
+  retake_at?: string | null;
   release_after: string | null;
   cleaner_payout_cents?: number;
   total_cents?: number;
@@ -185,3 +187,10 @@ export async function mk<T>(path: string, init: { method?: string; body?: unknow
 }
 
 export type MoneySummary = { paid_cents: number; paid_jobs: number; pending_cents: number; pending_jobs: number };
+
+/** Mirrors the server: backing out costs a strike once work started, or after the job's start time has passed. */
+export function backOutIsStrike(j: Pick<Job, "status" | "starts_at" | "window_start">): boolean {
+  if (j.status === "in_progress") return true;
+  const start = j.starts_at ?? j.window_start;
+  return j.status === "accepted" && !!start && new Date(start).getTime() < Date.now();
+}

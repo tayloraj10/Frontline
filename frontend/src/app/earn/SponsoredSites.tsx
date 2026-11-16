@@ -1,6 +1,7 @@
 "use client";
 
 import { claimRangeNote } from "@/components/map/useSponsoredMapLayer";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -11,9 +12,11 @@ import { SPONSORED_CHANGED_EVENT, SPONSORED_FOCUS_EVENT } from "@/components/map
 import { cn } from "@/lib/cn";
 import { getPosition } from "@/lib/getPosition";
 import { uploadToR2 } from "@/lib/uploadToR2";
+import MinBagsNote from "@/components/sponsorships/MinBagsNote";
 import { minBagsSentence, minBagsShort, minLargeBags } from "@/lib/sponsoredBags";
 import AddToSiteButton from "@/components/sponsorships/AddToSiteButton";
 import { ensureLoggedIn } from "@/lib/loginRedirect";
+import { useCopy } from "@/lib/settingText";
 
 const PAGE_SIZE = 6;
 type Filter = "open" | "all";
@@ -101,6 +104,7 @@ function minutesLeft(iso: string | null): string | null {
 }
 
 export default function SponsoredSites() {
+  const copy = useCopy();
   // Map popups link here with ?add=<id> to open that site's add-money box.
   const [addId, setAddId] = useState<string | null>(null);
   useEffect(() => {
@@ -170,11 +174,13 @@ export default function SponsoredSites() {
     try {
       if (!(await ensureLoggedIn())) return;
       const body: Record<string, unknown> = {};
-      if (step !== "release") {
+      // Claiming works from anywhere (you get a travel window); only the photos need your location.
+      if (step === "claim") {
+        body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      } else if (step !== "release") {
         const pos = await getPosition();
         body.latitude = pos.coords.latitude;
         body.longitude = pos.coords.longitude;
-        if (step === "claim") body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       }
       if (step === "before-photo" || step === "after-photo") {
         if (!photo) throw new Error("Take or choose a photo first.");
@@ -276,16 +282,25 @@ export default function SponsoredSites() {
                     )}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge variant="neutral">Group area</Badge>
+                    <Badge variant="info">Group area</Badge>
                     <span className="text-[11px] text-zinc-500">{usd(area.remaining_cents)} left</span>
                   </div>
                 </div>
                 <p className="text-xs text-zinc-500">
                   Groups earn this by hosting a cleanup inside the area. {minBagsSentence(area.payout_rule).replace("you need", "the event needs")}
                 </p>
-                <Button variant="secondary" onClick={() => showOnMap(area.id)}>
-                  Show on map
-                </Button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => showOnMap(area.id)}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-bold tracking-tight transition-[transform,background-color] duration-150 active:scale-[0.97] touch-manipulation bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/25"
+                  >
+                    Show on map
+                  </button>
+                  <Link href={`/earn/areas/${area.id}`} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-bold tracking-tight transition-[transform,background-color] duration-150 active:scale-[0.97] touch-manipulation bg-emerald-600 text-white hover:bg-emerald-500">
+                    View info
+                  </Link>
+                </div>
                 {area.open_to_additions && <AddToSiteButton id={area.id} label={area.area_name ?? "this area"} autoOpen={addId === area.id} />}
               </Card>
             );
@@ -298,7 +313,7 @@ export default function SponsoredSites() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   {site.is_mine && <Badge variant="pending" className="mb-1">Your sponsored site</Badge>}
-                  <p className="text-sm font-semibold text-zinc-100">{site.label}</p>
+                  <Link href={`/earn/sites/${site.id}`} className="text-sm font-semibold text-zinc-100 hover:underline">{site.label}</Link>
                   <p className="text-xs text-zinc-400">{describeRule(site.payout_rule)}</p>
                   <p className="mt-0.5 text-xs font-medium text-emerald-300">{minBagsShort(site.payout_rule)}</p>
                   {site.message && <p className="mt-0.5 text-xs text-zinc-500">&quot;{site.message}&quot;</p>}
@@ -325,7 +340,7 @@ export default function SponsoredSites() {
               {claim && (
                 <p className="text-xs text-zinc-400">
                   {claim.status === "claimed"
-                    ? `Be at the site and take a starting photo (${minutesLeft(claim.before_deadline_at)}).`
+                    ? `Get to the site and take a starting photo (${minutesLeft(claim.before_deadline_at)}).`
                     : `Clean it up, then take an after photo (${minutesLeft(claim.after_deadline_at)}).`}
                 </p>
               )}
@@ -351,7 +366,7 @@ export default function SponsoredSites() {
                         value={bags}
                         onChange={(e) => setBags(e.target.value)}
                       />
-                      <p className="text-xs text-zinc-500">{minBagsSentence(site.payout_rule)}</p>
+                      <MinBagsNote rule={site.payout_rule} />
                       {site.payout_rule.type === "per_bag" && (
                         <p className="text-xs text-zinc-500">
                           {parseInt(bags, 10) > 0
@@ -366,15 +381,27 @@ export default function SponsoredSites() {
 
               {!claim && site.available && !site.early_access_locked && (
                 <p className="text-xs text-zinc-500">
-                  {claimRangeNote(site.radius_meters)} {minBagsSentence(site.payout_rule)}
+                  {copy("Claim from anywhere, then you have {arrive} to get there.")} {claimRangeNote(site.radius_meters)} {minBagsSentence(site.payout_rule)}
                 </p>
               )}
 
               <div className="flex gap-2">
                 {!claim && (
-                  <Button className="flex-1" variant={site.available && !site.early_access_locked ? "primary" : "secondary"} onClick={() => showOnMap(site.id)}>
-                    {site.available && !site.early_access_locked ? "Show on map to claim" : "Show on map"}
-                  </Button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => showOnMap(site.id)}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-bold tracking-tight transition-[transform,background-color] duration-150 active:scale-[0.97] touch-manipulation bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/25"
+                    >
+                      Show on map
+                    </button>
+                    <Link
+                      href={`/earn/sites/${site.id}`}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-bold tracking-tight transition-[transform,background-color] duration-150 active:scale-[0.97] touch-manipulation bg-emerald-600 text-white hover:bg-emerald-500"
+                    >
+                      View info
+                    </Link>
+                  </>
                 )}
                 {claim?.status === "claimed" && (
                   <Button className="flex-1" loading={busy} onClick={() => act(site, "before-photo")}>

@@ -1,22 +1,27 @@
 "use client";
 
+import { distanceLabel, limitLabel } from "@/lib/distance";
 import { useEffect, useState } from "react";
 import LocalTime from "@/components/marketplace/LocalTime";
+import StepTimer from "@/components/marketplace/StepTimer";
 import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import { Camera, Check, MapPin } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getPosition } from "@/lib/getPosition";
+import { haversineMeters } from "@/lib/nearbyPartners";
 import { durationLabel, mk, usd, type Job } from "@/lib/marketplace";
 import { useCategories } from "@/lib/categories";
 import { uploadToR2 } from "@/lib/uploadToR2";
+import FieldAppNotice from "@/components/marketplace/FieldAppNotice";
+import { useFieldApp } from "@/lib/useFieldApp";
 import { useJobTracker, type TrackerState } from "@/lib/useJobTracker";
 
-export type FlowPhoto = { id: string; kind: string; url: string; distance_m?: number | null; created_at: string };
+export type FlowPhoto = { id: string; kind: string; url: string; distance_m?: number | null; created_at: string; late?: boolean; deleted_at?: string | null };
 
 type Coords = { latitude: number; longitude: number };
 
-const DEFAULT_ON_SITE_M = 150;
+const DEFAULT_ON_SITE_M = 152;
 
 /**
  * The cleaner's path through an accepted job: arrive (before photo + location check), do the work,
@@ -33,6 +38,7 @@ export default function CleanerFlow({
   refresh: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const { blocked } = useFieldApp();
   const [problem, setProblem] = useState<string | null>(null);
   const [canOverride, setCanOverride] = useState(false);
   const [reason, setReason] = useState("");
@@ -45,8 +51,8 @@ export default function CleanerFlow({
   const needsBags = cats.needsBags(job.job_type);
   const photoRequired = cats.get(job.job_type)?.after_photo_required ?? true;
 
-  const before = photos.filter((p) => p.kind === "before");
-  const after = photos.filter((p) => p.kind === "after");
+  const before = photos.filter((p) => p.kind === "before" && !p.deleted_at);
+  const after = photos.filter((p) => p.kind === "after" && !p.deleted_at);
   const arriving = job.status === "accepted";
   const working = job.status === "in_progress";
   const onSiteM = job.on_site_m ?? DEFAULT_ON_SITE_M;
@@ -67,6 +73,10 @@ export default function CleanerFlow({
     } finally {
       setBusy(null);
     }
+  }
+
+  async function captureAll(kind: "before" | "after", files: File[]) {
+    for (const f of files) await capture(kind, f);
   }
 
   async function locate(): Promise<Coords> {
@@ -141,11 +151,18 @@ export default function CleanerFlow({
   return (
     <Card className="space-y-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{arriving ? "Step 1 of 2" : "Step 2 of 2"}</p>
-        <p className="text-lg font-extrabold text-zinc-50">{arriving ? "Arrive and start" : "Finish up"}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{arriving ? "Step 1 of 2" : "Step 2 of 2"}</p>
+            <p className="text-lg font-extrabold text-zinc-50">{arriving ? "Arrive and start" : "Finish up"}</p>
+          </div>
+          {arriving && job.arrive_by && (
+            <StepTimer deadline={job.arrive_by} label="to arrive and start" startsAt={job.starts_at ?? job.window_start} />
+          )}
+        </div>
         {arriving && job.arrive_by && (
           <p className="mt-1 text-sm font-semibold text-amber-200">
-            Start by <LocalTime iso={job.arrive_by} />, or the job goes back on the board.
+            {(job.starts_at ?? job.window_start) ? "Scheduled job: be there and start by" : "Start by"} <LocalTime iso={job.arrive_by} />, or the job goes back on the board.
           </p>
         )}
         {job.address_label && (
@@ -163,15 +180,16 @@ export default function CleanerFlow({
         )}
       </div>
 
+      {blocked && <FieldAppNotice what="job" />}
       <ol className="space-y-3">
         <Item done={arriving ? before.length > 0 : true} title="Before photo" hint="Show the site as you found it. Take it when you arrive.">
-          {arriving && <Shot kind="before" busy={busy === "before"} count={before.length} onPick={(f) => capture("before", f)} />}
-          <Thumbs list={before} onSiteM={onSiteM} />
+          {arriving && <Shot kind="before" busy={busy === "before"} count={before.length} locked={blocked} onPick={(fs) => captureAll("before", fs)} />}
+          <Thumbs list={before} />
         </Item>
         {working && (
           <Item done={after.length > 0} title="After photo" hint="Show the finished site. The customer sees this before paying.">
-            <Shot kind="after" busy={busy === "after"} count={after.length} onPick={(f) => capture("after", f)} />
-            <Thumbs list={after} onSiteM={onSiteM} />
+            <Shot kind="after" busy={busy === "after"} count={after.length} locked={blocked} onPick={(fs) => captureAll("after", fs)} />
+            <Thumbs list={after} />
           </Item>
         )}
         {working && needsBags && (
@@ -206,8 +224,10 @@ export default function CleanerFlow({
         <Item
           done={false}
           title="Location check"
-          hint={`We check your phone is within about ${onSiteM} m of the job when you ${arriving ? "start" : "finish"}.`}
-        />
+          hint={`We check your phone is within about ${limitLabel(onSiteM)} of the job when you ${arriving ? "start" : "finish"}.`}
+        >
+          <LiveDistance lat={job.latitude} lng={job.longitude} onSiteM={onSiteM} />
+        </Item>
       </ol>
 
       {problem && (
@@ -251,11 +271,11 @@ export default function CleanerFlow({
       )}
 
       {arriving ? (
-        <Button className="w-full" disabled={before.length === 0} loading={busy === "start"} onClick={() => go("start")}>
+        <Button className="w-full" disabled={blocked || before.length === 0} loading={busy === "start"} onClick={() => go("start")}>
           I am here: start job
         </Button>
       ) : (
-        <Button className="w-full" disabled={(photoRequired && after.length === 0) || (needsBags && !bagsAck)} loading={busy === "complete"} onClick={() => go("complete")}>
+        <Button className="w-full" disabled={blocked || (photoRequired && after.length === 0) || (needsBags && !bagsAck)} loading={busy === "complete"} onClick={() => go("complete")}>
           Mark complete
         </Button>
       )}
@@ -263,12 +283,12 @@ export default function CleanerFlow({
   );
 }
 
-function trackHint(s: TrackerState): string {
+export function trackHint(s: TrackerState, what = "job"): string {
   switch (s) {
     case "tracking":
       return "Recording your route while you work. Only you and Frontline admins can see it. Keep the app open.";
     case "unsupported":
-      return "Route tracking needs the Frontline app. Open this job in the app on your phone to record your route.";
+      return `Route tracking needs the Frontline app. Open this ${what} in the app on your phone to record your route.`;
     case "denied":
       return "Location access is off. Turn it on for Frontline in your phone settings so your route can be recorded.";
     case "error":
@@ -279,14 +299,14 @@ function trackHint(s: TrackerState): string {
 }
 
 /** Running clock from arrival check-in; the final time is set by the server at the finished-photo submission. */
-function JobTimer({ startedAt }: { startedAt: string }) {
+export function JobTimer({ startedAt, what = "job" }: { startedAt: string; what?: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
   const secs = Math.max(0, (now - new Date(startedAt).getTime()) / 1000);
-  return <p className="mt-1 text-sm font-semibold text-sky-200">Time on the job: {durationLabel(secs)}</p>;
+  return <p className="mt-1 text-sm font-semibold text-sky-200">Time on the {what}: {durationLabel(secs)}</p>;
 }
 
 function Item({ done, title, hint, children }: { done: boolean; title: string; hint: string; children?: React.ReactNode }) {
@@ -309,17 +329,74 @@ function Item({ done, title, hint, children }: { done: boolean; title: string; h
   );
 }
 
-function Shot({ kind, busy, count, onPick }: { kind: string; busy: boolean; count: number; onPick: (f: File | undefined) => void }) {
+function Shot({ kind, busy, count, locked, onPick }: { kind: string; busy: boolean; count: number; locked?: boolean; onPick: (f: File[]) => void }) {
   return (
-    <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-zinc-800 px-4 text-sm font-bold text-zinc-100 touch-manipulation hover:bg-zinc-700 active:scale-[0.97]">
+    <label className={`inline-flex min-h-11 ${locked ? "opacity-50 pointer-events-none" : ""} cursor-pointer items-center gap-2 rounded-2xl bg-zinc-800 px-4 text-sm font-bold text-zinc-100 touch-manipulation hover:bg-zinc-700 active:scale-[0.97]`}>
       <Camera className="h-4 w-4" aria-hidden="true" />
-      {busy ? "Uploading..." : count ? "Add another" : `Take ${kind} photo`}
-      <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={busy} onChange={(e) => onPick(e.target.files?.[0])} />
+      {busy ? "Uploading..." : count ? "Add more photos" : `Choose ${kind} photos`}
+      <input type="file" accept="image/*" multiple className="sr-only" disabled={busy || locked} onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ""; onPick(fs); }} />
     </label>
   );
 }
 
-function Thumbs({ list, onSiteM }: { list: FlowPhoto[]; onSiteM: number }) {
+/**
+ * Live "how far am I" for the location check. Starts once the person taps (or right away when location is
+ * already allowed), then keeps updating as they walk, so they can open the job early and watch it flip to on site.
+ */
+export function LiveDistance({ lat, lng, onSiteM, what = "job" }: { lat?: number | null; lng?: number | null; onSiteM: number; what?: string }) {
+  const [on, setOn] = useState(false);
+  const [dist, setDist] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.permissions) return;
+    navigator.permissions
+      .query({ name: "geolocation" })
+      .then((r) => r.state === "granted" && setOn(true))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!on || lat == null || lng == null || !navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (p) => {
+        setErr(null);
+        setDist(Math.round(haversineMeters(p.coords.latitude, p.coords.longitude, lat, lng)));
+      },
+      () => setErr("Could not get your location. Check that it is allowed, then try again."),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, [on, lat, lng, tick]);
+  if (lat == null || lng == null) return null;
+  return (
+    <div className="space-y-1.5">
+      {dist != null && (
+        <p className={`text-sm font-bold ${dist <= onSiteM ? "text-emerald-300" : "text-amber-200"}`}>
+          {dist <= onSiteM ? "You are on site" : `You are ${distanceLabel(dist)} from the ${what}. Get within ${limitLabel(onSiteM)}.`}
+        </p>
+      )}
+      {err && <p className="text-xs text-amber-200">{err}</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setDist(null);
+            setErr(null);
+            if (on) setTick((t) => t + 1);
+            else setOn(true);
+          }}
+          className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-zinc-800 px-4 text-sm font-bold text-zinc-100 touch-manipulation hover:bg-zinc-700 active:scale-[0.97]"
+        >
+          <MapPin className="h-4 w-4" aria-hidden="true" />
+          {on ? "Recheck my location" : "Check my location"}
+        </button>
+        {on && <p className="text-xs text-zinc-500">Also updates as you move.</p>}
+      </div>
+    </div>
+  );
+}
+
+function Thumbs({ list }: { list: FlowPhoto[] }) {
   const { open, viewer } = usePhotoViewer(list.map((p) => p.url));
   if (list.length === 0) return null;
   return (
@@ -331,13 +408,6 @@ function Thumbs({ list, onSiteM }: { list: FlowPhoto[]; onSiteM: number }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p.url} alt={`${p.kind} photo`} className="aspect-square w-full object-cover" />
           </button>
-          {p.distance_m != null && (
-            <span
-              className={`pointer-events-none absolute bottom-1 left-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${p.distance_m <= onSiteM ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}
-            >
-              {p.distance_m <= onSiteM ? "On site" : `${p.distance_m} m away`}
-            </span>
-          )}
         </li>
       ))}
     </ul>

@@ -91,7 +91,11 @@ async def charge_job(db: AsyncSession, job: dict) -> str | None:
     if not is_configured():
         return None
     customer_id = await _customer_id(db, job["customer_id"])
-    cards = _cards(customer_id) if customer_id else []
+    try:
+        cards = _cards(customer_id) if customer_id else []
+    except stripe.StripeError as e:
+        logger.exception("Stripe card lookup failed for job %s", job["id"])
+        raise PaymentError("The person who posted this job has no usable payment card on file.") from e
     if not cards:
         raise PaymentError("The person who posted this job has no payment card on file.")
     try:

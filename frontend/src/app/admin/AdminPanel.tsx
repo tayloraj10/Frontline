@@ -3525,7 +3525,7 @@ const PAYMENT_SUBSECTIONS = [
 ];
 const PAYMENT_KEY_ORDER = [
   "payments_enabled", "payments_admin_preview", "marketplace_enabled",
-  "sponsored_claim_before_window_minutes", "sponsored_claim_work_window_minutes", "sponsored_claim_proximity_meters",
+  "sponsored_claim_before_window_minutes", "sponsored_claim_work_window_minutes", "sponsored_claim_extend_minutes", "sponsored_claim_max_total_minutes", "retake_wait_hours", "sponsored_claim_proximity_meters",
   "earning_weekly_ceiling_usd", "earning_weekly_ceiling_plus_usd", "earning_weekly_ceiling_group_usd", "earning_weekly_ceiling_group_plus_usd",
   "fraud_new_account_days", "plus_early_access_hours",
   "marketplace_platform_fee_percent", "min_payment_cents",

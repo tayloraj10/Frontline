@@ -6,9 +6,9 @@ import { X } from "lucide-react";
 const DISMISS_KEY = "frontline:app-promo-dismissed-at";
 const DISMISS_MS = 30 * 24 * 60 * 60 * 1000;
 
-const APP_STORE_URL =
+export const APP_STORE_URL =
   process.env.NEXT_PUBLIC_APP_STORE_URL ?? "https://apps.apple.com/ca/app/frontline-maps/id6799487822";
-const PLAY_STORE_URL =
+export const PLAY_STORE_URL =
   process.env.NEXT_PUBLIC_PLAY_STORE_URL ?? "https://play.google.com/store/apps/details?id=com.frontlinemaps.app";
 
 function StoreButton({ href, kicker, label }: { href: string; kicker: string; label: string }) {

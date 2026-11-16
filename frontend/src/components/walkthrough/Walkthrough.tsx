@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { svgProps, type WalkthroughDef } from "./parts";
+import { useCopy } from "@/lib/settingText";
 
 /** Generic stepped walkthrough: bottom sheet on mobile, centered card on desktop, swipe + Back/Next. */
 export default function Walkthrough({
@@ -15,6 +16,7 @@ export default function Walkthrough({
   onClose: () => void;
 }) {
   const steps = def.steps;
+  const copy = useCopy();
   const [i, setI] = useState(0);
   const touchX = useRef<number | null>(null);
   const last = i === steps.length - 1;
@@ -93,7 +95,7 @@ export default function Walkthrough({
               </span>
             )}
           </h2>
-          <p className="mt-2 text-[15px] text-zinc-300 leading-relaxed">{step.body}</p>
+          <p className="mt-2 text-[15px] text-zinc-300 leading-relaxed">{typeof step.body === "string" ? copy(step.body) : step.body}</p>
           {step.how && (
             <ol className="mt-4 flex flex-col gap-2">
               {step.how.map((h, n) => (
@@ -101,7 +103,7 @@ export default function Walkthrough({
                   <span className="mt-px w-5 h-5 shrink-0 rounded-full bg-zinc-800 text-zinc-400 text-[11px] font-bold flex items-center justify-center">
                     {n + 1}
                   </span>
-                  {h}
+                  {typeof h === "string" ? copy(h) : h}
                 </li>
               ))}
             </ol>

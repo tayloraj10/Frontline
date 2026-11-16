@@ -1,6 +1,7 @@
 "use client";
 
 
+import { distanceLabel, limitLabel } from "@/lib/distance";
 import { minLargeBags } from "@/lib/sponsoredBags";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import maplibregl from "maplibre-gl";
@@ -8,7 +9,6 @@ import { getPosition } from "@/lib/getPosition";
 import { circleRing } from "@/lib/areaShape";
 import { saveMapReturn } from "@/lib/mapReturn";
 import { flashRow } from "@/lib/flashRow";
-import { ensureLoggedIn } from "@/lib/loginRedirect";
 
 /** The map the popups currently belong to, so a popup link can save its camera. */
 let activeMap: maplibregl.Map | null = null;
@@ -56,6 +56,7 @@ interface MapSite extends WindowInfo {
   payout_rule: PayoutRule;
   open_to_additions?: boolean;
   is_mine?: boolean;
+  claimed_by_me?: boolean;
   radius_meters?: number | null;
   latitude: number;
   longitude: number;
@@ -102,7 +103,7 @@ const RING_LINE_ID = "sponsored-site-rings-line";
 const COLOR = "#34d399";
 // Pools you funded read yellow everywhere, matching your own job pins.
 const MINE_COLOR = "#fcd34d";
-const DEFAULT_CLAIM_RADIUS_M = 100;
+const DEFAULT_CLAIM_RADIUS_M = 152;
 
 const usd = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
@@ -141,9 +142,7 @@ function sponsorPopup(options: maplibregl.PopupOptions) {
 
 /** Plain-language proximity rule shown before someone taps Claim. */
 export function claimRangeNote(radius?: number | null) {
-  const m = Math.round(Number(radius) || 100);
-  const ft = Math.round((m * 3.281) / 10) * 10;
-  return `Claim range: ${m} m (about ${ft} ft).`;
+  return `Take your photos within ${limitLabel(Number(radius) || 152)} of the site.`;
 }
 
 /** One popup for several pools covering the same spot, so overlapping sponsors read as a group. */
@@ -193,7 +192,9 @@ async function fillDistanceLine(target: HTMLElement, site: { lat: number; lng: n
     const range = Number(site.radius) || DEFAULT_CLAIM_RADIUS_M;
     const inRange = d <= range;
     target.style.color = inRange ? "#6ee7b7" : "#fbbf24";
-    target.textContent = inRange ? `In range (${distanceText(d)} away).` : `${distanceText(d)} away. Get closer to claim.`;
+    target.textContent = inRange
+      ? `You are at the site (${distanceText(d)} away).`
+      : `You are ${distanceText(d)} away.`;
   } catch {
     /* leave blank */
   }
@@ -274,7 +275,7 @@ function popupNode(
   if (note) status.append(el("div", cta ? "color:#d4d4d8" : "color:#fbbf24", note));
   const distLine = el("div", "");
   const limitLine = el("div", "");
-  if (cta?.onClick) {
+  if (cta) {
     status.append(distLine, limitLine);
     void fillLimitLine(limitLine);
     if (where?.lat != null && where.lng != null) void fillDistanceLine(distLine, { lat: where.lat, lng: where.lng, radius: where.radius });
@@ -294,12 +295,34 @@ function popupNode(
     } else {
       const a = el("a", ctaCss, cta.label) as HTMLAnchorElement;
       a.href = cta.href ?? "/earn";
+      // Claiming happens on the site's own page, so the map position is saved for the way back.
+      if (where?.lat != null) a.addEventListener("click", () => saveMapReturn(activeMap));
       root.append(a);
     }
   }
 
-  // Secondary actions share one row, so the primary button stays the clear next step.
+  // One full-width primary action (Claim, or View details when there is nothing to claim), then the
+  // quieter actions side by side as half buttons.
+  const isSite = where?.lat != null;
+  const pageHref = where ? (isSite ? `/earn/sites/${where.id}` : `/earn/areas/${where.id}`) : null;
+  if (!cta && where && pageHref) {
+    const more = el(
+      "a",
+      "display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:6px;border-radius:999px;background:#059669;color:#fff;font-size:15px;font-weight:700;text-decoration:none",
+      "View details",
+    ) as HTMLAnchorElement;
+    more.href = pageHref;
+    more.addEventListener("click", () => saveMapReturn(activeMap));
+    root.append(more);
+  }
   const row = el("div", "display:flex;gap:8px;margin-top:6px;width:100%;min-width:0");
+  // Add money: the page has the box at the bottom, so jump straight to it.
+  if (addId && pageHref) {
+    const a = pillButton("a", "background:rgba(52,211,153,.16);color:#6ee7b7", "Add money", ICON_PLUS) as HTMLAnchorElement;
+    a.href = `${pageHref}#add-money`;
+    a.addEventListener("click", () => saveMapReturn(activeMap));
+    row.append(a);
+  }
   if (where) {
     // The list may render after the map, so show the button as soon as its row exists.
     const rowId = `sponsored-row-${where.id}`;
@@ -311,21 +334,8 @@ function popupNode(
     };
     sync();
     [500, 1500, 3500].forEach((ms) => setTimeout(sync, ms));
-    row.prepend(list);
+    row.append(list);
   }
-  if (addId) {
-    const a = pillButton("a", "background:rgba(52,211,153,.16);color:#6ee7b7", "Add money", ICON_PLUS) as HTMLAnchorElement;
-    a.href = `/earn?add=${addId}`;
-    row.append(a);
-  }
-  // Off the Earn page (the Trash War map), point to Earn for the full details and claim steps.
-  if (where && typeof window !== "undefined" && !window.location.pathname.startsWith("/earn")) {
-    const more = pillButton("a", "background:#059669;color:#fff", "View details", ICON_LIST) as HTMLAnchorElement;
-    more.href = "/earn";
-    more.addEventListener("click", () => saveMapReturn(activeMap));
-    row.prepend(more);
-  }
-  if (!cta && addId) root.append(el("div", "font-size:11px;color:#a1a1aa;margin-top:6px", "Open to additions. Chip in to fund more cleanups here."));
   if (row.childNodes.length) root.append(row);
   return root;
 }
@@ -360,56 +370,6 @@ async function fillLimitLine(target: HTMLElement) {
   }
 }
 
-// Claiming happens right in the popup: you have to be standing at the site, so the browser's
-// location is sent with the request. The photo steps then continue in the sites list.
-async function claimFromPopup(siteId: string, btn: HTMLButtonElement, status: HTMLElement) {
-  if (btn.dataset.claimed) {
-    document.getElementById("sponsored-sites")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-  btn.disabled = true;
-  btn.textContent = "Checking your location...";
-  status.textContent = "";
-  try {
-    if (!(await ensureLoggedIn())) {
-      btn.textContent = "Taking you to log in...";
-      return;
-    }
-    const pos = await getPosition();
-    btn.textContent = "Claiming...";
-    const res = await fetch(`/api/sponsored/${siteId}/claim`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      }),
-    });
-    if (!res.ok) {
-      let msg = "Could not claim this site.";
-      try {
-        const j = JSON.parse(await res.text());
-        if (typeof j.detail === "string") msg = j.detail;
-      } catch {
-        /* not JSON */
-      }
-      throw new Error(msg);
-    }
-    btn.dataset.claimed = "1";
-    btn.textContent = "Go to my claim";
-    btn.disabled = false;
-    status.style.color = "#6ee7b7";
-    status.textContent = "It is yours. Take your starting photo from the sites list.";
-    window.dispatchEvent(new Event(SPONSORED_CHANGED_EVENT));
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = "Claim this site";
-    status.style.color = "#fbbf24";
-    status.textContent = err instanceof Error ? err.message : "Could not claim this site.";
-  }
-}
-
 // Business/partner markers set their own z-index, so lift the popup above all of them. The map stays
 // where it is unless the card would be clipped by the frame, in which case it pans just far enough to
 // bring the whole card (including the call to action) into view.
@@ -418,6 +378,13 @@ function openPopup(popup: maplibregl.Popup, m: maplibregl.Map) {
   const el = popup.getElement();
   el.style.zIndex = "100";
   const fit = () => {
+    if (!popup.isOpen()) return;
+    // Measuring while the map is still flying or zooming reads a moving target and can fling the
+    // view far away from the pin, so wait for it to settle first.
+    if (m.isMoving()) {
+      m.once("moveend", () => requestAnimationFrame(fit));
+      return;
+    }
     const frame = m.getContainer().getBoundingClientRect();
     // Popups live inside the map frame and are clipped by it, so a card taller than the frame scrolls.
     const body = el.querySelector<HTMLElement>(".maplibregl-popup-content");
@@ -429,6 +396,8 @@ function openPopup(popup: maplibregl.Popup, m: maplibregl.Map) {
     const pad = 12;
     const dy = Math.max(0, frame.top + pad - card.top) - Math.max(0, card.bottom - (frame.bottom - pad));
     const dx = Math.max(0, frame.left + pad - card.left) - Math.max(0, card.right - (frame.right - pad));
+    // A card measured nowhere near the frame means the position is stale, so never chase it.
+    if (Math.abs(dx) > frame.width || Math.abs(dy) > frame.height) return;
     if (dx || dy) m.panBy([-dx, -dy], { duration: 250 });
   };
   // The card grows after it opens (distance check, claim status), so re-fit whenever its size changes.
@@ -732,15 +701,17 @@ export function useSponsoredMapLayer(
                 s.remaining_cents,
                 // Sponsors cannot claim their own site, so their popup has no claim button.
                 s.available && !s.is_mine && !s.early_access_locked
-                  ? { label: "Claim this site", onClick: (btn, status) => claimFromPopup(s.id, btn, status) }
+                  ? { label: "Claim this site", href: `/earn/sites/${s.id}` }
                   : null,
                 s.is_mine
                   ? "You sponsored this site."
                   : s.early_access_locked
                     ? "Get Frontline Plus to claim it now, or come back when it opens to everyone."
-                    : s.available
-                      ? claimRangeNote(s.radius_meters)
-                      : "Someone is working this site right now.",
+                    : s.claimed_by_me
+                      ? "You claimed this site. Finish it from your Earn page."
+                      : s.available
+                        ? `Claim from anywhere, then you have 1 hour to get there. ${claimRangeNote(s.radius_meters)}`
+                        : "Someone else is working this site right now.",
                 s.open_to_additions ? s.id : null,
                 { id: s.id, lat: s.latitude, lng: s.longitude, radius: s.radius_meters },
                 s.is_mine,

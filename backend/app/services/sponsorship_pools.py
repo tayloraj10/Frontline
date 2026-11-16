@@ -1156,7 +1156,7 @@ async def _jobs_view(db: AsyncSession, pool: dict, pool_id: UUID, viewer_id: UUI
                 SELECT j.id, j.title, j.price_cents, j.status, j.created_at, j.completed_at, j.release_after,
                        COALESCE(cl.display_name, cl.username) AS cleaner_name,
                        COALESCE((SELECT json_agg(ph.url ORDER BY ph.created_at) FROM marketplace_job_photos ph
-                                 WHERE ph.job_id = j.id AND ph.kind = 'after'), '[]'::json) AS after_photos
+                                 WHERE ph.job_id = j.id AND ph.kind = 'after' AND ph.deleted_at IS NULL), '[]'::json) AS after_photos
                 FROM marketplace_jobs j LEFT JOIN profiles cl ON cl.id = j.cleaner_id
                 WHERE j.pool_id = :p ORDER BY j.created_at DESC LIMIT 100
             """),

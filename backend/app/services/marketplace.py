@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services import connect
 from app.services import marketplace_chat_filter as chat_filter
 from app.services import marketplace_payments as mp
-from app.services.game_settings import min_payment_cents, size_limits
+from app.services.game_settings import min_payment_cents, retake_wait_hours, size_limits
 
 logger = logging.getLogger(__name__)
 
@@ -553,6 +553,28 @@ _JOB_COLS = """j.id, j.customer_id, j.cleaner_id, j.origin, j.title, j.descripti
   CASE WHEN j.area IS NULL THEN NULL ELSE ST_AsGeoJSON(j.area::geometry)::json END AS area"""
 
 
+async def _retake_at(db: AsyncSession, job_id: UUID, cleaner_id: UUID) -> datetime | None:
+    """When this cleaner may take the job again after giving it up, or None if they are free to."""
+    released = (
+        await db.execute(
+            text("SELECT created_at FROM marketplace_job_releases WHERE job_id = :j AND cleaner_id = :c"),
+            {"j": job_id, "c": cleaner_id},
+        )
+    ).scalar_one_or_none()
+    if not released:
+        return None
+    until = released + timedelta(hours=await retake_wait_hours(db))
+    return until if until > datetime.now(timezone.utc) else None
+
+
+def _remaining_label(until: datetime) -> str:
+    minutes = max(1, int((until - datetime.now(timezone.utc)).total_seconds() // 60))
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours} hr {mins} min"
+    return f"{hours} hr" if hours else f"{mins} min"
+
+
 async def get_job(db: AsyncSession, job_id: UUID, viewer_id: UUID, *, is_admin: bool = False) -> dict:
     row = (
         await db.execute(
@@ -589,7 +611,7 @@ async def get_job(db: AsyncSession, job_id: UUID, viewer_id: UUID, *, is_admin: 
     job["viewer_role"] = (
         "customer" if viewer_id == row["customer_id"] else "cleaner" if viewer_id == row["cleaner_id"] else "viewer"
     )
-    job["on_site_m"] = int(await _setting(db, "marketplace_site_radius_m", 150))
+    job["on_site_m"] = int(await _setting(db, "marketplace_site_radius_m", 152))
     if row["status"] == "open":
         # The deadline a cleaner would get if they took the job right now, shown before they commit.
         minutes = await _arrive_minutes(db)
@@ -597,6 +619,9 @@ async def get_job(db: AsyncSession, job_id: UUID, viewer_id: UUID, *, is_admin: 
         base = max(datetime.now(timezone.utc), start) if start else datetime.now(timezone.utc)
         job["arrive_minutes"] = minutes
         job["arrive_deadline"] = (base + timedelta(minutes=minutes)).isoformat()
+        # Set when the viewer gave this job up in the last 24 hours, so the page can say so before they try.
+        until = None if participant else await _retake_at(db, job_id, viewer_id)
+        job["retake_at"] = until.isoformat() if until else None
     fee = row["platform_fee_cents"] or 0
     job["cleaner_payout_cents"] = row["price_cents"] if row["fee_on_top"] else row["price_cents"] - fee
     job["total_cents"] = row["price_cents"] + fee if row["fee_on_top"] else row["price_cents"]
@@ -779,7 +804,7 @@ _ARRIVE_BY_SQL = "GREATEST(now(), COALESCE(starts_at, window_start, now())) + ma
 
 
 async def _arrive_minutes(db: AsyncSession) -> int:
-    return int(await _setting(db, "marketplace_arrive_minutes", 120))
+    return int(await _setting(db, "marketplace_arrive_minutes", 60))
 
 
 async def _require_no_active_job(db: AsyncSession, cleaner_id: UUID) -> None:
@@ -792,6 +817,14 @@ async def _require_no_active_job(db: AsyncSession, cleaner_id: UUID) -> None:
     ).first()
     if busy:
         raise MarketplaceError("You already have an active job. Finish it or cancel it before taking another.", 409)
+    busy_site = (
+        await db.execute(
+            text("SELECT 1 FROM sponsorship_site_claims WHERE user_id = :c AND status IN ('claimed', 'in_progress') LIMIT 1"),
+            {"c": cleaner_id},
+        )
+    ).first()
+    if busy_site:
+        raise MarketplaceError("You have a claimed cleanup site. Finish it or back out before taking a job.", 409)
 
 
 _CANCEL_DIRECT_SQL = """UPDATE marketplace_jobs SET status = 'cancelled', cancel_reason = :r,
@@ -799,6 +832,24 @@ _CANCEL_DIRECT_SQL = """UPDATE marketplace_jobs SET status = 'cancelled', cancel
 _REOPEN_SQL = """UPDATE marketplace_jobs SET status = 'open', cleaner_id = NULL, accepted_at = NULL, safety_ack_at = NULL,
                    started_at = NULL, check_in_distance_m = NULL, arrive_by = NULL, hold_status = 'none', stripe_payment_intent_id = NULL, payment_error = NULL
                  WHERE id = :id"""
+
+
+async def _reopen(db: AsyncSession, job_id: UUID, cleaner_id: UUID | None, reason: str) -> None:
+    """Puts a board job back up for someone else. The previous cleaner is remembered so they cannot retake it,
+    and their before/after photos and route are cleared so the next cleaner starts clean. Does not commit."""
+    if cleaner_id:
+        await db.execute(
+            text(
+                """INSERT INTO marketplace_job_releases (job_id, cleaner_id, reason) VALUES (:j, :c, :r)
+                   ON CONFLICT (job_id, cleaner_id) DO UPDATE SET reason = EXCLUDED.reason, created_at = now()"""
+            ),
+            {"j": job_id, "c": cleaner_id, "r": reason},
+        )
+    await db.execute(
+        text("DELETE FROM marketplace_job_photos WHERE job_id = :j AND kind IN ('before', 'after', 'checkin')"), {"j": job_id}
+    )
+    await db.execute(text("DELETE FROM marketplace_job_track_points WHERE job_id = :j"), {"j": job_id})
+    await db.execute(text(_REOPEN_SQL), {"id": job_id})
 
 
 async def _add_strike(db: AsyncSession, user_id: UUID, job_id: UUID, kind: str) -> None:
@@ -850,10 +901,9 @@ async def _lapse_unstarted_jobs(db: AsyncSession) -> int:
             logger.warning("Refund failed lapsing job %s, will retry next sweep", jid)
             continue
         if job["origin"] == "direct":
-            sql = _CANCEL_DIRECT_SQL
+            await db.execute(text(_CANCEL_DIRECT_SQL), {"id": jid, "r": "The cleaner did not arrive in time"})
         else:
-            sql = _REOPEN_SQL
-        await db.execute(text(sql), {"id": jid, "r": "The cleaner did not arrive in time"})
+            await _reopen(db, jid, job["cleaner_id"], "no_show")
         await db.commit()
         await _add_strike(db, job["cleaner_id"], jid, "no_show")
         lapsed += 1
@@ -1068,6 +1118,11 @@ async def take_job(db: AsyncSession, job_id: UUID, cleaner_id: UUID, safety_ack:
     await _require_cleaner_ready(db, cleaner_id)
     await _require_no_active_job(db, cleaner_id)
     await _require_under_weekly_ceiling(db, cleaner_id)
+    retake_at = await _retake_at(db, job_id, cleaner_id)
+    if retake_at:
+        raise MarketplaceError(
+            f"You gave this job up recently. You can take it again in {_remaining_label(retake_at)}, or pick another job.", 409
+        )
     if job.get("pool_id"):
         paused = (
             await db.execute(
@@ -1184,7 +1239,7 @@ async def cancel_job(db: AsyncSession, job_id: UUID, user_id: UUID, reason: str 
         )
     )
     if reopened:
-        await db.execute(text(_REOPEN_SQL), {"id": job_id})
+        await _reopen(db, job_id, job["cleaner_id"], "late_back_out" if late else "back_out")
     else:
         await db.execute(
             text(
@@ -1240,11 +1295,20 @@ async def _site_distance(db: AsyncSession, job_id: UUID, lat: float, lng: float)
     return int(round(d))
 
 
+def _distance_label(meters: float) -> str:
+    """US units for messages: feet under about a fifth of a mile, else miles (matches the frontend)."""
+    feet = meters * 3.28084
+    if feet < 1000:
+        return f"{max(5, int(round(feet / 5.0)) * 5)} ft"
+    miles = feet / 5280
+    return f"{miles:.1f} miles" if miles < 10 else f"{int(round(miles)):,} miles"
+
+
 async def _check_on_site(
     db: AsyncSession, job_id: UUID, lat: float | None, lng: float | None, override: bool, what: str
 ) -> tuple[int | None, bool]:
     """Returns (distance_m, flagged). Raises when the cleaner is too far away and has not used the override."""
-    allowed = int(await _setting(db, "marketplace_site_radius_m", 150))
+    allowed = int(await _setting(db, "marketplace_site_radius_m", 152))
     if lat is None or lng is None:
         if not override:
             raise MarketplaceError(f"We need your location to {what}. Allow location access and try again.")
@@ -1254,7 +1318,7 @@ async def _check_on_site(
         return dist, False
     if not override:
         raise MarketplaceError(
-            f"You are about {dist} m from the job site. Get to the site to {what}, or use 'My location is wrong' if this is a mistake."
+            f"You are about {_distance_label(dist)} from the job site. Get to the site to {what}, or use 'My location is wrong' if this is a mistake."
         )
     return dist, True
 
@@ -1272,7 +1336,7 @@ async def start_job(
         raise MarketplaceError("Your time to start this job has run out, so it is going back on the board.", 409)
     before = (
         await db.execute(
-            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'before' AND uploader_id = :u"),
+            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'before' AND uploader_id = :u AND deleted_at IS NULL"),
             {"id": job_id, "u": cleaner_id},
         )
     ).scalar_one()
@@ -1313,7 +1377,7 @@ async def complete_job(
         bags_ack, bags_count = False, None
     photos = (
         await db.execute(
-            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'after' AND uploader_id = :u"),
+            text("SELECT count(*) FROM marketplace_job_photos WHERE job_id = :id AND kind = 'after' AND uploader_id = :u AND deleted_at IS NULL"),
             {"id": job_id, "u": cleaner_id},
         )
     ).scalar_one()
@@ -1387,15 +1451,29 @@ async def add_track_points(db: AsyncSession, job_id: UUID, cleaner_id: UUID, poi
 
 
 async def get_track(db: AsyncSession, job_id: UUID, viewer_id: UUID, *, is_admin: bool = False) -> dict:
-    """The recorded route. Visible to the cleaner and to admins only (it is the cleaner's own location history)."""
+    """The recorded route. Visible to the cleaner and admins, and to the customer once the work is done.
+    Where each photo was taken goes to the customer and admins only, never back to the cleaner."""
     job = (
         await db.execute(
-            text("SELECT cleaner_id, status, started_at, completed_at, track_flagged, track_flag_reason FROM marketplace_jobs WHERE id = :id"),
+            text("SELECT cleaner_id, customer_id, status, started_at, completed_at, track_flagged, track_flag_reason FROM marketplace_jobs WHERE id = :id"),
             {"id": job_id},
         )
     ).mappings().first()
-    if not job or not (is_admin or job["cleaner_id"] == viewer_id):
+    is_customer = bool(job) and job["customer_id"] == viewer_id and job["status"] in ("completed", "confirmed", "released")
+    if not job or not (is_admin or is_customer or job["cleaner_id"] == viewer_id):
         raise MarketplaceError("Job not found.", 404)
+    photos: list[dict] = []
+    if is_admin or is_customer:
+        prow = (
+            await db.execute(
+                text(
+                    """SELECT kind, latitude, longitude, created_at FROM marketplace_job_photos
+                       WHERE job_id = :id AND deleted_at IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY created_at"""
+                ),
+                {"id": job_id},
+            )
+        ).mappings().all()
+        photos = [_plain(r) for r in prow]
     rows = (
         await db.execute(
             text(
@@ -1410,6 +1488,7 @@ async def get_track(db: AsyncSession, job_id: UUID, viewer_id: UUID, *, is_admin
     return {
         "points": pts,
         "distance_m": round(dist),
+        "photos": photos,
         "track_flagged": bool(job["track_flagged"]),
         "track_flag_reason": job["track_flag_reason"],
     }
@@ -1572,6 +1651,7 @@ async def add_photo(
     if kind not in ("listing", "before", "after", "checkin", "dispute"):
         raise MarketplaceError("Invalid photo kind.")
     is_cleaner = job["cleaner_id"] == user_id
+    late = False
     if kind == "listing":
         if job["customer_id"] != user_id or job["status"] not in ("requested", "open"):
             raise MarketplaceError("Photos of the site can only be added while the job is open.", 409)
@@ -1585,16 +1665,41 @@ async def add_photo(
     elif kind in ("before", "after", "checkin"):
         if not is_cleaner:
             raise MarketplaceError("Only the cleaner can add this photo.", 403)
-        if job["status"] != ("accepted" if kind == "before" else "in_progress"):
+        if kind in ("before", "after") and job["status"] in ("completed", "disputed"):
+            late = True  # asked-for extras after the work was submitted; flagged for reviewers
+        elif job["status"] != ("accepted" if kind == "before" else "in_progress"):
             raise MarketplaceError("Add before photos when you arrive and after photos while the job is in progress.", 409)
     distance = await _site_distance(db, job_id, latitude, longitude) if latitude is not None and longitude is not None else None
     await db.execute(
         text(
-            """INSERT INTO marketplace_job_photos (job_id, uploader_id, kind, url, latitude, longitude, distance_m)
-               VALUES (:j, :u, :k, :url, :lat, :lng, :d)"""
+            """INSERT INTO marketplace_job_photos (job_id, uploader_id, kind, url, latitude, longitude, distance_m, late)
+               VALUES (:j, :u, :k, :url, :lat, :lng, :d, :late)"""
         ),
-        {"j": job_id, "u": user_id, "k": kind, "url": url, "lat": latitude, "lng": longitude, "d": distance},
+        {"j": job_id, "u": user_id, "k": kind, "url": url, "lat": latitude, "lng": longitude, "d": distance, "late": late},
     )
+    await db.commit()
+    return {"ok": True}
+
+
+async def delete_photo(db: AsyncSession, job_id: UUID, photo_id: UUID, user_id: UUID) -> dict:
+    """The cleaner can remove their own before/after photo. It is kept (soft-deleted) so reviewers see it."""
+    job = await _participant_job(db, job_id, user_id)
+    if job["cleaner_id"] != user_id:
+        raise MarketplaceError("Only the cleaner can remove these photos.", 403)
+    if job["status"] not in ("in_progress", "completed", "disputed"):
+        raise MarketplaceError("Photos can no longer be changed.", 409)
+    row = (
+        await db.execute(
+            text(
+                """UPDATE marketplace_job_photos SET deleted_at = now(), deleted_by = :u
+                   WHERE id = :p AND job_id = :j AND uploader_id = :u AND kind IN ('before', 'after') AND deleted_at IS NULL
+                   RETURNING id"""
+            ),
+            {"p": photo_id, "j": job_id, "u": user_id},
+        )
+    ).fetchone()
+    if row is None:
+        raise MarketplaceError("Photo not found.", 404)
     await db.commit()
     return {"ok": True}
 
@@ -1603,7 +1708,7 @@ async def list_photos(db: AsyncSession, job_id: UUID, user_id: UUID) -> list[dic
     await _participant_job(db, job_id, user_id)
     rows = (
         await db.execute(
-            text("SELECT id, uploader_id, kind, url, distance_m, created_at FROM marketplace_job_photos WHERE job_id = :j ORDER BY created_at"),
+            text("SELECT id, uploader_id, kind, url, distance_m, created_at, late, deleted_at FROM marketplace_job_photos WHERE job_id = :j ORDER BY created_at"),
             {"j": job_id},
         )
     ).mappings().all()

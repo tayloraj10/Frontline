@@ -17,6 +17,8 @@ const USER_GET = [
   /^group-areas$/,
   /^map$/,
   /^my-limits$/,
+  /^claims\/mine$/,
+  new RegExp(`^${UUID}/claim/result$`),
   /^payouts\/status$/,
   new RegExp(`^groups/${UUID}/payouts/status$`),
   new RegExp(`^groups/${UUID}/earning-limit$`),
@@ -27,9 +29,12 @@ const USER_POST = [
   new RegExp(`^groups/${UUID}/payouts/(onboard|dashboard)$`),
   new RegExp(`^${UUID}/claim$`),
   new RegExp(`^${UUID}/top-up$`),
-  new RegExp(`^${UUID}/claim/(before-photo|after-photo|release)$`),
+  new RegExp(`^${UUID}/claim/(before-photo|after-photo|release|extend)$`),
+  new RegExp(`^${UUID}/claim/photos$`),
+  new RegExp(`^${UUID}/claim/track$`),
 ];
-const ADMIN_GET = [/^allocations$/];
+const USER_DELETE = [new RegExp(`^${UUID}/claim/photos/${UUID}$`)];
+const ADMIN_GET = [/^allocations$/, new RegExp(`^claims/${UUID}/track$`)];
 const ADMIN_POST = [
   new RegExp(`^allocations/${UUID}/review$`),
   new RegExp(`^allocations/${UUID}/paid-out$`),
@@ -44,11 +49,11 @@ const matches = (patterns: RegExp[], path: string) => patterns.some((p) => p.tes
 async function forward(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
 ) {
   const path = (await params).path.join("/");
-  const isAdminRoute = matches(method === "GET" ? ADMIN_GET : ADMIN_POST, path);
-  const isUserRoute = matches(method === "GET" ? USER_GET : USER_POST, path);
+  const isAdminRoute = method === "DELETE" ? false : matches(method === "GET" ? ADMIN_GET : ADMIN_POST, path);
+  const isUserRoute = matches(method === "GET" ? USER_GET : method === "DELETE" ? USER_DELETE : USER_POST, path);
   if (!isAdminRoute && !isUserRoute) {
     return NextResponse.json({ detail: "Not found" }, { status: 404 });
   }
@@ -88,7 +93,7 @@ async function forward(
       if (key !== "user_id") url.searchParams.set(key, value);
     });
     if (path === "sites" || path === "my-limits") url.searchParams.set("user_id", auth.userId);
-  } else {
+  } else if (method === "POST") {
     const body = await request.json().catch(() => ({}));
     if (path.endsWith("/review")) {
       body.reviewer_id = auth.userId;
@@ -112,4 +117,8 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ path: s
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return forward(request, ctx, "POST");
+}
+
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(request, ctx, "DELETE");
 }

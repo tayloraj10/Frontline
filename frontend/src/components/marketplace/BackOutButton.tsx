@@ -4,10 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import { mk } from "@/lib/marketplace";
+import { useCopy } from "@/lib/settingText";
 
 /** Lets the cleaner give a job back, before or after starting it. Board jobs return to the board. */
-export default function BackOutButton({ jobId, direct, onDone }: { jobId: string; direct: boolean; onDone?: () => Promise<void> | void }) {
+export default function BackOutButton({
+  jobId, direct, strike = false,
+}: { jobId: string; direct: boolean; /** True when backing out now would cost a strike. */ strike?: boolean }) {
   const router = useRouter();
+  const copy = useCopy();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,8 +21,8 @@ export default function BackOutButton({ jobId, direct, onDone }: { jobId: string
     setError(null);
     try {
       await mk(`/jobs/${jobId}/cancel`, { method: "POST", body: { reason: "The cleaner backed out" } });
-      if (onDone) await onDone();
-      else router.refresh();
+      router.push("/earn");
+      router.refresh();
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -34,8 +38,10 @@ export default function BackOutButton({ jobId, direct, onDone }: { jobId: string
   return (
     <div className="space-y-2 rounded-2xl bg-red-500/10 p-3 ring-1 ring-inset ring-red-500/30">
       <p className="text-sm text-zinc-200">
-        {direct ? "The customer is told and refunded." : "The job goes back on the board and the customer is refunded."} Backing out after
-        the start time, or once work has started, counts as a strike.
+        {direct ? "The customer is told and refunded." : "The job goes back on the board and the customer is refunded."}{" "}
+        {strike
+          ? "This counts as a strike because the start time has passed or work has started."
+          : copy("There is no penalty, but you will have to wait {wait} before you can take this job again.")}
       </p>
       {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
       <div className="grid grid-cols-2 gap-2">

@@ -19,6 +19,7 @@ export default function SponsorshipsPanels({
   fundOnHire = false,
   jobsView,
   extras,
+  hasActive = false,
 }: {
   businesses: { id: string; name: string }[];
   currentUserId: string;
@@ -29,6 +30,8 @@ export default function SponsorshipsPanels({
   jobsView?: ReactNode;
   /** Secondary cards (actions, payouts, guide) shown under the map so the map stays first. */
   extras?: ReactNode;
+  /** An active job or claimed site is shown above; hide the map, browse chips and lists so the task stays the focus. */
+  hasActive?: boolean;
 }) {
   const params = useSearchParams();
   const initialDo = params.get("do");
@@ -84,14 +87,21 @@ export default function SponsorshipsPanels({
           Thank you! Your sponsorship is received and will go live shortly.
         </p>
       )}
-      <FitScreen>
-        <SponsoredMap compact fill withJobs={!!jobsView} view={earnView} onViewChange={setView} onSeeJobInList={seeJobInList} />
-        {chips.length > 0 && <DoChooser chips={chips} active={doId} />}
-      </FitScreen>
+      {!hasActive && (
+        <FitScreen>
+          <SponsoredMap compact fill withJobs={!!jobsView} view={earnView} onViewChange={setView} onSeeJobInList={seeJobInList} />
+          {chips.length > 0 && <DoChooser chips={chips} active={doId} />}
+        </FitScreen>
+      )}
+      {hasActive && chips.length > 0 && (
+        <div className="mb-4">
+          <DoChooser chips={chips.filter((c) => c.href)} active={null} topCount={2} />
+        </div>
+      )}
       {extras}
-      {onJobs && jobsView}
-      {(doId === "sites" || !jobsView) && <SponsoredSites />}
-      {!onJobs && !fundOnHire && (
+      {!hasActive && onJobs && jobsView}
+      {!hasActive && (doId === "sites" || !jobsView) && <SponsoredSites />}
+      {(hasActive || !onJobs) && !fundOnHire && (
         <div className="mt-6">
           <h2 className="mb-1 text-sm font-bold text-zinc-100">Fund a cleanup</h2>
           <p className="mb-3 text-sm text-zinc-400">Put money behind a cleanup. It is only paid out after the work is verified.</p>
