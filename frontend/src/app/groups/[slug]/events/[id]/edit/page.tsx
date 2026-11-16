@@ -60,6 +60,7 @@ export default async function EditCleanupEventPage({ params }: Props) {
             lat: event.lat,
             lng: event.lng,
             addressLine1: event.address_line1,
+            meetupDetails: event.meetup_details,
             city: event.city,
             state: event.state,
             postalCode: event.postal_code,

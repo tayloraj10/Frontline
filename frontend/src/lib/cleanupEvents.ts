@@ -65,6 +65,7 @@ export type CleanupEventDetailData = {
   lat: number;
   lng: number;
   address_line1: string | null;
+  meetup_details?: string | null;
   city: string | null;
   state: string | null;
   postal_code: string | null;
@@ -199,6 +200,7 @@ export async function createCleanupEvent({
   latitude,
   longitude,
   addressLine1,
+  meetupDetails,
   city,
   state,
   postalCode,
@@ -221,6 +223,7 @@ export async function createCleanupEvent({
   latitude: number;
   longitude: number;
   addressLine1?: string | null;
+  meetupDetails?: string | null;
   city?: string | null;
   state?: string | null;
   postalCode?: string | null;
@@ -246,6 +249,7 @@ export async function createCleanupEvent({
     latitude,
     longitude,
     address_line1: addressLine1?.trim() || null,
+    meetup_details: meetupDetails?.trim() || null,
     city: city?.trim() || null,
     state: state?.trim() || null,
     postal_code: postalCode?.trim() || null,
@@ -272,6 +276,7 @@ export async function updateCleanupEvent({
   latitude,
   longitude,
   addressLine1,
+  meetupDetails,
   city,
   state,
   postalCode,
@@ -294,6 +299,7 @@ export async function updateCleanupEvent({
   latitude?: number;
   longitude?: number;
   addressLine1?: string | null;
+  meetupDetails?: string | null;
   city?: string | null;
   state?: string | null;
   postalCode?: string | null;
@@ -318,6 +324,7 @@ export async function updateCleanupEvent({
     latitude,
     longitude,
     address_line1: addressLine1 === undefined ? undefined : addressLine1?.trim() || null,
+    meetup_details: meetupDetails === undefined ? undefined : meetupDetails?.trim() || null,
     city: city === undefined ? undefined : city?.trim() || null,
     state: state === undefined ? undefined : state?.trim() || null,
     postal_code: postalCode === undefined ? undefined : postalCode?.trim() || null,

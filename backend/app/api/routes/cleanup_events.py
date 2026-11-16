@@ -56,6 +56,7 @@ class CreateCleanupEventRequest(BaseModel):
     latitude: float
     longitude: float
     address_line1: str | None = None
+    meetup_details: str | None = None
     city: str | None = None
     state: str | None = None
     postal_code: str | None = None
@@ -111,6 +112,7 @@ class PatchCleanupEventRequest(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     address_line1: str | None = None
+    meetup_details: str | None = None
     city: str | None = None
     state: str | None = None
     postal_code: str | None = None
@@ -607,7 +609,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
             SELECT c.id, c.campaign_id, cam.slug AS campaign_slug, c.title, c.description,
                    c.scheduled_start, c.scheduled_end, c.status, c.image_urls, c.join_code,
                    c.max_attendees, c.external_link, c.logging_mode,
-                   c.address_line1, c.city, c.state, c.postal_code, c.country,
+                   c.address_line1, c.city, c.state, c.postal_code, c.country, c.meetup_details,
                    c.metrics_small_bags, c.metrics_large_bags, c.metrics_pounds,
                    ST_Y(c.location::geometry) AS latitude, ST_X(c.location::geometry) AS longitude,
                    ST_AsGeoJSON(c.route)::json AS route,
@@ -935,6 +937,7 @@ async def get_cleanup_event(cleanup_id: UUID, viewer_user_id: UUID | None = None
         "lat": row.latitude,
         "lng": row.longitude,
         "address_line1": row.address_line1,
+        "meetup_details": row.meetup_details,
         "city": row.city,
         "state": row.state,
         "postal_code": row.postal_code,
@@ -1015,14 +1018,14 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             INSERT INTO cleanups
                 (campaign_id, geo_unit_id, group_id, is_group_event, join_code,
                  title, description, location,
-                 address_line1, city, state, postal_code, country,
+                 address_line1, city, state, postal_code, country, meetup_details,
                  route, scheduled_start, scheduled_end,
                  status, image_urls, submitted_by_user_id, max_attendees, external_link, logging_mode, sponsorship_id)
             VALUES
                 (:campaign_id, :geo_unit_id, :group_id, true, :join_code,
                  :title, :description,
                  ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
-                 :address_line1, :city, :state, :postal_code, :country,
+                 :address_line1, :city, :state, :postal_code, :country, :meetup_details,
                  CASE WHEN CAST(:route AS text) IS NOT NULL
                       THEN ST_GeomFromGeoJSON(CAST(:route AS text))::geography
                       ELSE NULL END,
@@ -1040,6 +1043,7 @@ async def create_cleanup_event(payload: CreateCleanupEventRequest, db: AsyncSess
             "lon": payload.longitude,
             "lat": payload.latitude,
             "address_line1": payload.address_line1,
+            "meetup_details": payload.meetup_details,
             "city": payload.city,
             "state": payload.state,
             "postal_code": payload.postal_code,
@@ -1143,6 +1147,7 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
                 location = CASE WHEN :has_new_location
                                 THEN ST_SetSRID(ST_MakePoint(CAST(:lon AS double precision), CAST(:lat AS double precision)), 4326)::geography
                                 ELSE location END,
+                meetup_details = CASE WHEN :set_meetup THEN :meetup_details ELSE meetup_details END,
                 address_line1 = COALESCE(:address_line1, address_line1),
                 city = COALESCE(:city, city),
                 state = COALESCE(:state, state),
@@ -1168,6 +1173,8 @@ async def patch_cleanup_event(cleanup_id: UUID, payload: PatchCleanupEventReques
             "lon": payload.longitude,
             "lat": payload.latitude,
             "address_line1": payload.address_line1,
+            "meetup_details": payload.meetup_details,
+            "set_meetup": "meetup_details" in payload.model_fields_set,
             "city": payload.city,
             "state": payload.state,
             "postal_code": payload.postal_code,

@@ -41,6 +41,7 @@ export default function ShareButton({
   size = "md",
   className = "",
   showQr = true,
+  filled = false,
 }: {
   content: ShareContent;
   variant?: "text" | "icon";
@@ -49,6 +50,8 @@ export default function ShareButton({
   className?: string;
   /** Show an adjacent "show QR code" trigger alongside the share action. */
   showQr?: boolean;
+  /** Icon variant only: solid tinted buttons with no border, to match filled action rows. */
+  filled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -83,13 +86,19 @@ export default function ShareButton({
   if (variant === "icon") {
     const dim = size === "sm" ? "w-9 h-9" : "w-11 h-11";
     const gap = size === "sm" ? "gap-1.5" : "gap-2";
+    const shareTone = filled
+      ? "border border-sky-500/30 bg-sky-500/15 text-sky-300 hover:text-sky-200 hover:bg-sky-500/25 hover:border-sky-500/50 active:text-sky-200 active:bg-sky-500/25"
+      : "border border-sky-500/30 bg-zinc-800/70 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 hover:border-sky-500/50 active:text-sky-300 active:bg-sky-500/10";
+    const qrTone = filled
+      ? "border border-violet-500/30 bg-violet-500/15 text-violet-300 hover:text-violet-200 hover:bg-violet-500/25 hover:border-violet-500/50 active:text-violet-200 active:bg-violet-500/25"
+      : "border border-violet-500/30 bg-zinc-800/70 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 hover:border-violet-500/50 active:text-violet-300 active:bg-violet-500/10";
     return (
       <>
         <div className={`inline-flex items-center ${gap} ${className}`}>
           <button
             onClick={handleShare}
             title={copied ? "Link copied!" : "Share"}
-            className={`${dim} flex items-center justify-center rounded-full border border-sky-500/30 bg-zinc-800/70 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 hover:border-sky-500/50 active:text-sky-300 active:bg-sky-500/10 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
+            className={`${dim} flex items-center justify-center rounded-full ${shareTone} active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
           >
             <ShareGlyph />
           </button>
@@ -97,7 +106,7 @@ export default function ShareButton({
             <button
               onClick={() => setQrOpen(true)}
               title="Show QR code"
-              className={`${dim} flex items-center justify-center rounded-full border border-violet-500/30 bg-zinc-800/70 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 hover:border-violet-500/50 active:text-violet-300 active:bg-violet-500/10 active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
+              className={`${dim} flex items-center justify-center rounded-full ${qrTone} active:scale-[0.9] transition-[background-color,border-color,color,transform] duration-150 shrink-0 touch-manipulation`}
             >
               <QRGlyph />
             </button>

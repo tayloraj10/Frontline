@@ -74,6 +74,7 @@ export default function CreateCleanupEventForm({
     lat: number;
     lng: number;
     addressLine1: string | null;
+    meetupDetails?: string | null;
     city: string | null;
     state: string | null;
     postalCode: string | null;
@@ -93,6 +94,7 @@ export default function CreateCleanupEventForm({
   const [scheduledEnd, setScheduledEnd] = useState(toDatetimeLocal(initialValues?.scheduledEnd ?? null));
   const [lat, setLat] = useState<number | null>(initialValues?.lat ?? null);
   const [lng, setLng] = useState<number | null>(initialValues?.lng ?? null);
+  const [meetupDetails, setMeetupDetails] = useState(initialValues?.meetupDetails ?? "");
   const [addressLine1, setAddressLine1] = useState(initialValues?.addressLine1 ?? "");
   const [city, setCity] = useState(initialValues?.city ?? "");
   const [state, setState] = useState(initialValues?.state ?? "");
@@ -170,6 +172,7 @@ export default function CreateCleanupEventForm({
           latitude: lat,
           longitude: lng,
           addressLine1: addressLine1.trim() || null,
+          meetupDetails: meetupDetails.trim() || null,
           city: city.trim() || null,
           state: state.trim() || null,
           postalCode: postalCode.trim() || null,
@@ -200,6 +203,7 @@ export default function CreateCleanupEventForm({
           latitude: lat,
           longitude: lng,
           addressLine1: addressLine1.trim() || null,
+          meetupDetails: meetupDetails.trim() || null,
           city: city.trim() || null,
           state: state.trim() || null,
           postalCode: postalCode.trim() || null,
@@ -257,6 +261,8 @@ export default function CreateCleanupEventForm({
       <div className="space-y-2">
         <label className="block text-sm font-semibold text-zinc-200">Description</label>
         <textarea className={`${inputCls} resize-none`} rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" />
+        <label className="block text-sm font-semibold text-zinc-200 mt-4">Meetup details</label>
+        <textarea className={`${inputCls} resize-none`} rows={2} maxLength={140} value={meetupDetails} onChange={e => setMeetupDetails(e.target.value)} placeholder="Optional. e.g. By the bagel shop on the corner, look for the green shirts" />
       </div>
     </>
   );
@@ -463,23 +469,23 @@ export default function CreateCleanupEventForm({
         <div className="grid grid-cols-2 gap-x-3 gap-y-4">
           <div className="col-span-2 space-y-1.5">
             <label className="block text-sm font-semibold text-zinc-200">Street address</label>
-            <input className={inputCls} value={addressLine1} onChange={e => setAddressLine1(e.target.value)} />
+            <input className={inputCls} value={addressLine1} onChange={e => { setShowAddressDetails(true); setAddressLine1(e.target.value); }} />
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-zinc-200">City</label>
-            <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} />
+            <input className={inputCls} value={city} onChange={e => { setShowAddressDetails(true); setCity(e.target.value); }} />
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-zinc-200">State</label>
-            <input className={inputCls} value={state} onChange={e => setState(e.target.value)} />
+            <input className={inputCls} value={state} onChange={e => { setShowAddressDetails(true); setState(e.target.value); }} />
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-zinc-200">Postal code</label>
-            <input className={inputCls} value={postalCode} onChange={e => setPostalCode(e.target.value)} />
+            <input className={inputCls} value={postalCode} onChange={e => { setShowAddressDetails(true); setPostalCode(e.target.value); }} />
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-zinc-200">Country</label>
-            <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} />
+            <input className={inputCls} value={country} onChange={e => { setShowAddressDetails(true); setCountry(e.target.value); }} />
           </div>
         </div>
       )}
