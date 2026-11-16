@@ -92,7 +92,7 @@ export default async function CleanerPage({ params }: { params: Promise<{ id: st
         )}
       </Section>
 
-      {user && !own && <ReportBlock userId={c.user_id} />}
+      {user && !own && <ReportBlock userId={c.user_id} name={c.username} role="cleaner" />}
     </div>
   );
 }

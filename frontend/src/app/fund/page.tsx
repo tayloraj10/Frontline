@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Banknote, Flag, Scale, ShieldCheck, UserCheck } from "lucide-react";
 import RewardsTabs from "@/components/RewardsTabs";
 import FundingGuideCard from "@/components/marketplace/FundingGuideCard";
+import PosterJobsCard from "@/components/marketplace/PosterJobsCard";
+import type { Job, MoneySummary } from "@/lib/marketplace";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { PageHeader } from "@/components/ui/PageShell";
 import { mkFetch, viewMarketplace } from "@/lib/marketplace.server";
@@ -14,6 +16,13 @@ import type { AdminOverview } from "@/components/marketplace/AdminPanel";
 /** Fund tab: pay a neighbor to clean (post a job) or sponsor a cleanup. Taking jobs lives on the Earn tab. */
 export default async function MarketplacePage() {
   const { user, isAdmin } = await viewMarketplace();
+  const zero: MoneySummary = { paid_cents: 0, paid_jobs: 0, pending_cents: 0, pending_jobs: 0 };
+  const [posted, spent] = user
+    ? await Promise.all([
+        mkFetch<Job[]>(user.id, isAdmin, "/jobs?role=customer").catch(() => [] as Job[]),
+        mkFetch<MoneySummary>(user.id, isAdmin, "/jobs/summary?role=customer").catch(() => zero),
+      ])
+    : [[] as Job[], zero];
   const [overview, pools] = await Promise.all([
     isAdmin && user ? mkFetch<AdminOverview>(user.id, isAdmin, "/admin/overview").catch(() => null) : Promise.resolve(null),
     listPools().then((r) => r?.open ?? []).catch(() => []),
@@ -39,6 +48,7 @@ export default async function MarketplacePage() {
       <FundMapPanel
         extras={
           <>
+            <PosterJobsCard jobs={posted} spent={spent} />
             <FundingGuideCard />
             {isAdmin && (
               <Link

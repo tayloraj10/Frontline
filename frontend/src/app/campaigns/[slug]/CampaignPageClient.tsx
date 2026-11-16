@@ -1,5 +1,6 @@
 "use client";
 
+import ActiveWork from "@/components/marketplace/ActiveWork";
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -1519,6 +1520,12 @@ export default function CampaignPageClient({
             }}
           />
         </>
+      )}
+
+      {campaign.slug === "trash-war" && userId && !pinPickerActive && !areaPickerActive && (
+        <div className="pointer-events-none absolute left-3 top-[6.75rem] z-10 flex sm:left-[3.75rem] sm:top-[calc(var(--map-top,0px)+3.75rem)]">
+          <ActiveWork variant="chip" className="pointer-events-auto" />
+        </div>
       )}
 
       {isHexBloom && !pinPickerActive && !areaPickerActive && (

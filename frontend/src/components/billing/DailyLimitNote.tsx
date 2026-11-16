@@ -6,6 +6,9 @@ import { SPONSORED_CHANGED_EVENT } from "@/components/map/useSponsoredMapLayer";
 export interface DailyLimit {
   limit_cents: number;
   earned_week_cents: number;
+  verified_cents?: number;
+  pending_review_cents?: number;
+  in_progress_cents?: number;
   remaining_cents: number;
   locked: boolean;
   is_plus: boolean;
@@ -39,16 +42,13 @@ export function useDailyLimit(): DailyLimit | null {
 
 /**
  * The viewer's weekly earning ceiling: everything earned through the app in the last 7 days.
- * `warnOnly` renders nothing until they are close (80%) or locked, for screens where the full bar
- * would be noise. Louder on purpose when locked: they cannot take new jobs or claim sites.
+ * `compact` is the short version for job and site pages (title, bar and one line); the full
+ * breakdown lives on the Earn page. Louder on purpose when locked: they cannot take new jobs or claim sites.
  */
-export default function DailyLimitNote({ className = "", warnOnly = false }: { className?: string; warnOnly?: boolean }) {
+export default function DailyLimitNote({ className = "", compact = false }: { className?: string; compact?: boolean }) {
   const limit = useDailyLimit();
   if (!limit) return null;
   const pct = limit.limit_cents > 0 ? (limit.earned_week_cents / limit.limit_cents) * 100 : 0;
-  // TEMPORARY: always show so the warning styles can be reviewed. Remove FORCE_SHOW to restore warn-only.
-  const FORCE_SHOW = false;
-  if (!FORCE_SHOW && warnOnly && !limit.locked && pct < 80) return null;
   const used = Math.min(100, pct);
   const near = !limit.locked && pct >= 80;
   const tone = limit.locked ? "border-amber-500/60 bg-amber-950/30" : near ? "border-amber-700/50 bg-zinc-900/60" : "border-zinc-800 bg-zinc-900/60";
@@ -60,9 +60,45 @@ export default function DailyLimitNote({ className = "", warnOnly = false }: { c
           {usd(limit.earned_week_cents)} of {usd(limit.limit_cents)}
         </span>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div className={`h-full rounded-full ${limit.locked || near ? "bg-amber-400" : "bg-emerald-400"}`} style={{ width: `${used}%` }} />
+      <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-zinc-800">
+        {limit.verified_cents != null ? (
+          [
+            [limit.verified_cents, "bg-emerald-400"],
+            [limit.pending_review_cents ?? 0, "bg-sky-400"],
+            [limit.in_progress_cents ?? 0, "bg-amber-400"],
+          ].map(([cents, color], i) => (
+            <div key={i} className={color as string} style={{ width: `${Math.min(100, limit.limit_cents > 0 ? ((cents as number) / limit.limit_cents) * 100 : 0)}%` }} />
+          ))
+        ) : (
+          <div className={limit.locked || near ? "bg-amber-400" : "bg-emerald-400"} style={{ width: `${used}%` }} />
+        )}
       </div>
+      {compact ? (
+        <p className={`mt-1.5 text-xs ${limit.locked || near ? "font-semibold text-amber-300" : "text-zinc-500"}`}>
+          {limit.locked
+            ? "Weekly limit reached. You can't take new jobs or claim sites until your last 7 days drop back under it."
+            : near
+              ? `Only ${usd(limit.remaining_cents)} left this week.`
+              : `${usd(limit.remaining_cents)} left this week. Full breakdown on the Earn page.`}
+        </p>
+      ) : (
+      <>
+      {limit.verified_cents != null && (
+        <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <dt className="text-zinc-500">Earned and verified</dt>
+            <dd className="font-bold text-emerald-300">{usd(limit.verified_cents)}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">Earned, awaiting approval</dt>
+            <dd className="font-bold text-sky-300">{usd(limit.pending_review_cents ?? 0)}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">In progress now</dt>
+            <dd className="font-bold text-amber-300">{usd(limit.in_progress_cents ?? 0)}</dd>
+          </div>
+        </dl>
+      )}
       {limit.locked ? (
         <p className="mt-1.5 text-sm font-semibold text-amber-300">
           You have reached the weekly limit, so you can't take new jobs or claim sites for now. Work you already have and payouts
@@ -70,10 +106,12 @@ export default function DailyLimitNote({ className = "", warnOnly = false }: { c
         </p>
       ) : (
         <p className="mt-1.5 text-xs text-zinc-500">
-          {near ? `Only ${usd(limit.remaining_cents)} left this week. ` : ""}This counts jobs and sponsored sites you earn yourself over
-          the last 7 days. Once you reach it you are paused from new work, but nothing is held back.
+          {near ? `Only ${usd(limit.remaining_cents)} left this week. ` : ""}This adds up the last 7 days: verified pay, pay waiting for approval and
+          jobs you have taken but not finished. Sponsored sites count once you submit them. Once you reach it you are paused from new work, but nothing is held back.
           {!limit.is_plus && limit.plus_limit_cents > limit.limit_cents && ` Frontline Plus raises it to ${usd(limit.plus_limit_cents)}.`}
         </p>
+      )}
+      </>
       )}
     </div>
   );

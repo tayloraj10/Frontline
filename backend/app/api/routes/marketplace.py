@@ -276,7 +276,13 @@ async def sweep(db: AsyncSession = Depends(get_db)):
     review window. Called every 15 minutes by a Railway cron (scripts/run_marketplace_sweep.py).
     Time-based and idempotent, but it moves money, so it requires the service secret."""
     await sweep_health.record_run(db)
-    return {"changed": await svc.expire_stale_jobs(db)}
+    changed = await svc.expire_stale_jobs(db)
+    # Also lapse sponsored-site claims here so claimants are told without anyone loading the page.
+    from app.services import sponsored_cleanups
+
+    await sponsored_cleanups._expire_all_stale(db)
+    await db.commit()
+    return {"changed": changed}
 
 
 @router.get("/jobs")
@@ -517,6 +523,14 @@ async def photos(job_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Dep
 async def add_photo(job_id: UUID, body: PhotoIn, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
     try:
         return await svc.add_photo(db, job_id, a.user_id, body.kind, body.url, body.latitude, body.longitude)
+    except svc.MarketplaceError as e:
+        raise _wrap(e)
+
+
+@router.delete("/jobs/{job_id}/photos/{photo_id}", dependencies=[Depends(limit_writes)])
+async def delete_photo(job_id: UUID, photo_id: UUID, a: Actor = Depends(actor), db: AsyncSession = Depends(get_db)):
+    try:
+        return await svc.delete_photo(db, job_id, photo_id, a.user_id)
     except svc.MarketplaceError as e:
         raise _wrap(e)
 

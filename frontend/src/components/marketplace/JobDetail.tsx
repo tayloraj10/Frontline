@@ -13,7 +13,12 @@ import { CategoryChip, CategoryInfoButton, SizeBadge } from "./CategoryBits";
 import { jobSize } from "@/lib/jobSizes";
 import { STATUS_LABELS, durationLabel, TIME_MODE_LABELS, mk, usd, whenLabel, type Job } from "@/lib/marketplace";
 import BackOutButton from "./BackOutButton";
+import RetakeNotice, { isFrozen } from "./RetakeNotice";
+import { backOutIsStrike } from "@/lib/marketplace";
 import CleanerFlow, { type FlowPhoto } from "./CleanerFlow";
+import PhotoGallery from "./PhotoGallery";
+import { uploadToR2 } from "@/lib/uploadToR2";
+import { scrollToTop } from "@/lib/scrollToTop";
 import JobRouteCard from "./JobRouteCard";
 import DailyLimitNote from "@/components/billing/DailyLimitNote";
 import JobSiteCard from "./JobSiteCard";
@@ -29,6 +34,8 @@ const HOLD_LABEL: Record<string, string> = {
   released: "Payment released to the cleaner",
   refunded: "Payment refunded",
 };
+
+const arriveLabel = (m: number) => (m % 60 === 0 ? `${m / 60} hour${m === 60 ? "" : "s"}` : `${m} minutes`);
 
 export default function JobDetail({
   initial,
@@ -97,6 +104,8 @@ export default function JobDetail({
     try {
       await mk(path, { method: "POST", body });
       await refresh();
+      // Taking or accepting a job swaps the page to the active job view, so start at the top of it.
+      if (key === "take" || key === "accept") scrollToTop(document.querySelector("h1"));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -108,8 +117,17 @@ export default function JobDetail({
   const other = role === "customer" ? job.cleaner_username : job.customer_username;
   const otherId = role === "customer" ? job.cleaner_id : job.customer_id;
 
+  // A cleaner mid-job sees the next steps first, before the job details.
+  const actionsFirst = role === "cleaner" && (job.status === "accepted" || job.status === "in_progress");
+  // Errors from taking a job show right under the Take button, not at the bottom of the page.
+  const takeError = role === "viewer" && job.status === "open";
+  const actions = anon ? <LoginPrompt action="take or follow this job" /> : <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} suspended={suspended} error={takeError ? error : null} />;
   return (
     <div className="space-y-6">
+      {(role === "viewer" || role === "cleaner") && <DailyLimitNote compact />}
+      {role === "viewer" && job.status === "open" && isFrozen(job.retake_at) && <RetakeNotice what="job" until={job.retake_at!} />}
+      {actionsFirst && error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
+      {actionsFirst && actions}
       <Card className={`space-y-3 ${role === "customer" ? "!ring-2 !ring-amber-300/70" : ""}`}>
         {role === "customer" && (
           <p className="rounded-xl bg-amber-300/15 px-3 py-2 text-sm font-bold text-amber-200 ring-1 ring-inset ring-amber-300/40">
@@ -118,7 +136,10 @@ export default function JobDetail({
         )}
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-2xl font-extrabold text-zinc-50">{job.title}</h1>
-          <Badge variant={s.tone}>{s.label}</Badge>
+          <Badge variant={s.tone} className="shrink-0 whitespace-nowrap px-3 py-1 text-sm font-semibold ring-1 ring-inset ring-current/30">
+            {s.tone === "pending" && <span aria-hidden className="size-2 animate-pulse rounded-full bg-current" />}
+            {s.label}
+          </Badge>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <CategoryChip type={job.job_type} />
@@ -176,14 +197,14 @@ export default function JobDetail({
         <p className="text-xs text-zinc-500">{HOLD_LABEL[job.hold_status] ?? job.hold_status}</p>
       </Card>
 
-      {error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
+      {!actionsFirst && !takeError && error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
 
-      {(role === "cleaner" || role === "viewer") &&
+      {(role === "cleaner" || role === "viewer" || role === "customer") &&
         ["completed", "confirmed", "released", "disputed"].includes(job.status) && (
           <JobRouteCard jobId={job.id} durationSeconds={job.duration_seconds} />
         )}
 
-      {anon ? <LoginPrompt action="take or follow this job" /> : <Actions job={job} role={role} busy={busy} act={act} photos={photos} refresh={refresh} payoutsBlocked={payoutsBlocked} needsSetup={needsSetup} suspended={suspended} />}
+      {!actionsFirst && actions}
 
       {role === "customer" && job.status === "open" && (job.price_flag_count ?? 0) > 0 && (
         <PriceFlags job={job} busy={busy} act={act} />
@@ -201,7 +222,7 @@ export default function JobDetail({
 
       {participant && (
         <Section title="Photos">
-          <Photos photos={photos} />
+          <Photos photos={photos} job={job} role={role} refresh={refresh} />
         </Section>
       )}
 
@@ -214,7 +235,7 @@ export default function JobDetail({
         </div>
       )}
 
-      {participant && otherId && <ReportBlock userId={otherId} jobId={job.id} />}
+      {participant && otherId && <ReportBlock userId={otherId} jobId={job.id} name={other} role={role === "customer" ? "cleaner" : "customer"} />}
     </div>
   );
 }
@@ -295,9 +316,11 @@ function Actions({
   payoutsBlocked,
   needsSetup,
   suspended,
+  error,
 }: {
   job: Job;
   role: "customer" | "cleaner" | "viewer";
+  error?: string | null;
   busy: string | null;
   act: (key: string, path: string, body?: unknown) => Promise<void>;
   photos: Photo[];
@@ -344,11 +367,11 @@ function Actions({
 
   // Anyone else viewing an open board job can take it at the posted price, or flag the price as too low
   if (role === "viewer" && job.status === "open") {
+    const frozen = isFrozen(job.retake_at);
     return (
       <Card className="space-y-3">
         <p className="text-sm font-bold text-zinc-100">Take this job for {usd(job.price_cents)}</p>
         <EarnLine job={job} />
-        <DailyLimitNote warnOnly />
         {suspended && <SuspendedNotice />}
         {payoutsBlocked && <PayoutsNeeded />}
         {safety}
@@ -358,7 +381,9 @@ function Actions({
               You must start by <LocalTime iso={job.arrive_deadline} />
             </p>
             <p className="mt-1">
-              You get {Math.round((job.arrive_minutes ?? 120) / 60 * 10) / 10} hours from {job.starts_at || job.window_start ? "the job start time" : "taking it"}. If you have not started
+              {job.starts_at || job.window_start
+                ? `This job is scheduled, so your ${arriveLabel(job.arrive_minutes ?? 60)} to get there runs from its start time (${whenLabel(job)}), not from when you take it. You can arrive early. `
+                : `You get ${arriveLabel(job.arrive_minutes ?? 60)} from taking it. `}If you have not started
               by then, the job goes back on the board, the customer is refunded and you get a strike.
             </p>
           </div>
@@ -379,9 +404,11 @@ function Actions({
             <li>You can only hold one job at a time.</li>
           </ul>
         </div>
-        <Button className="w-full" disabled={!ack || payoutsBlocked || needsSetup || suspended} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
+        {frozen && <RetakeNotice what="job" until={job.retake_at!} />}
+        <Button className="w-full" disabled={!ack || payoutsBlocked || needsSetup || suspended || frozen} loading={busy === "take"} onClick={() => act("take", `${base}/take`, { safety_ack: ack })}>
           Take this job
         </Button>
+        {error && <p role="alert" className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
         {job.price_flagged_by_me ? (
           <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">You flagged this price as too low. The poster has been told.</p>
         ) : (
@@ -421,7 +448,7 @@ function Actions({
     return (
       <div className="space-y-3">
         <CleanerFlow job={job} photos={photos} refresh={refresh} />
-        {(job.status === "accepted" || job.status === "in_progress") && <BackOutButton jobId={job.id} direct={job.origin === "direct"} onDone={refresh} />}
+        {(job.status === "accepted" || job.status === "in_progress") && <BackOutButton jobId={job.id} direct={job.origin === "direct"} strike={backOutIsStrike(job)} />}
       </div>
     );
   }
@@ -550,24 +577,42 @@ function ListingPhotos({ urls }: { urls: string[] }) {
   );
 }
 
-function Photos({ photos }: { photos: Photo[] }) {
-  const { open, viewer } = usePhotoViewer(photos.map((p) => p.url));
+function Photos({ photos, job, role, refresh }: { photos: Photo[]; job: Job; role: "customer" | "cleaner" | "viewer"; refresh: () => Promise<void> }) {
+  const others = photos.filter((p) => p.kind !== "before" && p.kind !== "after");
+  const { open, viewer } = usePhotoViewer(others.map((p) => p.url));
+  const canEdit = role === "cleaner" && ["in_progress", "completed", "disputed"].includes(job.status);
   if (photos.length === 0) return <p className="text-sm text-zinc-500">No photos yet.</p>;
   return (
-    <>
-      <ul className="grid grid-cols-3 gap-2">
-        {photos.map((p, i) => (
-          <li key={p.id} className="relative overflow-hidden rounded-xl bg-zinc-900">
-            <button type="button" onClick={() => open(i)} aria-label="Enlarge photo" className="block w-full touch-manipulation">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt={`${p.kind} photo`} className="aspect-square w-full object-cover" />
-            </button>
-            <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold capitalize text-zinc-100">{p.kind}</span>
-          </li>
-        ))}
-      </ul>
+    <div className="space-y-4">
+      <PhotoGallery
+        photos={photos}
+        canEdit={canEdit}
+        addHint={job.status === "in_progress" ? undefined : "If the poster or an admin asks for more photos, add them here. They are marked as added later."}
+        onAdd={async (kind, file) => {
+          const url = await uploadToR2(file, "marketplace");
+          await mk(`/jobs/${job.id}/photos`, { method: "POST", body: { kind, url } });
+          await refresh();
+        }}
+        onRemove={async (id) => {
+          await mk(`/jobs/${job.id}/photos/${id}`, { method: "DELETE" });
+          await refresh();
+        }}
+      />
+      {others.length > 0 && (
+        <ul className="grid grid-cols-3 gap-2">
+          {others.map((p, i) => (
+            <li key={p.id} className="relative overflow-hidden rounded-xl bg-zinc-900">
+              <button type="button" onClick={() => open(i)} aria-label="Enlarge photo" className="block w-full touch-manipulation">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt={`${p.kind} photo`} className="aspect-square w-full object-cover" />
+              </button>
+              <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold capitalize text-zinc-100">{p.kind}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {viewer}
-    </>
+    </div>
   );
 }
 

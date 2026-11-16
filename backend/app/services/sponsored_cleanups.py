@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services import connect
 from app.services import earning_limits
 from app.services import payments as payments_service
-from app.services.game_settings import get_game_settings, size_limits
+from app.services.game_settings import get_game_settings, retake_wait_hours, size_limits
 
 
 class SponsoredError(Exception):
@@ -244,7 +244,7 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
     await _expire_all_stale(db)
     await db.commit()
     early_hours = await _early_hours(db)
-    fallback_radius = (await get_game_settings(db)).get("sponsored_claim_proximity_meters", 100.0)
+    fallback_radius = (await get_game_settings(db)).get("sponsored_claim_proximity_meters", 152.0)
     viewer_plus = bool(user_id and await payments_service.has_premium(db, "user", user_id))
     rows = (
         await db.execute(
@@ -255,7 +255,9 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
                        ST_Y(s.site_location::geometry) AS latitude,
                        ST_X(s.site_location::geometry) AS longitude,
                        cl.id AS claim_id, cl.user_id AS claim_user_id, cl.status AS claim_status,
-                       cl.before_deadline_at, cl.after_deadline_at,
+                       cl.before_deadline_at, cl.after_deadline_at, cl.before_submitted_at,
+                       COALESCE(s.sponsor_user_id, (SELECT b.created_by FROM partner_businesses b
+                                                    WHERE b.id = s.sponsor_business_id)) AS sponsor_uid,
                        (s.sponsor_user_id = :uid
                          OR EXISTS (SELECT 1 FROM partner_businesses b
                                     WHERE b.id = s.sponsor_business_id
@@ -273,6 +275,30 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
             {"early_hours": early_hours, "uid": user_id},
         )
     ).mappings().all()
+    # Sites this person gave up in the last 24 hours, so the page can say when they can claim again.
+    wait_h = await retake_wait_hours(db)
+    frozen: dict[str, str] = {}
+    frozen_done: set[str] = set()
+    if user_id:
+        for fr in (
+            await db.execute(
+                text("""
+                    SELECT sponsorship_id, max(COALESCE(ended_at, after_submitted_at, claimed_at)) + make_interval(hours => :w) AS until,
+                           (array_agg(status ORDER BY COALESCE(ended_at, after_submitted_at, claimed_at) DESC))[1] AS last_status
+                    FROM sponsorship_site_claims
+                    WHERE user_id = :u AND status IN ('released', 'expired', 'submitted')
+                      AND COALESCE(ended_at, after_submitted_at, claimed_at) > now() - make_interval(hours => :w)
+                    GROUP BY sponsorship_id
+                """),
+                {"u": str(user_id), "w": wait_h},
+            )
+        ).all():
+            frozen[str(fr[0])] = fr[1].isoformat()
+            if fr[2] == "submitted":
+                frozen_done.add(str(fr[0]))
+    claim_photos = await list_claim_photos(
+        db, [str(r["claim_id"]) for r in rows if r["claim_id"] and user_id and str(r["claim_user_id"]) == str(user_id)]
+    )
     out = []
     for r in rows:
         mine = bool(user_id and r["claim_user_id"] and str(r["claim_user_id"]) == str(user_id))
@@ -287,7 +313,9 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
                 "remaining_cents": r["remaining_cents"],
                 "cap_per_user_cents": r["cap_per_user_cents"],
                 "open_to_additions": r["open_to_additions"],
-                "radius_meters": r["site_radius_meters"] or fallback_radius,
+                "retake_at": frozen.get(str(r["id"])),
+                "retake_reason": "done" if str(r["id"]) in frozen_done else "gave_up",
+                "radius_meters": max(r["site_radius_meters"] or 0, fallback_radius),
                 "latitude": r["latitude"],
                 "longitude": r["longitude"],
                 "available": r["claim_id"] is None,
@@ -300,6 +328,9 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
                         "status": r["claim_status"],
                         "before_deadline_at": r["before_deadline_at"].isoformat() if r["before_deadline_at"] else None,
                         "after_deadline_at": r["after_deadline_at"].isoformat() if r["after_deadline_at"] else None,
+                        "started_at": r["before_submitted_at"].isoformat() if r["before_submitted_at"] else None,
+                        "sponsor_id": str(r["sponsor_uid"]) if r["sponsor_uid"] and str(r["sponsor_uid"]) != str(user_id) else None,
+                        "photos": claim_photos.get(str(r["claim_id"]), []),
                     }
                     if mine
                     else None
@@ -312,7 +343,7 @@ async def list_sites(db: AsyncSession, user_id: UUID | None = None) -> list[dict
 async def list_map_features(db: AsyncSession, user_id: UUID | None = None) -> dict:
     """Funded pools with money left, shaped for the map: sites are points, group areas are
     simplified geo unit polygons. One read per map load, no per-move queries."""
-    fallback_radius = (await get_game_settings(db)).get("sponsored_claim_proximity_meters", 100.0)
+    fallback_radius = (await get_game_settings(db)).get("sponsored_claim_proximity_meters", 152.0)
     early_hours = await _early_hours(db)
     viewer_plus = bool(user_id and await payments_service.has_premium(db, "user", user_id))
     sites = (
@@ -403,7 +434,7 @@ async def list_map_features(db: AsyncSession, user_id: UUID | None = None) -> di
                 "label": r["site_label"],
                 "remaining_cents": r["remaining_cents"],
                 "payout_rule": r["payout_rule"],
-                "radius_meters": r["site_radius_meters"] or fallback_radius,
+                "radius_meters": max(r["site_radius_meters"] or 0, fallback_radius),
                 "latitude": r["latitude"],
                 "longitude": r["longitude"],
                 "available": not r["held"],
@@ -452,6 +483,10 @@ async def list_group_areas(
             text(f"""
                 SELECT s.id, s.payout_rule, s.remaining_cents, s.message, s.area_name, s.open_to_additions,
                        {_VISIBILITY_COLS},
+                       ST_Y(ST_PointOnSurface(s.area_geometry)) AS latitude,
+                       ST_X(ST_PointOnSurface(s.area_geometry)) AS longitude,
+                       CASE WHEN s.area_geometry IS NULL THEN NULL
+                            ELSE ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_GeometryN(ST_Multi(s.area_geometry), 1), 0.0003)) END AS geojson,
                        (s.sponsor_user_id = :uid
                          OR EXISTS (SELECT 1 FROM partner_businesses b
                                     WHERE b.id = s.sponsor_business_id
@@ -479,6 +514,9 @@ async def list_group_areas(
             {
                 "id": str(r["id"]),
                 "area_name": r["area_name"],
+                "latitude": r["latitude"],
+                "longitude": r["longitude"],
+                "geojson": json.loads(r["geojson"]) if r["geojson"] else None,
                 "open_to_additions": r["open_to_additions"],
                 "message": r["message"],
                 "payout_rule": r["payout_rule"],
@@ -506,24 +544,35 @@ async def _expire_all_stale(db: AsyncSession) -> None:
                 SET status = 'expired', ended_at = now()
                 WHERE (status = 'claimed' AND before_deadline_at < now())
                    OR (status = 'in_progress' AND after_deadline_at < now())
-                RETURNING user_id
+                RETURNING user_id, sponsorship_id
             """)
         )
     ).fetchall()
+    if not expired:
+        return
+    await db.commit()
+    from app.services.marketplace import _notify_safe
+
+    wait_h = await retake_wait_hours(db)
     for row in expired:
-        await db.execute(
-            text("""
-                INSERT INTO user_notifications (user_id, type, title, body, link_url)
-                VALUES (:user_id, 'claim_expired', 'Your site claim expired',
-                        'A sponsored site you claimed reopened: someone else can pick it up now.',
-                        '/impact')
-            """),
-            {"user_id": str(row.user_id)},
+        await _notify_safe(
+            db, row.user_id, "claim_expired", "You lost a site",
+            "You ran out of time on a sponsored site, so it went back on the board. "
+            f"You can take it again after {wait_h} hours. This is not a strike.",
+            f"/earn/sites/{row.sponsorship_id}", "View site", email=False,
         )
 
 
-async def _assert_near_site(db: AsyncSession, sponsorship_id: UUID, lat: float, lon: float) -> None:
-    """Server-side proximity re-check against the site point, never the client's own math."""
+async def _assert_near_site(
+    db: AsyncSession, sponsorship_id: UUID, lat: float | None, lon: float | None, override: bool = False
+) -> bool:
+    """Server-side proximity re-check against the site point, never the client's own math.
+    Returns True when the person was not verified on site but used the override, so the claim is
+    flagged for admin review (same as marketplace jobs)."""
+    if lat is None or lon is None:
+        if override:
+            return True
+        raise SponsoredError(422, "Turn on location so we can confirm you are at the site.")
     settings = await get_game_settings(db)
     row = (
         await db.execute(
@@ -531,7 +580,7 @@ async def _assert_near_site(db: AsyncSession, sponsorship_id: UUID, lat: float, 
                 SELECT ST_DWithin(
                     s.site_location,
                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
-                    CAST(COALESCE(s.site_radius_meters, :fallback) AS double precision)
+                    CAST(GREATEST(COALESCE(s.site_radius_meters, 0), :fallback) AS double precision)
                 )
                 FROM sponsorships s
                 WHERE s.id = :id AND s.model = 'site'
@@ -540,14 +589,17 @@ async def _assert_near_site(db: AsyncSession, sponsorship_id: UUID, lat: float, 
                 "id": str(sponsorship_id),
                 "lat": lat,
                 "lon": lon,
-                "fallback": settings.get("sponsored_claim_proximity_meters", 100.0),
+                "fallback": settings.get("sponsored_claim_proximity_meters", 152.0),
             },
         )
     ).fetchone()
     if row is None:
         raise SponsoredError(404, "Sponsored site not found")
     if not row[0]:
+        if override:
+            return True
         raise SponsoredError(403, "You need to be at the sponsored site to do this")
+    return False
 
 
 # An upcoming event attached to a group-area pool holds back money for its group, so a rival group
@@ -666,29 +718,60 @@ async def _assert_claim_allowed(
         return
     if row.sponsor_user_id is not None and row.sponsor_user_id == user_id:
         raise SponsoredError(403, "You can't claim a site you sponsored yourself.")
+    busy_job = (
+        await db.execute(
+            text("SELECT 1 FROM marketplace_jobs WHERE cleaner_id = :u AND status IN ('accepted', 'in_progress') LIMIT 1"),
+            {"u": str(user_id)},
+        )
+    ).first()
+    if busy_job:
+        raise SponsoredError(409, "You already have an active job. Finish it or cancel it before claiming a site.")
+    wait_h = await retake_wait_hours(db)
+    froze = (
+        await db.execute(
+            text("""
+                SELECT ended_at + make_interval(hours => :w) AS until FROM sponsorship_site_claims
+                WHERE sponsorship_id = :sid AND user_id = :u AND status IN ('released', 'expired')
+                  AND ended_at > now() - make_interval(hours => :w)
+                ORDER BY ended_at DESC LIMIT 1
+            """),
+            {"sid": str(sponsorship_id), "u": str(user_id), "w": wait_h},
+        )
+    ).fetchone()
+    if froze:
+        mins = max(1, int((froze.until - datetime.now(timezone.utc)).total_seconds() // 60))
+        h, m = divmod(mins, 60)
+        left = f"{h} hr {m} min" if h and m else f"{h} hr" if h else f"{m} min"
+        raise SponsoredError(409, f"You gave this site up recently. You can claim it again in {left}, or pick another site.")
     if row.payout_rule.get("one_winner"):
         return
     if await earning_limits.is_locked(db, user_id):
         raise SponsoredError(403, earning_limits.LOCKED_MESSAGE)
-    done_today = (
+    # Same 24 hour wait as giving a site up: one paid cleanup per person per site per day.
+    done = (
         await db.execute(
             text("""
-                SELECT 1 FROM sponsorship_site_claims
-                WHERE sponsorship_id = :sid AND user_id = :u AND status IN ('claimed', 'in_progress', 'submitted')
-                  AND claimed_at >= :since LIMIT 1
+                SELECT max(COALESCE(ended_at, after_submitted_at, claimed_at)) + make_interval(hours => :w) AS until
+                FROM sponsorship_site_claims
+                WHERE sponsorship_id = :sid AND user_id = :u AND status = 'submitted'
+                  AND COALESCE(ended_at, after_submitted_at, claimed_at) > now() - make_interval(hours => :w)
             """),
-            {"sid": str(sponsorship_id), "u": str(user_id), "since": earning_limits.local_midnight_utc(tz_name)},
+            {"sid": str(sponsorship_id), "u": str(user_id), "w": wait_h},
         )
     ).fetchone()
-    if done_today:
-        raise SponsoredError(409, "You can earn from this site once a day. Come back tomorrow.")
+    if done and done.until:
+        mins = max(1, int((done.until - datetime.now(timezone.utc)).total_seconds() // 60))
+        h, m = divmod(mins, 60)
+        left = f"{h} hr {m} min" if h and m else f"{h} hr" if h else f"{m} min"
+        raise SponsoredError(409, f"You already cleaned this site today. You can claim it again in {left}, or pick another site.")
 
 
 async def claim_site(
-    db: AsyncSession, sponsorship_id: UUID, user_id: UUID, lat: float, lon: float, tz_name: str | None = None
+    db: AsyncSession, sponsorship_id: UUID, user_id: UUID, lat: float | None, lon: float | None, tz_name: str | None = None
 ) -> dict:
+    # No proximity check at claim: like jobs, the claimer gets a travel window (before_deadline_at) to get
+    # there. Being on site is enforced when the before and after photos are submitted.
     await _expire_all_stale(db)
-    await _assert_near_site(db, sponsorship_id, lat, lon)
     await _assert_claim_allowed(db, sponsorship_id, user_id, tz_name)
     if await _pool_available_cents(db, sponsorship_id) <= 0:
         raise SponsoredError(409, "This site has no funds left to claim")
@@ -708,7 +791,7 @@ async def claim_site(
                 {
                     "id": str(sponsorship_id),
                     "user_id": str(user_id),
-                    "window": int(settings.get("sponsored_claim_before_window_minutes", 30)),
+                    "window": int(settings.get("marketplace_arrive_minutes", 60)),
                 },
             )
         ).fetchone()
@@ -723,11 +806,223 @@ async def claim_site(
     return {"claim_id": str(row.id), "status": "claimed", "before_deadline_at": row.before_deadline_at.isoformat()}
 
 
+async def _record_claim_photo(
+    db: AsyncSession, sponsorship_id: UUID, user_id: UUID, kind: str, url: str,
+    lat: float | None, lon: float | None, late: bool,
+) -> None:
+    await db.execute(
+        text("""
+            INSERT INTO sponsorship_claim_photos (claim_id, uploader_id, kind, url, latitude, longitude, late)
+            SELECT id, user_id, :kind, :url, :lat, :lon, :late FROM sponsorship_site_claims
+            WHERE sponsorship_id = :sid AND user_id = :uid
+            ORDER BY created_at DESC LIMIT 1
+        """),
+        {"kind": kind, "url": url, "lat": lat, "lon": lon, "late": late, "sid": str(sponsorship_id), "uid": str(user_id)},
+    )
+
+
+async def add_more_photo(
+    db: AsyncSession, sponsorship_id: UUID, user_id: UUID, kind: str, photo_url: str, lat: float | None, lon: float | None,
+    override: bool = False,
+) -> dict:
+    """Extra before/after photos. Once the work is submitted (awaiting review) they are flagged as added
+    later so the reviewer can tell."""
+    if kind not in ("before", "after"):
+        raise SponsoredError(422, "Invalid photo kind")
+    claim = (
+        await db.execute(
+            text("""SELECT id, status FROM sponsorship_site_claims
+                    WHERE sponsorship_id = :sid AND user_id = :uid ORDER BY created_at DESC LIMIT 1"""),
+            {"sid": str(sponsorship_id), "uid": str(user_id)},
+        )
+    ).fetchone()
+    if claim is None or claim.status not in ("in_progress", "submitted"):
+        raise SponsoredError(409, "You can add photos while the cleanup is in progress or waiting for review.")
+    if claim.status == "submitted":
+        pending = (
+            await db.execute(
+                text("SELECT 1 FROM sponsorship_allocations WHERE claim_id = :c AND status = 'pending_review'"),
+                {"c": str(claim.id)},
+            )
+        ).fetchone()
+        if pending is None:
+            raise SponsoredError(409, "This cleanup has already been reviewed.")
+    await _assert_near_site(db, sponsorship_id, lat, lon, override)
+    await _record_claim_photo(db, sponsorship_id, user_id, kind, photo_url, lat, lon, late=claim.status == "submitted")
+    await db.commit()
+    return {"ok": True}
+
+
+async def add_claim_track_points(db: AsyncSession, sponsorship_id: UUID, user_id: UUID, points: list[dict]) -> dict:
+    """Route points from the claimant's device while the cleanup is in progress. Re-sent points are ignored."""
+    claim = (
+        await db.execute(
+            text("""SELECT id, status FROM sponsorship_site_claims
+                    WHERE sponsorship_id = :sid AND user_id = :uid ORDER BY created_at DESC LIMIT 1"""),
+            {"sid": str(sponsorship_id), "uid": str(user_id)},
+        )
+    ).fetchone()
+    if claim is None:
+        raise SponsoredError(404, "Claim not found")
+    if claim.status != "in_progress":
+        raise SponsoredError(409, "Route points are only recorded while the cleanup is in progress.")
+    for p in points[:200]:
+        await db.execute(
+            text("""INSERT INTO sponsorship_claim_track_points (claim_id, user_id, latitude, longitude, accuracy_m, recorded_at)
+                    VALUES (:c, :u, :lat, :lng, :acc, :at) ON CONFLICT (claim_id, recorded_at) DO NOTHING"""),
+            {"c": str(claim.id), "u": str(user_id), "lat": p["latitude"], "lng": p["longitude"],
+             "acc": p.get("accuracy"), "at": p["recorded_at"]},
+        )
+    await db.commit()
+    n = (
+        await db.execute(text("SELECT count(*) FROM sponsorship_claim_track_points WHERE claim_id = :c"), {"c": str(claim.id)})
+    ).scalar_one()
+    return {"points": n}
+
+
+def _haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
+    from math import asin, cos, radians, sin, sqrt
+
+    dlat, dlng = radians(b[0] - a[0]), radians(b[1] - a[1])
+    h = sin(dlat / 2) ** 2 + cos(radians(a[0])) * cos(radians(b[0])) * sin(dlng / 2) ** 2
+    return 2 * 6371000 * asin(sqrt(h))
+
+
+async def get_claim_track(db: AsyncSession, claim_id: UUID) -> dict:
+    """Admin review: the recorded route plus where each photo was taken."""
+    flags = (
+        await db.execute(
+            text("SELECT track_flagged, track_flag_reason FROM sponsorship_site_claims WHERE id = :c"),
+            {"c": str(claim_id)},
+        )
+    ).first()
+    rows = (
+        await db.execute(
+            text("""SELECT latitude, longitude, accuracy_m, recorded_at FROM sponsorship_claim_track_points
+                    WHERE claim_id = :c ORDER BY recorded_at LIMIT 5000"""),
+            {"c": str(claim_id)},
+        )
+    ).mappings().all()
+    pts = [
+        {"latitude": r["latitude"], "longitude": r["longitude"], "accuracy_m": r["accuracy_m"], "recorded_at": r["recorded_at"].isoformat()}
+        for r in rows
+    ]
+    shots = (
+        await db.execute(
+            text("""SELECT kind, latitude, longitude, created_at FROM sponsorship_claim_photos
+                    WHERE claim_id = :c AND deleted_at IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
+                    ORDER BY created_at"""),
+            {"c": str(claim_id)},
+        )
+    ).mappings().all()
+    dist = sum(_haversine_m((a["latitude"], a["longitude"]), (b["latitude"], b["longitude"])) for a, b in zip(pts, pts[1:]))
+    return {
+        "points": pts,
+        "distance_m": round(dist),
+        "photos": [{"kind": r["kind"], "latitude": r["latitude"], "longitude": r["longitude"], "created_at": r["created_at"].isoformat()} for r in shots],
+        "track_flagged": bool(flags.track_flagged) if flags else False,
+        "track_flag_reason": flags.track_flag_reason if flags else None,
+    }
+
+
+async def delete_claim_photo(db: AsyncSession, sponsorship_id: UUID, user_id: UUID, photo_id: UUID) -> dict:
+    row = (
+        await db.execute(
+            text("""
+                UPDATE sponsorship_claim_photos p SET deleted_at = now(), deleted_by = :uid
+                FROM sponsorship_site_claims c
+                WHERE p.id = :pid AND p.claim_id = c.id AND c.sponsorship_id = :sid AND c.user_id = :uid
+                  AND p.uploader_id = :uid AND p.deleted_at IS NULL
+                  AND (c.status = 'in_progress' OR EXISTS (
+                        SELECT 1 FROM sponsorship_allocations a WHERE a.claim_id = c.id AND a.status = 'pending_review'))
+                RETURNING p.id
+            """),
+            {"pid": str(photo_id), "sid": str(sponsorship_id), "uid": str(user_id)},
+        )
+    ).fetchone()
+    await db.commit()
+    if row is None:
+        raise SponsoredError(404, "Photo not found or can no longer be changed")
+    return {"ok": True}
+
+
+async def list_claim_photos(db: AsyncSession, claim_ids: list[str]) -> dict[str, list[dict]]:
+    if not claim_ids:
+        return {}
+    rows = (
+        await db.execute(
+            text("""SELECT id, claim_id, kind, url, late, created_at, deleted_at
+                    FROM sponsorship_claim_photos WHERE claim_id = ANY(CAST(:ids AS uuid[])) ORDER BY created_at"""),
+            {"ids": claim_ids},
+        )
+    ).mappings().all()
+    out: dict[str, list[dict]] = {}
+    for r in rows:
+        out.setdefault(str(r["claim_id"]), []).append(
+            {"id": str(r["id"]), "kind": r["kind"], "url": r["url"], "late": r["late"],
+             "created_at": r["created_at"].isoformat(),
+             "deleted_at": r["deleted_at"].isoformat() if r["deleted_at"] else None}
+        )
+    return out
+
+
+async def list_my_claims(db: AsyncSession, user_id: UUID) -> list[dict]:
+    """The caller's finished-but-unreviewed cleanups, so they can add photos if a reviewer asks."""
+    rows = (
+        await db.execute(
+            text("""
+                SELECT c.id AS claim_id, c.sponsorship_id, s.site_label, a.status AS allocation_status, a.amount_cents
+                FROM sponsorship_site_claims c
+                JOIN sponsorships s ON s.id = c.sponsorship_id
+                JOIN sponsorship_allocations a ON a.claim_id = c.id
+                WHERE c.user_id = :u AND c.status = 'submitted' AND a.status = 'pending_review'
+                ORDER BY c.created_at DESC LIMIT 20
+            """),
+            {"u": str(user_id)},
+        )
+    ).mappings().all()
+    photos = await list_claim_photos(db, [str(r["claim_id"]) for r in rows])
+    return [
+        {"claim_id": str(r["claim_id"]), "sponsorship_id": str(r["sponsorship_id"]), "label": r["site_label"],
+         "amount_cents": r["amount_cents"], "photos": photos.get(str(r["claim_id"]), [])}
+        for r in rows
+    ]
+
+
+async def claim_result(db: AsyncSession, sponsorship_id: UUID, user_id: UUID) -> dict | None:
+    """The caller's latest finished claim on a site: waiting for review, or what they earned.
+    Only shown for two weeks so the page does not carry old news forever."""
+    r = (
+        await db.execute(
+            text("""
+                SELECT a.status, a.amount_cents, a.paid_out_at
+                FROM sponsorship_site_claims c
+                JOIN sponsorship_allocations a ON a.claim_id = c.id
+                WHERE c.sponsorship_id = :sid AND c.user_id = :u AND c.status = 'submitted'
+                  AND c.after_submitted_at > now() - interval '14 days'
+                ORDER BY c.after_submitted_at DESC LIMIT 1
+            """),
+            {"sid": str(sponsorship_id), "u": str(user_id)},
+        )
+    ).mappings().first()
+    if not r:
+        return None
+    return {"status": r["status"], "amount_cents": r["amount_cents"],
+            "paid_out_at": r["paid_out_at"].isoformat() if r["paid_out_at"] else None}
+
+
 async def submit_before_photo(
-    db: AsyncSession, sponsorship_id: UUID, user_id: UUID, photo_url: str, lat: float, lon: float
+    db: AsyncSession,
+    sponsorship_id: UUID,
+    user_id: UUID,
+    photo_url: str,
+    lat: float | None,
+    lon: float | None,
+    override: bool = False,
+    reason: str | None = None,
 ) -> dict:
     await _expire_all_stale(db)
-    await _assert_near_site(db, sponsorship_id, lat, lon)
+    flagged = await _assert_near_site(db, sponsorship_id, lat, lon, override)
     settings = await get_game_settings(db)
     row = (
         await db.execute(
@@ -735,8 +1030,11 @@ async def submit_before_photo(
                 UPDATE sponsorship_site_claims
                 SET status = 'in_progress',
                     before_photo_url = :photo_url,
-                    before_location = ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                    before_location = CASE WHEN CAST(:lat AS double precision) IS NULL THEN NULL
+                        ELSE ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography END,
                     before_submitted_at = now(),
+                    location_flagged = location_flagged OR :flagged,
+                    location_flag_reason = CASE WHEN :flagged THEN :reason ELSE location_flag_reason END,
                     after_deadline_at = now() + make_interval(mins => :window)
                 WHERE sponsorship_id = :id AND user_id = :user_id
                   AND status = 'claimed' AND before_deadline_at > now()
@@ -748,6 +1046,8 @@ async def submit_before_photo(
                 "photo_url": photo_url,
                 "lat": lat,
                 "lon": lon,
+                "flagged": flagged,
+                "reason": (reason or "").strip()[:300] or None,
                 "window": int(settings.get("sponsored_claim_work_window_minutes", 120)),
             },
         )
@@ -755,8 +1055,35 @@ async def submit_before_photo(
     if row is None:
         await db.commit()  # keep the expiry side effects
         raise SponsoredError(409, "Claim is not active or has expired")
+    await _record_claim_photo(db, sponsorship_id, user_id, "before", photo_url, lat, lon, late=False)
     await db.commit()
-    return {"status": "in_progress", "after_deadline_at": row.after_deadline_at.isoformat()}
+    return {"status": "in_progress", "after_deadline_at": row.after_deadline_at.isoformat(), "flagged": flagged}
+
+
+async def extend_claim(db: AsyncSession, sponsorship_id: UUID, user_id: UUID) -> dict:
+    """Add time to the cleanup window, so a big site does not cut people off. Capped from the start time."""
+    await _expire_all_stale(db)
+    settings = await get_game_settings(db)
+    add = int(settings.get("sponsored_claim_extend_minutes", 60))
+    cap = int(settings.get("sponsored_claim_max_total_minutes", 360))
+    row = (
+        await db.execute(
+            text("""
+                UPDATE sponsorship_site_claims
+                SET after_deadline_at = LEAST(after_deadline_at + make_interval(mins => :add),
+                                              before_submitted_at + make_interval(mins => :cap))
+                WHERE sponsorship_id = :id AND user_id = :user_id
+                  AND status = 'in_progress' AND after_deadline_at > now()
+                  AND after_deadline_at < before_submitted_at + make_interval(mins => :cap)
+                RETURNING after_deadline_at
+            """),
+            {"id": str(sponsorship_id), "user_id": str(user_id), "add": add, "cap": cap},
+        )
+    ).fetchone()
+    await db.commit()
+    if row is None:
+        raise SponsoredError(409, "You cannot add more time to this site. It may be at the longest allowed time, or no longer active.")
+    return {"after_deadline_at": row.after_deadline_at.isoformat()}
 
 
 async def submit_after_photo(
@@ -764,14 +1091,21 @@ async def submit_after_photo(
     sponsorship_id: UUID,
     user_id: UUID,
     photo_url: str,
-    lat: float,
-    lon: float,
+    lat: float | None,
+    lon: float | None,
     bags: int | None,
+    override: bool = False,
+    reason: str | None = None,
+    bags_ack: bool = False,
+    track_override: bool = False,
+    track_reason: str | None = None,
 ) -> dict:
     """Finish the claim and queue a pending_review allocation sized by the payout rule,
     trimmed to what the pool has left."""
     await _expire_all_stale(db)
-    await _assert_near_site(db, sponsorship_id, lat, lon)
+    flagged = await _assert_near_site(db, sponsorship_id, lat, lon, override)
+    if not bags_ack:
+        raise SponsoredError(422, "Confirm that all the bags are in your finished photo before you submit.")
 
     rule_row = (
         await db.execute(text("SELECT payout_rule FROM sponsorships WHERE id = :id"), {"id": str(sponsorship_id)})
@@ -786,25 +1120,56 @@ async def submit_after_photo(
                 "to be paid. Enter how many large bags you filled.",
             )
 
+    # Route tracking is required, but a dead phone must never strand a cleaner without pay: with too few
+    # points they can finish through the override, which flags the claim for admin review.
+    min_pts = int((await get_game_settings(db)).get("marketplace_min_track_points", 3))
+    pts = (
+        await db.execute(
+            text("""SELECT count(*) FROM sponsorship_claim_track_points t
+                    JOIN sponsorship_site_claims c ON c.id = t.claim_id
+                    WHERE c.sponsorship_id = :id AND c.user_id = :u AND c.status = 'in_progress'"""),
+            {"id": str(sponsorship_id), "u": str(user_id)},
+        )
+    ).scalar_one()
+    track_flagged = pts < min_pts
+    if track_flagged and not track_override:
+        raise SponsoredError(
+            422,
+            "We did not record your route for this site. Keep the app open while you work. "
+            "If your phone or signal failed, you can finish anyway and we will review it.",
+        )
+
     claim = (
         await db.execute(
             text("""
                 UPDATE sponsorship_site_claims
                 SET status = 'submitted',
                     after_photo_url = :photo_url,
-                    after_location = ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                    after_location = CASE WHEN CAST(:lat AS double precision) IS NULL THEN NULL
+                        ELSE ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography END,
                     after_submitted_at = now(),
+                    location_flagged = location_flagged OR :flagged,
+                    location_flag_reason = CASE WHEN :flagged THEN COALESCE(:reason, location_flag_reason)
+                        ELSE location_flag_reason END,
+                    track_flagged = :tf, track_flag_reason = :tr,
+                    bags_ack_at = now(), bags_count = :bags,
                     ended_at = now()
                 WHERE sponsorship_id = :id AND user_id = :user_id
                   AND status = 'in_progress' AND after_deadline_at > now()
                 RETURNING id
             """),
-            {"id": str(sponsorship_id), "user_id": str(user_id), "photo_url": photo_url, "lat": lat, "lon": lon},
+            {
+                "id": str(sponsorship_id), "user_id": str(user_id), "photo_url": photo_url, "lat": lat, "lon": lon,
+                "flagged": flagged, "reason": (reason or "").strip()[:300] or None,
+                "tf": track_flagged, "tr": ((track_reason or "").strip()[:300] or None) if track_flagged else None,
+                "bags": max(0, min(int(bags or 0), 500)),
+            },
         )
     ).fetchone()
     if claim is None:
         await db.commit()
         raise SponsoredError(409, "Claim is not active or has expired")
+    await _record_claim_photo(db, sponsorship_id, user_id, "after", photo_url, lat, lon, late=False)
 
     pool = (
         await db.execute(
@@ -1038,9 +1403,14 @@ async def list_allocations(db: AsyncSession, status: str | None = None) -> list[
                        a.user_id, p.display_name AS user_name, p.username,
                        a.group_id, g.name AS group_name,
                        a.is_direct, s.site_label, s.model, s.remaining_cents,
-                       cl.before_photo_url, cl.after_photo_url,
+                       cl.before_photo_url, cl.after_photo_url, a.claim_id,
+                       cl.location_flagged, cl.location_flag_reason, cl.track_flagged, cl.track_flag_reason,
+                       cl.bags_count,
                        ROUND(ST_Distance(s.site_location, cl.before_location))::int AS before_distance_m,
                        ROUND(ST_Distance(s.site_location, cl.after_location))::int AS after_distance_m,
+                       ST_Y(s.site_location::geometry) AS site_lat, ST_X(s.site_location::geometry) AS site_lng,
+                       ST_Y(cl.before_location::geometry) AS before_lat, ST_X(cl.before_location::geometry) AS before_lng,
+                       ST_Y(cl.after_location::geometry) AS after_lat, ST_X(cl.after_location::geometry) AS after_lng,
                        ROUND(EXTRACT(EPOCH FROM (cl.after_submitted_at - cl.before_submitted_at)) / 60)::int AS minutes_on_site,
                        EXTRACT(EPOCH FROM (now() - p.created_at)) / 86400 AS account_age_days,
                        (SELECT COUNT(*) FROM sponsorship_allocations o
@@ -1074,6 +1444,12 @@ async def list_allocations(db: AsyncSession, status: str | None = None) -> list[
         repeat = int(d.pop("repeat_same_site") or 0)
         b2b = int(d.pop("back_to_back_same_sponsor") or 0)
         flags = []
+        if d.get("location_flagged"):
+            why = d.get("location_flag_reason")
+            flags.append("Location override: not verified at the site" + (f" ({why})" if why else ""))
+        if d.get("track_flagged"):
+            why = d.get("track_flag_reason")
+            flags.append("No route recorded" + (f" ({why})" if why else ""))
         if age is not None and float(age) < new_days:
             flags.append(f"New account ({int(float(age))} days old)")
         if repeat >= 2:
@@ -1081,6 +1457,10 @@ async def list_allocations(db: AsyncSession, status: str | None = None) -> list[
         if b2b:
             flags.append(f"Also paid from {b2b} other site{'s' if b2b != 1 else ''} by the same sponsor within a day")
         out.append({**d, "id": str(r["id"]), "sponsorship_id": str(r["sponsorship_id"]), "fraud_flags": flags})
+    by_claim = await list_claim_photos(db, [str(r["claim_id"]) for r in rows if r["claim_id"]])
+    for o, r in zip(out, rows):
+        o["claim_id"] = str(r["claim_id"]) if r["claim_id"] else None
+        o["photos"] = by_claim.get(o["claim_id"] or "", [])
     return out
 
 

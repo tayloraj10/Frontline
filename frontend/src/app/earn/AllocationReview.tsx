@@ -1,5 +1,9 @@
 "use client";
 
+import PhotoGallery, { type GalleryPhoto } from "@/components/marketplace/PhotoGallery";
+import PhotoSpotsMap from "@/components/map/PhotoSpotsMap";
+import JobRouteCard from "@/components/marketplace/JobRouteCard";
+import { distanceLabel, limitLabel } from "@/lib/distance";
 import { useCallback, useEffect, useState } from "react";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -11,6 +15,7 @@ type AllocationStatus = "pending_review" | "approved" | "rejected" | "paid_out";
 
 interface Allocation {
   id: string;
+  claim_id?: string | null;
   amount_cents: number;
   status: AllocationStatus;
   created_at: string;
@@ -21,11 +26,18 @@ interface Allocation {
   site_label: string | null;
   is_direct?: boolean;
   remaining_cents: number;
+  photos?: GalleryPhoto[];
   before_photo_url: string | null;
   after_photo_url: string | null;
   before_distance_m?: number | null;
   after_distance_m?: number | null;
   minutes_on_site?: number | null;
+  site_lat?: number | null;
+  site_lng?: number | null;
+  before_lat?: number | null;
+  before_lng?: number | null;
+  after_lat?: number | null;
+  after_lng?: number | null;
   fraud_flags?: string[];
   payout_error?: string | null;
   stripe_transfer_id?: string | null;
@@ -137,7 +149,7 @@ export default function AllocationReview() {
                 <p className="text-[11px] text-zinc-600">{new Date(a.created_at).toLocaleString()}</p>
                 {a.reject_reason && <p className="text-xs text-red-400">Rejected: {a.reject_reason}</p>}
               </div>
-              <Badge variant={STATUS_VARIANT[a.status]}>{a.status.replace("_", " ")}</Badge>
+              <Badge variant={STATUS_VARIANT[a.status]} className="shrink-0 whitespace-nowrap capitalize">{a.status.replace("_", " ")}</Badge>
             </div>
 
             {a.fraud_flags && a.fraud_flags.length > 0 && (
@@ -152,27 +164,44 @@ export default function AllocationReview() {
               <p className="text-xs text-zinc-400">
                 {a.minutes_on_site} min between photos
                 {a.before_distance_m != null && a.after_distance_m != null &&
-                  ` · ${a.before_distance_m} m / ${a.after_distance_m} m from the site`}
+                  ` · ${distanceLabel(a.before_distance_m)} / ${distanceLabel(a.after_distance_m)} from the site`}
                 {a.minutes_on_site < 5 && <span className="font-semibold text-amber-300"> (quick, check the photos)</span>}
               </p>
             )}
 
-            {(a.before_photo_url || a.after_photo_url) && (
-              <div className="grid grid-cols-2 gap-2">
-                {[a.before_photo_url, a.after_photo_url].map((url, i) =>
-                  url ? (
-                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={i === 0 ? "Before" : "After"}
-                        className="aspect-square w-full rounded-2xl object-cover"
-                      />
-                      <span className="mt-1 block text-[11px] text-zinc-500">{i === 0 ? "Before" : "After"}</span>
-                    </a>
-                  ) : null,
-                )}
-              </div>
+            {a.site_lat != null && a.site_lng != null && (a.before_lat != null || a.after_lat != null) && (
+              <PhotoSpotsMap
+                site={[a.site_lng, a.site_lat]}
+                before={a.before_lat != null && a.before_lng != null ? [a.before_lng, a.before_lat] : null}
+                after={a.after_lat != null && a.after_lng != null ? [a.after_lng, a.after_lat] : null}
+              />
+            )}
+
+            {a.claim_id && (
+              <JobRouteCard
+                jobId={a.claim_id}
+                loader={() => fetch(`/api/sponsored/claims/${a.claim_id}/track`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(new Error("no track"))))}
+                subtitle="The route the cleaner recorded in the app, with where each photo was taken. Only admins see this."
+                sitePin={a.site_lat != null && a.site_lng != null ? [a.site_lng, a.site_lat] : undefined}
+              />
+            )}
+
+            {a.photos && a.photos.length > 0 ? (
+              <PhotoGallery photos={a.photos} />
+            ) : (
+              (a.before_photo_url || a.after_photo_url) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {[a.before_photo_url, a.after_photo_url].map((url, i) =>
+                    url ? (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={i === 0 ? "Before" : "After"} className="aspect-square w-full rounded-2xl object-cover" />
+                        <span className="mt-1 block text-[11px] text-zinc-500">{i === 0 ? "Before" : "After"}</span>
+                      </a>
+                    ) : null,
+                  )}
+                </div>
+              )
             )}
 
             {a.status === "pending_review" && (

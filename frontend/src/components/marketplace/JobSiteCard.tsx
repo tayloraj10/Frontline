@@ -1,5 +1,6 @@
 "use client";
 
+import { distanceLabel, limitLabel } from "@/lib/distance";
 import dynamic from "next/dynamic";
 import { Navigation } from "lucide-react";
 import type { Job } from "@/lib/marketplace";
@@ -26,11 +27,11 @@ export default function JobSiteCard({
   return (
     <div className="space-y-2">
       <div className="overflow-hidden rounded-2xl ring-1 ring-inset ring-zinc-800">
-        <MiniMapPreview lat={lat} lng={lng} interactive heightClassName="h-56" radiusM={job.radius_m} area={job.area} />
+        <MiniMapPreview lat={lat} lng={lng} interactive locate heightClassName="h-56" radiusM={job.radius_m} area={job.area} />
       </div>
       <p className="text-xs text-zinc-400">
         {job.address_label ? `${job.address_label}. ` : ""}Pin at {coords}
-        {job.area ? ", the green outline is the area to work" : job.radius_m ? `, the green circle shows the work area (about ${job.radius_m} m around the pin)` : ""}.
+        {job.area ? ", the green outline is the area to work" : job.radius_m ? `, the green circle shows the work area (about ${limitLabel(job.radius_m)} around the pin)` : ""}.
       </p>
       {navigate && (
       <div className="grid grid-cols-2 gap-2">

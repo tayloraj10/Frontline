@@ -63,3 +63,9 @@ async def size_limits(db: AsyncSession) -> dict:
         "circle_radius_min_m": _ft_to_m(s["sponsored_circle_radius_min_ft"]),
         "circle_radius_max_m": _ft_to_m(s["sponsored_circle_radius_max_ft"]),
     }
+
+
+async def retake_wait_hours(db: AsyncSession) -> int:
+    """Hours to wait before taking the same job or site again (game_settings.retake_wait_hours). Shared by jobs and sites."""
+    row = (await db.execute(text("SELECT value FROM game_settings WHERE key = 'retake_wait_hours'"))).first()
+    return int(row[0]) if row else 24

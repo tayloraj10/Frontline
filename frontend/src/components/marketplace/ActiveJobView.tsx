@@ -4,6 +4,7 @@ import Badge from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { STATUS_LABELS, usd, whenLabel, type Job } from "@/lib/marketplace";
 import BackOutButton from "./BackOutButton";
+import { backOutIsStrike } from "@/lib/marketplace";
 import JobSiteCard from "./JobSiteCard";
 import LocalTime from "./LocalTime";
 
@@ -22,14 +23,14 @@ export default function ActiveJobView({ job }: { job: Job }) {
           </p>
           <h2 className="mt-1 break-words font-display text-xl font-extrabold text-zinc-50">{job.title}</h2>
         </div>
-        <Badge variant={s.tone}>{s.label}</Badge>
+        <Badge variant={s.tone} className="shrink-0 whitespace-nowrap">{s.label}</Badge>
       </div>
 
       <div className="rounded-2xl bg-zinc-900/70 p-3 text-sm">
         <p className="font-bold text-zinc-100">{arriving ? "Next: get to the site and start" : "Next: finish up and mark it complete"}</p>
         {arriving && job.arrive_by && (
           <p className="mt-0.5 font-semibold text-amber-200">
-            Start by <LocalTime iso={job.arrive_by} />, or it goes back on the board.
+            {(job.starts_at ?? job.window_start) ? "Scheduled job: be there and start by" : "Start by"} <LocalTime iso={job.arrive_by} />, or it goes back on the board.
           </p>
         )}
       </div>
@@ -58,7 +59,7 @@ export default function ActiveJobView({ job }: { job: Job }) {
           Message
         </Link>
       </div>
-      {arriving && <BackOutButton jobId={job.id} direct={job.origin === "direct"} />}
+      {arriving && <BackOutButton jobId={job.id} direct={job.origin === "direct"} strike={backOutIsStrike(job)} />}
       <p className="text-xs text-zinc-500">You can hold one job at a time. Finish or back out of this one to see the board again.</p>
     </Card>
   );

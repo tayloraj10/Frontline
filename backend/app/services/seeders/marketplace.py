@@ -22,8 +22,8 @@ CUSTOMERS = [
     {"key": "mk_cust_devon", "username": "mk_devon", "name": "Devon Price"},
     {"key": "mk_cust_priya", "username": "mk_priya", "name": "Priya Shah"},
 ]
-# mk_priya is left without a card on purpose: with Stripe on, her jobs must stay off the board.
-CUSTOMERS_WITH_CARD = {"mk_cust_maria", "mk_cust_devon"}
+# Every seeded customer gets a Stripe test card (pm_card_visa) so every seeded job can be taken locally.
+CUSTOMERS_WITH_CARD = {"mk_cust_maria", "mk_cust_devon", "mk_cust_priya"}
 CLEANERS = [
     {"key": "mk_clean_jamal", "username": "mk_jamal", "name": "Jamal Carter", "headline": "Weekend lot and sidewalk crew",
      "services": ["lot_cleanup", "sidewalk", "litter"], "rate_type": "hourly", "rate_cents": 2500, "radius_km": 15,
@@ -224,10 +224,17 @@ class MarketplaceSeeder(Seeder):
         try:
             client = stripe.StripeClient(key)
             customer_id = existing
+            if customer_id:
+                try:
+                    # A deleted customer retrieves fine but flagged deleted, so check that too.
+                    if getattr(client.customers.retrieve(customer_id), "deleted", False):
+                        customer_id = None
+                except stripe.InvalidRequestError:
+                    customer_id = None  # stale id from another Stripe account or a deleted customer
             if not customer_id:
+                # No idempotency key: Stripe replays a cached response for 24h, which hands back a deleted customer.
                 customer_id = client.customers.create(
                     params={"name": u["name"], "email": f"{u['username']}@example.com", "metadata": {"user_id": uid, "seeded": "true"}},
-                    options={"idempotency_key": f"seed-customer-{uid}"},
                 ).id
             if not client.payment_methods.list(params={"customer": customer_id, "type": "card"}).data:
                 pm = client.payment_methods.attach("pm_card_visa", params={"customer": customer_id})

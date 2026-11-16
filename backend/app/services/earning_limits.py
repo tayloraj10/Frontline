@@ -51,29 +51,52 @@ def local_day_bounds_utc(moment: datetime, tz_name: str | None) -> tuple[datetim
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
-async def weekly_earned_cents(db: AsyncSession, user_id: UUID) -> int:
-    """Sponsored allocations (not rejected) plus marketplace jobs this person is working or was paid for."""
-    sponsored = (
+async def weekly_earned_breakdown(db: AsyncSession, user_id: UUID) -> dict[str, int]:
+    """Last 7 days split into verified (approved or paid), waiting for review, and jobs still in progress.
+
+    A sponsored site only has an amount once the after photo is submitted, so an unfinished claim is not
+    counted until then. Rejected allocations never count.
+    """
+    spons = (
         await db.execute(
             text("""
-                SELECT COALESCE(SUM(amount_cents), 0) FROM sponsorship_allocations
+                SELECT
+                  COALESCE(SUM(amount_cents) FILTER (WHERE status IN ('approved', 'paid_out')), 0),
+                  COALESCE(SUM(amount_cents) FILTER (WHERE status = 'pending_review'), 0)
+                FROM sponsorship_allocations
                 WHERE user_id = :u AND status <> 'rejected' AND created_at > now() - interval '7 days'
             """),
             {"u": str(user_id)},
         )
-    ).scalar()
+    ).one()
     jobs = (
         await db.execute(
             text("""
-                SELECT COALESCE(SUM(price_cents - CASE WHEN fee_on_top THEN 0 ELSE COALESCE(platform_fee_cents, 0) END), 0)
-                FROM marketplace_jobs
-                WHERE cleaner_id = :u AND accepted_at > now() - interval '7 days'
-                  AND status IN ('accepted', 'in_progress', 'completed', 'confirmed', 'released')
+                WITH j AS (
+                  SELECT status, price_cents - CASE WHEN fee_on_top THEN 0 ELSE COALESCE(platform_fee_cents, 0) END AS pay
+                  FROM marketplace_jobs
+                  WHERE cleaner_id = :u AND accepted_at > now() - interval '7 days'
+                    AND status IN ('accepted', 'in_progress', 'completed', 'confirmed', 'released')
+                )
+                SELECT
+                  COALESCE(SUM(pay) FILTER (WHERE status IN ('confirmed', 'released')), 0),
+                  COALESCE(SUM(pay) FILTER (WHERE status = 'completed'), 0),
+                  COALESCE(SUM(pay) FILTER (WHERE status IN ('accepted', 'in_progress')), 0)
+                FROM j
             """),
             {"u": str(user_id)},
         )
-    ).scalar()
-    return int(sponsored) + int(jobs)
+    ).one()
+    return {
+        "verified_cents": int(spons[0]) + int(jobs[0]),
+        "pending_review_cents": int(spons[1]) + int(jobs[1]),
+        "in_progress_cents": int(jobs[2]),
+    }
+
+
+async def weekly_earned_cents(db: AsyncSession, user_id: UUID) -> int:
+    """Everything counted against the weekly ceiling: verified, awaiting review and in progress."""
+    return sum((await weekly_earned_breakdown(db, user_id)).values())
 
 
 async def weekly_status(db: AsyncSession, user_id: UUID) -> dict:
@@ -82,10 +105,12 @@ async def weekly_status(db: AsyncSession, user_id: UUID) -> dict:
     base = int(round(float(settings.get("earning_weekly_ceiling_usd", DEFAULT_CEILING_USD)) * 100))
     plus_limit = max(base, int(round(float(settings.get("earning_weekly_ceiling_plus_usd", DEFAULT_PLUS_CEILING_USD)) * 100)))
     limit = plus_limit if plus else base
-    earned = await weekly_earned_cents(db, user_id)
+    parts = await weekly_earned_breakdown(db, user_id)
+    earned = sum(parts.values())
     return {
         "limit_cents": limit,
         "earned_week_cents": earned,
+        **parts,
         "remaining_cents": max(0, limit - earned),
         "locked": earned >= limit,
         "is_plus": plus,

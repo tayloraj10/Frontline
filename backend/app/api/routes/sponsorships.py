@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from uuid import UUID
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -261,14 +262,21 @@ async def list_group_areas(
 
 
 class SiteClaimRequest(BaseModel):
-    latitude: float
-    longitude: float
+    latitude: float | None = None  # not needed to claim, only for photos
+    longitude: float | None = None
     timezone: str | None = None  # IANA name from the browser, used to find the person's local midnight
 
 
 class SitePhotoRequest(SiteClaimRequest):
     photo_url: str
     bags: int | None = None
+    # "My location is wrong, continue anyway": the claim is flagged for admin review.
+    override: bool = False
+    reason: str | None = Field(default=None, max_length=300)
+    # After photo only.
+    bags_ack: bool = False
+    track_override: bool = False
+    track_reason: str | None = Field(default=None, max_length=300)
 
 
 @router.post("/{sponsorship_id}/claim", dependencies=[Depends(limit_writes)])
@@ -295,8 +303,96 @@ async def site_before_photo(
 ):
     try:
         return await sponsored_cleanups.submit_before_photo(
-            db, sponsorship_id, user.id, payload.photo_url, payload.latitude, payload.longitude
+            db, sponsorship_id, user.id, payload.photo_url, payload.latitude, payload.longitude,
+            payload.override, payload.reason,
         )
+    except sponsored_cleanups.SponsoredError as e:
+        _raise(e)
+
+
+@router.get("/{sponsorship_id}/claim/result")
+async def site_claim_result(
+    sponsorship_id: UUID,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return {"result": await sponsored_cleanups.claim_result(db, sponsorship_id, user.id)}
+
+
+@router.get("/claims/mine")
+async def my_claims(user: CurrentUser = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    return await sponsored_cleanups.list_my_claims(db, user.id)
+
+
+class MorePhotoRequest(BaseModel):
+    kind: Literal["before", "after"]
+    photo_url: str = Field(min_length=5, max_length=1000)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    # Same "my location is wrong" choice the main photo made, so extra photos do not fail the location check.
+    override: bool = False
+
+
+@router.post("/{sponsorship_id}/claim/photos", dependencies=[Depends(limit_writes)])
+async def site_more_photo(
+    sponsorship_id: UUID,
+    payload: MorePhotoRequest,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await sponsored_cleanups.add_more_photo(
+            db, sponsorship_id, user.id, payload.kind, payload.photo_url, payload.latitude, payload.longitude,
+            payload.override,
+        )
+    except sponsored_cleanups.SponsoredError as e:
+        _raise(e)
+
+
+class TrackPointIn(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy: float | None = None
+    recorded_at: datetime
+
+
+class TrackIn(BaseModel):
+    points: list[TrackPointIn] = Field(min_length=1, max_length=200)
+
+
+@router.post("/{sponsorship_id}/claim/track", dependencies=[Depends(limit_writes)])
+async def site_claim_track(
+    sponsorship_id: UUID,
+    payload: TrackIn,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await sponsored_cleanups.add_claim_track_points(
+            db, sponsorship_id, user.id, [p.model_dump() for p in payload.points]
+        )
+    except sponsored_cleanups.SponsoredError as e:
+        _raise(e)
+
+
+@router.get("/claims/{claim_id}/track")
+async def site_claim_route(
+    claim_id: UUID,
+    user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await sponsored_cleanups.get_claim_track(db, claim_id)
+
+
+@router.delete("/{sponsorship_id}/claim/photos/{photo_id}", dependencies=[Depends(limit_writes)])
+async def site_delete_photo(
+    sponsorship_id: UUID,
+    photo_id: UUID,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await sponsored_cleanups.delete_claim_photo(db, sponsorship_id, user.id, photo_id)
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
 
@@ -310,8 +406,21 @@ async def site_after_photo(
 ):
     try:
         return await sponsored_cleanups.submit_after_photo(
-            db, sponsorship_id, user.id, payload.photo_url, payload.latitude, payload.longitude, payload.bags
+            db, sponsorship_id, user.id, payload.photo_url, payload.latitude, payload.longitude, payload.bags,
+            payload.override, payload.reason, payload.bags_ack, payload.track_override, payload.track_reason,
         )
+    except sponsored_cleanups.SponsoredError as e:
+        _raise(e)
+
+
+@router.post("/{sponsorship_id}/claim/extend", dependencies=[Depends(limit_writes)])
+async def site_extend(
+    sponsorship_id: UUID,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await sponsored_cleanups.extend_claim(db, sponsorship_id, user.id)
     except sponsored_cleanups.SponsoredError as e:
         _raise(e)
 

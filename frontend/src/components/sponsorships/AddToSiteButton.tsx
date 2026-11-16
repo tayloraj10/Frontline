@@ -10,7 +10,7 @@ import { Note, TextInput } from "@/components/ui/fields";
  * additions. Starts a Stripe Checkout for the extra amount; the paid amount is added to the
  * site's balance when the payment clears. Sole-credit sites never render this.
  */
-export default function AddToSiteButton({ id, label, autoOpen = false }: { id: string; label: string; autoOpen?: boolean }) {
+export default function AddToSiteButton({ id, label, autoOpen = false, successPath = "/earn?checkout=success" }: { id: string; label: string; autoOpen?: boolean; successPath?: string }) {
   const [open, setOpen] = useState(autoOpen);
   const [dollars, setDollars] = useState("10");
   const [busy, setBusy] = useState(false);
@@ -37,7 +37,7 @@ export default function AddToSiteButton({ id, label, autoOpen = false }: { id: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount_cents: cents,
-          success_url: `${window.location.origin}/earn?checkout=success`,
+          success_url: `${window.location.origin}${successPath}`,
           cancel_url: window.location.href,
         }),
       });

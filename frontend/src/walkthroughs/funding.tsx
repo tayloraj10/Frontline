@@ -1,4 +1,5 @@
 import { Stage, Chip, Arrow, type WalkthroughDef } from "@/components/walkthrough/parts";
+import { MinutesChip } from "@/lib/settingText";
 
 export const funding: WalkthroughDef = {
   id: "funding",
@@ -58,15 +59,15 @@ export const funding: WalkthroughDef = {
       track: { name: "Neighbor jobs", tone: "sky" },
       body: "Taking a job starts a clock, so only take one you can get to. You can have one job at a time.",
       how: [
-        "Get to the site within 2 hours of the start time, or the job goes back on the board",
+        "Get to the site within {arrive} of the start time, or the job goes back on the board",
         "Take a before photo, then start the job once you are at the site",
-        "Use the mobile app: your route and time on site are recorded while the job is in progress",
+        "Do the job in the Frontline phone app: photos, start and finish need it, and your route and time on site are recorded. You can take the job from a computer",
         "Take an after photo showing all your bags and mark it done",
-        "Backing out after the start time counts as a strike",
+        "Backing out after the start time, or once work has started, counts as a strike. Any back out freezes that job for you for {wait}",
       ],
       visual: (
         <Stage>
-          <Chip on>2 hrs</Chip>
+          <MinutesChip setting="marketplace_arrive_minutes" />
           <Arrow />
           <span className="text-3xl">📸</span>
         </Stage>
@@ -91,7 +92,7 @@ export const funding: WalkthroughDef = {
       label: "Sites",
       body: "A site is one specific spot a sponsor wants cleaned, shown as a pin on the map. Any signed-in cleaner can claim it.",
       how: [
-        "Claim the site, then take a before photo at the pin",
+        "Claim the site (a computer works), then take the photos at the pin in the Frontline phone app",
         "Clean up, then take an after photo",
         "An admin reviews the photos and you get paid from the sponsor's money",
       ],
@@ -111,18 +112,18 @@ export const funding: WalkthroughDef = {
       label: "Claim",
       body: "Claiming holds the site for you, but the clock starts right away, so claim it when you are ready to go.",
       how: [
-        "You need to be at the site to claim it",
-        "You have 30 minutes after claiming to take the before photo",
-        "Then you have 2 hours to clean up and take the after photo",
+        "You can claim it from anywhere, then you get time to travel there",
+        "You have {arrive} after claiming to get there and take the before photo",
+        "Then you have {work} to clean up and take the after photo",
         "If time runs out, the site opens up for others and you get a notification. You can also let it go yourself",
         "Per-bag sites ask for your bag count with the after photo",
         "Rewards are capped per person and per day, and you need payouts set up to receive the money",
       ],
       visual: (
         <Stage>
-          <Chip on>30 min</Chip>
+          <MinutesChip setting="marketplace_arrive_minutes" />
           <Arrow />
-          <Chip on>2 hrs</Chip>
+          <MinutesChip setting="sponsored_claim_work_window_minutes" />
         </Stage>
       ),
     },

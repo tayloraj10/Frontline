@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { newGeolocateControl } from "./sponsorMapControls";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
@@ -19,6 +20,7 @@ export default function MiniMapPreview({
   zoneCampaignId,
   radiusM,
   area,
+  locate = false,
 }: {
   lat: number;
   lng: number;
@@ -31,6 +33,8 @@ export default function MiniMapPreview({
   radiusM?: number | null;
   /** Draws this polygon instead of the circle (a job's drawn work area). */
   area?: GeoJSON.Polygon | null;
+  /** Adds the locate button, which drops the viewer's own location dot on the map. */
+  locate?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -103,6 +107,7 @@ export default function MiniMapPreview({
       addSite(m);
     });
     if (interactive) m.addControl(new maplibregl.NavigationControl(), "top-right");
+    if (interactive && locate) m.addControl(newGeolocateControl(), "top-right");
     const marker = new maplibregl.Marker({ color: "#22c55e" })
       .setLngLat([lng, lat])
       .addTo(m);

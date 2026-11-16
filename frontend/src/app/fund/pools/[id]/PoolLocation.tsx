@@ -22,6 +22,7 @@ export default function PoolLocation({ pool }: { pool: SponsorshipPool }) {
           lat={lat}
           lng={lng}
           interactive
+          locate
           heightClassName="h-[220px]"
           radiusM={pool.model === "site" ? pool.site_radius_meters : null}
           area={(pool.area_geojson as GeoJSON.Polygon | null | undefined) ?? null}
