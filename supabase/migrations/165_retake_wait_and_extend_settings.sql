@@ -10,10 +10,3 @@ INSERT INTO game_settings (key, value, category, label, description) VALUES
   ('sponsored_claim_max_total_minutes', 360, 'payments', 'Sponsored site: longest total cleanup time (minutes)',
    'The most time a claimant can have on a site from their before photo, counting every extension.')
 ON CONFLICT (key) DO NOTHING;
-
--- sponsored_claim_before_window_minutes is not read by any code. Sites use the job setting
--- (marketplace_arrive_minutes) for the get-there window. Flag it so nobody edits it expecting an effect.
-UPDATE game_settings
-SET label = 'NOT USED: Sponsored site get-there window (minutes)',
-    description = 'Not used by any code right now. Sponsored sites use the job setting "marketplace_arrive_minutes" for the time to get there and take the first photo. Changing this does nothing. Kept so we remember to decide whether sites should get their own value later.'
-WHERE key = 'sponsored_claim_before_window_minutes';
