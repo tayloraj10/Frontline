@@ -52,7 +52,8 @@ export default async function HomePage() {
         <p className="text-zinc-400 text-base sm:text-lg max-w-md leading-relaxed">
           Frontline is for people who want to make the world better and get rewarded for it. Join cleanup events or head out on your own, log what you do, earn points, and spend them at local partner shops. Groups get tools to run events and show their impact.
         </p>
-        <div className="flex flex-col sm:flex-row gap-3 max-w-md">
+        <div className="flex flex-col gap-3 max-w-md">
+        <div className="flex flex-col sm:flex-row gap-3">
           <Link
             href={user ? primaryHref : "/signup"}
             className="inline-flex items-center justify-center min-h-12 px-6 bg-emerald-400 text-emerald-950 hover:bg-emerald-300 active:scale-[0.97] font-bold rounded-2xl transition-[background-color,transform] duration-150 touch-manipulation sm:flex-1"
@@ -67,6 +68,15 @@ export default async function HomePage() {
               Sign in
             </Link>
           )}
+        </div>
+        {!user && (
+          <Link
+            href={primaryHref}
+            className="inline-flex items-center justify-center min-h-12 px-6 bg-white text-zinc-900 hover:bg-zinc-200 active:scale-[0.97] font-bold rounded-2xl transition-[background-color,transform] duration-150 touch-manipulation"
+          >
+            Open the map
+          </Link>
+        )}
         </div>
         <div className="grid max-w-md grid-cols-2 divide-x divide-zinc-800 rounded-[20px] bg-zinc-900 py-4 text-center">
           {stats.map((st) => (
