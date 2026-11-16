@@ -3540,6 +3540,7 @@ const PAYMENT_KEY_ORDER = [
 
 // Extra caution text shown under a setting's description.
 const SETTING_WARNINGS: Record<string, { tone: "red" | "amber"; text: string }> = {
+  sponsored_claim_before_window_minutes: { tone: "amber", text: "NOT USED. Sponsored sites use the job setting \"marketplace_arrive_minutes\" for the time to get there and take the first photo, so changing this does nothing for users." },
   sponsored_circle_radius_min_ft: { tone: "amber", text: "NOT USED. No screen in the app lets a sponsor draw a circle area, so changing this does nothing for users." },
   sponsored_circle_radius_max_ft: { tone: "amber", text: "NOT USED. No screen in the app lets a sponsor draw a circle area, so changing this does nothing for users." },
   payments_enabled: {
