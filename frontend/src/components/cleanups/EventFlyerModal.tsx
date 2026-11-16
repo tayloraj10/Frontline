@@ -10,6 +10,7 @@ import { downloadImage, shareImage } from "@/lib/share";
 import type { CleanupEventDetailData } from "@/lib/cleanupEvents";
 import {
   FLYER_MAP_ASPECT,
+  FLYER_RECTS,
   FLYER_PALETTES,
   canvasToBlob,
   formatFlyerDate,
@@ -773,11 +774,45 @@ export default function EventFlyerModal({
                   </div>
                 </div>
                 {MAPTILER_KEY ? (
-                  <div className="relative mx-auto" style={{ width: "min(100%, 340px)", aspectRatio: String(FLYER_MAP_ASPECT) }}>
+                  <div className="relative mx-auto" style={{ width: "min(100%, 340px)", aspectRatio: String(FLYER_MAP_ASPECT), containerType: "inline-size" }}>
                     {/* maplibre's CSS forces position:relative on its container, so give it a sized wrapper */}
                     <div className="absolute inset-0 rounded-xl overflow-hidden border border-zinc-700">
                       <div ref={mapElRef} className="w-full h-full" />
                     </div>
+                    {logoUrls.length > 0 && logoCorner !== "off" && (() => {
+                      // Mirrors the logo row drawn onto the flyer, scaled to this map's width
+                      const w = FLYER_RECTS.map.w;
+                      const n = logoUrls.length;
+                      const size = n > 2 ? 72 : n > 1 ? 80 : 92;
+                      const inset = (18 / w) * 100;
+                      const sizePct = (size / w) * 100;
+                      const pos: React.CSSProperties = {
+                        top: logoCorner === "tl" || logoCorner === "tr" ? `${inset}%` : logoCorner === "center" ? "50%" : undefined,
+                        bottom: logoCorner === "bl" || logoCorner === "br" ? `${inset}%` : undefined,
+                        left: logoCorner === "tl" || logoCorner === "bl" ? `${inset}%` : logoCorner === "center" ? "50%" : undefined,
+                        right: logoCorner === "tr" || logoCorner === "br" ? `${inset}%` : undefined,
+                        transform: logoCorner === "center" ? "translate(-50%, -50%)" : undefined,
+                      };
+                      return (
+                        <div className="absolute flex pointer-events-none" style={pos}>
+                          {logoUrls.map((u, i) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={u + i}
+                              src={u}
+                              alt=""
+                              className="rounded-full object-cover shadow-lg"
+                              style={{
+                                width: `calc(${sizePct}cqw)`,
+                                aspectRatio: "1",
+                                marginLeft: i === 0 ? 0 : `calc(${-sizePct * 0.28}cqw)`,
+                                border: `3px solid ${event.route ? "#ffffff" : "#38bdf8"}`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
                     <div className="absolute top-2 right-2 flex flex-col rounded-lg overflow-hidden border border-zinc-700/70 bg-zinc-900/90">
                       <button
                         type="button"
