@@ -87,7 +87,7 @@ export function useJobPinsLayer(
         link.addEventListener("click", () => saveMapReturn(m));
         card.append(kind, type, title, price, link);
         jobPopup?.remove();
-        const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "232px", offset: 14, className: "sponsor-popup" })
+        const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "232px", offset: 14, className: "frontline-card-popup" })
           .setLngLat([j.longitude as number, j.latitude as number])
           .setDOMContent(card)
           .addTo(m);

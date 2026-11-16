@@ -393,6 +393,8 @@ function openPopup(popup: maplibregl.Popup, m: maplibregl.Map) {
       body.style.overflowY = "auto";
     }
     const card = el.getBoundingClientRect();
+    // A card with no size is hidden (for example by a content blocker), so there is nothing to bring into view.
+    if (card.width === 0 || card.height === 0) return;
     const pad = 12;
     const dy = Math.max(0, frame.top + pad - card.top) - Math.max(0, card.bottom - (frame.bottom - pad));
     const dx = Math.max(0, frame.left + pad - card.left) - Math.max(0, card.right - (frame.right - pad));
@@ -579,7 +581,7 @@ export function useSponsoredMapLayer(
         .filter((x) => !seen.has(String(x.properties?.id)) && seen.add(String(x.properties?.id)));
       if (stack.length > 1) {
         openPopup(
-          sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "sponsor-popup" })
+          sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "frontline-card-popup" })
             .setLngLat(e.lngLat)
             .setDOMContent(
               overlapNode(
@@ -598,7 +600,7 @@ export function useSponsoredMapLayer(
       }
       const rule = JSON.parse(String(f.properties?.rule ?? "{}")) as PayoutRule;
       openPopup(
-        sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "sponsor-popup" })
+        sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "frontline-card-popup" })
           .setLngLat(e.lngLat)
           .setDOMContent(
             popupNode("Sponsored area", String(f.properties?.name), rule, Number(f.properties?.left ?? 0), null,
@@ -691,7 +693,7 @@ export function useSponsoredMapLayer(
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         openPopup(
-          sponsorPopup({ closeButton: true, maxWidth: "264px", offset: 56, anchor: "bottom", className: "sponsor-popup" })
+          sponsorPopup({ closeButton: true, maxWidth: "264px", offset: 56, anchor: "bottom", className: "frontline-card-popup" })
             .setLngLat([s.longitude, s.latitude])
             .setDOMContent(
               popupNode(
@@ -776,7 +778,7 @@ export function useSponsoredMapLayer(
           "display:block;text-align:center;padding:8px 10px;border-radius:8px;background:#0891b2;color:#fff;font-weight:700;font-size:13px;text-decoration:none";
         box.append(link);
         openPopup(
-          sponsorPopup({ closeButton: true, maxWidth: "264px", offset: 52, anchor: "bottom", className: "sponsor-popup" })
+          sponsorPopup({ closeButton: true, maxWidth: "264px", offset: 52, anchor: "bottom", className: "frontline-card-popup" })
             .setLngLat([pl.longitude, pl.latitude])
             .setDOMContent(box),
           m,
@@ -901,7 +903,7 @@ export function useSponsoredMapLayer(
         const bounds = new maplibregl.LngLatBounds([Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]);
         map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
         openPopup(
-          sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "sponsor-popup" })
+          sponsorPopup({ closeButton: true, maxWidth: "264px", anchor: "bottom", className: "frontline-card-popup" })
             .setLngLat(bounds.getCenter())
             .setDOMContent(
               popupNode("Sponsored area", area.area_name ?? "Sponsored area", area.payout_rule, area.remaining_cents, null,
