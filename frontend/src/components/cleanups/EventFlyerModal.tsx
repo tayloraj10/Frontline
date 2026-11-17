@@ -247,6 +247,15 @@ export default function EventFlyerModal({
   const blobRef = useRef<Blob | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  const fullscreenScrollRef = useRef<HTMLDivElement>(null);
+
+  // Zooming makes the image wider than the screen; start scrolled to its middle, not its left edge.
+  useEffect(() => {
+    const el = fullscreenScrollRef.current;
+    if (!zoomed || !el) return;
+    el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    el.scrollTop = 0;
+  }, [zoomed]);
   const [busy, setBusy] = useState<"share" | "download" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -594,7 +603,10 @@ export default function EventFlyerModal({
               ×
             </button>
           </div>
-          <div className={`flex-1 min-h-0 overflow-auto ${zoomed ? "" : "flex items-center justify-center"}`}>
+          <div
+            ref={fullscreenScrollRef}
+            className={`flex-1 min-h-0 overflow-auto ${zoomed ? "" : "flex items-center justify-center p-3 pb-6"}`}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewUrl}
@@ -633,9 +645,6 @@ export default function EventFlyerModal({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={previewUrl} alt="Flyer preview" className="w-full h-full object-contain" />
-                    <span className="absolute bottom-2 right-2 px-2.5 py-1 rounded-full bg-black/70 text-[11px] font-semibold text-zinc-100">
-                      Tap to enlarge
-                    </span>
                   </button>
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-sm text-zinc-500">Rendering...</div>
