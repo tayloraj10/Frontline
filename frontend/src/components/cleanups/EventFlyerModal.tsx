@@ -232,6 +232,7 @@ export default function EventFlyerModal({
   // Map
   const [mapStyle, setMapStyle] = useState<MapStyleId>("outdoor");
   const [showZone, setShowZone] = useState(true);
+  const [showQr, setShowQr] = useState(true);
   const [mapVersion, setMapVersion] = useState(0);
   const mapElRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -511,6 +512,7 @@ export default function EventFlyerModal({
           logoCorner,
           partnerLine,
           logoRing: event.route ? "#ffffff" : "#38bdf8",
+          eventUrl: showQr ? `${window.location.origin}/cleanup-events/${event.id}` : undefined,
         });
         const blob = await canvasToBlob(canvas);
         if (cancelled || !blob) return;
@@ -528,7 +530,7 @@ export default function EventFlyerModal({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [palette, title, venue, address, meetNote, meetDetails, details, dateLine, timeLine, handle, platform, logoCorner, mapVersion, logoUrls, partnerLine, event.route]);
+  }, [palette, title, venue, address, meetNote, meetDetails, details, dateLine, timeLine, handle, platform, logoCorner, mapVersion, logoUrls, partnerLine, event.route, showQr]);
 
   useEffect(() => {
     return () => {
@@ -754,6 +756,16 @@ export default function EventFlyerModal({
                 <div>
                   <label className={labelCls} htmlFor="flyer-details">Details</label>
                   <textarea id="flyer-details" className={inputCls} rows={4} value={details} onChange={(e) => setDetails(e.target.value)} maxLength={400} />
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQr((v) => !v)}
+                    aria-pressed={showQr}
+                    className={`${chipBase} ${showQr ? chipOn : chipOff}`}
+                  >
+                    RSVP QR code: {showQr ? "On" : "Off"}
+                  </button>
                 </div>
               </section>
 

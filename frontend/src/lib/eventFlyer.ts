@@ -12,7 +12,7 @@ const GAP = 24;
 const RADIUS = 44;
 const INNER_W = FLYER_W - PAD * 2;
 const INNER_H = FLYER_H - PAD * 2;
-const LEFT_W = 590;
+const LEFT_W = 560;
 const RIGHT_W = INNER_W - LEFT_W - GAP;
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -44,7 +44,7 @@ export const FLYER_RECTS = {
 export const FLYER_MAP_ASPECT = FLYER_RECTS.map.w / FLYER_RECTS.map.h;
 
 /** Shown in the top-right card when the organizer has no description or meetup details. */
-const GENERIC_BLURB = "Grab a bag, bring a friend, and help make the neighborhood cleaner. Everyone is welcome.";
+const GENERIC_BLURB = "Grab a bag, bring a friend, and help make a difference. Meet fellow volunteers, enjoy some time outside, and leave the place better than you found it.";
 
 export type FlyerPalette = {
   id: string;
@@ -98,6 +98,8 @@ export type FlyerOptions = {
   partnerLine: string;
   /** Ring color around the logo badges (white on routes, sky on a point pin). */
   logoRing: string;
+  /** Absolute Frontline event page URL. When set, a scannable QR tile is drawn on the map card. */
+  eventUrl?: string;
 };
 
 const FONT = `"DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
@@ -141,6 +143,53 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number
   return lines;
 }
 
+/**
+ * Re-wraps each paragraph into the same number of lines as greedy wrapping, but chooses the breaks
+ * that minimize the squared leftover width per line, so no short word is left alone on a line.
+ */
+function balanceLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const out: string[] = [];
+  for (const para of text.split("\n")) {
+    const words = para.split(/\s+/).filter(Boolean);
+    const greedy = wrapLines(ctx, para, maxWidth);
+    const n = greedy.length;
+    if (words.length < 2 || n < 2) {
+      out.push(...greedy);
+      continue;
+    }
+    const width = (i: number, j: number) => ctx.measureText(words.slice(i, j).join(" ")).width;
+    // dp[k][j]: best cost of splitting the first j words into k lines
+    const dp: number[][] = Array.from({ length: n + 1 }, () => Array(words.length + 1).fill(Infinity));
+    const from: number[][] = Array.from({ length: n + 1 }, () => Array(words.length + 1).fill(0));
+    dp[0][0] = 0;
+    for (let k = 1; k <= n; k++) {
+      for (let j = k; j <= words.length; j++) {
+        for (let i = k - 1; i < j; i++) {
+          const w = width(i, j);
+          if (w > maxWidth || dp[k - 1][i] === Infinity) continue;
+          const cost = dp[k - 1][i] + (maxWidth - w) ** 2;
+          if (cost < dp[k][j]) {
+            dp[k][j] = cost;
+            from[k][j] = i;
+          }
+        }
+      }
+    }
+    if (dp[n][words.length] === Infinity) {
+      out.push(...greedy);
+      continue;
+    }
+    const lines: string[] = [];
+    for (let k = n, j = words.length; k >= 1; k--) {
+      const i = from[k][j];
+      lines.unshift(words.slice(i, j).join(" "));
+      j = i;
+    }
+    out.push(...lines);
+  }
+  return out;
+}
+
 function drawSocialIcon(ctx: CanvasRenderingContext2D, platform: string, x: number, y: number, size: number, color: string) {
   ctx.save();
   ctx.translate(x, y);
@@ -171,6 +220,8 @@ type FitOpts = {
   valign?: "top" | "middle" | "bottom";
   lineHeight?: number;
   upper?: boolean;
+  /** Even out line lengths (no orphaned short words) without adding lines. For centered blurbs. */
+  balance?: boolean;
 };
 
 /** Draws wrapped text at the largest size that fits the box; at the minimum size it clips with an ellipsis. */
@@ -189,6 +240,7 @@ function drawFitted(ctx: CanvasRenderingContext2D, rawText: string, o: FitOpts) 
   size = Math.max(size, o.minSize);
   ctx.font = `${o.weight} ${size}px ${FONT}`;
   lines = wrapLines(ctx, text, o.box.w);
+  if (o.balance && lines.length > 1) lines = balanceLines(ctx, text, o.box.w);
   const maxLines = Math.max(1, Math.floor(o.box.h / (size * lh)));
   if (lines.length > maxLines) {
     lines = lines.slice(0, maxLines);
@@ -212,6 +264,66 @@ function drawFitted(ctx: CanvasRenderingContext2D, rawText: string, o: FitOpts) 
   const x = o.align === "center" ? o.box.x + o.box.w / 2 : o.box.x;
   lines.forEach((line, i) => {
     ctx.fillText(line, x, startY + i * size * lh + (size * lh - size) / 2);
+  });
+}
+
+/** Height reserved at the bottom of a text card for the "scan to RSVP" row. */
+const QR_PAD = 10;
+const QR_SIZE = 104;
+const QR_LABEL_H = 30;
+const QR_TILE_W = QR_SIZE + QR_PAD * 2;
+const QR_TILE_H = QR_SIZE + QR_PAD * 2 + QR_LABEL_H - 6;
+const QR_FOOT = QR_TILE_H + 4;
+
+/** Black-on-white QR to the event page, or null if it can't be generated. */
+async function makeQrImage(url: string): Promise<HTMLImageElement | null> {
+  try {
+    const QRCode = await import("qrcode");
+    return await loadImageOnce(
+      await QRCode.toDataURL(url, { margin: 0, width: 300, errorCorrectionLevel: "M", color: { dark: "#111111", light: "#ffffff" } }),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Left-aligned call to action with the QR tile in the bottom-right of a text card. */
+function drawQrFooter(ctx: CanvasRenderingContext2D, card: Rect, color: string, qr: HTMLImageElement) {
+  const inset = 28;
+  const tx = card.x + card.w - inset - QR_TILE_W;
+  const ty = card.y + card.h - 24 - QR_TILE_H;
+  ctx.save();
+  roundRectPath(ctx, { x: tx, y: ty, w: QR_TILE_W, h: QR_TILE_H }, 16);
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 12;
+  ctx.fill();
+  ctx.restore();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(qr, tx + QR_PAD, ty + QR_PAD, QR_SIZE, QR_SIZE);
+  ctx.imageSmoothingEnabled = true;
+  ctx.save();
+  ctx.fillStyle = "#111111";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const label = "EVENT";
+  let labelSize = 26;
+  ctx.font = `800 ${labelSize}px ${FONT}`;
+  while (labelSize > 10 && ctx.measureText(label).width > QR_TILE_W - 20) {
+    labelSize -= 1;
+    ctx.font = `800 ${labelSize}px ${FONT}`;
+  }
+  ctx.fillText(label, tx + QR_TILE_W / 2, ty + QR_PAD + QR_SIZE + (QR_TILE_H - QR_PAD - QR_SIZE) / 2);
+  ctx.restore();
+  drawFitted(ctx, "Scan to RSVP, check in when you arrive!", {
+    box: { x: card.x + inset, y: ty, w: tx - 16 - (card.x + inset), h: QR_TILE_H },
+    maxSize: 30,
+    minSize: 16,
+    weight: 800,
+    color,
+    align: "left",
+    valign: "middle",
+    lineHeight: 1.2,
   });
 }
 
@@ -446,55 +558,67 @@ export async function renderEventFlyer(opts: FlyerOptions): Promise<HTMLCanvasEl
   const e = FLYER_RECTS.details;
   const hasMeetDetails = opts.meetDetails.trim() !== "";
   const hasDetails = opts.details.trim() !== "";
+  const qrImg = opts.eventUrl ? await makeQrImage(opts.eventUrl) : null;
+  const foot = qrImg ? QR_FOOT : 0;
   if (hasMeetDetails) {
-    const mh = hasDetails ? Math.round((e.h - GAP) * 0.42) : e.h;
+    // With the QR footer eating the bottom of the details card, give that card more room.
+    const mh = hasDetails ? Math.round((e.h - GAP) * (qrImg ? 0.32 : 0.42)) : e.h;
     const mr = { ...e, h: mh };
     fillCard(ctx, mr, p.cardB);
+    const mFoot = !hasDetails && qrImg ? QR_FOOT : 0;
+    if (mFoot && qrImg) drawQrFooter(ctx, mr, p.text, qrImg);
     drawFitted(ctx, opts.meetDetails, {
-      box: { x: mr.x + 28, y: mr.y + 22, w: mr.w - 56, h: mr.h - 44 },
+      box: { x: mr.x + 28, y: mr.y + 22, w: mr.w - 56, h: mr.h - 44 - mFoot },
       maxSize: 40,
       minSize: 20,
-      weight: 600,
+      weight: 700,
       color: p.text,
       align: "center",
+      balance: true,
       valign: "middle",
       lineHeight: 1.2,
     });
     if (hasDetails) {
       const dr = { ...e, y: e.y + mh + GAP, h: e.h - mh - GAP };
       fillCard(ctx, dr, p.cardA);
+      if (qrImg) drawQrFooter(ctx, dr, p.text, qrImg);
       drawFitted(ctx, opts.details, {
-        box: { x: dr.x + 28, y: dr.y + 22, w: dr.w - 56, h: dr.h - 44 },
+        box: { x: dr.x + 24, y: dr.y + 16, w: dr.w - 48, h: dr.h - 32 - foot },
         maxSize: 34,
         minSize: 18,
         weight: 700,
         color: p.text,
         align: "center",
+        balance: true,
         valign: "middle",
         lineHeight: 1.25,
       });
     }
   } else if (hasDetails) {
     fillCard(ctx, e, p.cardA);
+    if (qrImg) drawQrFooter(ctx, e, p.text, qrImg);
     drawFitted(ctx, opts.details, {
-      box: { x: e.x + 28, y: e.y + 28, w: e.w - 56, h: e.h - 56 },
+      box: { x: e.x + 28, y: e.y + 28, w: e.w - 56, h: e.h - 56 - foot },
       maxSize: 38,
       minSize: 20,
       weight: 700,
       color: p.text,
       align: "center",
+      balance: true,
       valign: "middle",
       lineHeight: 1.25,
     });
   } else {
     fillCard(ctx, e, p.cardA);
+    if (qrImg) drawQrFooter(ctx, e, p.text, qrImg);
     drawFitted(ctx, GENERIC_BLURB, {
-      box: { x: e.x + 36, y: e.y + 28, w: e.w - 72, h: e.h - 56 },
+      box: { x: e.x + 36, y: e.y + 28, w: e.w - 72, h: e.h - 56 - foot },
       maxSize: 44,
       minSize: 20,
       weight: 700,
       color: p.text,
       align: "center",
+      balance: true,
       valign: "middle",
       lineHeight: 1.2,
     });
