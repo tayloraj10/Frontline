@@ -6,6 +6,7 @@ import { createPublicClient } from "@/lib/supabase/public";
 import type { Database } from "@/types/database";
 import { getPlusGroupIds } from "@/lib/plus.server";
 import GroupsListClient from "./GroupsListClient";
+import ComingUpStrip from "./ComingUpStrip";
 
 type Group = Database["public"]["Tables"]["groups"]["Row"];
 type OwnSubmission = Pick<Group, "id" | "slug" | "name" | "status" | "image_url">;
@@ -25,10 +26,11 @@ const getGroupsListData = unstable_cache(
         supabase.from("group_members").select("group_id, user_id"),
         supabase
           .from("cleanups")
-          .select("id, group_id")
+          .select("id, group_id, title, scheduled_start")
           .eq("is_group_event", true)
           .neq("status", "cancelled")
-          .gt("scheduled_start", new Date().toISOString()),
+          .gt("scheduled_start", new Date().toISOString())
+          .order("scheduled_start", { ascending: true }),
         supabase.from("contributions").select("group_id").not("group_id", "is", null).gt("submitted_at", activitySince),
       ]);
 
@@ -40,7 +42,8 @@ const getGroupsListData = unstable_cache(
     return {
       groups: (groupsData ?? []) as Group[],
       members: membersData ?? ([] as { group_id: string; user_id: string }[]),
-      events: eventsData ?? ([] as { id: string; group_id: string | null }[]),
+      events:
+        eventsData ?? ([] as { id: string; group_id: string | null; title: string; scheduled_start: string | null }[]),
       cohosts: cohostsData ?? ([] as { cleanup_id: string; group_id: string }[]),
       recentContributions: recentContributionsData ?? ([] as { group_id: string | null }[]),
     };
@@ -90,6 +93,23 @@ export default async function GroupsPage() {
   for (const c of cohostsData ?? []) {
     upcomingEventCountByGroup[c.group_id] = (upcomingEventCountByGroup[c.group_id] ?? 0) + 1;
   }
+
+  // Next few events across all groups for the "Coming up" strip (events are
+  // already sorted soonest-first by the query).
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  const comingUp = (eventsData ?? [])
+    .filter((e) => e.group_id && groupById.has(e.group_id))
+    .slice(0, 8)
+    .map((e) => {
+      const g = groupById.get(e.group_id!)!;
+      return {
+        id: e.id,
+        title: e.title,
+        scheduledStart: e.scheduled_start,
+        groupName: g.name,
+        groupImageUrl: g.image_url,
+      };
+    });
 
   const recentContributionCountByGroup: Record<string, number> = {};
   for (const c of recentContributionsData ?? []) {
@@ -161,6 +181,8 @@ export default async function GroupsPage() {
           </div>
         </div>
       )}
+
+      <ComingUpStrip events={comingUp} />
 
       {groups.length === 0 ? (
         <div className="text-center py-28 text-zinc-600">
