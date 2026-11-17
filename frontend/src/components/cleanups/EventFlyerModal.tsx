@@ -245,6 +245,8 @@ export default function EventFlyerModal({
   // Output
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const blobRef = useRef<Blob | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
   const [busy, setBusy] = useState<"share" | "download" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -570,6 +572,40 @@ export default function EventFlyerModal({
 
   return (
     <BodyPortal>
+      {fullscreen && previewUrl && (
+        <div className="fixed inset-0 z-[70] bg-black flex flex-col" role="dialog" aria-label="Flyer full screen preview">
+          <div className="flex items-center justify-between px-3 py-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setZoomed((z) => !z)}
+              className="min-h-11 px-4 rounded-full bg-zinc-800 text-zinc-100 text-sm font-semibold touch-manipulation"
+            >
+              {zoomed ? "Fit to screen" : "Zoom in"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFullscreen(false);
+                setZoomed(false);
+              }}
+              aria-label="Close full screen"
+              className="w-11 h-11 flex items-center justify-center text-2xl leading-none text-zinc-300 active:text-white touch-manipulation"
+            >
+              ×
+            </button>
+          </div>
+          <div className={`flex-1 min-h-0 overflow-auto ${zoomed ? "" : "flex items-center justify-center"}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt="Flyer full screen preview"
+              onClick={() => setZoomed((z) => !z)}
+              className={zoomed ? "block max-w-none" : "max-w-full max-h-full object-contain"}
+              style={zoomed ? { width: "min(220vw, 1400px)" } : undefined}
+            />
+          </div>
+        </div>
+      )}
       <div className="fixed inset-0 z-[60] bg-black/80 flex items-end sm:items-center justify-center">
         <div className="w-full sm:max-w-5xl max-h-[100dvh] sm:max-h-[92vh] bg-zinc-950 sm:rounded-2xl border border-zinc-800 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
@@ -587,10 +623,20 @@ export default function EventFlyerModal({
           <div className="flex-1 overflow-y-auto p-4 grid gap-5 md:grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-start">
             {/* Preview + export */}
             <div className="space-y-3 md:sticky md:top-0">
-              <div className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900" style={{ aspectRatio: "1080 / 1350" }}>
+              <div className="relative rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900" style={{ aspectRatio: "1080 / 1350" }}>
                 {previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={previewUrl} alt="Flyer preview" className="w-full h-full object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => setFullscreen(true)}
+                    aria-label="View flyer full screen"
+                    className="block w-full h-full touch-manipulation"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={previewUrl} alt="Flyer preview" className="w-full h-full object-contain" />
+                    <span className="absolute bottom-2 right-2 px-2.5 py-1 rounded-full bg-black/70 text-[11px] font-semibold text-zinc-100">
+                      Tap to enlarge
+                    </span>
+                  </button>
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-sm text-zinc-500">Rendering...</div>
                 )}
