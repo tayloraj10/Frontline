@@ -33,7 +33,25 @@ export default function HomeAutoRedirect({ href }: { href: string }) {
     if (hasLandedThisLoad) return;
     hasLandedThisLoad = true;
     if (homeRequested) return;
-    router.replace(href);
+    // A cold start from a link (e.g. a flyer QR) must land on that link, not the default
+    // map. The OS hands the app its launch URL, but only after this effect would already
+    // have redirected, so ask for it here and use it as the destination.
+    (async () => {
+      let dest = href;
+      try {
+        const { App } = await import("@capacitor/app");
+        const launch = await App.getLaunchUrl();
+        if (launch?.url) {
+          const u = new URL(launch.url);
+          if (u.origin === "https://www.frontlinemaps.com" && u.pathname !== "/") {
+            dest = `${u.pathname}${u.search}${u.hash}`;
+          }
+        }
+      } catch {
+        // No launch URL available: fall back to the default destination.
+      }
+      router.replace(dest);
+    })();
   }, [href, router]);
 
   return null;
