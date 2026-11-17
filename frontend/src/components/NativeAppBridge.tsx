@@ -77,6 +77,27 @@ export default function NativeAppBridge() {
       });
       removeUrlListener = () => sub.remove();
 
+      // Cold start from a link (e.g. a flyer QR): the OS can deliver the launch URL
+      // before the listener above exists, and the app then just opens on its home
+      // screen. Ask for it explicitly. Only act from the home route and once per
+      // session, so the navigation below can't loop when this component remounts.
+      try {
+        const SEEN_KEY = "frontline:launch-url-handled";
+        if (window.location.pathname === "/" && !sessionStorage.getItem(SEEN_KEY)) {
+          sessionStorage.setItem(SEEN_KEY, "1");
+          const launch = await App.getLaunchUrl();
+          if (launch?.url) {
+            const parsed = new URL(launch.url);
+            if (parsed.origin === "https://www.frontlinemaps.com" && parsed.pathname !== "/") {
+              window.location.href = parsed.toString();
+              return;
+            }
+          }
+        }
+      } catch {
+        // No launch URL or storage unavailable: stay on the home route.
+      }
+
       await StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
       await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
       await installNativeGeolocationPolyfill().catch(() => {});
