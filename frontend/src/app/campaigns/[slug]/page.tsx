@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { createPublicClient } from "@/lib/supabase/public";
 import CampaignPageClient from "./CampaignPageClient";
 import MapRouteFlag from "@/components/map/MapRouteFlag";
@@ -254,8 +255,8 @@ export default async function CampaignPage({ params, searchParams }: Props) {
   const supabase = await createClient();
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";
 
-  const [{ data: { user } }, pageData] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, pageData] = await Promise.all([
+    getServerUser(),
     getCampaignPageData(slug, fastapiUrl),
   ]);
 

@@ -4,15 +4,14 @@ import RewardsTabs from "@/components/RewardsTabs";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import PartnersBrowseClient, { type BrowseBusiness, type BrowseOffer } from "./PartnersBrowseClient";
 import BusinessApplyPrompt from "./BusinessApplyPrompt";
 
 export default async function PartnersPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   const nowIso = new Date().toISOString();
 

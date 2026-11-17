@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { createPublicClient } from "@/lib/supabase/public";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible } from "@/lib/paymentsVisibility";
@@ -88,8 +89,8 @@ export default async function UserProfilePage({ params }: Props) {
   const username = decodeURIComponent(rawUsername);
   const supabase = await createClient();
 
-  const [{ data: { user: currentUser } }, { data: profileData }] = await Promise.all([
-    supabase.auth.getUser(),
+  const [currentUser, { data: profileData }] = await Promise.all([
+    getServerUser(),
     supabase.schema("public").from("profiles").select("*").eq("username", username).single(),
   ]);
 

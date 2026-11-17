@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import BackButton from "@/components/ui/BackButton";
 import GroupEditForm from "./GroupEditForm";
 import MemberManager from "./MemberManager";
@@ -18,8 +19,8 @@ export default async function GroupEditPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupData }] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, { data: groupData }] = await Promise.all([
+    getServerUser(),
     supabase.from("groups").select("*").eq("slug", slug).single(),
   ]);
 

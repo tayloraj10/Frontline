@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { rewardsVisible } from "@/lib/paymentsVisibility";
 import { PageHeader, PageShell } from "@/components/ui/PageShell";
@@ -23,9 +24,7 @@ import { payoutsBlocked, type Job, type MeStatus } from "@/lib/marketplace";
 export default async function SponsorshipsPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   const [{ data: profile }, paymentsGate] = await Promise.all([
     user

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible } from "@/lib/paymentsVisibility";
 import BackButton from "@/components/ui/BackButton";
@@ -16,8 +17,8 @@ export default async function GroupStatsPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupData }, paymentsGate] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, { data: groupData }, paymentsGate] = await Promise.all([
+    getServerUser(),
     supabase.from("groups").select("*").eq("slug", slug).single(),
     getPaymentsGate(),
   ]);

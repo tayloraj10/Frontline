@@ -2,6 +2,7 @@ import Link from "next/link";
 import LogoLink from "@/components/nav/LogoLink";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { createPublicClient } from "@/lib/supabase/public";
 import UserNav from "./UserNav";
 import NotificationBellWrapper from "./NotificationBellWrapper";
@@ -32,12 +33,7 @@ const getHasActiveTeamEvent = unstable_cache(
 
 export default async function AppHeader() {
   const supabase = await createClient();
-  const [
-    {
-      data: { user },
-    },
-    hasActiveTeamEvent,
-  ] = await Promise.all([supabase.auth.getUser(), getHasActiveTeamEvent()]);
+  const [user, hasActiveTeamEvent] = await Promise.all([getServerUser(), getHasActiveTeamEvent()]);
 
   let isAdmin = false;
   let isBusinessAdmin = false;

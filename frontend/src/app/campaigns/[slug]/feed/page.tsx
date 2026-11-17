@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import CampaignTabNav from "../CampaignTabNav";
 import FeedActivityList from "@/components/contributions/FeedActivityList";
 import type { Database } from "@/types/database";
@@ -24,9 +25,9 @@ export default async function ActivityFeedPage({ params, searchParams }: Props) 
 
   const supabase = await createClient();
 
-  const [{ data: campaignData }, { data: { user: currentUser } }] = await Promise.all([
+  const [{ data: campaignData }, currentUser] = await Promise.all([
     supabase.schema("public").from("campaigns").select("id, title, description, campaign_type").eq("slug", slug).single(),
-    supabase.auth.getUser(),
+    getServerUser(),
   ]);
 
   if (!campaignData) notFound();

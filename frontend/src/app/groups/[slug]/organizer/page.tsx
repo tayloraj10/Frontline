@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import BackButton from "@/components/ui/BackButton";
 import OrganizerDashboardView from "./OrganizerDashboardView";
@@ -15,8 +16,8 @@ export default async function GroupOrganizerPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupData }] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, { data: groupData }] = await Promise.all([
+    getServerUser(),
     supabase.from("groups").select("*").eq("slug", slug).single(),
   ]);
 

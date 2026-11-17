@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import BackButton from "@/components/ui/BackButton";
 import CreateCleanupEventForm from "@/components/cleanups/CreateCleanupEventForm";
 
@@ -11,8 +12,8 @@ export default async function NewCleanupEventPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupData }] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, { data: groupData }] = await Promise.all([
+    getServerUser(),
     supabase.from("groups").select("id, name").eq("slug", slug).single(),
   ]);
 

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { rewardsVisible } from "@/lib/paymentsVisibility";
 import { PageShell } from "@/components/ui/PageShell";
@@ -8,9 +9,7 @@ import AreaDetail from "./AreaDetail";
 export default async function AreaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
   const [{ data: profile }, gate] = await Promise.all([
     user
       ? supabase.schema("public").from("profiles").select("is_admin, rewards_beta").eq("id", user.id).single()

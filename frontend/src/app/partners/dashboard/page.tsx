@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
 import PartnerDashboardClient, { type DashboardBusiness, type DashboardOffer, type DashboardLocation } from "./PartnerDashboardClient";
 
 export default async function PartnerDashboardPage() {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getServerUser();
   if (!user) redirect("/login");
 
   const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://localhost:8000";

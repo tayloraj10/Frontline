@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getCleanupEvent } from "@/lib/cleanupEvents";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible } from "@/lib/paymentsVisibility";
@@ -15,9 +16,7 @@ export default async function CleanupEventPage({ params }: Props) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   const [event, { data: adminProfile }, paymentsGate] = await Promise.all([
     getCleanupEvent(id, user?.id ?? null).catch(() => null),

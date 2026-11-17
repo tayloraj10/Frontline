@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { createPublicClient } from "@/lib/supabase/public";
 import { CAMPAIGN_TYPE_CONFIG, CONTRIBUTION_LABELS, CAMPAIGN_SLUG_ORDER } from "@/config/campaigns";
 import type { Database } from "@/types/database";
@@ -205,10 +205,9 @@ function FeaturedCampaignCard({ campaign }: { campaign: Campaign }) {
 }
 
 export default async function CampaignsPage() {
-  const supabase = await createClient();
-  const [campaignsData, { data: { user } }] = await Promise.all([
+  const [campaignsData, user] = await Promise.all([
     getActiveCampaigns(),
-    supabase.auth.getUser(),
+    getServerUser(),
   ]);
 
   const publicClient = createPublicClient();
