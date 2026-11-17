@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Geist, Bricolage_Grotesque, Figtree, DM_Mono } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import AppHeader from "@/components/AppHeader";
 import LegalGate from "@/components/LegalGate";
@@ -88,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PlusFlairProvider>{children}</PlusFlairProvider>
         </div>
         <LegalGate />
+        <SpeedInsights />
       </body>
     </html>
   );
