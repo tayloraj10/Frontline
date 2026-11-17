@@ -639,8 +639,8 @@ export default function EventFlyerModal({
                       className={`flex items-center gap-2 min-h-11 pl-2 pr-3 rounded-full border text-xs font-semibold touch-manipulation active:scale-[0.97] transition-transform duration-150 ${p.id === paletteId ? "border-zinc-100 text-zinc-100" : "border-zinc-700 text-zinc-400"}`}
                     >
                       <span className="flex -space-x-1.5">
-                        {[p.bg, p.cardA, p.cardB].map((c) => (
-                          <span key={c} className="w-5 h-5 rounded-full border border-zinc-600" style={{ background: c }} />
+                        {[p.bg, p.cardA, p.cardB].map((c, i) => (
+                          <span key={i} className="w-5 h-5 rounded-full border border-zinc-600" style={{ background: c }} />
                         ))}
                       </span>
                       {p.label}

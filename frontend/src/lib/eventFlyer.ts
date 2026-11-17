@@ -61,10 +61,13 @@ export const FLYER_PALETTES: FlyerPalette[] = [
   { id: "grape", label: "Grape", bg: "#5a33c8", cardA: "#dccbf2", cardB: "#c8e8b6", cardC: "#ffffff", text: "#26106b" },
   { id: "electric", label: "Electric", bg: "#2438ff", cardA: "#ffe600", cardB: "#ff8cc4", cardC: "#ffffff", text: "#0d124d" },
   { id: "tangerine", label: "Tangerine", bg: "#f0560a", cardA: "#fff0d4", cardB: "#ffe066", cardC: "#ffffff", text: "#3a1500" },
-  { id: "berry", label: "Berry", bg: "#c2105f", cardA: "#ffd0e6", cardB: "#ffe45e", cardC: "#ffffff", text: "#4a0a2c" },
+  { id: "kelly", label: "Kelly", bg: "#12b44a", cardA: "#e4ffdc", cardB: "#ffe14d", cardC: "#ffffff", text: "#06301a" },
+  // Bold two-tone (modeled on NYC trash club flyers). Dark palettes use dark cards with light text.
+  { id: "cyanpop", label: "Cyan Pop", bg: "#00d0e0", cardA: "#ffee00", cardB: "#d9dde1", cardC: "#ffffff", text: "#111111" },
+  { id: "goldenhour", label: "Golden Hour", bg: "#ffc95c", cardA: "#0a0a6e", cardB: "#2a2ac4", cardC: "#5566f5", text: "#fff1b8" },
+  { id: "powder", label: "Powder", bg: "#bcd6fb", cardA: "#1f0303", cardB: "#4a0c0c", cardC: "#8c2222", text: "#ffffff" },
   // Pastel
   { id: "lavender", label: "Lavender", bg: "#9d83e0", cardA: "#f4eeff", cardB: "#c9f2b4", cardC: "#ffffff", text: "#25134f" },
-  { id: "peach", label: "Peach", bg: "#ee8456", cardA: "#fff1e8", cardB: "#ffe08a", cardC: "#ffffff", text: "#4d200c" },
   { id: "mint", label: "Mint", bg: "#55bf96", cardA: "#eafaf2", cardB: "#fff0a8", cardC: "#ffffff", text: "#0d3a30" },
   { id: "sky", label: "Sky", bg: "#5ca5ea", cardA: "#eaf5ff", cardB: "#ffd3e1", cardC: "#ffffff", text: "#0e2f55" },
 ];
