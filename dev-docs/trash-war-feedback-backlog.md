@@ -25,7 +25,7 @@ New optional flow, added alongside it:
 - [x] On claim: timer #1 starts, user has `CLAIM_BEFORE_WINDOW_MINUTES` (30 min) to arrive on-site and submit a **before** photo.
 - [x] On before-photo submission: timer #2 starts, user has `CLAIM_AFTER_WINDOW_MINUTES` (20/30/45 min, scaled by report severity low/medium/high) to submit an **after** (cleaned-up) photo.
 - [x] If either timer expires, the claim is released/expires (report reverts to unclaimed, available for others); a `CLAIM_RECLAIM_COOLDOWN_MINUTES` (15 min) cooldown applies before the same user can reclaim it.
-- [x] Successfully completing the claim flow grants a **score multiplier** (`CLAIM_CHALLENGE_MULTIPLIER` = 1.5x) vs. a plain in-range log.
+- [x] Successfully completing the claim flow grants a **score multiplier** (`CLAIM_CHALLENGE_MULTIPLIER` = 2.5x) vs. a plain in-range log.
 - [x] Before/after claim photos carry over (already-uploaded R2 URLs, no reupload) into the final Log Cleanup form, prefilled and independently removable.
 - [x] Claim photo previews are bigger, centered, and click-to-enlarge via the shared `Lightbox` component.
 

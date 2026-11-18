@@ -19,10 +19,10 @@ points.
 | Pound of trash | **0.5** | `POUND_VALUE` — see caveat below, not always scored |
 | Filing a trash report | **0** | Reports themselves aren't a contribution — no points until someone resolves or claims one |
 | Resolving a report by cleaning near it (`resolve_report_id`) | same as the cleanup logged | No separate bonus, just marks the report addressed |
-| Claiming a report as a challenge (`claimed_report_id`) | cleanup value × **1.5** | `CLAIM_CHALLENGE_MULTIPLIER` in `problem_reports.py` |
+| Claiming a report as a challenge (`claimed_report_id`) | cleanup value × **2.5** (default; admin-configurable via `claim_challenge_multiplier`) | `CLAIM_CHALLENGE_MULTIPLIER` in `problem_reports.py` |
 | Civic action (register independent, attend town hall, etc.) | **1** | flat value, `contribution_scoring.py:66` default for non-cleanup types |
 | Solarpunk photo action | **1** | same flat default |
-| Active campaign score-multiplier event | cleanup value × event's configured multiplier | `campaign_events` row with `effect_config.type = 'score_multiplier'`, stacks with the claim-challenge bonus |
+| Active campaign score-multiplier event | cleanup value × event's configured multiplier | `campaign_events` row with `effect_config.type = 'score_multiplier'`, does not stack with the claim-challenge bonus, the larger one applies |
 
 **Pounds caveat:** pounds are only actually converted into points on the
 *organizer-logged* paths — `log-for-attendee` and `log-team-total`

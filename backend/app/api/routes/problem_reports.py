@@ -495,7 +495,7 @@ async def submit_claim_after_photo(
     await db.commit()
     return {
         "status": "addressed",
-        "challenge_multiplier": settings.get("claim_challenge_multiplier", 1.5),
+        "challenge_multiplier": settings.get("claim_challenge_multiplier", 2.5),
         "report_id": str(report_id),
     }
 

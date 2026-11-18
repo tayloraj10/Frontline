@@ -620,7 +620,7 @@ async def submit_contribution(
         notes=payload.notes,
         location_verified=location_verified,
         apply_multiplier=payload.cleanup_event_id is None and effective_team_event_id is None,
-        challenge_multiplier=settings.get("claim_challenge_multiplier", 1.5) if challenge_bonus_applied else 1.0,
+        challenge_multiplier=settings.get("claim_challenge_multiplier", 2.5) if challenge_bonus_applied else 1.0,
         cleanup_event_id=str(payload.cleanup_event_id) if payload.cleanup_event_id else None,
         team_event_id=str(effective_team_event_id) if effective_team_event_id else None,
         team_event_team_id=team_event_team_id,
