@@ -97,6 +97,32 @@ const CLEANUP_EVENT_RADIUS_METERS_FALLBACK = 150;
 const ROUTE_LOOP_CLOSE_METERS = 20;
 
 /** Haversine distance in meters between two [lng, lat] points. */
+// Calls cb once the map looks ready. "idle" alone is unreliable here because
+// continuous paint animations (bonus-spot pulse) keep the map from ever going
+// idle, so also poll for style + tiles loaded and cap the wait.
+function whenMapSettled(m: maplibregl.Map, cb: () => void, maxMs = 7000) {
+  let done = false;
+  let poll: ReturnType<typeof setInterval> | undefined;
+  let cap: ReturnType<typeof setTimeout> | undefined;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    clearInterval(poll);
+    clearTimeout(cap);
+    m.off("idle", finish);
+    cb();
+  };
+  m.once("idle", finish);
+  poll = setInterval(() => {
+    try {
+      if (m.isStyleLoaded() && m.areTilesLoaded()) finish();
+    } catch {
+      finish();
+    }
+  }, 150);
+  cap = setTimeout(finish, maxMs);
+}
+
 function distanceMeters(a: [number, number], b: [number, number]): number {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -805,9 +831,8 @@ function LegendToggle({
 }) {
   return (
     <label
-      className={`flex items-center gap-2.5 min-h-10 px-3 rounded-xl cursor-pointer select-none transition-[background-color,transform] duration-150 hover:bg-zinc-800/70 active:bg-zinc-800 active:scale-[0.98] touch-manipulation ${
-        indent ? "ml-4" : ""
-      }`}
+      className={`flex items-center gap-2.5 min-h-10 px-3 rounded-xl cursor-pointer select-none transition-[background-color,transform] duration-150 hover:bg-zinc-800/70 active:bg-zinc-800 active:scale-[0.98] touch-manipulation ${indent ? "ml-4" : ""
+        }`}
     >
       <span className={`flex flex-1 items-center gap-2.5 min-w-0 text-[13px] ${checked ? "" : "opacity-50"}`}>{children}</span>
       <input
@@ -1176,297 +1201,297 @@ function TerritoryPanel({
 
   return (
     <>
-    <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-40 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
-      <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
+      <div className="absolute top-auto bottom-28 sm:top-[200px] sm:bottom-4 right-2 left-2 sm:left-auto z-40 sm:w-64 max-h-[60dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl backdrop-blur-sm pb-safe flex flex-col">
+        <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accentHex }} />
 
-      {/* Header */}
-      <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-              {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Leader`}
-            </p>
-            <p className="text-xl font-black leading-none tracking-tight text-zinc-100">
-              {variant === "stats" ? displayName : `${unitLabel} ${displayName}`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            {isClaimed && isContested && (
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${isContested
-                ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
-                : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
-                }`}>
-                Contested
-              </span>
-            )}
-            <IconButton onClick={onClose} className="-mr-2.5 -mt-1.5 text-3xl leading-none text-zinc-400 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150" aria-label="Close">×</IconButton>
-          </div>
-        </div>
-
-        <div className="mt-2.5">
-          {variant === "territory" && (
-            claimLabel ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm">{isGroup ? "👥" : "👤"}</span>
-                {isGroup && claimLabel.groupSlug ? (
-                  <Link
-                    href={`/groups/${claimLabel.groupSlug}`}
-                    className="truncate text-sm font-semibold hover:underline active:underline"
-                    style={{ color: accentHex }}
-                  >
-                    {claimLabel.name}
-                  </Link>
-                ) : (
-                  <span className="truncate text-sm font-semibold" style={{ color: accentHex }}>
-                    {claimLabel.name}
-                  </span>
-                )}
-                <span className="ml-auto text-[10px] text-zinc-600 shrink-0">leads</span>
-              </div>
-            ) : (
-              <span className="text-sm text-zinc-600">No leader yet</span>
-            )
-          )}
-          {hasStats && (
-            <>
-              <p className="mt-0.5 text-xs text-zinc-500 flex items-center gap-1">
-                {totalPoints} point{totalPoints !== 1 ? "s" : ""} total in {unitLabel}
-                <button
-                  onClick={() => setShowPointsInfo(true)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-base text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 active:bg-zinc-700 active:text-zinc-200 active:scale-[0.92] transition-[background-color,color,transform] duration-150 touch-manipulation leading-none"
-                  aria-label="What are points?"
-                  title="What are points?"
-                >
-                  ⓘ
-                </button>
+        {/* Header */}
+        <div className="border-b border-zinc-800 pb-2.5 pl-4 pr-3 pt-3">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="mb-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+                {variant === "stats" ? `${unitLabel} Stats` : `${unitLabel} Leader`}
               </p>
-              {totalBagCount > 0 && (
-                <p className="text-[11px] text-zinc-600">
-                  {totalBagCount} bag{totalBagCount !== 1 ? "s" : ""} picked up
-                  {bagTotals.small > 0 && bagTotals.large > 0 && (
-                    <span> ({bagTotals.small} small, {bagTotals.large} large)</span>
-                  )}
-                </p>
+              <p className="text-xl font-black leading-none tracking-tight text-zinc-100">
+                {variant === "stats" ? displayName : `${unitLabel} ${displayName}`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              {isClaimed && isContested && (
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${isContested
+                  ? "bg-amber-950/80 text-amber-400 border border-amber-800/60"
+                  : "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
+                  }`}>
+                  Contested
+                </span>
               )}
-              {variant === "stats" && statsTotalReportCount > 0 && (
-                <p className="text-[11px] text-zinc-600">
-                  🚮 {statsTotalReportCount} trash report{statsTotalReportCount !== 1 ? "s" : ""}
-                  {statsReportCount > 0 && (
-                    <span className="text-orange-400"> ({statsReportCount} open)</span>
-                  )}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {/* Group battle bars */}
-        {isContested && (
-          <div className="border-b border-zinc-800 px-4 py-3">
-            <p className="mb-2.5 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Group Battle</p>
-            <div className="space-y-2.5">
-              {groupBreakdown.map((g) => {
-                const color = groupColors[g.id] ?? "#71717a";
-                const isHolder = g.id === holdingGroupId;
-                const pct = (g.points / maxGroupPoints) * 100;
-                return (
-                  <div key={g.id}>
-                    <div className="flex items-start justify-between mb-1">
-                      <div className="flex items-start gap-1.5">
-                        <div className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
-                        <span className={`text-xs break-words ${isHolder ? "font-semibold" : "text-zinc-400"}`}
-                          style={isHolder ? { color } : {}}>
-                          {g.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                        {isHolder && <span className="text-[10px] text-zinc-500 leading-none">holds</span>}
-                        <span className="text-xs font-mono tabular-nums text-zinc-300">{g.points}</span>
-                      </div>
-                    </div>
-                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
-                    </div>
-                  </div>
-                );
-              })}
+              <IconButton onClick={onClose} className="-mr-2.5 -mt-1.5 text-3xl leading-none text-zinc-400 hover:text-zinc-100 active:text-zinc-100 transition-colors duration-150" aria-label="Close">×</IconButton>
             </div>
           </div>
-        )}
 
-        {/* Hotspot progress */}
-        {reportThreshold !== null && (
-          <div className="px-4 py-3 border-t border-zinc-800">
-            <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Hotspot Status</p>
-            {reportCount === 0 ? (
-              <p className="text-xs text-zinc-500">No reports yet</p>
-            ) : (
+          <div className="mt-2.5">
+            {variant === "territory" && (
+              claimLabel ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">{isGroup ? "👥" : "👤"}</span>
+                  {isGroup && claimLabel.groupSlug ? (
+                    <Link
+                      href={`/groups/${claimLabel.groupSlug}`}
+                      className="truncate text-sm font-semibold hover:underline active:underline"
+                      style={{ color: accentHex }}
+                    >
+                      {claimLabel.name}
+                    </Link>
+                  ) : (
+                    <span className="truncate text-sm font-semibold" style={{ color: accentHex }}>
+                      {claimLabel.name}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[10px] text-zinc-600 shrink-0">leads</span>
+                </div>
+              ) : (
+                <span className="text-sm text-zinc-600">No leader yet</span>
+              )
+            )}
+            {hasStats && (
               <>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-orange-400">⚠️ {reportCount} open report{reportCount !== 1 ? "s" : ""}</span>
-                  <span className="text-xs text-zinc-600 tabular-nums">{reportCount} / {reportThreshold}</span>
-                </div>
-                <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500 bg-orange-500"
-                    style={{ width: `${Math.min((reportCount / reportThreshold) * 100, 100)}%` }}
-                  />
-                </div>
-                {reportCount >= reportThreshold && (
-                  <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached. Hotspot active!</p>
+                <p className="mt-0.5 text-xs text-zinc-500 flex items-center gap-1">
+                  {totalPoints} point{totalPoints !== 1 ? "s" : ""} total in {unitLabel}
+                  <button
+                    onClick={() => setShowPointsInfo(true)}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-base text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 active:bg-zinc-700 active:text-zinc-200 active:scale-[0.92] transition-[background-color,color,transform] duration-150 touch-manipulation leading-none"
+                    aria-label="What are points?"
+                    title="What are points?"
+                  >
+                    ⓘ
+                  </button>
+                </p>
+                {totalBagCount > 0 && (
+                  <p className="text-[11px] text-zinc-600">
+                    {totalBagCount} bag{totalBagCount !== 1 ? "s" : ""} picked up
+                    {bagTotals.small > 0 && bagTotals.large > 0 && (
+                      <span> ({bagTotals.small} small, {bagTotals.large} large)</span>
+                    )}
+                  </p>
                 )}
-                {reportPhotos.length > 0 && (
-                  <div className="mt-2 flex gap-1.5 flex-wrap">
-                    {reportPhotos.slice(0, 4).map((url, i) => (
-                      <button
-                        key={i}
-                        onClick={() => onPhotoSelect({ url })}
-                        className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 active:border-orange-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="Report photo" className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
+                {variant === "stats" && statsTotalReportCount > 0 && (
+                  <p className="text-[11px] text-zinc-600">
+                    🚮 {statsTotalReportCount} trash report{statsTotalReportCount !== 1 ? "s" : ""}
+                    {statsReportCount > 0 && (
+                      <span className="text-orange-400"> ({statsReportCount} open)</span>
+                    )}
+                  </p>
                 )}
               </>
             )}
           </div>
-        )}
+        </div>
 
-        {/* Cleanup photos */}
-        {cleanupPhotos.length > 0 && (
-          <div className="px-4 py-3 border-t border-zinc-800">
-            <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Cleanup Photos</p>
-            <div className="flex gap-1.5 flex-wrap">
-              {cleanupPhotos.slice(0, 4).map((photo, i) => (
-                <button
-                  key={i}
-                  onClick={() =>
-                    onPhotoSelect({
-                      url: photo.url,
-                      contentType: "cleanup_log_photo",
-                      contentId: photo.cleanupId,
-                      gallery: cleanupPhotos.map((p) => ({ url: p.url, contentId: p.cleanupId })),
-                      galleryIndex: i,
-                    })
-                  }
-                  className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 active:border-emerald-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.url} alt="Cleanup photo" className="w-full h-full object-cover" />
-                </button>
-              ))}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* Group battle bars */}
+          {isContested && (
+            <div className="border-b border-zinc-800 px-4 py-3">
+              <p className="mb-2.5 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Group Battle</p>
+              <div className="space-y-2.5">
+                {groupBreakdown.map((g) => {
+                  const color = groupColors[g.id] ?? "#71717a";
+                  const isHolder = g.id === holdingGroupId;
+                  const pct = (g.points / maxGroupPoints) * 100;
+                  return (
+                    <div key={g.id}>
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex items-start gap-1.5">
+                          <div className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
+                          <span className={`text-xs break-words ${isHolder ? "font-semibold" : "text-zinc-400"}`}
+                            style={isHolder ? { color } : {}}>
+                            {g.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          {isHolder && <span className="text-[10px] text-zinc-500 leading-none">holds</span>}
+                          <span className="text-xs font-mono tabular-nums text-zinc-300">{g.points}</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Recent activity */}
-        <div className="px-4 py-3">
-          <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Activity</p>
-          {loading ? (
-            <p className="text-xs text-zinc-700">Loading…</p>
-          ) : variant === "stats" ? (
-            statsRecent.length === 0 ? (
+          {/* Hotspot progress */}
+          {reportThreshold !== null && (
+            <div className="px-4 py-3 border-t border-zinc-800">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Hotspot Status</p>
+              {reportCount === 0 ? (
+                <p className="text-xs text-zinc-500">No reports yet</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-orange-400">⚠️ {reportCount} open report{reportCount !== 1 ? "s" : ""}</span>
+                    <span className="text-xs text-zinc-600 tabular-nums">{reportCount} / {reportThreshold}</span>
+                  </div>
+                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500 bg-orange-500"
+                      style={{ width: `${Math.min((reportCount / reportThreshold) * 100, 100)}%` }}
+                    />
+                  </div>
+                  {reportCount >= reportThreshold && (
+                    <p className="mt-1.5 text-[10px] text-red-400 font-semibold">Threshold reached. Hotspot active!</p>
+                  )}
+                  {reportPhotos.length > 0 && (
+                    <div className="mt-2 flex gap-1.5 flex-wrap">
+                      {reportPhotos.slice(0, 4).map((url, i) => (
+                        <button
+                          key={i}
+                          onClick={() => onPhotoSelect({ url })}
+                          className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-orange-500 active:border-orange-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="Report photo" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Cleanup photos */}
+          {cleanupPhotos.length > 0 && (
+            <div className="px-4 py-3 border-t border-zinc-800">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Cleanup Photos</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {cleanupPhotos.slice(0, 4).map((photo, i) => (
+                  <button
+                    key={i}
+                    onClick={() =>
+                      onPhotoSelect({
+                        url: photo.url,
+                        contentType: "cleanup_log_photo",
+                        contentId: photo.cleanupId,
+                        gallery: cleanupPhotos.map((p) => ({ url: p.url, contentId: p.cleanupId })),
+                        galleryIndex: i,
+                      })
+                    }
+                    className="w-11 h-11 rounded overflow-hidden border border-zinc-700 flex-shrink-0 hover:border-emerald-500 active:border-emerald-500 active:scale-[0.95] transition-[border-color,transform] duration-150 touch-manipulation"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt="Cleanup photo" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recent activity */}
+          <div className="px-4 py-3">
+            <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-zinc-600">Recent Activity</p>
+            {loading ? (
+              <p className="text-xs text-zinc-700">Loading…</p>
+            ) : variant === "stats" ? (
+              statsRecent.length === 0 ? (
+                <p className="text-xs text-zinc-700">No cleanups logged yet</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {statsRecent.slice(0, 7).map((r, i) => {
+                    const hasBagSplit = r.smallBags > 0 || r.largeBags > 0;
+                    return (
+                      <div key={i} className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 shrink-0" />
+                          <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{r.name}</span>
+                          <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{r.points} pts</span>
+                          <span className="text-xs text-zinc-600 shrink-0">
+                            {r.submittedAt
+                              ? new Date(r.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                              : ""}
+                          </span>
+                        </div>
+                        {(r.groupName || hasBagSplit) && (
+                          <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">
+                            {r.groupName}
+                            {r.groupName && hasBagSplit ? " · " : ""}
+                            {hasBagSplit && `${r.smallBags} small, ${r.largeBags} large`}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : contribs.length === 0 ? (
               <p className="text-xs text-zinc-700">No cleanups logged yet</p>
             ) : (
               <div className="space-y-1.5">
-                {statsRecent.slice(0, 7).map((r, i) => {
-                  const hasBagSplit = r.smallBags > 0 || r.largeBags > 0;
+                {contribs.slice(0, 7).map((c, i) => {
+                  const name = c.profiles?.display_name ?? c.profiles?.username ?? "Anonymous";
+                  const groupName = c.groups?.name;
+                  const dotColor = c.group_id ? (groupColors[c.group_id] ?? "#71717a") : null;
+                  const small = c.cleanups?.metrics_small_bags ?? 0;
+                  const large = c.cleanups?.metrics_large_bags ?? 0;
+                  const hasBagSplit = small > 0 || large > 0;
                   return (
                     <div key={i} className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 shrink-0" />
-                        <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{r.name}</span>
-                        <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{r.points} pts</span>
+                        {dotColor
+                          ? <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
+                          : <div className="w-1.5 h-1.5 shrink-0" />}
+                        <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{name}</span>
+                        <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{c.value ?? 1} pts</span>
                         <span className="text-xs text-zinc-600 shrink-0">
-                          {r.submittedAt
-                            ? new Date(r.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                          {c.submitted_at
+                            ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                             : ""}
                         </span>
                       </div>
-                      {(r.groupName || hasBagSplit) && (
+                      {(groupName || hasBagSplit) && (
                         <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">
-                          {r.groupName}
-                          {r.groupName && hasBagSplit ? " · " : ""}
-                          {hasBagSplit && `${r.smallBags} small, ${r.largeBags} large`}
+                          {groupName}
+                          {groupName && hasBagSplit ? " · " : ""}
+                          {hasBagSplit && `${small} small, ${large} large`}
                         </p>
                       )}
                     </div>
                   );
                 })}
               </div>
-            )
-          ) : contribs.length === 0 ? (
-            <p className="text-xs text-zinc-700">No cleanups logged yet</p>
-          ) : (
-            <div className="space-y-1.5">
-              {contribs.slice(0, 7).map((c, i) => {
-                const name = c.profiles?.display_name ?? c.profiles?.username ?? "Anonymous";
-                const groupName = c.groups?.name;
-                const dotColor = c.group_id ? (groupColors[c.group_id] ?? "#71717a") : null;
-                const small = c.cleanups?.metrics_small_bags ?? 0;
-                const large = c.cleanups?.metrics_large_bags ?? 0;
-                const hasBagSplit = small > 0 || large > 0;
-                return (
-                  <div key={i} className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      {dotColor
-                        ? <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
-                        : <div className="w-1.5 h-1.5 shrink-0" />}
-                      <span className="text-xs text-zinc-300 truncate flex-1 min-w-0">{name}</span>
-                      <span className="text-xs text-zinc-400 shrink-0 tabular-nums">{c.value ?? 1} pts</span>
-                      <span className="text-xs text-zinc-600 shrink-0">
-                        {c.submitted_at
-                          ? new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                          : ""}
-                      </span>
-                    </div>
-                    {(groupName || hasBagSplit) && (
-                      <p className="pl-3.5 text-[10px] text-zinc-600 leading-tight mt-0.5">
-                        {groupName}
-                        {groupName && hasBagSplit ? " · " : ""}
-                        {hasBagSplit && `${small} small, ${large} large`}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-    {showPointsInfo && (
-      <BodyPortal>
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
-          onClick={() => setShowPointsInfo(false)}
-        >
-          <div
-            className="w-full max-w-xs rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-white/5 p-5 shadow-elevation-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-base font-bold text-zinc-100">What are points?</h2>
-            <p className="mt-2 text-sm text-zinc-400">Points are how we rank cleanups. Bigger hauls earn more.</p>
-            <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">
-              <li className="flex justify-between"><span>Small bag</span><span className="tabular-nums"><SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> pt{pointValues.small_bag_value !== 1 ? "s" : ""}</span></li>
-              <li className="flex justify-between"><span>Large bag</span><span className="tabular-nums"><SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> pts</span></li>
-              <li className="flex justify-between"><span>Per pound</span><span className="tabular-nums"><SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> pts</span></li>
-            </ul>
-            <button
-              type="button"
-              onClick={() => setShowPointsInfo(false)}
-              className="mt-5 w-full min-h-11 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,transform] duration-150 touch-manipulation"
-            >
-              Got it
-            </button>
+            )}
           </div>
         </div>
-      </BodyPortal>
-    )}
+      </div>
+      {showPointsInfo && (
+        <BodyPortal>
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
+            onClick={() => setShowPointsInfo(false)}
+          >
+            <div
+              className="w-full max-w-xs rounded-[20px] bg-zinc-900 ring-1 ring-inset ring-white/5 p-5 shadow-elevation-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-base font-bold text-zinc-100">What are points?</h2>
+              <p className="mt-2 text-sm text-zinc-400">Points are how we rank cleanups. Bigger hauls earn more.</p>
+              <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">
+                <li className="flex justify-between"><span>Small bag</span><span className="tabular-nums"><SettingValue value={pointValues.small_bag_value} loading={pointValuesLoading} /> pt{pointValues.small_bag_value !== 1 ? "s" : ""}</span></li>
+                <li className="flex justify-between"><span>Large bag</span><span className="tabular-nums"><SettingValue value={pointValues.large_bag_value} loading={pointValuesLoading} /> pts</span></li>
+                <li className="flex justify-between"><span>Per pound</span><span className="tabular-nums"><SettingValue value={pointValues.pound_value} loading={pointValuesLoading} /> pts</span></li>
+              </ul>
+              <button
+                type="button"
+                onClick={() => setShowPointsInfo(false)}
+                className="mt-5 w-full min-h-11 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,transform] duration-150 touch-manipulation"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </BodyPortal>
+      )}
     </>
   );
 }
@@ -4334,7 +4359,7 @@ export default function CampaignMap({
     setTilesLoading(true);
     map.current.once("style.load", () => {
       setupCustomLayers();
-      map.current?.once("idle", () => setTilesLoading(false));
+      if (map.current) whenMapSettled(map.current, () => setTilesLoading(false));
     });
     map.current.setStyle(styleUrl(activeStyle));
   }, [activeStyle, setupCustomLayers]);
@@ -4644,7 +4669,7 @@ export default function CampaignMap({
     // Watch "idle" only once per load/style-swap rather than for the map's whole
     // lifetime — the report-radius pulse animation repaints continuously, which
     // would otherwise keep the map perpetually "busy" and the spinner stuck on.
-    map.current.once("idle", () => setTilesLoading(false));
+    whenMapSettled(map.current, () => setTilesLoading(false));
 
     map.current.on("load", async () => {
       if (!map.current) return;
@@ -4677,9 +4702,9 @@ export default function CampaignMap({
         // show the event's total instead of one participant's slice of it.
         const displayValue = props.cleanup_event_id
           ? contributionFeaturesRef.current.reduce((sum, f) => {
-              const p = f.properties as { value?: number; cleanup_event_id?: string } | null;
-              return p && p.cleanup_event_id === props.cleanup_event_id ? sum + (p.value ?? 0) : sum;
-            }, 0)
+            const p = f.properties as { value?: number; cleanup_event_id?: string } | null;
+            return p && p.cleanup_event_id === props.cleanup_event_id ? sum + (p.value ?? 0) : sum;
+          }, 0)
           : (props.value ?? 1);
         hoverDiv.style.display = "block";
         hoverDiv.style.left = `${e.originalEvent.clientX + 14}px`;
@@ -5325,7 +5350,7 @@ export default function CampaignMap({
           ...Object.fromEntries(list.map((c) => [c.geo_unit_id, { lat: c.lat, lng: c.lng }])),
         };
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         if (!cancelled) updateEventMarkers(activeEvents);
       });
@@ -5773,7 +5798,7 @@ export default function CampaignMap({
         bonusSpotsRef.current = data;
         updateBonusSpotMarkers(data);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       cancelled = true;
     };
@@ -5824,6 +5849,8 @@ export default function CampaignMap({
   const handleGeoSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setSuggestOpen(false);
+    // Collapse the keyboard and the focused bar layout once the search runs.
+    (document.activeElement as HTMLElement | null)?.blur?.();
     const query = geoSearch.trim();
     if (!query) return;
     const fail = (msg: string) => {
@@ -6020,58 +6047,77 @@ export default function CampaignMap({
       {!pinPickerActive && !areaPickerActive && !routePickerActive && !(campaign.geo_unit?.includes("h3_hex") ?? false) && (
         <div className="absolute z-10 focus-within:z-30 left-3 right-3 sm:right-auto sm:w-auto sm:max-w-[calc(100%-4.5rem)] sm:flex-row sm:flex-wrap top-3 sm:top-[calc(var(--map-top,0px)+0.75rem)] flex flex-col gap-2 items-start pointer-events-none [&>*]:pointer-events-auto">
           <div className="relative z-20 h-11 w-full sm:w-[32rem] pl-[3.25rem] pr-[9.25rem] focus-within:pr-0">
-          {(
-            <form
-              onSubmit={handleGeoSearch}
-              className={`flex w-full items-center h-11 pl-4 pr-1 rounded-full bg-zinc-900/90 backdrop-blur-md shadow-elevation-3 ${geoSearchError ? "ring-1 ring-red-500/70" : ""}`}
-            >
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0 text-zinc-500">
-                <circle cx="7" cy="7" r="4.75" stroke="currentColor" strokeWidth="1.6" />
-                <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              <input
-                type="text"
-                aria-label="Search"
-                placeholder="Search"
-                value={geoSearch}
-                onChange={(e) => {
-                  setGeoSearch(e.target.value);
-                  setSuggestOpen(true);
-                }}
-                onFocus={() => setSuggestOpen(true)}
-                onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
-                className="min-w-0 flex-1 bg-transparent px-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={!geoSearch}
-                className="h-9 px-4 rounded-full bg-emerald-400 text-emerald-950 text-xs font-bold transition-[opacity,transform] duration-150 active:scale-[0.95] disabled:opacity-0 disabled:pointer-events-none touch-manipulation"
+            {(
+              <form
+                onSubmit={handleGeoSearch}
+                className={`flex w-full items-center h-11 pl-4 pr-1 rounded-full bg-zinc-900/90 backdrop-blur-md shadow-elevation-3 ${geoSearchError ? "ring-1 ring-red-500/70" : ""}`}
               >
-                Go
-              </button>
-            </form>
-          )}
-          {suggestOpen && suggestions.length > 0 && (
-            <ul className="absolute left-[3.25rem] right-0 top-12 overflow-hidden rounded-2xl bg-zinc-900/95 backdrop-blur-md shadow-elevation-4 ring-1 ring-inset ring-white/5 py-1">
-              {suggestions.map((f) => (
-                <li key={f.id}>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0 text-zinc-500">
+                  <circle cx="7" cy="7" r="4.75" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  aria-label="Search"
+                  placeholder="Search"
+                  value={geoSearch}
+                  onChange={(e) => {
+                    setGeoSearch(e.target.value);
+                    setSuggestOpen(true);
+                  }}
+                  onFocus={() => setSuggestOpen(true)}
+                  onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
+                  className="min-w-0 flex-1 bg-transparent px-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                />
+                {geoSearch && (
                   <button
                     type="button"
+                    aria-label="Clear search"
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setGeoSearch(f.place_name);
-                      setSuggestOpen(false);
+                    onClick={(ev) => {
+                      setGeoSearch("");
                       setSuggestions([]);
-                      goToFeature(f);
+                      setGeoSearchError(null);
+                      (ev.currentTarget.form?.querySelector("input") as HTMLInputElement | null)?.focus();
                     }}
-                    className="w-full min-h-11 px-4 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 active:bg-zinc-800 truncate touch-manipulation"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:text-zinc-200 active:bg-zinc-800 touch-manipulation"
                   >
-                    {f.place_name}
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
                   </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                )}
+                <button
+                  type="submit"
+                  disabled={!geoSearch}
+                  onMouseDown={(e) => e.preventDefault()}
+                  className="h-9 px-4 rounded-full bg-emerald-400 text-emerald-950 text-xs font-bold transition-[opacity,transform] duration-150 active:scale-[0.95] disabled:opacity-0 disabled:pointer-events-none touch-manipulation"
+                >
+                  Go
+                </button>
+              </form>
+            )}
+            {suggestOpen && suggestions.length > 0 && (
+              <ul className="absolute left-[3.25rem] right-0 top-12 overflow-hidden rounded-2xl bg-zinc-900/95 backdrop-blur-md shadow-elevation-4 ring-1 ring-inset ring-white/5 py-1">
+                {suggestions.map((f) => (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setGeoSearch(f.place_name);
+                        setSuggestOpen(false);
+                        setSuggestions([]);
+                        goToFeature(f);
+                      }}
+                      className="w-full min-h-11 px-4 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 active:bg-zinc-800 truncate touch-manipulation"
+                    >
+                      {f.place_name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           {geoSearchError && <p className="sm:basis-full text-xs text-red-300 px-3 py-1 rounded-full bg-zinc-900/90 backdrop-blur-md">{geoSearchError}</p>}
           {(statsChip || activeEvents.length > 0) && (
@@ -6144,12 +6190,11 @@ export default function CampaignMap({
               // having to open the panel — one letter is enough since these are
               // mutually exclusive (single-select), so at most one can ever be lit.
               <span
-                title={`${
-                  showZipStats ? (isUkViewport ? "Postcodes" : "Zip codes")
-                  : showAnyNeighborhoodStats ? "Neighborhood"
-                  : showBoroughStats ? "Borough"
-                  : "City"
-                } stats layer is on`}
+                title={`${showZipStats ? (isUkViewport ? "Postcodes" : "Zip codes")
+                    : showAnyNeighborhoodStats ? "Neighborhood"
+                      : showBoroughStats ? "Borough"
+                        : "City"
+                  } stats layer is on`}
                 className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-emerald-950 text-[9px] font-bold leading-none shadow"
               >
                 {showZipStats ? "Z" : showAnyNeighborhoodStats ? "N" : showBoroughStats ? "B" : "C"}
@@ -6217,14 +6262,14 @@ export default function CampaignMap({
                         {group.opts.map((opt) => {
                           const active =
                             opt.id === "zip" ? showZipStats
-                            : opt.id === "neighborhood" ? showAnyNeighborhoodStats
-                            : opt.id === "borough" ? showBoroughStats
-                            : showCityStats;
+                              : opt.id === "neighborhood" ? showAnyNeighborhoodStats
+                                : opt.id === "borough" ? showBoroughStats
+                                  : showCityStats;
                           const setActive =
                             opt.id === "zip" ? setShowZipStats
-                            : opt.id === "neighborhood" ? setShowAnyNeighborhoodStats
-                            : opt.id === "borough" ? setShowBoroughStats
-                            : setShowCityStats;
+                              : opt.id === "neighborhood" ? setShowAnyNeighborhoodStats
+                                : opt.id === "borough" ? setShowBoroughStats
+                                  : setShowCityStats;
                           return (
                             <button
                               key={opt.id}
@@ -6233,11 +6278,10 @@ export default function CampaignMap({
                                 if (!active) setLegendOpen(false);
                               }}
                               aria-pressed={active}
-                              className={`inline-flex items-center min-h-9 px-3.5 text-[13px] font-semibold rounded-full cursor-pointer transition-[background-color,color,transform] duration-150 active:scale-[0.96] touch-manipulation ${
-                                active
+                              className={`inline-flex items-center min-h-9 px-3.5 text-[13px] font-semibold rounded-full cursor-pointer transition-[background-color,color,transform] duration-150 active:scale-[0.96] touch-manipulation ${active
                                   ? "bg-emerald-400 text-emerald-950"
                                   : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
-                              }`}
+                                }`}
                             >
                               {opt.label}
                             </button>
@@ -6250,223 +6294,223 @@ export default function CampaignMap({
                 </>
               )}
               {(isChoropleth ? (
-            <>
-              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
-                <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
-                <span className="text-zinc-300">Democrat lean</span>
-              </div>
-              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
-                <span className="w-3 h-3 rounded-sm bg-red-600/80" />
-                <span className="text-zinc-300">Republican lean</span>
-              </div>
-              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
-                <span className="w-3 h-3 rounded-sm bg-zinc-500/80" />
-                <span className="text-zinc-300">Neutralized</span>
-              </div>
-            </>
-          ) : isHeatmap ? (
-            <>
-              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
-                <span className="w-3 h-2 rounded-sm" style={{ background: "linear-gradient(to right, rgba(255,200,0,0.5), rgba(255,80,0,0.8), rgba(150,0,30,1))" }} />
-                <span className="text-zinc-300">Unfollow density</span>
-              </div>
-              <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
-                <span className="text-zinc-500">Low → High</span>
-              </div>
-            </>
-          ) : isHexBloom ? (
-            <>
-              {BLOOM_STAGE_LABELS.slice(1).map((label, i) => (
-                <div key={i + 1} className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
-                  <span className="w-3 h-3 rounded-sm" style={{ background: BLOOM_STAGE_COLORS[i + 1] }} />
-                  <span className="text-zinc-300">S{i + 1} {label}</span>
-                </div>
-              ))}
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5 px-2 pt-1 pb-1">
-                <button
-                  onClick={() => {
-                    setShowCleanupDots(true);
-                    setShowGroupEventDots(true);
-                    setShowGroupEvents(true);
-                    setShowMapEvents(true);
-                    setShowHotspots(true);
-                    setShowBonusSpots(true);
-                    setShowEventRadius(true);
-                    setShowGroupRoutes(true);
-                    setShowAdhocRoutes(true);
-                    setShowReports(true);
-                    setShowPartners(true);
-                    setShowSponsored(true);
-                  }}
-                  className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
-                >
-                  All on
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCleanupDots(false);
-                    setShowGroupEventDots(false);
-                    setShowGroupEvents(false);
-                    setShowMapEvents(false);
-                    setShowHotspots(false);
-                    setShowBonusSpots(false);
-                    setShowEventRadius(false);
-                    setShowGroupRoutes(false);
-                    setShowAdhocRoutes(false);
-                    setShowReports(false);
-                    setShowPartners(false);
-                    setShowSponsored(false);
-                    setShowGroupTerritory(false);
-                    setShowIndividualTerritory(false);
-                    setShowUnclaimedTerritory(false);
-                  }}
-                  className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
-                >
-                  All off
-                </button>
-              </div>
-              <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">On the map</p>
-              <LegendToggle checked={showCleanupDots} onChange={setShowCleanupDots}>
-                <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
-                <span className="text-zinc-300">Cleanup logged</span>
-              </LegendToggle>
-              <LegendToggle checked={showGroupEventDots} onChange={setShowGroupEventDots}>
-                <span className="relative w-4 h-4 flex items-center justify-center flex-shrink-0">
-                  <span className="absolute inset-0 rounded-full border-2 border-sky-400" />
-                  <span className="w-2 h-2 rounded-full bg-emerald-500/90" />
-                </span>
-                <span className="text-zinc-300">Group event cleanup</span>
-              </LegendToggle>
-              <LegendToggle checked={showGroupEvents} onChange={setShowGroupEvents}>
-                <span className="w-3 h-3 rounded-full border-2 border-sky-400 bg-sky-900 flex-shrink-0" />
-                <span className="text-zinc-300">Group event</span>
-              </LegendToggle>
-              <LegendToggle checked={showMapEvents} onChange={setShowMapEvents}>
-                <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm leading-none">✨</span>
-                </span>
-                <span className="text-zinc-300">Map event</span>
-              </LegendToggle>
-              <LegendToggle checked={showHotspots} onChange={setShowHotspots}>
-                <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm leading-none">🔥</span>
-                </span>
-                <span className="text-zinc-300">Hotspot</span>
-              </LegendToggle>
-              <LegendToggle checked={showBonusSpots} onChange={setShowBonusSpots}>
-                <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm leading-none">💎</span>
-                </span>
-                <span className="text-zinc-300">Bonus spot</span>
-              </LegendToggle>
-              {sponsoredLayer.available && (
-                <LegendToggle checked={showSponsored} onChange={setShowSponsored}>
-                  <span className="flex items-center gap-1 flex-shrink-0">
-                    <span className="w-3 h-3 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/10 flex-shrink-0" />
-                    <span className="w-3 h-3 rounded-sm border border-dashed border-amber-300 bg-amber-300/20 flex-shrink-0" />
-                  </span>
-                  <span className="text-zinc-300 leading-tight">
-                    Sponsored areas{showSponsored && sponsoredLayer.count > 0 ? ` (${sponsoredLayer.count})` : ""}
-                    <br />
-                    <span className="text-[11px] text-zinc-500">(yellow = yours, purple ✦ = Plus only)</span>
-                  </span>
-                </LegendToggle>
-              )}
-              {jobsLayer.available && (
-                <LegendToggle checked={showJobs} onChange={setShowJobs}>
-                  <span className="flex items-center gap-1 flex-shrink-0">
-                    <span className="rounded-full bg-sky-400 px-1.5 py-px text-[9px] font-black leading-none text-sky-950">$</span>
-                    <span className="rounded-full bg-amber-300 px-1.5 py-px text-[9px] font-black leading-none text-amber-950">$</span>
-                  </span>
-                  <span className="text-zinc-300 leading-tight">
-                    Neighbor jobs{showJobs && jobsLayer.count > 0 ? ` (${jobsLayer.count})` : ""}
-                    <br />
-                    <span className="text-[11px] text-zinc-500">(yellow = yours)</span>
-                  </span>
-                </LegendToggle>
-              )}
-              <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>
-                <span className="w-3 h-3 rounded-full border border-sky-400 bg-sky-400/10 flex-shrink-0" />
-                <span className="text-zinc-300">Event check-in radius</span>
-              </LegendToggle>
-              <LegendToggle checked={showGroupRoutes} onChange={setShowGroupRoutes}>
-                <span className="w-3 h-0.5 rounded-full bg-[#0284c7] flex-shrink-0" />
-                <span className="text-zinc-300">Group event route</span>
-              </LegendToggle>
-              <LegendToggle checked={showAdhocRoutes} onChange={setShowAdhocRoutes}>
-                <span className="w-3 h-0.5 rounded-full bg-[#f59e0b] flex-shrink-0" />
-                <span className="text-zinc-300">Ad-hoc route</span>
-              </LegendToggle>
-              <LegendToggle checked={showReports} onChange={setShowReports}>
-                <span className="flex items-center gap-1 flex-shrink-0">
-                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500 border border-purple-600 flex-shrink-0" />
-                </span>
-                <span className="text-zinc-300">Report (open · claimed)</span>
-              </LegendToggle>
-              <LegendToggle checked={showPartners} onChange={setShowPartners}>
-                <span className="flex items-center gap-0.5 flex-shrink-0">
-                  <span
-                    className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ border: "1.5px solid #22c55e", background: "rgba(20,83,45,0.9)" }}
-                  >
-                    <span className="text-[9px] leading-none">🏪</span>
-                  </span>
-                  <span
-                    className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ border: "1.5px solid #fbbf24", background: "rgba(120,53,15,0.9)" }}
-                  >
-                    <span className="text-[9px] leading-none">🎁</span>
-                  </span>
-                </span>
-                <span className="text-zinc-300 leading-tight">
-                  Partner business
-                  <br />
-                  (🎁 = active offer)
-                </span>
-              </LegendToggle>
-              {/* De-emphasized (smaller, muted) rather than removed — claiming
+                <>
+                  <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
+                    <span className="w-3 h-3 rounded-sm bg-blue-600/80" />
+                    <span className="text-zinc-300">Democrat lean</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
+                    <span className="w-3 h-3 rounded-sm bg-red-600/80" />
+                    <span className="text-zinc-300">Republican lean</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
+                    <span className="w-3 h-3 rounded-sm bg-zinc-500/80" />
+                    <span className="text-zinc-300">Neutralized</span>
+                  </div>
+                </>
+              ) : isHeatmap ? (
+                <>
+                  <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
+                    <span className="w-3 h-2 rounded-sm" style={{ background: "linear-gradient(to right, rgba(255,200,0,0.5), rgba(255,80,0,0.8), rgba(150,0,30,1))" }} />
+                    <span className="text-zinc-300">Unfollow density</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
+                    <span className="text-zinc-500">Low → High</span>
+                  </div>
+                </>
+              ) : isHexBloom ? (
+                <>
+                  {BLOOM_STAGE_LABELS.slice(1).map((label, i) => (
+                    <div key={i + 1} className="flex items-center gap-2.5 min-h-9 px-3 text-[13px]">
+                      <span className="w-3 h-3 rounded-sm" style={{ background: BLOOM_STAGE_COLORS[i + 1] }} />
+                      <span className="text-zinc-300">S{i + 1} {label}</span>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5 px-2 pt-1 pb-1">
+                    <button
+                      onClick={() => {
+                        setShowCleanupDots(true);
+                        setShowGroupEventDots(true);
+                        setShowGroupEvents(true);
+                        setShowMapEvents(true);
+                        setShowHotspots(true);
+                        setShowBonusSpots(true);
+                        setShowEventRadius(true);
+                        setShowGroupRoutes(true);
+                        setShowAdhocRoutes(true);
+                        setShowReports(true);
+                        setShowPartners(true);
+                        setShowSponsored(true);
+                      }}
+                      className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
+                    >
+                      All on
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCleanupDots(false);
+                        setShowGroupEventDots(false);
+                        setShowGroupEvents(false);
+                        setShowMapEvents(false);
+                        setShowHotspots(false);
+                        setShowBonusSpots(false);
+                        setShowEventRadius(false);
+                        setShowGroupRoutes(false);
+                        setShowAdhocRoutes(false);
+                        setShowReports(false);
+                        setShowPartners(false);
+                        setShowSponsored(false);
+                        setShowGroupTerritory(false);
+                        setShowIndividualTerritory(false);
+                        setShowUnclaimedTerritory(false);
+                      }}
+                      className="flex-1 min-h-9 rounded-full bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 active:scale-[0.96] transition-[background-color,color,transform] duration-150 text-xs font-semibold touch-manipulation"
+                    >
+                      All off
+                    </button>
+                  </div>
+                  <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">On the map</p>
+                  <LegendToggle checked={showCleanupDots} onChange={setShowCleanupDots}>
+                    <span className="w-3 h-3 rounded-full bg-emerald-500/90" />
+                    <span className="text-zinc-300">Cleanup logged</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showGroupEventDots} onChange={setShowGroupEventDots}>
+                    <span className="relative w-4 h-4 flex items-center justify-center flex-shrink-0">
+                      <span className="absolute inset-0 rounded-full border-2 border-sky-400" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-500/90" />
+                    </span>
+                    <span className="text-zinc-300">Group event cleanup</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showGroupEvents} onChange={setShowGroupEvents}>
+                    <span className="w-3 h-3 rounded-full border-2 border-sky-400 bg-sky-900 flex-shrink-0" />
+                    <span className="text-zinc-300">Group event</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showMapEvents} onChange={setShowMapEvents}>
+                    <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm leading-none">✨</span>
+                    </span>
+                    <span className="text-zinc-300">Map event</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showHotspots} onChange={setShowHotspots}>
+                    <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm leading-none">🔥</span>
+                    </span>
+                    <span className="text-zinc-300">Hotspot</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showBonusSpots} onChange={setShowBonusSpots}>
+                    <span className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm leading-none">💎</span>
+                    </span>
+                    <span className="text-zinc-300">Bonus spot</span>
+                  </LegendToggle>
+                  {sponsoredLayer.available && (
+                    <LegendToggle checked={showSponsored} onChange={setShowSponsored}>
+                      <span className="flex items-center gap-1 flex-shrink-0">
+                        <span className="w-3 h-3 rounded-sm border border-dashed border-emerald-400 bg-emerald-400/10 flex-shrink-0" />
+                        <span className="w-3 h-3 rounded-sm border border-dashed border-amber-300 bg-amber-300/20 flex-shrink-0" />
+                      </span>
+                      <span className="text-zinc-300 leading-tight">
+                        Sponsored areas{showSponsored && sponsoredLayer.count > 0 ? ` (${sponsoredLayer.count})` : ""}
+                        <br />
+                        <span className="text-[11px] text-zinc-500">(yellow = yours, purple ✦ = Plus only)</span>
+                      </span>
+                    </LegendToggle>
+                  )}
+                  {jobsLayer.available && (
+                    <LegendToggle checked={showJobs} onChange={setShowJobs}>
+                      <span className="flex items-center gap-1 flex-shrink-0">
+                        <span className="rounded-full bg-sky-400 px-1.5 py-px text-[9px] font-black leading-none text-sky-950">$</span>
+                        <span className="rounded-full bg-amber-300 px-1.5 py-px text-[9px] font-black leading-none text-amber-950">$</span>
+                      </span>
+                      <span className="text-zinc-300 leading-tight">
+                        Neighbor jobs{showJobs && jobsLayer.count > 0 ? ` (${jobsLayer.count})` : ""}
+                        <br />
+                        <span className="text-[11px] text-zinc-500">(yellow = yours)</span>
+                      </span>
+                    </LegendToggle>
+                  )}
+                  <LegendToggle checked={showEventRadius} onChange={setShowEventRadius}>
+                    <span className="w-3 h-3 rounded-full border border-sky-400 bg-sky-400/10 flex-shrink-0" />
+                    <span className="text-zinc-300">Event check-in radius</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showGroupRoutes} onChange={setShowGroupRoutes}>
+                    <span className="w-3 h-0.5 rounded-full bg-[#0284c7] flex-shrink-0" />
+                    <span className="text-zinc-300">Group event route</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showAdhocRoutes} onChange={setShowAdhocRoutes}>
+                    <span className="w-3 h-0.5 rounded-full bg-[#f59e0b] flex-shrink-0" />
+                    <span className="text-zinc-300">Ad-hoc route</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showReports} onChange={setShowReports}>
+                    <span className="flex items-center gap-1 flex-shrink-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-orange-500 border border-orange-600 flex-shrink-0" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-500 border border-purple-600 flex-shrink-0" />
+                    </span>
+                    <span className="text-zinc-300">Report (open · claimed)</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showPartners} onChange={setShowPartners}>
+                    <span className="flex items-center gap-0.5 flex-shrink-0">
+                      <span
+                        className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ border: "1.5px solid #22c55e", background: "rgba(20,83,45,0.9)" }}
+                      >
+                        <span className="text-[9px] leading-none">🏪</span>
+                      </span>
+                      <span
+                        className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ border: "1.5px solid #fbbf24", background: "rgba(120,53,15,0.9)" }}
+                      >
+                        <span className="text-[9px] leading-none">🎁</span>
+                      </span>
+                    </span>
+                    <span className="text-zinc-300 leading-tight">
+                      Partner business
+                      <br />
+                      (🎁 = active offer)
+                    </span>
+                  </LegendToggle>
+                  {/* De-emphasized (smaller, muted) rather than removed — claiming
                   still works when turned on, but we no longer want to visually encourage
                   it now that the non-competitive Geographic Stats layers exist above. */}
-              <div className="my-1.5 mx-2 border-t border-zinc-800" />
-              <div className="flex items-center justify-between gap-2 pr-2">
-                <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Leaders</p>
-                <InlineTip title="Zip code leaders">
-                  <p>Colors each zip code by who leads there. Green areas are led by a group, blue by an individual, and outlined areas have no leader yet.</p>
-                  <p>Use the toggles under it to show or hide each kind. This is separate from Geographic stats above.</p>
-                </InlineTip>
-              </div>
-              <LegendToggle
-                checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
-                onChange={(show) => {
-                  setShowGroupTerritory(show);
-                  setShowIndividualTerritory(show);
-                  setShowUnclaimedTerritory(show);
-                }}
-              >
-                <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500/50" />
-                <span className="text-zinc-300">Zip code leaders</span>
-              </LegendToggle>
-              <p className="px-3 pb-1 text-[11px] leading-snug text-zinc-500">
-                Colors each zip code by who leads there.
-              </p>
-              <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
-                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" />
-                <span className="text-zinc-300">Group leads</span>
-              </LegendToggle>
-              <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
-                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
-                <span className="text-zinc-300">Individual leads</span>
-              </LegendToggle>
-              <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
-                <span className="w-2.5 h-2.5 rounded-sm border border-[#a1a1aa]/60 bg-transparent" />
-                <span className="text-zinc-300">No leader yet</span>
-              </LegendToggle>
-            </>
-          ))}
+                  <div className="my-1.5 mx-2 border-t border-zinc-800" />
+                  <div className="flex items-center justify-between gap-2 pr-2">
+                    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Leaders</p>
+                    <InlineTip title="Zip code leaders">
+                      <p>Colors each zip code by who leads there. Green areas are led by a group, blue by an individual, and outlined areas have no leader yet.</p>
+                      <p>Use the toggles under it to show or hide each kind. This is separate from Geographic stats above.</p>
+                    </InlineTip>
+                  </div>
+                  <LegendToggle
+                    checked={showGroupTerritory && showIndividualTerritory && showUnclaimedTerritory}
+                    onChange={(show) => {
+                      setShowGroupTerritory(show);
+                      setShowIndividualTerritory(show);
+                      setShowUnclaimedTerritory(show);
+                    }}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500/50" />
+                    <span className="text-zinc-300">Zip code leaders</span>
+                  </LegendToggle>
+                  <p className="px-3 pb-1 text-[11px] leading-snug text-zinc-500">
+                    Colors each zip code by who leads there.
+                  </p>
+                  <LegendToggle checked={showGroupTerritory} onChange={setShowGroupTerritory} indent>
+                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" />
+                    <span className="text-zinc-300">Group leads</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showIndividualTerritory} onChange={setShowIndividualTerritory} indent>
+                    <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
+                    <span className="text-zinc-300">Individual leads</span>
+                  </LegendToggle>
+                  <LegendToggle checked={showUnclaimedTerritory} onChange={setShowUnclaimedTerritory} indent>
+                    <span className="w-2.5 h-2.5 rounded-sm border border-[#a1a1aa]/60 bg-transparent" />
+                    <span className="text-zinc-300">No leader yet</span>
+                  </LegendToggle>
+                </>
+              ))}
             </div>
           )}
         </div>
@@ -6760,8 +6804,8 @@ export default function CampaignMap({
               <Link
                 href={`/cleanup-events/${selectedCleanupEvent.id}`}
                 className={`mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${selectedCleanupEvent.is_past
-                    ? "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] text-zinc-200"
-                    : "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950"
+                  ? "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-600 active:scale-[0.97] text-zinc-200"
+                  : "bg-sky-500 hover:bg-sky-400 active:bg-sky-400 active:scale-[0.97] text-sky-950"
                   }`}
               >
                 {selectedCleanupEvent.is_past ? "View Details" : "View & RSVP"}
