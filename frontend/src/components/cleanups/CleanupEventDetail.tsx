@@ -30,9 +30,18 @@ import { distanceToRouteMeters, type RouteLineString } from "@/lib/cleanupRoutes
 import GroupEventTrackRoute from "@/components/cleanups/GroupEventTrackRoute";
 import EventRoutesSection from "@/components/cleanups/EventRoutesSection";
 import { searchUsers, type UserSearchResult } from "@/lib/users";
-import RoutePreviewMap from "@/components/map/RoutePreviewMap";
-import NearbyReportsMap from "@/components/map/NearbyReportsMap";
-import Lightbox from "@/components/Lightbox";
+import dynamic from "next/dynamic";
+import MapPlaceholder from "@/components/map/MapPlaceholder";
+// MapLibre is large; load it after first paint. Placeholders match the map heights so nothing shifts.
+const RoutePreviewMap = dynamic(() => import("@/components/map/RoutePreviewMap"), {
+  ssr: false,
+  loading: () => <MapPlaceholder heightClassName="h-[220px]" />,
+});
+const NearbyReportsMap = dynamic(() => import("@/components/map/NearbyReportsMap"), {
+  ssr: false,
+  loading: () => <MapPlaceholder heightClassName="h-[180px]" />,
+});
+const Lightbox = dynamic(() => import("@/components/Lightbox"), { ssr: false });
 import ReportPhotoButton from "@/components/ReportPhotoButton";
 import Avatar from "@/components/ui/Avatar";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -41,12 +50,13 @@ import { refreshUserPoints } from "@/lib/userPoints";
 import ShareButton from "@/components/ShareButton";
 import PermissionHelp from "@/components/PermissionHelp";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
-import RedemptionConfirmationModal, { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
+import type { RedemptionProof } from "@/app/partners/RedemptionConfirmationModal";
+const RedemptionConfirmationModal = dynamic(() => import("@/app/partners/RedemptionConfirmationModal"), { ssr: false });
 import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import BodyPortal from "@/components/ui/BodyPortal";
-import EventFlyerModal from "@/components/cleanups/EventFlyerModal";
+const EventFlyerModal = dynamic(() => import("@/components/cleanups/EventFlyerModal"), { ssr: false });
 import PlusFlair from "@/components/billing/PlusFlair";
-import { describeRule } from "@/app/earn/SponsoredSites";
+import { describeRule } from "@/app/earn/SponsoredSites";
 import Spinner from "@/components/ui/Spinner";
 
 const inputCls =
@@ -395,7 +405,7 @@ export default function CleanupEventDetail({
           aria-label={`View ${event.title} photo`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={event.image_url} alt={event.title} className="w-full h-full object-contain" />
+          <img src={event.image_url} alt={event.title} fetchPriority="high" decoding="async" className="w-full h-full object-contain" />
         </button>
       )}
       {headerLightboxOpen && event.image_url && (
@@ -743,16 +753,26 @@ export default function CleanupEventDetail({
           </div>
         )}
         {event.description && <p className="mt-3 text-sm text-zinc-300 leading-relaxed">{event.description}</p>}
-        {event.external_link && (
-          <a
-            href={event.external_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-zinc-200 hover:text-white active:text-white transition-colors duration-150 underline"
-          >
-            Event link ↗
-          </a>
-        )}
+        {event.external_link && (() => {
+          let host = "";
+          try {
+            host = new URL(event.external_link).hostname.replace(/^www\./, "");
+          } catch {}
+          return (
+            <a
+              href={event.external_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex max-w-full min-h-11 items-center gap-3 rounded-2xl bg-zinc-800/60 px-3.5 py-2.5 ring-1 ring-inset ring-white/5 transition-[background-color,transform] duration-150 hover:bg-zinc-800 active:scale-[0.98] active:bg-zinc-800 touch-manipulation"
+            >
+              <span className="min-w-0">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Event link</span>
+                <span className="block truncate text-sm font-semibold text-zinc-100">{host || event.external_link}</span>
+              </span>
+              <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700/60 text-zinc-200">↗</span>
+            </a>
+          );
+        })()}
       </div>
 
       {event.is_organizer && !isCancelled && (
