@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import { createTeamEvent, uploadTeamEventLogo, uploadTeamEventImage, type TeamEventSubmissionMode } from "@/lib/teamEvents";
 import { TEAM_COLORS } from "@/lib/teamColors";
 

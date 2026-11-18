@@ -46,7 +46,8 @@ import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import BodyPortal from "@/components/ui/BodyPortal";
 import EventFlyerModal from "@/components/cleanups/EventFlyerModal";
 import PlusFlair from "@/components/billing/PlusFlair";
-import { describeRule } from "@/app/earn/SponsoredSites";
+import { describeRule } from "@/app/earn/SponsoredSites";
+import Spinner from "@/components/ui/Spinner";
 
 const inputCls =
   "w-full min-h-11 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-zinc-500";
@@ -150,6 +151,7 @@ export default function CleanupEventDetail({
 }) {
   const [event, setEvent] = useState(initialEvent);
   const [rsvpLoading, setRsvpLoading] = useState(false);
+  const [rsvpPending, setRsvpPending] = useState<"going" | "maybe" | "cancelled" | null>(null);
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [showJoinCodeField, setShowJoinCodeField] = useState(false);
@@ -863,14 +865,18 @@ export default function CleanupEventDetail({
                   <button
                     key={status}
                     disabled={rsvpLoading || (status === "going" && blockGoing)}
-                    onClick={() => handleRsvp(status)}
+                    onClick={() => {
+                      setRsvpPending(status);
+                      void handleRsvp(status).finally(() => setRsvpPending(null));
+                    }}
                     title={status === "going" && blockGoing ? "This event is full" : undefined}
-                    className={`flex-1 min-h-11 px-3 text-sm font-semibold rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.96] touch-manipulation disabled:opacity-50 ${
+                    className={`flex flex-1 items-center justify-center gap-1.5 min-h-11 px-3 text-sm font-semibold rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.96] touch-manipulation disabled:opacity-50 ${
                       viewerStatus === status
                         ? activeClasses
                         : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 active:bg-zinc-700"
                     }`}
                   >
+                    {rsvpPending === status && <Spinner className="h-3.5 w-3.5" />}
                     {status === "going" ? "Going" : status === "maybe" ? "Maybe" : "Can't go"}
                   </button>
                 );
@@ -889,6 +895,7 @@ export default function CleanupEventDetail({
                   title={checkInBlockedReason ?? undefined}
                   className="w-full min-h-12 px-5 text-sm font-bold bg-zinc-100 hover:bg-white active:bg-white active:scale-[0.97] disabled:active:scale-100 disabled:opacity-40 text-zinc-900 rounded-full transition-[background-color,transform] duration-150 touch-manipulation"
                 >
+                  {checkInLoading && <Spinner className="mr-2 inline-block" />}
                   {checkInLoading ? "Checking in…" : "Check in with my location"}
                 </button>
                 {!checkInLoading && checkInBlockedReason && (

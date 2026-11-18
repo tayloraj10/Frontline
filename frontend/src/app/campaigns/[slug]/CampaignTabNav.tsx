@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import { buildCampaignHrefWithSavedPosition } from "@/lib/mapPosition";
 
 type Tab = "map" | "leaderboard" | "feed";

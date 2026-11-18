@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import { mk } from "@/lib/marketplace";

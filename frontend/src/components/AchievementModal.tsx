@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 

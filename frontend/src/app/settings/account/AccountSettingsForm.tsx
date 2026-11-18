@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import { createClient } from "@/lib/supabase/client";
 import { deleteAccount } from "./actions";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import BackButton from "@/components/ui/BackButton";
 import { buildCampaignHrefWithSavedPosition } from "@/lib/mapPosition";
 
