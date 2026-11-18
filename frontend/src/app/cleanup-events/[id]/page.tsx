@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCleanupEvent } from "@/lib/cleanupEvents";
-import { getPaymentsGate } from "@/lib/gameSettings.server";
+import { getPaymentsGateCached } from "@/lib/gameSettings.server";
 import { paymentsVisible } from "@/lib/paymentsVisibility";
 import CleanupEventDetail from "@/components/cleanups/CleanupEventDetail";
 import BackToCampaignButton from "@/components/ui/BackToCampaignButton";
@@ -14,6 +14,8 @@ interface Props {
 export default async function CleanupEventPage({ params }: Props) {
   const { id } = await params;
   const supabase = await createClient();
+  // Independent of the user, so start it before the auth round trip rather than after.
+  const gatePromise = getPaymentsGateCached();
 
   const {
     data: { user },
@@ -24,7 +26,7 @@ export default async function CleanupEventPage({ params }: Props) {
     user
       ? supabase.schema("public").from("profiles").select("is_admin").eq("id", user.id).single()
       : Promise.resolve({ data: null as { is_admin: boolean } | null }),
-    getPaymentsGate(),
+    gatePromise,
   ]);
   if (!event) notFound();
   const isSiteAdmin = adminProfile?.is_admin ?? false;
