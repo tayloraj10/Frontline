@@ -56,7 +56,7 @@ import { hasRouteTrackingCapability } from "@/lib/capacitor";
 import BodyPortal from "@/components/ui/BodyPortal";
 const EventFlyerModal = dynamic(() => import("@/components/cleanups/EventFlyerModal"), { ssr: false });
 import PlusFlair from "@/components/billing/PlusFlair";
-import { describeRule } from "@/app/earn/SponsoredSites";
+import { describeRule } from "@/app/earn/SponsoredSites";
 import Spinner from "@/components/ui/Spinner";
 
 const inputCls =
@@ -753,16 +753,26 @@ export default function CleanupEventDetail({
           </div>
         )}
         {event.description && <p className="mt-3 text-sm text-zinc-300 leading-relaxed">{event.description}</p>}
-        {event.external_link && (
-          <a
-            href={event.external_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-zinc-200 hover:text-white active:text-white transition-colors duration-150 underline"
-          >
-            Event link ↗
-          </a>
-        )}
+        {event.external_link && (() => {
+          let host = "";
+          try {
+            host = new URL(event.external_link).hostname.replace(/^www\./, "");
+          } catch {}
+          return (
+            <a
+              href={event.external_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex max-w-full min-h-11 items-center gap-3 rounded-2xl bg-zinc-800/60 px-3.5 py-2.5 ring-1 ring-inset ring-white/5 transition-[background-color,transform] duration-150 hover:bg-zinc-800 active:scale-[0.98] active:bg-zinc-800 touch-manipulation"
+            >
+              <span className="min-w-0">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Event link</span>
+                <span className="block truncate text-sm font-semibold text-zinc-100">{host || event.external_link}</span>
+              </span>
+              <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700/60 text-zinc-200">↗</span>
+            </a>
+          );
+        })()}
       </div>
 
       {event.is_organizer && !isCancelled && (
