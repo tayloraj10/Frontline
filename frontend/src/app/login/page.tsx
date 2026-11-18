@@ -7,7 +7,8 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isNativePlatform, isAndroidNative } from "@/lib/capacitor";
 import { applyAppleProfileName } from "@/lib/applyAppleProfileName";
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
+import Spinner from "@/components/ui/Spinner";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -299,8 +300,9 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-medium rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
+            className="w-full py-3 inline-flex items-center justify-center gap-2 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-950 font-medium rounded-xl shadow-elevation-2 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:active:scale-100 touch-manipulation text-sm"
           >
+            {loading && <Spinner />}
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>

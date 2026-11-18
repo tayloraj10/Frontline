@@ -6,6 +6,7 @@ import "./globals.css";
 import AppHeader from "@/components/AppHeader";
 import LegalGate from "@/components/LegalGate";
 import NativeAppBridge from "@/components/NativeAppBridge";
+import NavigationProgress from "@/components/nav/NavigationProgress";
 import PullToRefresh from "@/components/PullToRefresh";
 import PlusFlairProvider from "@/components/billing/PlusFlairProvider";
 import CheckoutNotice from "@/components/billing/CheckoutNotice";
@@ -77,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
         <NativeAppBridge />
+        <NavigationProgress />
         <CheckoutNotice />
         <AppHeader />
         <div

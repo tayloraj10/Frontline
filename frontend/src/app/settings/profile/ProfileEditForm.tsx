@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { uploadToR2 } from "@/lib/uploadToR2";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {

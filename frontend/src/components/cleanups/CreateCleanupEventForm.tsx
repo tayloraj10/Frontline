@@ -3,7 +3,7 @@
 import InlineTip from "@/components/walkthrough/InlineTip";
 import PermissionHelp from "@/components/PermissionHelp";
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import BusinessLocationMapPicker from "@/app/admin/BusinessLocationMapPicker";
 import AddressAutocomplete from "@/app/admin/AddressAutocomplete";
 import { createCleanupEvent, updateCleanupEvent } from "@/lib/cleanupEvents";

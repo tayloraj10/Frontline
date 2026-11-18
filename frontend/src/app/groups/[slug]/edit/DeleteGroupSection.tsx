@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import Link from "next/link";
 import { deleteGroup, GroupHasBlockingEventsError, type BlockingEvent } from "@/lib/groups";
 

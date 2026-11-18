@@ -6,7 +6,7 @@ import { scrollToTop } from "@/lib/scrollToTop";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { usePhotoViewer } from "@/components/marketplace/usePhotoViewer";
 import { Camera, Ruler, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/fields";

@@ -2,6 +2,7 @@
 
 import InlineTip from "@/components/walkthrough/InlineTip";
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useRouter } from "@/lib/useProgressRouter";
 import Link from "next/link";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -1921,6 +1922,21 @@ export default function CampaignMap({
   const isHeatmap = campaignType === "heatmap";
   const isHexBloom = campaignType === "hex_bloom";
   const pinPickerUnitLabel = campaign.geo_unit?.includes("uk_postcode_district") ? "Postcode" : "ZIP";
+
+  const router = useRouter();
+  // Popup content is raw HTML, so its internal links would do a full page load.
+  // Route them through the client router instead (faster, shows progress).
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.(".maplibregl-popup a[href^=\"/\"]") as HTMLAnchorElement | null;
+      if (!a || (a.target && a.target !== "_self")) return;
+      e.preventDefault();
+      router.push(a.getAttribute("href")!);
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [router]);
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/useProgressRouter";
 import Button from "@/components/ui/Button";
 import { ChoiceChips, Field, Note, TextArea, TextInput } from "@/components/ui/fields";
 import SitePlacePicker, { EMPTY_SITE, sitePlaceProblem, type SitePlace } from "@/app/earn/SitePlacePicker";
