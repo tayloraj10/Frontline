@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { PageShell, PageHeader } from "@/components/ui/PageShell";
 import ProgressBar from "@/components/ui/ProgressBar";
 
@@ -56,7 +57,7 @@ function LadderCard({ ladder }: { ladder: Ladder }) {
 
 export default async function AchievementsPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getServerUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: settings }, { data: contribs }, { data: unlocked }] = await Promise.all([

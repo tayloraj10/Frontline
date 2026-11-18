@@ -12,7 +12,7 @@ import { isNativePlatform } from "@/lib/capacitor";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { version as appVersion } from "../../package.json";
-import type { User } from "@supabase/supabase-js";
+import type { ServerUser } from "@/lib/supabase/serverUser";
 
 export default function UserNav({
   user,
@@ -22,7 +22,7 @@ export default function UserNav({
   displayName: profileDisplayName = null,
   username = null,
 }: {
-  user: User | null;
+  user: ServerUser | null;
   points?: number;
   spendablePoints?: number;
   avatarUrl?: string | null;

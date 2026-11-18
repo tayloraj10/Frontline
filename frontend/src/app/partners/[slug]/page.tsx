@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { createPublicClient } from "@/lib/supabase/public";
 import BackButton from "@/components/ui/BackButton";
 import type { BrowseOffer } from "../PartnersBrowseClient";
@@ -51,9 +52,7 @@ export default async function PartnerDetailPage({
   const { slug } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   const nowIso = new Date().toISOString();
 

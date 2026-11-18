@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 
 export default async function ProfileRedirectPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getServerUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

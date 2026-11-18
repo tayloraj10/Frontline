@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getTeamEvent, getTeamEventStats } from "@/lib/teamEvents";
 import StatsClient from "./StatsClient";
 import EventLeaderboardSection from "./EventLeaderboardSection";
@@ -14,11 +14,8 @@ interface Props {
 
 export default async function TeamEventStatsPage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   const event = await getTeamEvent(id).catch(() => null);
   if (!event) notFound();

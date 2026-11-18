@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from "@/lib/legal";
 import LegalAcceptForm from "./LegalAcceptForm";
 
@@ -14,11 +15,9 @@ export default async function LegalGate() {
   const pathname = headerList.get("x-pathname") ?? "";
   if (SKIP_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
   if (!user) return null;
+  const supabase = await createClient();
 
   const { data: profile } = await supabase
     .schema("public")

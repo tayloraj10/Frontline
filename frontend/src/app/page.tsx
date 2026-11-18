@@ -2,13 +2,12 @@ import LegalModalLink from "@/components/legal/LegalModalLink";
 import Link from "next/link";
 import AppPromoCard from "@/components/AppPromoCard";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import HomeAutoRedirect from "@/components/HomeAutoRedirect";
 
 export default async function HomePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   let isBusinessOnly = false;
   if (user) {

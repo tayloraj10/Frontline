@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { BarChart3, CalendarPlus, ClipboardList, Pencil, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { createPublicClient } from "@/lib/supabase/public";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible, rewardsVisible } from "@/lib/paymentsVisibility";
@@ -78,8 +79,8 @@ export default async function GroupProfilePage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data: groupData }] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, { data: groupData }] = await Promise.all([
+    getServerUser(),
     supabase.from("groups").select("*").eq("slug", slug).single(),
   ]);
 

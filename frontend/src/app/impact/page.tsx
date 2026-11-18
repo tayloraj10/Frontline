@@ -5,6 +5,7 @@ import Link from "next/link";
 import MoneySupport from "@/components/ui/MoneySupport";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { rewardsVisible } from "@/lib/paymentsVisibility";
 import RewardsTabs from "@/components/RewardsTabs";
@@ -55,9 +56,7 @@ export default async function ImpactPage({ searchParams }: { searchParams: Promi
   const { tab } = await searchParams;
   const youTab = tab === "you";
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, paymentsGate] = await Promise.all([

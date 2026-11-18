@@ -3,6 +3,7 @@ import { version as appVersion } from "../../../../package.json";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import ThemeToggle from "@/components/ThemeToggle";
 import AccountSettingsForm from "./AccountSettingsForm";
 
@@ -10,7 +11,7 @@ export const metadata = { title: "Account Settings | Frontline" };
 
 export default async function AccountSettingsPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getServerUser();
   if (!user) redirect("/login?next=/settings/account");
 
   const provider = user.app_metadata?.provider ?? "email";

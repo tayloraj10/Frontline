@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getTeamEvent } from "@/lib/teamEvents";
 import TeamEventPageClient from "./TeamEventPageClient";
 
@@ -11,9 +12,7 @@ export default async function TeamEventPage({ params }: Props) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   const event = await getTeamEvent(id).catch(() => null);
   if (!event) notFound();

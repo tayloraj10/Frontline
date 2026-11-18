@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { getPaymentsGate } from "@/lib/gameSettings.server";
 import { paymentsVisible } from "@/lib/paymentsVisibility";
 import { PlusFlairContextProvider } from "./PlusFlair";
@@ -8,9 +9,7 @@ export default async function PlusFlairProvider({ children }: { children: React.
   let visible = false;
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getServerUser();
     const [gate, adminRow] = await Promise.all([
       getPaymentsGate(),
       user ? supabase.from("profiles").select("is_admin").eq("id", user.id).single() : Promise.resolve({ data: null }),

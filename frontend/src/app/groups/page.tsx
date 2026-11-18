@@ -2,6 +2,7 @@ import { PageShell } from "@/components/ui/PageShell";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/serverUser";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { Database } from "@/types/database";
 import { getPlusGroupIds } from "@/lib/plus.server";
@@ -55,8 +56,8 @@ const getGroupsListData = unstable_cache(
 export default async function GroupsPage() {
   const supabase = await createClient();
 
-  const [{ data: { user } }, plusGroupIds, { groups: groupsData, members: membersData, events: eventsData, cohosts: cohostsData, recentContributions: recentContributionsData }] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, plusGroupIds, { groups: groupsData, members: membersData, events: eventsData, cohosts: cohostsData, recentContributions: recentContributionsData }] = await Promise.all([
+    getServerUser(),
     getPlusGroupIds(),
     getGroupsListData(),
   ]);

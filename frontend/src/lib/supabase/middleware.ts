@@ -26,8 +26,12 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh session — do not add any logic between this and the return
-  const { data: { user } } = await supabase.auth.getUser();
+  // Refresh session — do not add any logic between this and the return.
+  // getClaims() verifies the JWT locally against the cached project JWKS (asymmetric keys), so it
+  // makes no Supabase Auth round trip on the happy path, unlike getUser() which hit the network on
+  // every request. It still refreshes an expired session, so cookies stay current.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const user = claimsData?.claims ?? null;
 
   const isAuthPage = request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/signup") ||
