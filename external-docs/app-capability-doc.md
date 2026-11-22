@@ -82,6 +82,7 @@ Last updated: 2026-09-13.
   - Optional decorative planned route (does not credit any zip/geo-unit — separate from the real zip-crediting route-mode contribution).
   - A shareable join code for GPS-free check-in.
 - Edit or cancel an existing event (cancel confirms via dialog; cancelled events hide RSVP/check-in).
+- Guided event page for organizers: Before / During / After tabs (opens on the current phase, derived from start, end and check-in window) with a flag strip that calls out what needs attention (no RSVPs, people not checked in, totals not logged, trash reports eligible to clear, no photos or routes) and a button that jumps to the fix. An "Everything" view remains available.
 - Manually add an attendee by searching users and RSVPing them on their behalf.
 - Manually check in an attendee (skips their own GPS/code check-in).
 - Promote/demote attendees to co-organizer.

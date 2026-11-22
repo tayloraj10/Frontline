@@ -1,7 +1,7 @@
 "use client";
 
 import { LARGE_BAG_DEFINITION, minLargeBags } from "@/lib/sponsoredBags";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   getCleanupEvent,
@@ -47,6 +47,7 @@ import Avatar from "@/components/ui/Avatar";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useGameSettings, SettingValue } from "@/lib/gameSettings";
 import { refreshUserPoints } from "@/lib/userPoints";
+import { getEventPhase, getOrganizerFlags, type EventPhase } from "@/lib/organizerFlags";
 import ShareButton from "@/components/ShareButton";
 import PermissionHelp from "@/components/PermissionHelp";
 import FlowGuide from "@/components/walkthrough/FlowGuide";
@@ -183,13 +184,14 @@ export default function CleanupEventDetail({
     const stored = window.localStorage.getItem("cleanup-event-view-mode");
     return stored === "full" ? "full" : "guided";
   });
-  const [guidedStep, setGuidedStep] = useState(0);
+  // Which lifecycle tab the organizer picked; null follows the event's actual phase.
+  const [phaseTab, setPhaseTab] = useState<EventPhase | null>(null);
+  const [phaseNow, setPhaseNow] = useState(() => Date.now());
+  const [eligibleReports, setEligibleReports] = useState<number | null>(null);
   const [organizerMenuOpen, setOrganizerMenuOpen] = useState(false);
   const [flyerOpen, setFlyerOpen] = useState(false);
   const [attendeeFilter, setAttendeeFilter] = useState<"all" | "not_checked_in">("all");
   const [moreRowId, setMoreRowId] = useState<string | null>(null);
-  const [rosterOpen, setRosterOpen] = useState(false);
-  const [stepsEarly, setStepsEarly] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const changeViewMode = (mode: "guided" | "full") => {
@@ -387,13 +389,43 @@ export default function CleanupEventDetail({
   const blockGoing = event.is_full && viewerStatus !== "going";
   const isCancelled = event.status === "cancelled";
   const effectiveIsOrganizer = event.is_organizer && !previewAsAttendee;
-  const opensAtMs = (() => {
-    const candidates = [event.scheduled_start, event.check_in_window_start]
-      .filter((v): v is string => !!v)
-      .map((v) => new Date(v).getTime());
-    return candidates.length > 0 ? Math.min(...candidates) : null;
-  })();
-  const beforeEventStart = opensAtMs !== null && Date.now() < opensAtMs;
+
+  // Organizer lifecycle: the phase follows the clock, re-evaluated every 30s.
+  const organizerLive = event.is_organizer && !isCancelled;
+  const livePhase = getEventPhase(event, phaseNow);
+  useEffect(() => {
+    if (!organizerLive) return;
+    const id = setInterval(() => setPhaseNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, [organizerLive]);
+
+  // Open trash reports near the event, for the "can be cleared" flag. The log form still
+  // runs its own fetch for the checkbox list; this one only needs the count.
+  useEffect(() => {
+    if (!organizerLive || !userId || event.logging_mode !== "organizer_total") return;
+    let cancelled = false;
+    getNearbyReports({ cleanupId: event.id, organizerUserId: userId })
+      .then(({ reports }) => {
+        if (!cancelled) setEligibleReports(reports.length);
+      })
+      .catch(() => { });
+    return () => {
+      cancelled = true;
+    };
+  }, [organizerLive, userId, event.id, event.logging_mode, event.reports_cleared_count]);
+
+  // While the event is live, poll for new check-ins so organizers don't have to tap Refresh.
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  });
+  useEffect(() => {
+    if (!organizerLive || livePhase !== "during") return;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void refreshRef.current().catch(() => { });
+    }, 45000);
+    return () => clearInterval(id);
+  }, [organizerLive, livePhase]);
 
   return (
     <div className="space-y-6">
@@ -780,7 +812,7 @@ export default function CleanupEventDetail({
           <span className="text-xs font-semibold text-zinc-400 truncate">
             {previewAsAttendee
               ? "Previewing what attendees see"
-              : `Organizer view: ${viewMode === "guided" ? "Step by step" : "Everything"}`}
+              : `Organizer view: ${viewMode === "guided" ? "Guided" : "Everything"}`}
           </span>
           {previewAsAttendee ? (
             <button
@@ -810,7 +842,7 @@ export default function CleanupEventDetail({
               />
               <div className="absolute right-0 top-full mt-2 z-40 w-72 max-w-full rounded-3xl bg-zinc-900 border border-zinc-700/60 shadow-elevation-3 p-1.5">
                 {([
-                  { key: "guided", title: "Step by step", desc: "One stage at a time" },
+                  { key: "guided", title: "Guided", desc: "Flags and one phase at a time" },
                   { key: "full", title: "Everything", desc: "All sections on one page" },
                 ] as const).map((o) => (
                   <button
@@ -850,6 +882,9 @@ export default function CleanupEventDetail({
       {locationDenied && <PermissionHelp kind="location" alternative="You can also check in with the join code from the organizer." />}
 
       {(() => {
+        // Guided organizers are obviously going, so drop the RSVP buttons and keep just
+        // check-in, logging and route tracking. Still shown if their RSVP is not "going".
+        const hideOwnRsvp = effectiveIsOrganizer && viewMode === "guided" && viewerStatus === "going";
         const checkinSection = isCancelled ? null : !userId ? (
           <Link
             href={`/login?next=/cleanup-events/${event.id}`}
@@ -858,8 +893,11 @@ export default function CleanupEventDetail({
             Log in to RSVP
           </Link>
         ) : (
-          <div className="rounded-[20px] bg-zinc-900 p-4 space-y-3">
+          <div id="organizer-checkin" className="rounded-[20px] bg-zinc-900 p-4 space-y-3 scroll-mt-20">
             <div className="flex items-center justify-between">
+              {hideOwnRsvp ? (
+                <span className="text-sm font-semibold text-zinc-300">Your check-in</span>
+              ) : (
               <span className="text-sm font-semibold text-zinc-300">
                 {goingCount} going
                 {event.max_attendees !== null && (
@@ -869,6 +907,7 @@ export default function CleanupEventDetail({
                   </span>
                 )}
               </span>
+              )}
               {viewerCheckedIn && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-400">
                   ✓ Checked in
@@ -878,6 +917,7 @@ export default function CleanupEventDetail({
                 </span>
               )}
             </div>
+            {!hideOwnRsvp && (
             <div className="flex items-center gap-2">
               {(["going", "maybe", "cancelled"] as const).map((status) => {
                 const activeClasses = "bg-zinc-100 text-zinc-900";
@@ -902,6 +942,7 @@ export default function CleanupEventDetail({
                 );
               })}
             </div>
+            )}
 
             {!viewerCheckedIn && (
               <div className="pt-2 border-t border-zinc-800 space-y-2">
@@ -1046,15 +1087,20 @@ export default function CleanupEventDetail({
           </div>
         );
 
+        // Not-checked-in people first, so the people who still need attention are on top.
+        const rosterSorted = [...event.rsvps].sort((a, b) => {
+          const rank = (r: (typeof event.rsvps)[number]) => (r.status === "cancelled" ? 3 : r.checked_in_at ? 2 : r.status === "going" ? 0 : 1);
+          return rank(a) - rank(b);
+        });
         const checkinRosterSection = effectiveIsOrganizer && !isCancelled && event.rsvps.length > 0 && (
-          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+          <div id="organizer-roster" className="rounded-[20px] bg-zinc-900 overflow-hidden scroll-mt-20">
             <div className="px-4 py-2.5 bg-zinc-900/40 flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-zinc-300">
-                Attendees <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
+                Check-in list <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
               </span>
             </div>
             <ul className="divide-y divide-zinc-800/60">
-              {event.rsvps.map((r) => (
+              {rosterSorted.map((r) => (
                 <li key={r.user_id} className="px-4 py-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Avatar
@@ -1065,6 +1111,11 @@ export default function CleanupEventDetail({
                     />
                     <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
                     <PlusFlair isPlus={r.is_plus} className="shrink-0" />
+                    {r.status !== "going" && (
+                      <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-700/60 rounded px-1.5 py-0.5 shrink-0">
+                        {r.status === "cancelled" ? "Can't go" : "Maybe"}
+                      </span>
+                    )}
                   </div>
                   {r.checked_in_at ? (
                     <span className="text-xs text-emerald-400 whitespace-nowrap shrink-0">✓ checked in</span>
@@ -1086,18 +1137,6 @@ export default function CleanupEventDetail({
                 </li>
               ))}
             </ul>
-          </div>
-        );
-
-        const doCleanupSection = (
-          <div className="rounded-[20px] bg-zinc-900 p-5 text-center space-y-1.5">
-            <p className="text-2xl" aria-hidden="true">🧹</p>
-            <p className="text-sm font-semibold text-zinc-200">Time to clean!</p>
-            <p className="text-xs text-zinc-500 max-w-xs mx-auto">
-              {event.logging_mode === "organizer_total"
-                ? "Nothing to do here. Get out there with your team and pick up trash, then come back to this page to log the team's totals when you're done."
-                : "Nothing to do here. Get out there and pick up trash. Attendees log their own totals on the map as they go."}
-            </p>
           </div>
         );
 
@@ -1135,23 +1174,25 @@ export default function CleanupEventDetail({
         );
 
         const logSection = effectiveIsOrganizer && !isCancelled && event.logging_mode === "organizer_total" && (
-          <LogTeamTotalForm
-            cleanupId={event.id}
-            organizerUserId={userId!}
-            rsvps={event.rsvps}
-            eventLat={event.lat}
-            eventLng={event.lng}
-            eventRoute={event.route}
-            persistedReportsClearedCount={event.reports_cleared_count}
-            onLogged={refresh}
-          />
+          <div id="organizer-log" className="scroll-mt-20">
+            <LogTeamTotalForm
+              cleanupId={event.id}
+              organizerUserId={userId!}
+              rsvps={event.rsvps}
+              eventLat={event.lat}
+              eventLng={event.lng}
+              eventRoute={event.route}
+              persistedReportsClearedCount={event.reports_cleared_count}
+              onLogged={refresh}
+            />
+          </div>
         );
 
         const manageMode = effectiveIsOrganizer && !isCancelled;
         const visibleRsvps =
           manageMode && attendeeFilter === "not_checked_in" ? event.rsvps.filter((r) => !r.checked_in_at) : event.rsvps;
         const attendeesSection = (
-          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+          <div id="organizer-attendees" className="rounded-[20px] bg-zinc-900 overflow-hidden scroll-mt-20">
             <div className="px-4 pt-3 pb-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold text-zinc-300">
@@ -1353,7 +1394,7 @@ export default function CleanupEventDetail({
         );
 
         const photosSection = (event.photos.length > 0 || (userId && !isCancelled)) && (
-          <div className="rounded-[20px] bg-zinc-900 overflow-hidden">
+          <div id="organizer-photos" className="rounded-[20px] bg-zinc-900 overflow-hidden scroll-mt-20">
             <div className="px-4 py-2.5 bg-zinc-900/40 flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-zinc-300">
                 Photos <span className="text-zinc-500 font-normal">({event.photos.length})</span>
@@ -1380,163 +1421,223 @@ export default function CleanupEventDetail({
         );
 
         const routesLinkSection = event.attendee_route_count > 0 && (
-          <EventRoutesSection cleanupId={event.id} routeCount={event.attendee_route_count} />
+          <div id="organizer-routes" className="scroll-mt-20">
+            <EventRoutesSection cleanupId={event.id} routeCount={event.attendee_route_count} />
+          </div>
         );
 
-        if (effectiveIsOrganizer && !isCancelled && viewMode === "guided" && beforeEventStart && !stepsEarly) {
-          return (
-            <div className="space-y-4">
-              <div className="rounded-[20px] bg-zinc-900 p-4 space-y-2">
-                <p className="text-base font-bold text-zinc-100">This event has not started yet</p>
-                <p className="text-sm text-zinc-400">
-                  The step by step guide for check-in, the cleanup and logging totals unlocks when the event begins
-                  {opensAtMs ? ` (${new Date(opensAtMs).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })})` : ""}.
-                  Until then you can manage RSVPs and offers below.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setStepsEarly(true)}
-                  className="inline-flex items-center min-h-11 px-4 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-zinc-200 active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
-                >
-                  Show the steps anyway
-                </button>
-              </div>
-              {checkinSection}
-              {joinCodeSection}
-              {attendeesSection}
-              {eventOffersSection}
-              {manageEventOffersSection}
-            </div>
-          );
-        }
-
         if (effectiveIsOrganizer && !isCancelled && viewMode === "guided") {
-          const rosterToggle = checkinRosterSection && (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setRosterOpen((v) => !v)}
-                aria-expanded={rosterOpen}
-                className="w-full flex items-center justify-between gap-3 rounded-full bg-zinc-900 hover:bg-zinc-800 px-5 min-h-12 text-sm font-semibold text-zinc-200 touch-manipulation transition-colors"
-              >
-                <span>
-                  Who&apos;s here <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
-                </span>
-                <span className="text-xs text-zinc-400">{rosterOpen ? "Hide" : "Show"}</span>
-              </button>
-              {attendeeReminderEnabled && (
-                <div className="flex items-center justify-between gap-3 rounded-[20px] bg-zinc-900 px-4 py-2.5">
-                  <span className="text-xs text-zinc-400">Email everyone who RSVP&apos;d</span>
-                  <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />
-                </div>
-              )}
-              {rosterOpen && checkinRosterSection}
-            </div>
-          );
-          const steps: { key: string; label: string; hint: string; content: React.ReactNode }[] = [
-            { key: "checkin", label: "Check in attendees", hint: "Check people in as they arrive.", content: <>{checkinSection}{joinCodeSection}{checkinSummarySection}{rosterToggle}</> },
-            { key: "clean", label: "Do the cleanup", hint: "Nothing to do here but get out and clean.", content: doCleanupSection },
-            ...(logSection ? [{ key: "log", label: "Log the cleanup", hint: "Enter the totals for the whole team.", content: logSection as React.ReactNode }] : []),
-            { key: "attendees", label: "Manage attendee data", hint: "Add attendees or manage organizers.", content: <>{attendeesSection}{eventOffersSection}{manageEventOffersSection}</> },
-            ...(photosSection
-              ? [{ key: "photos", label: "Photos and Routes", hint: "Event photos and attendee routes.", content: <>{photosSection}{routesLinkSection}</> as React.ReactNode }]
-              : routesLinkSection
-                ? [{ key: "photos", label: "Photos and Routes", hint: "Event photos and attendee routes.", content: routesLinkSection as React.ReactNode }]
-                : []),
+          const activePhase: EventPhase = phaseTab ?? livePhase;
+          const allFlags = getOrganizerFlags(event, {
+            eligibleReports,
+            canTrackRoutes: hasRouteTrackingCapability() || process.env.NODE_ENV !== "production",
+          });
+          const phaseFlags = allFlags.filter((f) => f.phase === activePhase);          const phases: { key: EventPhase; label: string }[] = [
+            { key: "before", label: "Before" },
+            { key: "during", label: "During" },
+            { key: "after", label: "After" },
           ];
-          const activeStepIndex = Math.min(guidedStep, steps.length - 1);
-          const shortLabels: Record<string, string> = {
-            checkin: "Check in",
-            clean: "Clean",
-            log: "Log",
-            attendees: "People",
-            photos: "Photos",
+          const scrollToTarget = (id: string) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            // Sections inside a collapsed <details> have to be opened before they can be seen.
+            const details = el.closest("details");
+            if (details) details.open = true;
+            requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "start" }));
           };
-          const goToStep = (idx: number) => {
-            setGuidedStep(Math.max(0, Math.min(idx, steps.length - 1)));
+          const goPhase = (p: EventPhase) => {
+            setPhaseTab(p === livePhase ? null : p);
             requestAnimationFrame(() => {
-              document.getElementById("guided-stepper")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              document.getElementById("organizer-phases")?.scrollIntoView({ behavior: "smooth", block: "start" });
             });
           };
-          const navBtn =
-            "min-h-11 px-5 text-sm font-bold rounded-full bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none transition-[background-color,transform] duration-150 touch-manipulation";
-          const prevNextRow = (
-            <div className="flex items-center justify-between gap-2">
-              <button type="button" disabled={activeStepIndex === 0} onClick={() => goToStep(activeStepIndex - 1)} className={navBtn}>
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={activeStepIndex === steps.length - 1}
-                onClick={() => goToStep(activeStepIndex + 1)}
-                className={navBtn}
-              >
-                Next
-              </button>
+          const phaseHint: Record<EventPhase, string> = {
+            before: "Get ready: see who is coming and share the join code.",
+            during: "Check people in as they arrive and take photos as you clean.",
+            after: "Wrap up: log totals, clear trash reports, add photos and review routes.",
+          };
+          const phaseTitle: Record<EventPhase, string> = {
+            before: "Before the event",
+            during: "During the event",
+            after: "After the event",
+          };
+          const phaseStep = phases.findIndex((p) => p.key === activePhase) + 1;
+
+          const goingRsvps = event.rsvps.filter((r) => r.status === "going");
+          const maybeRsvps = event.rsvps.filter((r) => r.status === "maybe");
+          const cantGoCount = event.rsvps.filter((r) => r.status === "cancelled").length;
+          const rsvpListSection = (
+            <div id="organizer-rsvps" className="rounded-[20px] bg-zinc-900 overflow-hidden scroll-mt-20">
+              <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-3 flex-wrap">
+                <span className="text-sm font-semibold text-zinc-300">
+                  RSVPs{" "}
+                  <span className="text-zinc-500 font-normal">
+                    {goingRsvps.length} going
+                    {event.max_attendees !== null ? ` of ${event.max_attendees}` : ""}
+                    {maybeRsvps.length > 0 ? ` · ${maybeRsvps.length} maybe` : ""}
+                    {cantGoCount > 0 ? ` · ${cantGoCount} can't go` : ""}
+                  </span>
+                </span>
+                <AddAttendeeControl
+                  cleanupId={event.id}
+                  existingUserIds={event.rsvps.map((r) => r.user_id)}
+                  onAdded={refresh}
+                />
+              </div>
+              {goingRsvps.length + maybeRsvps.length === 0 ? (
+                <div className="px-4 pb-5 pt-2 text-center text-zinc-500 text-sm">No RSVPs yet. Share the event to get people out.</div>
+              ) : (
+                <ul className="divide-y divide-zinc-800/60 max-h-72 overflow-y-auto">
+                  {[...goingRsvps, ...maybeRsvps].map((r) => (
+                    <li key={r.user_id} className="px-4 py-2 flex items-center gap-2">
+                      <Avatar avatarUrl={r.avatar_url} name={r.display_name ?? r.username ?? "?"} username={r.username} size="xs" />
+                      <span className="text-sm text-zinc-200 truncate">{r.display_name ?? r.username ?? "Unknown"}</span>
+                      <PlusFlair isPlus={r.is_plus} className="shrink-0" />
+                      {r.is_organizer && (
+                        <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-400/10 rounded px-1.5 py-0.5 shrink-0">★ Organizer</span>
+                      )}
+                      {r.status === "maybe" && (
+                        <span className="ml-auto text-[10px] font-semibold text-zinc-400 bg-zinc-700/60 rounded px-1.5 py-0.5 shrink-0">Maybe</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           );
+
+          const reminderCard = attendeeReminderEnabled && (
+            <div className="flex items-center justify-between gap-3 rounded-[20px] bg-zinc-900 px-4 py-2.5">
+              <span className="text-xs text-zinc-400">Email everyone who RSVP&apos;d</span>
+              <SendAttendeeReminderButton cleanupId={event.id} organizerUserId={userId!} />
+            </div>
+          );
+
+          const phaseContent: Record<EventPhase, React.ReactNode> = {
+            before: (
+              <>
+                {rsvpListSection}
+                {reminderCard}
+                {joinCodeSection}
+                {eventOffersSection}
+                {manageEventOffersSection}
+              </>
+            ),
+            during: (
+              <>
+                {checkinSection}
+                {checkinSummarySection}
+                {joinCodeSection}
+                {checkinRosterSection}
+                {photosSection}
+                <button
+                  type="button"
+                  onClick={() => goPhase("after")}
+                  className="w-full min-h-12 px-5 rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 active:scale-[0.97] text-sm font-bold text-zinc-200 transition-[background-color,transform] duration-150 touch-manipulation"
+                >
+                  Done cleaning? Wrap up the event
+                </button>
+              </>
+            ),
+            after: (
+              <>
+                {logSection}
+                {photosSection}
+                {routesLinkSection}
+                {eventOffersSection}
+                <details className="rounded-[20px] bg-zinc-900 group">
+                  <summary className="cursor-pointer list-none px-4 min-h-12 flex items-center justify-between text-sm font-semibold text-zinc-300 touch-manipulation">
+                    Attendee data and organizers
+                    <span className="text-xs text-zinc-500 font-normal group-open:hidden">Show</span>
+                    <span className="text-xs text-zinc-500 font-normal hidden group-open:inline">Hide</span>
+                  </summary>
+                  <div className="p-2 space-y-4">
+                    {attendeesSection}
+                    {manageEventOffersSection}
+                  </div>
+                </details>
+              </>
+            ),
+          };
+
           return (
             <div className="space-y-4">
-              <div id="guided-stepper" className="rounded-[20px] bg-zinc-900 p-4 scroll-mt-20">
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    disabled={activeStepIndex === 0}
-                    onClick={() => goToStep(activeStepIndex - 1)}
-                    aria-label="Previous step"
-                    className="min-h-10 px-4 text-xs font-bold rounded-full bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none touch-manipulation"
-                  >
-                    Back
-                  </button>
-                  <div className="min-w-0 text-center">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                      Step {activeStepIndex + 1} of {steps.length}
-                    </p>
-                    <p className="mt-0.5 text-base font-bold text-zinc-100 truncate">{steps[activeStepIndex].label}</p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={activeStepIndex === steps.length - 1}
-                    onClick={() => goToStep(activeStepIndex + 1)}
-                    aria-label="Next step"
-                    className="min-h-10 px-4 text-xs font-bold rounded-full bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none touch-manipulation"
-                  >
-                    Next
-                  </button>
+              <div id="organizer-phases" className="rounded-[20px] bg-zinc-900 p-3 scroll-mt-20 space-y-2">
+                <div className="text-center pt-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Step {phaseStep} of {phases.length}
+                  </p>
+                  <h3 className="text-lg font-bold text-zinc-100 leading-tight">{phaseTitle[activePhase]}</h3>
                 </div>
-                <div className="mt-4 flex items-start" role="tablist" aria-label="Event steps">
-                  {steps.map((st, i) => (
-                    <div key={st.key} className="flex-1 flex flex-col items-center">
-                      <div className="w-full flex items-center">
-                        <span className={`h-0.5 flex-1 ${i === 0 ? "bg-transparent" : i <= activeStepIndex ? "bg-emerald-500" : "bg-zinc-700"}`} />
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={i === activeStepIndex}
-                          aria-label={`Step ${i + 1}: ${st.label}`}
-                          onClick={() => goToStep(i)}
-                          className={`w-10 h-10 shrink-0 rounded-full text-sm font-bold touch-manipulation transition-colors ${
-                            i === activeStepIndex
-                              ? "bg-zinc-100 text-zinc-900"
-                              : i < activeStepIndex
-                                ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
-                                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                          }`}
-                        >
-                          {i < activeStepIndex ? "✓" : i + 1}
-                        </button>
-                        <span className={`h-0.5 flex-1 ${i === steps.length - 1 ? "bg-transparent" : i < activeStepIndex ? "bg-emerald-500" : "bg-zinc-700"}`} />
-                      </div>
-                      <span className={`mt-1 text-[11px] font-semibold ${i === activeStepIndex ? "text-zinc-100" : "text-zinc-500"}`}>
-                        {shortLabels[st.key] ?? st.label}
-                      </span>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-1 rounded-full bg-zinc-800 p-1" role="tablist" aria-label="Event phase">
+                  {phases.map((p) => {
+                    // Only high-priority tasks count toward the badge; nice-to-haves don't.
+                    const count = p.key === livePhase ? allFlags.filter((f) => f.phase === p.key && f.severity === "action").length : 0;
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={activePhase === p.key}
+                        onClick={() => goPhase(p.key)}
+                        className={`flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-bold touch-manipulation transition-colors ${
+                          activePhase === p.key ? "bg-zinc-100 text-zinc-900" : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        {p.label}
+                        {p.key === livePhase && (
+                          <span
+                            aria-label="Current phase"
+                            className={`h-1.5 w-1.5 rounded-full ${activePhase === p.key ? "bg-emerald-600" : "bg-emerald-400"}`}
+                          />
+                        )}
+                        {count > 0 && (
+                          <span
+                            className="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold inline-flex items-center justify-center bg-amber-500 text-zinc-900"
+                          >
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-                <p className="mt-3 text-xs text-zinc-400 text-center">{steps[activeStepIndex].hint}</p>
+                <p className="text-xs text-zinc-400 text-center">
+                  {activePhase !== livePhase
+                    ? `Viewing ${activePhase}. This event is currently ${livePhase === "during" ? "happening" : livePhase === "before" ? "upcoming" : "over"}.`
+                    : phaseHint[activePhase]}
+                </p>
               </div>
-              <div className="space-y-4">{steps[activeStepIndex].content}</div>
-              {prevNextRow}
+
+              {phaseFlags.length > 0 ? (
+                <ul className="space-y-2" aria-label="Needs your attention">
+                  {phaseFlags.map((f) => (
+                    <li
+                      key={f.id}
+                      className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 ${
+                        f.severity === "action" ? "bg-amber-500/10 border border-amber-500/30" : "bg-zinc-900"
+                      }`}
+                    >
+                      <span className={`text-sm ${f.severity === "action" ? "text-amber-200" : "text-zinc-300"}`}>
+                        {f.message}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => scrollToTarget(f.targetId)}
+                        className="shrink-0 min-h-10 px-4 text-xs font-bold rounded-full bg-zinc-100 text-zinc-900 hover:bg-white active:bg-white active:scale-[0.97] transition-[background-color,transform] duration-150 touch-manipulation"
+                      >
+                        {f.actionLabel}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                  Nothing needs your attention right now.
+                </p>
+              )}
+
+              {phaseContent[activePhase]}
             </div>
           );
         }
@@ -1705,18 +1806,19 @@ function AddAttendeeControl({
   }
 
   return (
-    <div className="relative">
+    <div className="relative w-full sm:w-auto">
       <input
         type="text"
         autoFocus
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Search by username..."
-        className="bg-zinc-900 border border-zinc-700 rounded-xl px-2.5 py-1 text-xs text-zinc-100 focus:outline-none focus:border-zinc-500 w-40"
+        placeholder="Username"
+        aria-label="Search by username"
+        className="bg-zinc-900 border border-zinc-700 rounded-xl px-3 min-h-11 text-base sm:text-sm text-zinc-100 focus:outline-none focus:border-zinc-500 w-full sm:w-56"
       />
       {(loading || visibleResults.length > 0 || error) && (
-        <div className="absolute right-0 top-full mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-xl divide-y divide-zinc-800 max-h-48 overflow-y-auto z-10 shadow-lg">
+        <div className="absolute right-0 top-full mt-1 w-full sm:w-56 bg-zinc-900 border border-zinc-700 rounded-xl divide-y divide-zinc-800 max-h-48 overflow-y-auto z-10 shadow-lg">
           {loading && <p className="px-3 py-2 text-xs text-zinc-600">Searching…</p>}
           {error && <p className="px-3 py-2 text-xs text-red-400">{error}</p>}
           {!loading &&
@@ -2188,6 +2290,69 @@ function RemoveEventOfferButton({
   );
 }
 
+/**
+ * Email preview that starts zoomed out to fit its container, so there is no horizontal
+ * scrolling. The +/- buttons zoom in from there (scrolling is then expected).
+ */
+function EmailPreviewFrame({ subject, html }: { subject: string; html: string }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState(1);
+  const [mult, setMult] = useState(1);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    const measure = measureRef.current;
+    if (!box || !measure) return;
+    const recompute = () => {
+      const natural = measure.scrollWidth;
+      const available = box.clientWidth - 24; // box padding
+      if (natural > 0 && available > 0) setFit(Math.min(1, available / natural));
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [html]);
+
+  const steps = [1, 1.5, 2, 3];
+  const idx = steps.indexOf(mult);
+  const btn =
+    "min-h-9 min-w-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-700 text-sm font-semibold text-zinc-200 disabled:opacity-40 touch-manipulation";
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-end gap-1.5">
+        <span className="text-xs text-zinc-500 mr-1">{Math.round(fit * mult * 100)}%</span>
+        <button type="button" aria-label="Zoom out" className={btn} disabled={idx <= 0} onClick={() => setMult(steps[idx - 1])}>
+          −
+        </button>
+        <button type="button" aria-label="Zoom in" className={btn} disabled={idx >= steps.length - 1} onClick={() => setMult(steps[idx + 1])}>
+          +
+        </button>
+      </div>
+      <div
+        ref={boxRef}
+        className="relative rounded-lg border border-zinc-800 bg-white text-black p-3 max-h-80 overflow-y-auto text-sm"
+        style={{ overflowX: mult > 1 ? "auto" : "hidden" }}
+      >
+        {/* Off-screen copy used only to learn the email's natural width. */}
+        <div
+          ref={measureRef}
+          aria-hidden="true"
+          className="absolute left-0 top-0 invisible pointer-events-none"
+          style={{ width: "max-content" }}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+        <div style={{ zoom: fit * mult }}>
+          <p className="font-semibold mb-2">{subject}</p>
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SendAttendeeReminderButton({
   cleanupId,
   organizerUserId,
@@ -2275,10 +2440,7 @@ function SendAttendeeReminderButton({
               <p className="text-xs text-zinc-500">
                 Preview: will send to {preview.recipient_count} attendee{preview.recipient_count === 1 ? "" : "s"} marked &ldquo;going&rdquo;.
               </p>
-              <div className="rounded-lg border border-zinc-800 bg-white text-black p-3 max-h-64 overflow-y-auto text-sm">
-                <p className="font-semibold mb-2">{preview.subject}</p>
-                <div dangerouslySetInnerHTML={{ __html: preview.html }} />
-              </div>
+              <EmailPreviewFrame subject={preview.subject} html={preview.html} />
               {error && <p className="text-red-400 text-xs">{error}</p>}
               <div className="flex items-center gap-2">
                 <button
