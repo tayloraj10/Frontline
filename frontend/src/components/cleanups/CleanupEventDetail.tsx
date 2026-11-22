@@ -1099,7 +1099,7 @@ export default function CleanupEventDetail({
                 Check-in list <span className="text-zinc-500 font-normal">({event.rsvps.length})</span>
               </span>
             </div>
-            <ul className="divide-y divide-zinc-800/60">
+            <ul className="divide-y divide-zinc-800/60 max-h-72 overflow-y-auto">
               {rosterSorted.map((r) => (
                 <li key={r.user_id} className="px-4 py-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -1525,10 +1525,10 @@ export default function CleanupEventDetail({
             ),
             during: (
               <>
-                {checkinSection}
                 {checkinSummarySection}
-                {joinCodeSection}
                 {checkinRosterSection}
+                {joinCodeSection}
+                {checkinSection}
                 {photosSection}
                 <button
                   type="button"
